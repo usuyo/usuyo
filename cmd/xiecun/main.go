@@ -43,5 +43,5 @@ func newRootCmd() *cobra.Command {
 
 // notImplemented is the RunE of every subcommand until its feature lands.
 func notImplemented(cmd *cobra.Command, _ []string) error {
-	return fmt.Errorf("%s: not implemented", cmd.CommandPath())
+	return fmt.Errorf("%s: not implemented", cmd.Name())
 }
