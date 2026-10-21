@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "web-3b9c2f1a-q7m4",
+  "identities": [{ "platform": "web", "url": "https://example.com/post/42" }],
+  "kind": "article",
+  "title": "",
+  "capturedAt": "2026-10-20T03:00:00+08:00",
+  "origin": { "entry": "cli", "action": "unknown", "importBatch": "batch-2026-10-20" },
+  "completeness": "link",
+  "missing": ["text", "html"],
+  "snapshots": [],
+  "tags": { "platform": [], "engine": [], "user": [] },
+  "sameAs": [],
+  "state": "normal",
+  "jobs": {}
+}

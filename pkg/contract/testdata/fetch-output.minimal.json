@@ -1,0 +1,12 @@
+{
+  "identity": { "platform": "web", "url": "https://example.com/post/42" },
+  "kind": "post",
+  "title": "",
+  "text": "",
+  "images": [],
+  "media": [],
+  "platformTags": [],
+  "completeness": "link",
+  "missing": ["text", "html"],
+  "evidence": { "fetchedAt": "2026-10-20T03:00:01Z" }
+}

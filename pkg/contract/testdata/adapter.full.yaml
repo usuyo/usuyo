@@ -1,0 +1,14 @@
+id: community/wechat-mp-basic
+platforms: [wechat-mp]
+match: ["mp.weixin.qq.com/s/*"]
+capabilities: [fetch]
+method: cli
+upstream:
+  project: https://github.com/example/wechat-mp-basic
+  license: MIT
+  install:
+    npm: "@example/wechat-mp-basic"
+requires: {cookie: none, proxy: none}
+cost: free
+outputs: [text, raw-html, images]
+limits: "仅个人使用；单条触发"

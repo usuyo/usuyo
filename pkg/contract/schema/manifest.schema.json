@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Xiecun manifest.json",
+  "description": "Index card of a content package. Normative source: docs/SPEC.md §3. Arrays are always present and may be empty.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "identities",
+    "kind",
+    "title",
+    "capturedAt",
+    "origin",
+    "completeness",
+    "missing",
+    "snapshots",
+    "tags",
+    "sameAs",
+    "state",
+    "jobs"
+  ],
+  "properties": {
+    "schema": { "const": 1, "description": "Manifest schema version." },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "description": "Directory name <platform>-<id8>-<rand4>; never changes after creation."
+    },
+    "identities": { "type": "array", "items": { "$ref": "#/$defs/identity" } },
+    "kind": { "$ref": "#/$defs/kind" },
+    "title": { "type": "string" },
+    "author": { "$ref": "#/$defs/author" },
+    "publishedAt": { "type": "string", "format": "date-time" },
+    "capturedAt": { "type": "string", "format": "date-time" },
+    "origin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entry", "action", "importBatch"],
+      "properties": {
+        "entry": { "enum": ["paste", "extension", "mobile", "import", "sync", "mcp", "cli", "api"] },
+        "action": { "enum": ["favorite", "like", "share", "view", "unknown"] },
+        "importBatch": { "type": ["string", "null"] }
+      }
+    },
+    "completeness": { "$ref": "#/$defs/completeness" },
+    "missing": { "type": "array", "items": { "type": "string" } },
+    "missingReason": { "type": "string" },
+    "snapshots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "adapter", "adapterVersion", "at", "completeness", "rawDir"],
+        "properties": {
+          "id": { "type": "string" },
+          "adapter": { "type": "string", "description": "Adapter id as declared in adapter.yaml." },
+          "adapterVersion": { "type": "string" },
+          "at": { "type": "string", "format": "date-time" },
+          "completeness": { "$ref": "#/$defs/completeness" },
+          "rawDir": { "type": "string", "description": "Relative to the item directory, e.g. raw/s1." }
+        }
+      }
+    },
+    "tags": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform", "engine", "user"],
+      "properties": {
+        "platform": { "type": "array", "items": { "type": "string" } },
+        "engine": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["tag", "by", "at", "confidence"],
+            "properties": {
+              "tag": { "type": "string" },
+              "by": { "type": "string" },
+              "at": { "type": "string", "format": "date-time" },
+              "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+            }
+          }
+        },
+        "user": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "fingerprints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["images"],
+      "properties": {
+        "text": { "type": "string" },
+        "images": { "type": "array", "items": { "type": "string" } },
+        "video": { "type": "string" }
+      }
+    },
+    "sameAs": { "type": "array", "items": { "type": "string" }, "description": "Ids of other items in the same-source group." },
+    "state": { "enum": ["normal", "slimmed", "trashed"] },
+    "jobs": {
+      "type": "object",
+      "additionalProperties": { "enum": ["pending", "done", "failed"] }
+    }
+  },
+  "$defs": {
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform"],
+      "properties": {
+        "platform": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "contentId": { "type": "string" },
+        "url": { "type": "string", "format": "uri" }
+      }
+    },
+    "author": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string" },
+        "platformId": { "type": "string" },
+        "url": { "type": "string", "format": "uri" }
+      }
+    },
+    "kind": { "enum": ["article", "post", "image", "video", "file"] },
+    "completeness": { "enum": ["link", "partial", "full"] }
+  }
+}

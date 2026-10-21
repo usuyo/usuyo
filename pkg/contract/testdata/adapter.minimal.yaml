@@ -1,0 +1,8 @@
+id: builtin/web-generic
+platforms: [web]
+match: ["*"]
+capabilities: [fetch]
+method: cli
+requires: {cookie: none, proxy: none}
+cost: free
+outputs: [text, raw-html, images]

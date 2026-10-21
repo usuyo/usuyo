@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "id": "douyin-7f3a2c1e-k9x2",
+  "identities": [
+    {
+      "platform": "douyin",
+      "contentId": "7f3a2c1e9d4b6a80",
+      "url": "https://www.douyin.com/video/7f3a2c1e9d4b6a80"
+    }
+  ],
+  "kind": "video",
+  "title": "手冲咖啡：三段式注水",
+  "author": {
+    "name": "咖啡日常",
+    "platformId": "MS4wLjABAAAAsample",
+    "url": "https://www.douyin.com/user/MS4wLjABAAAAsample"
+  },
+  "publishedAt": "2026-10-01T12:00:00Z",
+  "capturedAt": "2026-10-20T03:00:00Z",
+  "origin": { "entry": "paste", "action": "favorite", "importBatch": null },
+  "completeness": "partial",
+  "missing": ["media:video"],
+  "missingReason": "平台未提供原文件",
+  "snapshots": [
+    {
+      "id": "s1",
+      "adapter": "community/douyin-api",
+      "adapterVersion": "5.1.4",
+      "at": "2026-10-20T03:00:02Z",
+      "completeness": "partial",
+      "rawDir": "raw/s1"
+    }
+  ],
+  "tags": {
+    "platform": ["手冲", "咖啡日常"],
+    "engine": [
+      { "tag": "咖啡", "by": "qwen3-4b", "at": "2026-10-20T03:05:00Z", "confidence": 0.82 }
+    ],
+    "user": ["周末要试"]
+  },
+  "fingerprints": {
+    "text": "simhash:9f86d081884c7d65",
+    "images": ["phash:c3a1b2d4e5f60718"],
+    "video": "dur:183|phash:0a1b2c3d4e5f6071"
+  },
+  "sameAs": [],
+  "state": "normal",
+  "jobs": { "normalize": "done", "ocr": "pending", "asr": "failed", "embed": "pending" }
+}
