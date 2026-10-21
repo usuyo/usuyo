@@ -1,0 +1,25 @@
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      # lint 工具由 make init 编译进 bin/，按 Makefile 内容缓存
+      - uses: actions/cache@v6
+        with:
+          path: bin/golangci-lint-*
+          key: golangci-lint-${{ runner.os }}-${{ hashFiles('Makefile') }}
+      - run: make init
+      - run: make check
