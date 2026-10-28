@@ -9,3 +9,4 @@
 | [02 来源适配器生态](02-adapter-ecosystems.md) | Mihon、yt-dlp、RSSHub、OpenCLI 等社区来源如何声明、分发、调用、治理 |
 | [03 Agent 协议与接口](03-agent-protocols.md) | MCP 2026-07-28、ACP、go-sdk 的现状；不可信内容与变更集的做法 |
 | [04 技术选型](04-tech-options.md) | 搜索、OCR、ASR、关键帧、去重、画布与桌面壳、i18n 的候选与推荐 |
+| [05 笔记软件互通与插件化](05-note-apps-and-plugins.md) | 平台内容转笔记的工具与转换插件怎么做；插件注册表、隔离方式、导出格式；获取、转换、导出三类插件与仓库拆分的建议 |

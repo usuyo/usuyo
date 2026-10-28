@@ -476,8 +476,8 @@ Karakeep 不是适配器生态，但它的抓取器把"浏览器 / 无浏览器 
 - BBDown 2026-05-14 归档的原因。
 - Cobalt 公共实例 YouTube 不可用的起止时间与官方说明（仅 issue 摘要）。
 - RSSHub 是否有官方路由状态页；RSSHub 历史上是否收到并执行过下架要求。
-- Obsidian 帮助页提到的示例模板仓库 "clipper-templates" 的实际地址。
-- Krew 索引的 PR 自动检查与发布机器人（官方页面 404）。
+- Obsidian 帮助页提到的示例模板仓库 "clipper-templates" 的实际地址。最可能是 kepano/clipper-templates，帮助页是否链到它仍待核实，见 [05 §1.1](05-note-apps-and-plugins.md#11-obsidian-社区插件)。
+- Krew 索引的 PR 自动检查与发布机器人（官方页面 404）。发布机器人的形态已在 [05 §3.8](05-note-apps-and-plugins.md#38-其他先例) 查明；PR 自动检查仍待核实。
 - MCP 规范仓库、Zotero translators、ftr-site-config、Prowlarr/Indexers 的许可证（GitHub API 返回空或 NOASSERTION）。
 - MCP 2026-07-28 版的生命周期与超时条文（[§12.2](#122-mcp-stdio-与宿主配置) 引用的是 2025-06-18 版；stdio 页已复核）。
 - opencli 的下架/移除流程是否存在。
