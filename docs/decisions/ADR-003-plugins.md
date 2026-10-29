@@ -3,7 +3,7 @@
 
 日期：2026-10-28 · 状态：proposed
 
-本条定插件的种类、进程与协议、清单、权限与隔离、仓库拆分、索引的运作、导出与读回。依据是调研 [05 §6](../research/05-note-apps-and-plugins.md#6-对歇存插件化架构的启示)，需要拍板的 P1–P9 都按 05 的建议定，见 [05 §6.8](../research/05-note-apps-and-plugins.md#68-需要拍板的事)。清单字段与契约的改动留到实现时再做。
+本条定插件的种类、进程与协议、清单、权限与隔离、仓库拆分、分发与校验、导出与读回。依据是调研 [05 §6](../research/05-note-apps-and-plugins.md#6-对歇存插件化架构的启示)，需要拍板的 P1–P9 按 05 的建议定（见 [05 §6.8](../research/05-note-apps-and-plugins.md#68-需要拍板的事)），只有分发方式按用户 2026-10-28 的决定改成 GitHub 组织加 GitHub App，不做索引仓库。清单字段与契约的改动留到实现时再做。
 
 <a id="背景"></a>
 ## 背景
@@ -14,11 +14,11 @@
 
 - 平台抓取正在从笔记插件里搬出去。24 个 Obsidian 社区插件里有 7 个把抓取和转写放进本机的独立后端或命令行工具，做的就是歇存「获取方式」的事（[05 §1.4](../research/05-note-apps-and-plugins.md#14-共性与对歇存的含义)）。
 - 别人的插件依赖宿主 API，拿不出来用；能复用的是背后的协议和命令行工具，转写基本都是 OpenAI 转写接口的形状（[05 §2.5](../research/05-note-apps-and-plugins.md#25-运行方式统计与可复用协议)）。
-- 纯 GitHub Actions 的仓库索引就能收 PR、校验、给外部提交评论和打标签；GitHub App 只在四件事上不可替代（[05 §3.9](../research/05-note-apps-and-plugins.md#39-github-app-与-actions-的能力差别)）。
+- GitHub App 能做而 Actions 做不了的有四件事，其中一件是不需要作者配合就收到插件仓库的 release 事件（[05 §3.9](../research/05-note-apps-and-plugins.md#39-github-app-与-actions-的能力差别)）。
 - 主流笔记宿主都没有运行时强制隔离；ffmpeg、ASR、OCR、本地视觉模型只能跑原生进程（[05 §4.1](../research/05-note-apps-and-plugins.md#41-宿主插件的安全模型)、[05 §4.4](../research/05-note-apps-and-plugins.md#44-原生进程还是-wasm)）。
 - 没有工具从笔记软件读回改动（[05 §5.9](../research/05-note-apps-and-plugins.md#59-读回双向的先例与歇存的做法)）。
 
-2026-10-28 用户认可了方向：先做 GitHub 仓库索引，托管 GitHub App 以后再加，官方索引不收获取方式。
+2026-10-28 用户定了分发方式：主仓库和官方插件都放在 GitHub 组织 `xiecun-app` 里，进组织就是上架；第三方插件放在作者自己的仓库，用户按仓库直接安装；不做靠 PR 收录的索引仓库；GitHub App 从一开始就做。获取方式不进组织。
 
 <a id="决定"></a>
 ## 决定
@@ -26,11 +26,11 @@
 <a id="1-插件分三类"></a>
 ### 1. 插件分三类
 
-| 类 | 做什么 | 输入 | 输出 | 官方索引 |
+| 类 | 做什么 | 输入 | 输出 | 官方插件 |
 |---|---|---|---|---|
-| 获取 fetch | 从平台或外部文件取回内容 | URL、订阅源、导出包 | `raw/` 快照、文本、媒体 | 不收，只进社区 store |
-| 转换 transform | 把条目里已有的文件变成新的一层 | 条目文件的路径，只读 | `derived/` 下的约定文件、`images/keyframes/` | 收 |
-| 导出 export | 把条目和主题页写到笔记软件，可选读回用户改动 | 条目与主题页的只读视图（JSON） | 交给宿主写的文件，或经宿主代发的云 API 调用；读回时返回结构化改动 | 收；云端目标标「离开本机」 |
+| 获取 fetch | 从平台或外部文件取回内容 | URL、订阅源、导出包 | `raw/` 快照、文本、媒体 | 没有，只能是第三方仓库 |
+| 转换 transform | 把条目里已有的文件变成新的一层 | 条目文件的路径，只读 | `derived/` 下的约定文件、`images/keyframes/` | 有 |
+| 导出 export | 把条目和主题页写到笔记软件，可选读回用户改动 | 条目与主题页的只读视图（JSON） | 交给宿主写的文件，或经宿主代发的云 API 调用；读回时返回结构化改动 | 有；云端目标标「离开本机」 |
 
 - **导入是获取的一种**，来源是文件而不是 URL，沿用获取方式的协议，`origin.entry` 记 `import`。
 - **模型 provider 不是插件**，是内核里的一份配置：名称、OpenAI 兼容端点、模型、密钥。密钥存系统钥匙串。转换插件只引用 provider 名称，请求由内核代签代发，插件拿不到密钥明文。
@@ -87,29 +87,27 @@
 
 | 仓库 | 内容 | 许可证 |
 |---|---|---|
-| `xiecun-app/xiecun` | 内核、CLI、MCP、桌面壳；插件运行器、权限落实、provider 代理、导出记录与读回合并；不含任何平台抓取逻辑 | AGPL-3.0 |
+| `xiecun-app/xiecun` | 内核、CLI、MCP、桌面壳；插件运行器、权限落实、provider 代理、导出记录与读回合并；屏蔽清单 `security/plugin-blocklist.json`；不含任何平台抓取逻辑 | AGPL-3.0 |
 | `xiecun-app/plugin-kit` | 清单与消息的 JSON Schema、`derived/` 文件格式、契约测试套件与 `testdata/`、Go / TypeScript / Python SDK、插件模板、本地校验命令 | MIT |
-| `xiecun-app/plugins` | 官方索引，只收转换与导出插件：`index/<id>.yaml`、生成的 `index.json`、`removed.yaml`、`deprecated.yaml`、校验与定时任务的 workflow | MIT |
-| `xiecun-app/<kind>-<name>` | 官方插件，一个插件一个仓库，例如 `transform-ffmpeg`、`transform-asr-sherpa`、`transform-ocr-rapid`、`export-obsidian`、`export-notion`；release 附各平台二进制与 sha256 | MIT |
-| 社区获取方式 store | 按 [02 §15.7](../research/02-adapter-ecosystems.md#157-适配器源信任与治理) 的 `store.json`、`index.json` 分层；官方客户端不预置任何 store | 各 store 自定 |
-| 社区转换、导出插件 | 提 PR 进官方索引，或自建 store | 作者自定 |
+| `xiecun-app/<kind>-<name>` | 官方插件，只有转换与导出，一个插件一个仓库，例如 `transform-ffmpeg`、`transform-asr-sherpa`、`transform-ocr-rapid`、`export-obsidian`、`export-notion`；release 附各平台二进制，清单列出各资产的 sha256 | MIT |
+| `xiecun-app` 下的 GitHub App 服务 | 接收 release 事件，跑校验，写 check run；仓库名实现时定 | 实现时定 |
+| 第三方插件 | 作者自己的仓库，三类都可以；获取方式只能以这种形式存在 | 作者自定 |
 
-- **命名**：官方插件在 `xiecun-app` 组织下不加 `xiecun-` 前缀；社区插件仓库名用前缀 `xiecun-transform-`、`xiecun-export-`、`xiecun-fetch-`。两者都加 GitHub topic `xiecun-plugin`。
-- **官方插件也走插件协议。** Obsidian 导出、ffmpeg、默认 ASR、默认 OCR 都做成独立仓库的官方插件，随安装包预装，不写进内核。社区插件拿到的是同一套能力。
-- **按法律风险分索引。** 获取方式是唯一涉及平台的一类，官方索引不收，客户端也不预置任何获取方式 store。这样即使某个获取方式出事，官方索引和插件生态不受连累。
+- **命名**：官方插件在 `xiecun-app` 组织下不加 `xiecun-` 前缀；第三方插件仓库名用前缀 `xiecun-transform-`、`xiecun-export-`、`xiecun-fetch-`。两者都加 GitHub topic `xiecun-plugin`。
+- **官方插件也走插件协议。** Obsidian 导出、ffmpeg、默认 ASR、默认 OCR 都做成组织里独立仓库的官方插件，随安装包预装，不写进内核。第三方插件拿到的是同一套能力。
+- **按法律风险分组织内外。** 获取方式是唯一涉及平台的一类，一律不进 `xiecun-app` 组织，客户端也不预置任何获取方式。这样即使某个获取方式出事，组织和官方插件不受连累。
 
-<a id="6-索引的运作"></a>
-### 6. 索引的运作
+<a id="6-分发与校验"></a>
+### 6. 分发与校验
 
-- **提交**：PR 只加一个 `index/<id>.yaml`（仓库地址、类别），一个 PR 一个插件。
-- **校验分两段**：
-  - `pull_request` 任务只有读权限，在临时环境里下载插件 release，校验清单 schema、sha256、权限声明，跑契约测试，结果上传为 artifact；
-  - `workflow_run` 任务读取结果，以 `github-actions[bot]` 评论、打标签；
-  - `pull_request_target` 里只把 PR 内容当数据读，不签出、不执行 PR 带来的任何东西。
-- **更新**：定时任务轮询各插件的 Latest Release，校验通过后把版本、各平台资产的 sha256、权限摘要写进生成的 `index.json`。作者不用再提 PR，但每个新版本都过同一套校验；校验失败就在索引仓库开 issue 并 @ 作者。
-- **下架**：`removed.yaml`（原因、日期）、`deprecated.yaml`、按版本禁用、恶意清单，都是数据文件，由客户端读取后执行。
-- **需要 `[bot]` 身份或跨仓库写入时**：注册一个只装在索引仓库的 GitHub App，私钥放仓库 secrets，workflow 里用 `actions/create-github-app-token` 换 1 小时的 token。不托管服务。
-- **托管 GitHub App** 在下面任一情况出现时再加：插件多到轮询不经济；要发版后即时收录；要读私有源码核对构建；要逐版本的扫描服务。加了 App 之后，它也只给索引仓库开 PR 或提交，索引始终以仓库里的文件为准，每次变更都是一条可审计的提交。
+- **官方插件列表就是组织本身。** 客户端列出 `xiecun-app` 组织里带 topic `xiecun-plugin` 的仓库，版本和资产取各自的 GitHub Release。不另做索引文件，不走 PR 收录。仓库进组织就是上架，由组织成员审核。
+- **第三方插件不经过歇存。** 作者在自己的仓库发布；用户输入 `owner/repo` 直接安装；浏览靠搜索 topic `xiecun-plugin`。客户端清楚标出「官方」和「第三方 · 未经歇存审核」两种来源。
+- **GitHub App 从一开始就做**，归 `xiecun-app` 组织所有，装在组织上：
+  - 每次 release 自动校验清单 schema、各平台资产的 sha256、跑契约测试，结果写成 check run；
+  - 第三方作者也可以把它装到自己的仓库，拿到同样的校验；
+  - 客户端显示每个版本的校验结果：通过、失败、没有校验。
+- **安装与更新以 release 资产的 sha256 为准。** 客户端下载后核对清单里列出的 sha256，不一致就拒装。
+- **屏蔽清单。** 不做下架用的索引，只在主仓库放一份 `security/plugin-blocklist.json`，列出恶意仓库和恶意版本（仓库、版本范围、原因、日期）。客户端在启动、安装和更新前读取它，命中的拒装，已装的停用。
 
 <a id="7-导出与读回"></a>
 ### 7. 导出与读回
@@ -133,8 +131,9 @@
 
 | 方案 | 原因 |
 |---|---|
-| 第一步就做托管 GitHub App | 要持久运行的 webhook 服务、私钥托管、签名校验、排队与重试；纯 Actions 已经能收 PR、校验、评论。保留为后续选项，触发条件见 [决定 6](#6-索引的运作) |
-| 官方索引收获取方式，或客户端预置获取方式 store | Tachiyomi 的应用、扩展、网站同在一个组织，一起被下线（[02 §1](../research/02-adapter-ecosystems.md#1-tachiyomi-与-mihon-扩展生态)） |
+| 靠 PR 收录的索引仓库：`plugins` 仓库、`index/<id>.yaml`、生成的 `index.json`，即 [05 §6.4](../research/05-note-apps-and-plugins.md#64-索引用-github-仓库还是-github-app) 的建议 | 用户认为丑陋，也多一层维护；组织本身就能当官方列表，topic 就能用来浏览 |
+| 中心化的插件商店网站 | 多一个要运行和审核的服务；仓库加 topic 已经能浏览和安装 |
+| 获取方式进组织，或客户端预置任何获取方式 | Tachiyomi 的应用、扩展、网站同在一个组织，一起被下线（[02 §1](../research/02-adapter-ecosystems.md#1-tachiyomi-与-mihon-扩展生态)） |
 | 三类插件各一份清单 | 字段大半重合，三套 schema 会各自漂移 |
 | 现在就做 `wasm-runner`，或只用 Wasm | ffmpeg、ASR、OCR、本地视觉模型做不了；眼下没有纯变换插件需要它 |
 | wazero 或 Extism 嵌进内核 | [ADR-001](ADR-001-stack.md) 要求重计算与插件外置；Extism 的 Go SDK 停滞 |
@@ -151,14 +150,19 @@
 
 - [PRD §4](../PRD.md#4-原则) 原则 4 的「一切可插拔」加「导出」，和获取方式、识别器并列。
 - [SPEC §8](../SPEC.md#8-适配器协议-v0) 扩展清单：加 `kind`、转换与导出的字段、`permissions`；补转换插件的 JSON-RPC 协议。顺带把 [SPEC §2](../SPEC.md#2-资料库目录真相源) 的 `threads/`、`thoughts/` 改成 product-model 的 `topics/`，导出读的是 `topics/`。
-- [product-model §8.1](../product-model.md#81-设置清单) 设置清单加「导出」分组；「自动更新获取方式」保留，但扩大了权限的新版本要等用户同意。
+- [product-model §8.1](../product-model.md#81-设置清单) 设置清单加「导出」分组；「自动更新获取方式」保留，但扩大了权限的新版本要等用户同意；「获取方式来源列表」改为按仓库安装的插件列表，标出「官方」与「第三方 · 未经歇存审核」。
 - CLAUDE.md 重写时，技术栈里「适配器」一行改为三类插件，并指向本条。
 
 代码，实现时做：
 
 - `pkg/contract`：`adapter.yaml` 的 Go 类型与 schema 加 `kind` 等字段；新增转换、导出消息的 schema。插件清单与消息的 schema 以内核的 `pkg/contract` 还是 `plugin-kit` 为准，实现时定。
 - 内核：插件运行器、各平台沙箱 profile 生成（每个 macOS 大版本回归）、provider 代理、导出记录、读回合并。
-- 新仓库 `plugin-kit`、`plugins` 和首批官方插件，开始实现时再建。
+- 新仓库 `plugin-kit`、GitHub App 服务和首批官方插件，开始实现时再建。
+
+运维：
+
+- GitHub App 要持续运行一个接收 webhook 的服务，包括托管、私钥保管、webhook 签名校验、排队与重试。
+- 客户端直接调 GitHub API 列组织仓库、读 release 和 check run。未登录时每个 IP 每小时只有 60 次 REST 请求，客户端要缓存结果、按需刷新。
 
 [ADR-001](ADR-001-stack.md) 的结论不变，本条是其中「独立进程」一条的展开。
 
@@ -175,3 +179,5 @@
 - 飞书、语雀是否保留 HTML 注释，决定它们以后能不能读回。
 - 「资料库即 vault」时，Obsidian 改属性会重写 YAML、重命名会改写链接，对真相文件的影响。
 - 思源对同一 `path` 重复调用 `createDocWithMd` 的实际结果。
+- 客户端不登录时能否读到公开仓库的 check run；check run 挂在 release tag 指向的提交上，客户端按 tag 查找是否可靠。
+- 组织成员审核的具体流程：谁能把仓库建进组织或转入组织，上架前要过哪些检查。
