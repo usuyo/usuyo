@@ -18,20 +18,21 @@
 
 收录范围：
 
-- [06 调研](research/06-platform-access-and-account-risk.md#调研-06--平台内容获取的开源生态与账号风险)里致谢标为 thanks 的 259 条，按类别放进下面各节，出处链到 06 的同名小节；用户点名的项目链到 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)。
+- [06 调研](research/06-platform-access-and-account-risk.md#调研-06--平台内容获取的开源生态与账号风险)里标「（致谢）」的 260 条，按类别放进下面各节，出处链到 06 的同名小节；用户点名的项目链到 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)。
+- 用户点名、06 没标致谢的 5 条。用户说过，点名的项目都是以后的致谢候选，所以照收，按 06 里的类别和关系放进各节，限制写在各自那一行：
+  - NanmiCoder/MediaCrawler：自定义的非商业学习许可，条款里没有分发授权，只借做法，不 fork、不分发、不包装。
+  - ahang008/ah-skills：Skill 索引仓库，本身不从平台取内容，许可为非商业源码可见；同作者的 ah-douyin-clean-downloader 在 06 标了致谢，已收。
+  - open-wxa/wxa-runner：在浏览器里运行自己的小程序、做本地调试和测试的工具，不取平台内容；内置的基础库是腾讯代码，不能分发。
+  - pabatiba89-sys/kali-publish：social-auto-upload 派生的商业产品发布模块，视频号流程写死了推广话题和商品逻辑，只借登录经验；上游 social-auto-upload 已收。
+  - ycccccccy/echotrace：用户写的是 `echo`，对应关系是推断；属 client-hook，已停更，作者的另一个仓库在腾讯 2026 年的 DMCA 通知里。
 - [02](research/02-adapter-ecosystems.md#调研-02--社区维护的来源适配器生态) 和 [05](research/05-note-apps-and-plugins.md#调研-05--笔记软件互通与插件化) 里被当作做法来源、准备兼容或借代码的 61 条，出处链到对应小节。只在表格里出现、没被引为做法的，以及只被当作反例的，不收。这 61 个仓库 2026-10-30 用 `gh api` 确认存在，许可证以返回值为准。
 - 归档、停更、删库的项目照收，状态写在一句话里。
 
-合计 320 条：计划适配 127 条，参考设计 182 条，相邻项目 11 条。
-
-用户点名、这次没收的四个：
-
-- NanmiCoder/MediaCrawler：自定义的非商业学习许可，条款里没有分发授权，歇存不 fork、不分发、不包装。
-- ahang008/ah-skills：Skill 索引仓库，本身不从平台取内容，许可为非商业源码可见；同作者的 ah-douyin-clean-downloader 已收。
-- open-wxa/wxa-runner：在浏览器里运行自己的小程序、做本地调试和测试的工具，不取平台内容。
-- pabatiba89-sys/kali-publish：social-auto-upload 派生的商业产品发布模块，视频号流程写死了推广话题和商品逻辑；上游 social-auto-upload 已收。
+合计 326 条：计划适配 127 条，参考设计 184 条，相邻项目 15 条。
 
 用户给的视频号链接，按视频演示的内容推断对应 mingjuner123-spec/wechat-inbox-sync（待核实）。
+
+用户写的 `echo`，按名字和星数推断对应 ycccccccy/echotrace（待核实），其他同名候选见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)。
 
 正式发布前逐条确认：
 
@@ -71,6 +72,10 @@
 - [onfabric/context-use](https://github.com/onfabric/context-use)：把对话记录和 Instagram、Google、Telegram 等平台导出包转成 AI 记忆的命令行，附 Agent Skill。MIT。参考设计。见 [06 §4](research/06-platform-access-and-account-risk.md#4-多平台下载与抓取)
 - [timelinize/timelinize](https://github.com/timelinize/timelinize)：本地优先的个人时间线应用，把各平台官方导出包、手机备份和本地文件导入同一个 SQLite 库，按时间、地点、人物浏览。AGPL-3.0。参考设计。见 [06 §4](research/06-platform-access-and-account-risk.md#4-多平台下载与抓取)
 - [whiteguo233/OpenBiliClaw](https://github.com/whiteguo233/OpenBiliClaw)：本地运行的跨平台内容推荐 Agent，浏览器扩展同步用户在各平台的观看历史、收藏和关注，生成兴趣画像后找内容并说明推荐理由。MIT。参考设计。见 [06 §4](research/06-platform-access-and-account-risk.md#4-多平台下载与抓取)
+
+**相邻项目（1）**
+
+- [NanmiCoder/MediaCrawler](https://github.com/NanmiCoder/MediaCrawler)：多平台自媒体内容采集工具，按关键词、帖子 ID 或创作者主页抓小红书、抖音、快手、B站、微博、贴吧、知乎的帖子和评论；用户点名；非商业学习许可，只借做法，不分发。NOASSERTION（自定义「非商业学习使用许可证 1.1」，没有分发授权）。相邻项目。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
 
 <a id="抖音快手与-tiktok"></a>
 ## 抖音、快手与 TikTok
@@ -202,6 +207,11 @@
 - [MuZiJin701/wx-video-account-notes](https://github.com/MuZiJin701/wx-video-account-notes)：把视频号分享链接解析成视频、图文和音乐文件，在本机做 OCR、ASR 并整理成 Markdown 笔记的 Agent Skill。MIT（服务端文件来自上游，受 MIT + Commons Clause 约束）。参考设计。见 [06 §8](research/06-platform-access-and-account-risk.md#8-微信生态)
 - [shibanyu333/wechat-chat-export](https://github.com/shibanyu333/wechat-chat-export)：Mac 微信聊天记录导出工具，读屏、自动滚动截图、本机 OCR，导出 Word 或 Markdown，附带图片和聊天文件。MIT。参考设计。见 [06 §8](research/06-platform-access-and-account-risk.md#8-微信生态)
 - [zhaohongxuan/obsidian-weread-plugin](https://github.com/zhaohongxuan/obsidian-weread-plugin)：把微信读书的书籍、划线、想法、书评同步进 Obsidian 的社区插件。MIT。参考设计。见 [06 §8](research/06-platform-access-and-account-risk.md#8-微信生态)
+
+**相邻项目（2）**
+
+- [open-wxa/wxa-runner](https://github.com/open-wxa/wxa-runner)：在普通浏览器里用微信官方基础库运行自己的小程序编译产物，用于本地调试和 Playwright E2E 测试，不取平台内容；用户点名；内置的基础库是腾讯代码、没有许可证，不能随歇存分发。MIT。相邻项目。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
+- [ycccccccy/echotrace](https://github.com/ycccccccy/echotrace)：微信 4.x PC 端聊天记录的本地导出与分析工具，解密本机数据库后导出 JSON、HTML、Excel 并生成年度报告，2026-01-18 停止维护，默认分支只剩文档；用户点名的 echo，对应关系是推断；client-hook，作者的另一个仓库 wx_key 在腾讯 2026 年的 DMCA 通知里。MIT。相邻项目。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
 
 <a id="微博知乎豆瓣与海外社交平台"></a>
 ## 微博、知乎、豆瓣与海外社交平台
@@ -451,15 +461,18 @@
 
 - [Breakthrough/PySceneDetect](https://github.com/Breakthrough/PySceneDetect)：基于 OpenCV 的镜头切换检测命令行和 Python 库，输出每个场景的起止时间，可按场景截图或切分视频。BSD-3-Clause。计划适配。见 [06 §15](research/06-platform-access-and-account-risk.md#15-相邻创作发布与分析)
 
-**参考设计（4）**
+**参考设计（6）**
 
 - [chengyi-ai/native-subtitle-quote-image](https://github.com/chengyi-ai/native-subtitle-quote-image)：从视频按时间点取帧，裁出画面里已烧录的字幕条或把台词画到真实帧上，拼成社交长图并逐张质检的 Agent Skill。MIT。参考设计。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
 - [dreammis/social-auto-upload](https://github.com/dreammis/social-auto-upload)：命令行加 Agent Skill 的多平台发布工具，用浏览器自动化把视频、图文和文章发到抖音、B站、小红书、视频号等 17 个平台入口。MIT。参考设计。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
 - [hanliang97/MatrixMedia](https://github.com/hanliang97/MatrixMedia)：Electron 桌面应用，把视频批量发布到抖音、快手、小红书、视频号、B站等平台的多个账号，附命令行、本机 HTTP 和 MCP。GPL-2.0。参考设计。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
 - [hypit-ai/hypit](https://github.com/hypit-ai/hypit)：给编码 Agent 用的视频制作语言与命令行，读入参考视频后转写、截帧分析，生成可编辑、可重跑的工作流。NOASSERTION（改过的 Apache-2.0，未经授权不得用于托管服务或商业获利）。参考设计。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
+- [pabatiba89-sys/kali-publish](https://github.com/pabatiba89-sys/kali-publish)：social-auto-upload 的派生，喀理 AI 的开源发布后端，用本机 Chrome 保存的登录态把视频发到小红书、视频号、抖音等 10 个平台；用户点名；只借登录与会话导出的经验，视频号流程写死了推广话题和商品逻辑，不包装。MIT。参考设计。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
+- [ZJU-REAL/Easel](https://github.com/ZJU-REAL/Easel)：浙江大学 REAL Lab 发起的社媒运营 Agent 工作台，用 Agent Skill 做热点发现、选题和图文音视频创作，扫码登录七个国内平台发布并读回账号数据。Apache-2.0（内置的 gzh-design 为 AGPL-3.0，抖音发布脚本的来源许可待核实）。参考设计。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
 
-**相邻项目（11）**
+**相邻项目（12）**
 
+- [ahang008/ah-skills](https://github.com/ahang008/ah-skills)：阿杭的 Codex Skill 目录仓库，主要是指向独立仓库的索引，另有短视频制作入口、口播润色与剪辑包，本身不从平台取数据；用户点名；源码可见的非商业许可，只借来源说明的写法，不 fork、不分发。NOASSERTION（AH Source Available Non-Commercial License 1.0）。相邻项目。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
 - [caol64/wenyan-mcp](https://github.com/caol64/wenyan-mcp)：文颜的 MCP 版本，把 Markdown 转成公众号样式，连同图片、封面经官方接口上传到草稿箱。Apache-2.0。相邻项目。见 [06 §15](research/06-platform-access-and-account-risk.md#15-相邻创作发布与分析)
 - [doocs/cose](https://github.com/doocs/cose)：doocs/md 配套的浏览器扩展，把编辑好的文章一次同步到公众号、知乎、头条、小红书长文、X Articles 等平台。Apache-2.0。相邻项目。见 [06 §15](research/06-platform-access-and-account-risk.md#15-相邻创作发布与分析)
 - [doocs/md](https://github.com/doocs/md)：把 Markdown 即时渲染成公众号图文样式的编辑器，有网页版、浏览器扩展、VS Code 扩展和命令行。WTFPL。相邻项目。见 [06 §15](research/06-platform-access-and-account-risk.md#15-相邻创作发布与分析)

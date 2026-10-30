@@ -9,7 +9,7 @@
 ## 约定
 
 - **数据来源与日期**：每个仓库的 ★、最近推送、最近 release、许可证、是否归档，都是 2026-10-30 调用 `gh api repos/<owner>/<repo>` 与 `gh api repos/<owner>/<repo>/releases/latest` 的返回。★ 用 `stargazers_count`；推送用 `pushed_at` 的日期；release 写「tag（日期）」，没有 release 写 none；许可证用 `spdx_id`，没有许可证写 none，GitHub 识别不出的写 NOASSERTION，实际条款写在「歇存怎么用」一列。只有 Readeck 维护的 go-readability 不在 GitHub（在 Codeberg），★ 一栏写「—」。判断只依据代码、文档和 issue，没有运行任何抓取工具，也没有对平台发请求。
-- **范围**：共收录 459 个项目，层级分布 official-export 39、public-web 59、vision-ui 48、browser-session 48、session-api 29、private-api 110、client-hook 29、not-applicable 97。主要用途是刷量、刷赞刷粉、批量私信、养号、撞库或收集他人隐私数据的项目不收录，也不算相邻项目。复现签名和 Hook 客户端的项目只记它是什么、属于哪一层、维护和下架情况，不写技术细节。
+- **范围**：共收录 470 个项目，层级分布 official-export 40、public-web 61、vision-ui 48、browser-session 48、session-api 31、private-api 111、client-hook 30、not-applicable 101。主要用途是刷量、刷赞刷粉、批量私信、养号、撞库或收集他人隐私数据的项目不收录，也不算相邻项目。复现签名和 Hook 客户端的项目只记它是什么、属于哪一层、维护和下架情况，不写技术细节。
 - **获取层级**：按「实际怎么拿到数据」判断，不按项目自己的宣传。风险对比见 [§1.1](#11-七个层级)。
   - `official-export`：平台官方的数据导出、用户授权的官方开放 API，或读取用户已经导出的文件；
   - `public-web`：不登录，读公开页面或分享链接，不自己复现平台的请求签名；
@@ -23,7 +23,7 @@
   一个项目有多条路径时，取默认路径用到的最高一层。所以多平台工具的层级往往偏高：同一个工具在某个平台上可能走更低的一层，[§2](#2-覆盖矩阵每个平台有哪些层级可选) 对这种情况单独标记。
 - **登录**：是否需要用户账号单独记，和层级分开。不登录的方式没有账号风险，只有 IP 层面的风控。表里写「不用 / 可选 / 必须」，不涉及平台的写「—」。
 - **表格各列**（[§4](#4-多平台下载与抓取) 到 [§15](#15-相邻创作发布与分析)）：
-  - 项目：仓库链接。后面标「（致谢）」的是以后可能放进致谢名单的项目，共 259 个，标注沿用各条调研的判断；
+  - 项目：仓库链接。后面标「（致谢）」的是以后可能放进致谢名单的项目，共 260 个，标注沿用各条调研的判断；
   - ★ / 推送 / release / 许可证：见上，归档的仓库另标「已归档」；
   - 平台：支持四个及以上平台的前面写「多平台」；「微信聊天」也包括客户端里的「收藏」；
   - 做什么：一句话。02、05 写过的项目在后面链过去，用户点名的项目链到 [§3](#3-用户点名的项目)；
@@ -47,10 +47,10 @@
 6. **下架和法律风险集中在两类做法：解密本地数据、复现平台签名。** 腾讯 2026 年发了 37 份针对聊天库解密的 DMCA 通知，B站 2026 年给接口文档、SDK、下载器和 Xposed 模块的维护者发律师函；只读公开页、页内请求、UI 自动化、官方导出这几类没有找到来函记录。见 [§16.3](#163-下架停更与法律风险)。
 7. **视频号是覆盖最差的平台。** 不装证书、不注入的路只有借腾讯元宝的登录态换凭证，账号风险从微信号转到元宝账号；其余都是本机代理改写页面，属于 `client-hook`。见 [§8](#8-微信生态)。
 8. **热门中文项目多是非商业或源码可见许可。** MediaCrawler、逸尘的 Skill 合集、阿杭的两个仓库、wechat-inbox-sync 新版、Hypit、videodl 都只能参考，不能分发，也不能改成歇存的插件。见 [§17.4](#174-fork-与许可证)。
-9. **用户点名的 24 个名字里，能直接拿来做获取插件的不多。** wechat-article-exporter 的单篇管线、Downvid 的抖音快手解析器、chubbyskills、bilibili-douyin-notes、xhs-account-teardown 可以 fork 或移植；转换侧的 AI-Video-Transcriber、indra 可以包装；其余是发布、创作工具或非商业项目。见 [§3](#3-用户点名的项目)。
+9. **用户点名的 26 个名字里，能直接拿来做获取插件的不多。** wechat-article-exporter 的单篇管线、Downvid 的抖音快手解析器、chubbyskills、bilibili-douyin-notes、xhs-account-teardown 可以 fork 或移植；转换侧的 AI-Video-Transcriber、indra 可以包装；其余是发布、创作工具或非商业项目。后补的 `easel` 是创作发布工作台，只借设计；`echo` 推断是已停更的 EchoTrace，属 `client-hook`，不接入。见 [§3](#3-用户点名的项目)。
 10. **清单加两个声明字段，风险由宿主推出。** 提议插件声明 `access`（七层取值）和 `login`，宿主据此推出 `risk`；设置里按风险从低到高排序、默认先试低风险，高风险层单独确认，失败后自动换方式时不往更高风险的层换。见 [§17.1](#171-清单里声明获取层级)、[§17.2](#172-设置里怎么让用户选)。
 11. **首批自己适配的方向。** 先做官方导出的导入和公开页单条获取，再做页内取列表和视觉层拿链接。按用户 2026-10-30 定的方向，自己维护的获取方式放进一个单独的 GitHub 组织，和官方组织分开，客户端不预置；组织名等产品改名定下后再起，届时修订 ADR-003。见 [§17.3](#173-首批自己适配的插件)、[§17.4](#174-fork-与许可证)。
-12. **致谢候选有 259 个。** 在各表的项目名后标「（致谢）」。已下架或清空的、只记录层级的客户端注入类和运营类工具都没有标；有几个非商业许可的项目标了，意思是可以致谢，不能复用代码。见 [约定](#约定)。
+12. **致谢候选有 260 个。** 在各表的项目名后标「（致谢）」。已下架或清空的、只记录层级的客户端注入类和运营类工具都没有标；有几个非商业许可的项目标了，意思是可以致谢，不能复用代码。见 [约定](#约定)。
 
 <a id="1-账号风险分层"></a>
 ## 1. 账号风险分层
@@ -172,7 +172,7 @@
 <a id="3-用户点名的项目"></a>
 ## 3. 用户点名的项目
 
-用户点了 24 个名字，对应 27 个仓库：逸尘名下另有 3 个仓库一并列出。「用户写的」一列照抄原文。这些项目在各类别表里也各有一行。
+用户先点了 24 个名字，对应 27 个仓库：逸尘名下另有 3 个仓库一并列出；之后又补了 `easel` 和 `echo` 两个，合计 26 个名字、29 个仓库，`echo` 的对应关系是推断。「用户写的」一列照抄原文。这些项目在各类别表里也各有一行。
 
 | 项目 | 用户写的 | 层级 | 登录 | 许可证 | 歇存怎么用 |
 |---|---|---|---|---|---|
@@ -203,6 +203,8 @@
 | ↳ [mcncarl/ailu](https://github.com/mcncarl/ailu) | （同一作者） | `not-applicable` | 必须 | AGPL-3.0 | 借飞书导出的最小权限做法 |
 | ↳ [mcncarl/wechat-relay](https://github.com/mcncarl/wechat-relay) | （同一作者） | `not-applicable` | 必须 | AGPL-3.0 | 借官方接口中转的安全边界 |
 | [hanliang97/MatrixMedia](https://github.com/hanliang97/MatrixMedia) | `hanliang97/MatrixMedia` | `session-api` | 必须 | GPL-2.0-only | 借登录态页面里取列表的适配器结构 |
+| [ZJU-REAL/Easel](https://github.com/ZJU-REAL/Easel) | `easel` | `private-api`（B站 登录模拟 TV 端） | 可选 | Apache-2.0，内置 gzh-design 为 AGPL-3.0 | 不接入；借登录状态文件、读回分档和资料目录锁 |
+| [ycccccccy/echotrace](https://github.com/ycccccccy/echotrace) | `echo` | `client-hook`（微信本地数据） | 必须 | MIT，默认分支只剩文档 | 不接入；对应关系是推断，只记录层级和下架情况 |
 
 **kali-publish（pabatiba89-sys/kali-publish）。** GitHub 按名字搜不到，按描述搜「kali 发布」找到这个仓库；npm、PyPI 上没有同名包。它是 social-auto-upload 的派生，喀理 AI 商业产品的开源发布模块，用本机 Chrome 保存的登录态把视频发到小红书、视频号、抖音等 10 个平台，不取内容。对歇存有用的只有登录这一块的踩坑记录：Google 系平台不接受在 Playwright 控制的 Chrome 里登录，所以首次登录用普通 Chrome 加独立资料目录，再经本机 CDP 导出 `storage-state.json`；macOS 上自动化启动的 Chrome 读不到系统钥匙串加密的 Cookie；判断登录是否完成只查必需 Cookie 的名字，不读也不解密值。这几条可以写进获取插件的登录指南。不包装也不 fork：视频号流程会在每条作品后追加推广话题、按账号名挂课程商品，本机 5409 端口的服务没有认证，按链接下载时忽略证书错误。MIT；单人维护，没有 issue，能否持续不确定。
 
@@ -257,6 +259,23 @@
 **mcncarl/wechat-relay（同一作者）。** 自托管的公众号草稿接口中转服务，只转发上传素材、上传正文图片、新建草稿、读取草稿四个官方接口，让公众号的 IP 白名单只需登记服务器的固定出口 IP。可借它的安全写法：只开放四个路径且全部要认证，对路径、方法、参数、请求体与响应大小、速率、连接数都设上限；新建草稿必须带幂等键，数据库只存键的摘要、路由和请求体哈希，不存原文；只在 token 失效的三种错误码时换新 token 重试一次；日志按白名单字段输出，不含密钥和正文；进程只绑定回环地址。歇存以后做公众号草稿导出，或给需要固定出口 IP 的官方接口做中转时，可以照这套边界设计。AGPL-3.0，只作为用户自部署的独立服务经 HTTP 调用。
 
 **hanliang97/MatrixMedia。** Electron 桌面应用，把本地或网络视频批量发到抖音、快手、小红书、视频号、B站、头条等的多个账号，附命令行、本机 HTTP 接口和 MCP；还能采集自己账号的作品与粉丝数据，部分请求带 Cookie 直接调接口，条目记 `session-api`。对歇存有用的是数据统计模块：为每个账号开一个隐藏窗口复用会话，先看是否被重定向到登录页，再在页面上下文执行按平台写的适配器脚本，签名一律交给页面自己完成，统一输出概览、粉丝趋势和作品列表——把「作品列表」换成「收藏列表」，就是 `browser-session` 层获取插件该有的形状。命令行的退出码区分成功、异常、参数错误、业务失败，账号和历史命令支持 `--json`。GPL-2.0-only，和 AGPL 内核、MIT 插件都不兼容，只借结构。README 承认小红书对内置窗口的自动化检测越来越严，所以加了真实 Chrome 发布模式，并对小红书强制显示窗口、两次点击间隔随机 5–10 秒；启动时默认向公开 Gist 写匿名打开事件，可以关闭。
+
+**easel（ZJU-REAL/Easel）。** 用户后来补的名字。浙江大学 REAL Lab 发起的社媒运营 Agent 工作台，README 同列北京大学与 OpenDCAI Lab；默认用 OpenClaw 做执行底座，也可换 OpenCode、Codex 或通用 ACP；`skills/builtin` 下 115 个 Agent Skill 覆盖热点发现、选题、图文音视频创作、七个国内平台的扫码登录与发布，以及发布后的读回和账号数据。它不读收藏夹，取数按功能分层：热点雷达不登录，读第三方聚合服务和知乎、头条的公开热榜，属 `public-web`；账号数据和评论在 Playwright 保存的登录态里读创作中心页面和页面自己的请求，属 `browser-session`；抖音读回在页面里带 Cookie 请求作品列表，B站 用 cookies.json 直接调稿件和数据接口，属 `session-api`。条目记 `private-api`，因为默认路径里 B站 唯一的登录入口模拟 TV 端扫码；内置的小红书分析技能是 lucasygu/redbook（见 [§6](#6-小红书)）的源码副本，但 redbook 要用户另装。只按取内容那一步算，最高是 `session-api`，口径列在 [§18](#18-待核实清单)。取数部分歇存用不上，可借四处设计：登录状态文件由执行进程原子写 JSON、宿主轮询，分出等待扫码、需要短信验证、校验中等状态，获取插件扫码登录时可以照此把进度交给界面；读回结果分 verified、unverified、login_required、readback_error 四档，没有平台侧证据不算成功，可以映射进歇存的错误信封，把登录失效和通道故障分开；同一资料目录加跨进程锁，国内平台一律直连（[ZJU-REAL/Easel #52](https://github.com/ZJU-REAL/Easel/issues/52)、[ZJU-REAL/Easel #42](https://github.com/ZJU-REAL/Easel/issues/42)）；未合并的 [ZJU-REAL/Easel #171](https://github.com/ZJU-REAL/Easel/issues/171) 定了采集器协议（`version`、`fetched_at`、`items`，经 stdout、HTTP JSON 或 RSS 接入，子进程限时长、内存和进程数），和 [ADR-003 §2](../decisions/ADR-003-plugins.md#2-进程与协议) 的独立进程加 JSON 是同一路子。主体 Apache-2.0，可以并入 AGPL 内核；但内置的 gzh-design 是 AGPL-3.0，抖音发布脚本自述移植了 AGPL-3.0 项目的流程与选择器，相容性没有核实。只借设计，要用代码时保留 Apache-2.0 声明，避开这两处。风险集中在小红书：[ZJU-REAL/Easel #98](https://github.com/ZJU-REAL/Easel/issues/98) 用户登录一直被提示 IP 有风险，维护者修了误判，同时说明平台真返回 300012 时代码不能保证解除；#52 记录无头模式扫码时被要求验证码；#42 指出开着 VPN 时国内平台经境外出口登录、发布会触发 300012。README 提醒小红书自动发布有验证、限流和账号风控风险，建议用户确认后手动发布。issue 里没有封号报告。2026-08-28 建仓，维护活跃。
+
+**echo（ycccccccy/echotrace）。** 用户后来补的名字，只写了 `echo`。对应到 EchoTrace 是推断，把握中等。依据有三：按名字核对到的 echo 项目里，它是唯一和国内平台数据有关、星数过百的（3856 星、689 个 fork），其余候选在 0–26 星之间；它正落在本报告微信本地数据、`client-hook` 和下架这条线上；按名字找收藏、稍后读或平台内容转笔记的 Echo，没有找到星数可观的项目。名气最大的 labstack/echo 是 Go 的 Web 框架，和内容获取无关，没有收录。EchoTrace 是微信 4.x PC 端聊天记录的本地导出与分析工具：取得本机数据库密钥后解密本地库，离线浏览，导出 JSON、HTML、Excel，并生成年度报告，属 `client-hook`。作者 2026-01-18 发布 5.2.0 宣布停止维护，默认分支换成只有文档的新提交，源码只留在 fork 和旧安装包里，哪一份和最后发布的一致无法核对。EchoTrace 本身不在腾讯 2026 年的 DMCA 通知里，但作者的另一个仓库 wx_key（取密钥工具）在 [2026-06-29 的通知](https://github.com/github/dmca/blob/master/2026/06/2026-06-29-wechat.md)里，README 推荐的继任者 [hicccc77/WeFlow](https://github.com/hicccc77/WeFlow) 在 [2026-07-07 的通知](https://github.com/github/dmca/blob/master/2026/07/2026-07-07-wechat.md)里（[§16.3](#163-下架停更与法律风险)）。歇存不接入：它处理的是聊天记录，不是收藏；有人把文章链接发到「文件传输助手」当稍后读，用户导出这个会话的文件可以作为导入来源，但产生文件的工具不由歇存推荐或预置。MIT。导出内容含聊天对象和群成员的消息，生成、分享年度报告涉及他人隐私。
+
+如果用户说的是别的 echo，下面这些名字相近的候选在各类别表里各有一行；在 Obsidian、录音转写或 Agent 记忆的语境里，更可能是前三个：
+
+- [anbang278/echo-notes](https://github.com/anbang278/echo-notes)：Obsidian 录音转写插件，附一个只监听本机的 MLX 转写服务，见 [§12](#12-转换转写字幕与-ocr)。
+- [questionjie-max/echo-memory](https://github.com/questionjie-max/echo-memory)：Mac 上的本地个人记忆应用，经只读 MCP 交给 Agent，见 [§13](#13-笔记知识库与收藏归档)。
+- [HuanHuanHuanFFF/Echo](https://github.com/HuanHuanHuanFFF/Echo)：本地 Markdown 笔记检索 MCP，见 [§13](#13-笔记知识库与收藏归档)。
+- [Qc-riviere/EchoMind-releases](https://github.com/Qc-riviere/EchoMind-releases)：闭源的灵感速记应用，给绑定的微信 bot 发消息即可记录，见 [§13](#13-笔记知识库与收藏归档)。
+- [Bin-Zhang-hhht/EchoForge](https://github.com/Bin-Zhang-hhht/EchoForge)：读公开 RSS 的技术播客雷达，见 [§7](#7-b站youtube-与播客)。
+- [eudaemoniaYH/echo-podcast-memory](https://github.com/eudaemoniaYH/echo-podcast-memory)：小宇宙、机核的收听历史分析，带登录令牌调接口，见 [§7](#7-b站youtube-与播客)。
+- [Rookage/echo-editorial](https://github.com/Rookage/echo-editorial)：短视频创作工作台，把抖音分享链接转成逐字稿再改写，见 [§15](#15-相邻创作发布与分析)。
+- [Kerinlin/EchoDistill](https://github.com/Kerinlin/EchoDistill)：在浏览器里读评论区、交给模型归纳的油猴脚本，见 [§15](#15-相邻创作发布与分析)。
+
+另有一条和 easel 有关：[ZJU-REAL/Awesome-GUI-Agents](https://github.com/ZJU-REAL/Awesome-GUI-Agents) 是同一组织维护的 GUI Agent 论文清单，没有代码，见 [§10](#10-视觉与-ui-自动化)。
 
 <a id="4-多平台下载与抓取"></a>
 ## 4. 多平台下载与抓取
@@ -398,12 +417,14 @@
 | [34892002/bilibili-mcp-js](https://github.com/34892002/bilibili-mcp-js) | 196 / 2026-10-23 / v0.1.4（2026-10-23） / MIT | B站 | TypeScript 写的 B站 搜索 MCP：搜索、热门、视频详情、UP 主信息 | public-web | 不用 | MCP | 只作参考。MIT。 |
 | [xiaoleiy/podpull](https://github.com/xiaoleiy/podpull)（致谢） | 147 / 2026-09-05 / none / MIT | 播客 | 播客下载命令行，接受 Apple Podcasts、RSS、小宇宙单集链接，可选本地转写 | public-web | 不用 | 命令行、网页应用 | 获取方式：包装它的命令行，放第三方仓库。MIT，可 fork。 |
 | [weisi-gu/xiaoyuzhou-podcast-notes](https://github.com/weisi-gu/xiaoyuzhou-podcast-notes) | 57 / 2026-07-12 / none / MIT | 播客 | Agent Skill：小宇宙单集转结构化笔记，音频送阿里云转写 | public-web | 不用 | Agent Skill、命令行 | 获取加转换：借做法自己写，获取部分放第三方仓库。MIT，可 fork。 |
+| [Bin-Zhang-hhht/EchoForge](https://github.com/Bin-Zhang-hhht/EchoForge) | 0 / 2026-10-30 / none / MIT | 播客 | 个人技术播客雷达：每天只读白名单播客 RSS 的元信息，本地先取官方逐字稿、没有才转写，写成带原文定位的中文精编 | public-web | 不用 | 命令行、Docker、Agent Skill、网页应用 | 参考：借做法自己写。MIT，可 fork；借「先找逐字稿、没有再转写」和产物检查的规则。 |
 | [ItsMaciek/WatchNow](https://github.com/ItsMaciek/WatchNow)（致谢） | 0 / 2025-12-11 / none / none | YouTube | 读 Google Takeout 里 YouTube「稍后观看」的 CSV，显示缩略图并排序 | public-web | 不用 | 网页应用 | 获取方式：借做法自己写，放第三方仓库。没有许可证，只参考。 |
 | [the1812/Bilibili-Evolved](https://github.com/the1812/Bilibili-Evolved) | 30940 / 2026-10-17 / v2.11.5（2026-10-17） / NOASSERTION | B站 | B站 网页增强用户脚本，以组件提供下载、快速收藏、稍后再看等功能 | browser-session | 可选 | 浏览器扩展 | 只作参考。MIT 加转发附加条件，只作参考。 |
 | [xifangczy/cat-catch](https://github.com/xifangczy/cat-catch) | 22622 / 2026-10-28 / 2.7.4（2026-10-26） / GPL-3.0 | 通用网页 | 浏览器资源嗅探扩展，列出页面加载的音视频资源供下载 | browser-session | 可选 | 浏览器扩展 | 只作参考。GPL-3.0；商店里有加了广告代码的仿冒版。 |
 | [IndieKKY/bilibili-subtitle](https://github.com/IndieKKY/bilibili-subtitle)（致谢） | 1187 / 2025-11-04 / none / MIT | B站 | 浏览器扩展：在 B站 视频页列出字幕，可下载，并调模型翻译和总结 | browser-session | 可选 | 浏览器扩展 | 获取加转换：借做法自己写，获取部分放第三方仓库。MIT，可 fork。 |
 | [ayasa520/bilibili-favorites-exporter](https://github.com/ayasa520/bilibili-favorites-exporter)（致谢） | 48 / 2025-09-09 / none / MIT | B站 | 浏览器扩展：在 B站 收藏夹页把自建收藏夹和订阅合集导出为 JSON | browser-session | 可选 | 浏览器扩展 | 获取方式：fork 后改造，放第三方仓库。MIT，保留版权声明；失效视频的信息从第三方站补取。 |
 | [yutto-dev/yutto](https://github.com/yutto-dev/yutto)（致谢） | 2118 / 2026-10-27 / v2.3.1（2026-08-28） / GPL-3.0 | B站 | Python 的 B站 命令行下载器，支持收藏夹、稍后再看批量，可另存字幕和弹幕 | session-api | 可选 | 命令行、HTTP 接口 | 获取方式：包装它的命令行，放第三方仓库。GPL-3.0：用户自装，独立进程调用；只开放收藏夹、稍后再看和普通投稿。 |
+| [eudaemoniaYH/echo-podcast-memory](https://github.com/eudaemoniaYH/echo-podcast-memory) | 1 / 2026-08-14 / none / NOASSERTION | 播客 | macOS 上的播客收听分析原型：浏览器扩展读出小宇宙、机核的登录令牌，本机服务带令牌取收听历史，另读 Apple 播客的本机记录 | session-api | 必须 | 网页应用、浏览器扩展 | 不接入。自定义「保留所有权利」许可：只许原样运行做个人评估，不能修改或分发。 |
 | [yt-dlp/yt-dlp](https://github.com/yt-dlp/yt-dlp)（致谢） | 203882 / 2026-10-29 / 2026.10.26（2026-10-26） / Unlicense | 多平台：YouTube、B站、抖音、TikTok、小红书、微博、知乎、X、Instagram、Reddit、Pinterest、播客、通用网页 | 命令行音视频下载器，内置上千个站点抽取器，可只输出 JSON 元数据和字幕（[02 §2](02-adapter-ecosystems.md#2-yt-dlp)） | private-api | 可选 | 命令行、库 | 获取方式：包装它的命令行，放第三方仓库。Unlicense，可 fork；不传 cookie 就没有账号风险；YouTube 要外部 JS 运行时。 |
 | [soimort/you-get](https://github.com/soimort/you-get)（致谢） | 56863 / 2026-10-06 / v0.4.1743（2025-01-04） / NOASSERTION | 多平台：B站、YouTube、其他、通用网页 | Python 网页媒体下载器，按站点表路由，表外交给通用抽取器，可只输出 JSON 信息（[02 §4](02-adapter-ecosystems.md#4-you-get)） | private-api | 可选 | 命令行、库 | 获取方式：包装它的命令行，放第三方仓库。LICENSE.txt 正文是 MIT，可 fork。 |
 | [imputnet/cobalt](https://github.com/imputnet/cobalt)（致谢） | 45648 / 2026-04-06 / none / AGPL-3.0 | 多平台：YouTube、B站、TikTok、X、Instagram、Reddit、Pinterest、其他 | 自托管的媒体保存服务，提交链接返回可下载的音视频或图片（[02 §8](02-adapter-ecosystems.md#8-cobalt)） | private-api | 可选 | HTTP 接口、网页应用、Docker | 获取方式：调它的 HTTP 接口，放第三方仓库。api 是 AGPL-3.0、web 是 CC-BY-NC-SA-4.0：用户自建实例，经 HTTP 调用。 |
@@ -482,6 +503,7 @@
 | [sjzar/chatlog](https://github.com/sjzar/chatlog) | 9180 / 2025-10-20 / none / none | 微信聊天 | 本地微信聊天记录查询工具，曾提供 HTTP API 和 MCP；2025-10-20 收函后移除代码 | client-hook | 必须 | 命令行、HTTP 接口、MCP | 不接入。代码已删。 |
 | [lich0821/WeChatFerry](https://github.com/lich0821/WeChatFerry) | 6806 / 2026-07-10 / v39.5.2（2026-03-28） / MIT · 已归档 | 微信聊天 | 注入 PC 微信进程的机器人框架；已归档 | client-hook | 必须 | 库、HTTP 接口 | 相邻，不接入。MIT。 |
 | [git-jiadong/wechatDataBackup](https://github.com/git-jiadong/wechatDataBackup) | 6421 / 2026-01-10 / none / Apache-2.0 | 微信聊天 | PC 微信聊天记录导出与浏览工具；2026-01 被 DMCA 点名后代码移除 | client-hook | 必须 | 桌面应用 | 不接入。Apache-2.0。 |
+| [ycccccccy/echotrace](https://github.com/ycccccccy/echotrace) | 3856 / 2026-03-20 / 5.2.0（2026-01-18） / MIT | 微信聊天 | 微信 4.x PC 端聊天记录的本地导出与分析工具：解密本机数据库，导出 JSON、HTML、Excel，生成年度报告；2026-01-18 停更，默认分支只剩文档（用户点名，见 [§3](#3-用户点名的项目)） | client-hook | 必须 | 桌面应用、命令行 | 相邻，不接入。MIT；源码只在 fork 和旧安装包里，同作者的 wx_key 已被 DMCA 点名。 |
 | [biggerstar/wedecode](https://github.com/biggerstar/wedecode) | 3349 / 2026-08-27 / none / GPL-3.0 | 小程序 | 微信小程序 wxapkg 包的反编译还原工具 | client-hook | 不用 | 命令行 | 相邻，不接入。GPL-3.0。 |
 | [ttttupup/wxhelper](https://github.com/ttttupup/wxhelper) | 3192 / 2026-06-12 / 3.9.8.25-v2（2023-12-26） / MIT | 微信聊天 | 向 PC 微信注入 DLL 开放本机 HTTP 接口的逆向练习项目，只支持旧版本 | client-hook | 必须 | HTTP 接口、库 | 相邻，不接入。MIT。 |
 | [nobiyou/wx_channel](https://github.com/nobiyou/wx_channel) | 2858 / 2026-10-28 / v5.7.13（2026-10-15） / MIT | 视频号 | Windows 视频号下载助手：本机代理注入按钮，支持收藏和点赞列表下载 | client-hook | 必须 | 桌面应用、HTTP 接口、网页应用 | 获取方式：调它的 HTTP 接口，放第三方仓库。MIT；和 ltaoo 早期代码的关系未核实，暂不 fork。 |
@@ -601,6 +623,7 @@
 | [danzey0425-lgtm/web-image-sourcing](https://github.com/danzey0425-lgtm/web-image-sourcing)（致谢） | 0 / 2026-08-05 / none / MIT | 多平台：小红书、抖音、B站、通用网页 | Agent Skill：真实 Edge 加桌面操控，从小红书、抖音、B站收集图片素材并做视觉质检 | vision-ui | 必须 | Agent Skill、命令行 | 参考：借做法自己写。MIT，可 fork；README 记录了小红书 300012 与 xsec_token 过期的实测。 |
 | [bytedance/UI-TARS-desktop](https://github.com/bytedance/UI-TARS-desktop) | 39447 / 2026-10-09 / v0.3.1（2026-10-08） / Apache-2.0 | 通用网页、其他 | 字节跳动的多模态 Agent 套件，用视觉模型截图操作电脑和浏览器 | browser-session | 可选 | 桌面应用、命令行、网页应用、MCP | 只作参考。Apache-2.0；免费远程电脑等于在陌生设备上登录。 |
 | [web-infra-dev/midscene](https://github.com/web-infra-dev/midscene)（致谢） | 15443 / 2026-10-30 / v1.17.3（2026-10-29） / MIT | 通用网页、其他 | 视觉驱动的 UI 自动化 SDK，支持网页、Android、iOS、鸿蒙和桌面 | browser-session | 可选 | 库、命令行、浏览器扩展、Agent Skill | 获取方式：包装它的命令行，放第三方仓库。MIT，可 fork。 |
+| [ZJU-REAL/Awesome-GUI-Agents](https://github.com/ZJU-REAL/Awesome-GUI-Agents) | 467 / 2026-07-28 / none / none | — | ZJU-REAL 维护的 GUI Agent 论文与资源清单，配套一篇综述，按感知、探索、规划、交互分类，没有代码 | not-applicable | — | 其他 | 只作参考。没有许可证，只链接引用，不复制清单内容。 |
 
 - **设备驱动层许可证友好，适合做通用视觉层插件的底座。** scrcpy、uiautomator2、Appium、WebDriverAgent、go-ios、mirroir-mcp、Peekaboo、Windows-MCP 都是 MIT、Apache 或 BSD；go-ios 是纯 Go，和歇存的技术栈一致。
 - **没有找到抖音、小红书、B站 App 收藏页的现成流程**（待核实）。通用 Agent（Open-AutoGLM、mobilerun、mobile-use、MobiAgent）要为每个 App 自己写流程；MobiAgent 能把成功的操作序列录下来复用，Maestro 能把流程写成可回放的 YAML，适合把写好的流程固定下来。
@@ -696,6 +719,7 @@
 | [FireRedTeam/FireRedASR2S](https://github.com/FireRedTeam/FireRedASR2S)（致谢） | 728 / 2026-06-02 / none / Apache-2.0 | — | 小红书 FireRed 团队的中文语音识别系统，覆盖方言和中英混说，带字级时间戳 | not-applicable | — | 命令行、库、HTTP 接口、模型 | 转换插件：包装它的命令行。Apache-2.0，可 fork。 |
 | [SWHL/RapidVideOCR](https://github.com/SWHL/RapidVideOCR)（致谢） | 506 / 2026-10-25 / v3.1.1（2025-06-04） / Apache-2.0 | — | 读 VideoSubFinder 导出的字幕关键帧，用 RapidOCR 识别后生成字幕 | not-applicable | — | 命令行、库 | 转换插件：包装它的命令行。Apache-2.0，可 fork。 |
 | [bytefer/macos-vision-ocr](https://github.com/bytefer/macos-vision-ocr)（致谢） | 322 / 2025-02-14 / v0.0.2（2025-02-14） / MIT | — | 调用 Apple Vision 的 OCR 命令行，输出带位置和置信度的 JSON | not-applicable | — | 命令行 | 转换插件：fork 后改造。MIT，保留版权声明。 |
+| [anbang278/echo-notes](https://github.com/anbang278/echo-notes) | 26 / 2026-10-22 / 0.4.44（2026-10-22） / MIT | — | Obsidian 插件：把库里的录音或麦克风录音转成带来源链接的逐字稿，附一个只监听本机的 MLX 转写服务，接口与 OpenAI 兼容 | not-applicable | — | Obsidian 插件、HTTP 接口 | 转换插件：调它的 HTTP 接口。MIT，可 fork；本机服务只支持 Apple Silicon，所用模型的许可另看。 |
 
 - **本地引擎够用。** 转写有 whisper.cpp、faster-whisper、SenseVoice、sherpa-onnx、FunASR、Qwen3-ASR，OCR 有 RapidOCR、PaddleOCR 模型、Apple Vision，内容不必发出本机；引擎对比见 [04 §2](04-tech-options.md#2-ocr-sidecar)、[04 §3](04-tech-options.md#3-asr-sidecar)，转换插件的做法见 [05 §2](05-note-apps-and-plugins.md#2-转换类插件与工具)。
 - **权重许可要单独看。** SenseVoice、Paraformer 按 FunASR 模型许可（可商用、要署名）；indra、marker、surya 的权重有收入门槛；OXR、MinerU 有附加条款。
@@ -713,6 +737,7 @@
 | [FlyingWolFox/Netscape-Bookmarks-File-Parser](https://github.com/FlyingWolFox/Netscape-Bookmarks-File-Parser)（致谢） | 52 / 2024-02-14 / v1.1（2020-05-20） / MIT | 通用网页 | Netscape 书签 HTML 的解析与生成库 | official-export | 不用 | 库 | 获取方式：借做法自己写，放第三方仓库。MIT，可 fork。 |
 | [dogsheep/evernote-to-sqlite](https://github.com/dogsheep/evernote-to-sqlite)（致谢） | 44 / 2021-11-02 / 0.3.2（2021-08-26） / Apache-2.0 | 其他 | 把 Evernote ENEX 导出转成 SQLite，为正文和图中文字建全文索引 | official-export | 不用 | 命令行 | 获取方式：借做法自己写，放第三方仓库。Apache-2.0，可 fork。 |
 | [karlicoss/instapexport](https://github.com/karlicoss/instapexport)（致谢） | 32 / 2026-10-19 / none / MIT | 通用网页 | 用 Instapaper 官方 API 把本人的文章收藏和高亮导出为 JSON | official-export | 必须 | 命令行、库 | 获取方式：包装它的命令行，放第三方仓库。MIT，可 fork。 |
+| [questionjie-max/echo-memory](https://github.com/questionjie-max/echo-memory) | 20 / 2026-10-25 / v1.0.0（2026-10-25） / Apache-2.0 | 其他 | Apple Silicon Mac 上的本地个人记忆应用：收录录音、文档、ChatGPT 与 Claude 的导出记录和本机 Agent 会话，结论可点回原话，经只读 MCP 交给 Agent | official-export | 不用 | 桌面应用、MCP | 参考：借做法自己写。Apache-2.0，可 fork；借引用逐字核对、只读 MCP 默认关闭的做法。 |
 | [volcengine/OpenViking](https://github.com/volcengine/OpenViking)（致谢） | 41194 / 2026-10-30 / v0.5.2.1（2026-10-27） / AGPL-3.0 | 通用网页、公众号 | 火山引擎的 Agent 上下文数据库，把资料、记忆和技能组织成 viking:// 文件系统并生成分层摘要（用户点名，见 [§3](#3-用户点名的项目)） | public-web | 可选 | HTTP 接口、命令行、MCP、库、网页应用、桌面应用、Docker、Agent Skill | 只作参考。主项目 AGPL-3.0，ov 命令行 Apache-2.0；可做导出目标，不复制代码。 |
 | [khoj-ai/khoj](https://github.com/khoj-ai/khoj) | 37904 / 2026-08-02 / 2.0.0-beta.28（2026-03-26） / AGPL-3.0 | 通用网页、其他 | 可自托管的个人 AI 助手，索引本地文档，聊天时可联网读网页 | public-web | 可选 | 网页应用、桌面应用、Obsidian 插件、HTTP 接口、Docker | 只作参考。AGPL-3.0；维护放缓。 |
 | [topoteretes/cognee](https://github.com/topoteretes/cognee) | 32926 / 2026-10-30 / v1.6.6（2026-10-29） / Apache-2.0 | 通用网页、其他 | Agent 记忆平台：把文档、网页和对话加工成知识图谱加向量索引 | public-web | 可选 | 库、HTTP 接口、MCP、网页应用、Docker | 只作参考。Apache-2.0。 |
@@ -762,6 +787,8 @@
 | [markusmobius/go-trafilatura](https://github.com/markusmobius/go-trafilatura)（致谢） | 151 / 2026-09-30 / v2.2.6（2026-09-29） / Apache-2.0 | 通用网页 | trafilatura 的 Go 原生移植，提取正文和作者、日期、语言等元数据 | not-applicable | — | 库、命令行 | 转换插件：fork 后改造。Apache-2.0，保留版权声明；依赖 go-re2，体积和启动开销大。 |
 | [markusmobius/go-domdistiller](https://github.com/markusmobius/go-domdistiller)（致谢） | 74 / 2026-09-29 / v1.0.0（2026-09-15） / MIT | 通用网页 | Chrome 阅读模式所用 DOM Distiller 的 Go 原生移植 | not-applicable | — | 库 | 转换插件：fork 后改造。MIT，保留版权声明；分发时保留上游的 BSD 与 Apache 声明。 |
 | [karlicoss/bleanser](https://github.com/karlicoss/bleanser)（致谢） | 16 / 2026-10-25 / v0.2.20251009（2025-10-08） / MIT | — | 清理冗余备份：找出内容已被后一份完全包含的旧导出 | not-applicable | 不用 | 命令行、库 | 参考：借做法自己写。MIT，可 fork。 |
+| [Qc-riviere/EchoMind-releases](https://github.com/Qc-riviere/EchoMind-releases) | 4 / 2026-06-29 / v0.3.8（2026-06-29） / NOASSERTION | 微信聊天 | 闭源的灵感速记桌面应用，本地语义检索；给绑定的微信 bot 发消息即可记录，README 称经腾讯官方 ClawBot 通道；仓库只放文档和安装包 | not-applicable | 可选 | 桌面应用、其他 | 相邻：借做法自己写。专有许可，不开源，不能 fork、包装或分发；只参考「微信发给 bot 就收下」的入口思路。 |
+| [HuanHuanHuanFFF/Echo](https://github.com/HuanHuanHuanFFF/Echo) | 1 / 2026-10-06 / v0.2.0（2026-10-06） / MIT | — | 个人 Markdown 笔记的本地检索 MCP：按标题结构切块，BM25 加向量混合检索，返回带路径和行号的原文片段 | not-applicable | — | MCP、命令行 | 参考：借做法自己写。MIT，可 fork；借检索结果带行号和截断标记的格式。 |
 | [readeck/go-readability](https://codeberg.org/readeck/go-readability)（致谢） | —（Codeberg） / 2026-09-30 / v2.1.3（2026-09-30） / MIT | 通用网页 | Readeck 团队接手维护的 go-readability 分支，v2 兼容 Readability.js 0.6 | not-applicable | — | 库 | 转换插件：fork 后改造。MIT，保留版权声明；托管在 Codeberg，经 Go 模块代理拉取。 |
 | [duzui300/Obsiclip](https://github.com/duzui300/Obsiclip)（致谢） | 0 / 2026-10-08 / v1.1.0（2026-10-08） / AGPL-3.0 | 其他 | Android 分享桥：分享来的文字套模板经 obsidian:// 写入笔记；实验功能用无障碍读 Kindle 划线 | not-applicable | — | 手机应用 | 参考：借做法自己写。AGPL-3.0：只借思路。 |
 
@@ -805,15 +832,18 @@
 | [gitroomhq/postiz-app](https://github.com/gitroomhq/postiz-app)（致谢） | 40194 / 2026-10-30 / v2.25.3（2026-10-24） / AGPL-3.0 | 多平台：X、YouTube、TikTok、Instagram、Reddit、Pinterest、Telegram、其他 | 自托管的社媒排期发布平台，经官方 OAuth 接口发布并拉取帖子数据 | official-export | 必须 | 网页应用、HTTP 接口、MCP、命令行、Docker | 相邻，只作参考。AGPL-3.0。 |
 | [inovector/mixpost](https://github.com/inovector/mixpost) | 3891 / 2026-03-16 / 2.6.0（2026-03-16） / MIT | X、其他 | 自托管社媒管理工具的 Lite 版，经官方接口排期发布 | official-export | 必须 | 网页应用、库 | 相邻，只作参考。MIT。 |
 | [BetaStreetOmnis/xhs_ai_publisher](https://github.com/BetaStreetOmnis/xhs_ai_publisher) | 2094 / 2026-10-30 / v1.2.0（2026-06-28） / Apache-2.0 | 多平台：小红书、微博、头条/西瓜、B站、公众号、通用网页、其他 | 小红书笔记的本地编辑与发布工具，可取各平台热榜作素材 | public-web | 必须 | 桌面应用、网页应用、HTTP 接口、Docker | 相邻，不接入。Apache-2.0。 |
+| [Rookage/echo-editorial](https://github.com/Rookage/echo-editorial) | 7 / 2026-10-30 / none / MIT | 抖音 | 短视频创作者的本地 Web 工作台：抖音分享链接或本地视频转逐字稿，改写成小红书或抖音风格的稿件，再配音合成竖屏视频 | public-web | 不用 | 网页应用、HTTP 接口、Agent Skill | 只作参考。MIT。 |
 | [wechatsync/Wechatsync](https://github.com/wechatsync/Wechatsync)（致谢） | 6537 / 2026-10-23 / 1.0.10（2021-04-28） / GPL-3.0 | 多平台：公众号、知乎、微博、小红书、抖音、B站、豆瓣、头条/西瓜、X、通用网页、其他 | 用浏览器登录态把文章同步成多个平台草稿的扩展，附命令行和 MCP | browser-session | 必须 | 浏览器扩展、命令行、MCP、Agent Skill | 相邻，只作参考。GPL-3.0；部分适配器不开源。 |
 | [Xiangyu-CAS/xiaohongshu-ops-skill](https://github.com/Xiangyu-CAS/xiaohongshu-ops-skill) | 2465 / 2026-03-19 / stable（2026-03-12） / none | 小红书 | 配合 OpenClaw 浏览器的小红书运营 Skill：分析账号、给选题，也能发布、回复 | browser-session | 必须 | Agent Skill | 相邻，不接入。没有许可证。 |
 | [hanliang97/MatrixMedia](https://github.com/hanliang97/MatrixMedia)（致谢） | 1165 / 2026-10-29 / v0.13.3（2026-10-28） / GPL-2.0 | 多平台：抖音、快手、小红书、视频号、B站、头条/西瓜、其他 | Electron 应用：视频批量发到 8 个平台的多个账号，附命令行、本机 HTTP、MCP，能采集自己账号的数据（用户点名，见 [§3](#3-用户点名的项目)） | session-api | 必须 | 桌面应用、命令行、HTTP 接口、MCP、Agent Skill | 参考：借做法自己写。GPL-2.0-only，和 AGPL 内核、MIT 插件都不兼容：只借登录态页面里取列表的适配器结构。 |
+| [Kerinlin/EchoDistill](https://github.com/Kerinlin/EchoDistill) | 23 / 2026-07-08 / none / MIT | 多平台：YouTube、Reddit、B站、知乎、小红书、X、贴吧、抖音、其他 | 油猴脚本：在已打开的帖子或视频页展开并读取评论区，交给用户配置的模型生成评论归纳和反方审视 | session-api | 可选 | 浏览器扩展 | 只作参考。MIT。 |
 | [hypit-ai/hypit](https://github.com/hypit-ai/hypit)（致谢） | 26782 / 2026-10-30 / v0.3.1（2026-10-09） / NOASSERTION | 多平台：TikTok、YouTube、Instagram、B站 | 给编码 Agent 的视频制作语言与命令行：读参考视频、转写截帧，生成可重跑的工作流再渲染新视频（用户点名，见 [§3](#3-用户点名的项目)） | private-api | 不用 | 命令行、Agent Skill、网页应用 | 只作参考。改过的 Apache-2.0，禁止商业再分发：只借下载器隔离的做法。 |
 | [elebumm/RedditVideoMakerBot](https://github.com/elebumm/RedditVideoMakerBot) | 12562 / 2026-10-30 / 3.4.0（2025-10-28） / GPL-3.0 | Reddit、YouTube、TikTok | 一条命令把 Reddit 帖子和评论做成短视频 | private-api | 必须 | 命令行、网页应用、Docker | 相邻，不接入。GPL-3.0。 |
 | [zhouxiaoka/autoclip](https://github.com/zhouxiaoka/autoclip)（致谢） | 9871 / 2026-10-30 / v1.5.7（2026-10-24） / MIT | 多平台：B站、YouTube、TikTok、Instagram | AI 剪辑桌面工具，把长视频切成短视频并生成字幕、封面和发布文案 | private-api | 可选 | 桌面应用、命令行、MCP | 相邻，不接入。MIT。 |
 | [RayVentura/ShortGPT](https://github.com/RayVentura/ShortGPT) | 8092 / 2025-02-10 / v0.3.0（2025-02-10） / MIT | YouTube | 实验性的短视频自动化框架；2025-02 后停更 | private-api | 不用 | 库、网页应用、Docker | 相邻，不接入。MIT。 |
 | [Anil-matcha/AI-Youtube-Shorts-Generator](https://github.com/Anil-matcha/AI-Youtube-Shorts-Generator) | 5666 / 2026-10-24 / none / MIT | YouTube | 把 YouTube 长视频剪成竖版短视频，默认调用 MuAPI 云接口 | private-api | 不用 | 命令行、Agent Skill | 相邻，不接入。MIT。 |
 | [biliup/biliup](https://github.com/biliup/biliup) | 5566 / 2026-10-27 / v1.3.4（2026-10-22） / MIT | 多平台：B站、抖音、快手、YouTube、其他 | 直播录制与 B站 投稿工具 | private-api | 可选 | 网页应用、命令行、桌面应用、Agent Skill、Docker | 相邻，不接入。代码 MIT，但 README 写禁止商业用途，按非商业处理。 |
+| [ZJU-REAL/Easel](https://github.com/ZJU-REAL/Easel)（致谢） | 4217 / 2026-10-25 / v0.3.0（2026-10-12） / Apache-2.0 | 多平台：小红书、抖音、快手、知乎、B站、视频号、公众号、微博、头条/西瓜、通用网页、其他 | 浙江大学 REAL Lab 的社媒运营 Agent 工作台：热点发现、选题和图文音视频创作，扫码登录七个国内平台发布并读回账号数据（用户点名，见 [§3](#3-用户点名的项目)） | private-api | 可选 | 网页应用、命令行、Agent Skill | 参考：借做法自己写。Apache-2.0，可 fork；内置的 gzh-design 是 AGPL-3.0，抖音发布脚本来源许可存疑；只借登录状态文件、读回分档和资料目录锁。 |
 | [pbeenigg/LittleCrawler](https://github.com/pbeenigg/LittleCrawler) | 762 / 2026-08-09 / none / MIT | 小红书、知乎、其他 | 异步爬虫框架，抓小红书、知乎、闲鱼的搜索、详情和评论 | private-api | 必须 | 命令行、HTTP 接口、网页应用 | 不接入。标 MIT，但小红书模块和 MediaCrawler 一致且去掉了原声明，不能 fork。 |
 | [atian-create/lingzao-skill](https://github.com/atian-create/lingzao-skill) | 303 / 2026-07-02 / none / MIT-0 | 小红书、抖音、公众号 | 小红书运营 Skill 包，搜索公开笔记要接作者的付费服务 | private-api | 不用 | Agent Skill、命令行 | 相邻，不接入。MIT-0。 |
 | [harry0703/MoneyPrinterTurbo](https://github.com/harry0703/MoneyPrinterTurbo)（致谢） | 136472 / 2026-10-30 / v1.3.9（2026-10-21） / MIT | TikTok、Instagram、YouTube | 按主题自动写脚本、配音、配素材和字幕，合成短视频，可经 Upload-Post 发布（用户点名，见 [§3](#3-用户点名的项目)） | not-applicable | 可选 | 命令行、HTTP 接口、网页应用、Agent Skill、Docker | 相邻，只作参考。MIT；借它给 Agent 的退出码和确认参数约定。 |
@@ -1195,6 +1225,11 @@ permissions:
 - OXR 的许可条款和接口都很新，可能变化；indra 权重的竞争条款能否用于官方插件需要法律意见。
 - 阿杭的源码可见许可下，第三方插件调用用户自装的副本是否算「包含」，需要法律意见。
 - Hypit 改过的 Apache-2.0 与歇存 AGPL 内核的关系，需要法律意见。
+- `echo` 对应 ycccccccy/echotrace 是推断，把握中等：依据是名字、星数和它与本报告微信本地数据这条线的关系，没有用户确认。如果用户是在 Obsidian、录音转写或 Agent 记忆的语境里提到 echo，更可能指 echo-notes、echo-memory 或 HuanHuanHuanFFF/Echo。
+- Easel 记 `private-api` 是因为 B站 登录模拟 TV 端；只按取内容那一步算，默认路径最高是 `session-api`，要和其他条目统一口径。可选的 CloakBrowser 内核会改浏览器指纹（[ZJU-REAL/Easel #52](https://github.com/ZJU-REAL/Easel/issues/52)），是否也按 `private-api` 算，同样要统一。
+- Easel 的抖音发布脚本自述移植了 AGPL-3.0 项目的流程与选择器，却随 Apache-2.0 发布，相容性没有核实；它自己的致谢文件也把部分来源的许可写成待核实。#171 的采集器协议还没合并，合并前可能再变。
+- echo-podcast-memory 记 `session-api`，但它请求小宇宙接口时带 App 的应用标识；如果小宇宙播客后台网页自己不带，按「模拟 App 调私有接口」应改记 `private-api`。
+- EchoMind 闭源，README 说经腾讯官方 ClawBot 通道收消息，没法从代码核实；这个通道对非 OpenClaw 应用的使用条款、消息是否经腾讯以外的服务器，也没有核实。
 
 **[§4](#4-多平台下载与抓取) 到 [§15](#15-相邻创作发布与分析)：各类别条目**
 
