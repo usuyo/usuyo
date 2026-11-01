@@ -8,7 +8,7 @@
 <a id="背景"></a>
 ## 背景
 
-歇存要接三种外部能力：从平台取回内容，把音视频和图片变成文字，把资料库导出到笔记软件。[PRD §4](../PRD.md#4-原则) 原则 1 要求内核平台中立，原则 4 要求一切可插拔；[ADR-001](ADR-001-stack.md) 要求重计算与适配器都是独立进程，不进内核。
+歇存要接三种外部能力：从平台取回内容，把音视频和图片变成文字，把资料库导出到笔记软件。[PRD §4](../PRD.md) 原则 1 要求内核平台中立，原则 4 要求一切可插拔；[ADR-001](ADR-001-stack.md) 要求重计算与适配器都是独立进程，不进内核。
 
 调研 05 的发现：
 
@@ -148,7 +148,7 @@
 
 文档。用户说这些到设计阶段再一起改，这次只列出：
 
-- [PRD §4](../PRD.md#4-原则) 原则 4 的「一切可插拔」加「导出」，和获取方式、识别器并列。
+- [PRD §4](../PRD.md) 原则 4 的「一切可插拔」加「导出」，和获取方式、识别器并列。
 - [SPEC §8](../SPEC.md#8-适配器协议-v0) 扩展清单：加 `kind`、转换与导出的字段、`permissions`；补转换插件的 JSON-RPC 协议。顺带把 [SPEC §2](../SPEC.md#2-资料库目录真相源) 的 `threads/`、`thoughts/` 改成 product-model 的 `topics/`，导出读的是 `topics/`。
 - [product-model §8.1](../product-model.md#81-设置清单) 设置清单加「导出」分组；「自动更新获取方式」保留，但扩大了权限的新版本要等用户同意；「获取方式来源列表」改为按仓库安装的插件列表，标出「官方」与「第三方 · 未经歇存审核」。
 - CLAUDE.md 重写时，技术栈里「适配器」一行改为三类插件，并指向本条。
@@ -165,6 +165,26 @@
 - 客户端直接调 GitHub API 列组织仓库、读 release 和 check run。未登录时每个 IP 每小时只有 60 次 REST 请求，客户端要缓存结果、按需刷新。
 
 [ADR-001](ADR-001-stack.md) 的结论不变，本条是其中「独立进程」一条的展开。
+
+<a id="修订-2026-11-01"></a>
+## 修订 2026-11-01
+
+按用户 2026-11-01 的方向修订插件范围的几处决定。上面的正文不改，有冲突的以本节为准；字段和调用细节见 [思鹭插件协议 v1（草案）](../plugin-protocol.md)。
+
+1. **名字跟着改名走。** 产品改名思鹭 / Seelu，命令 `seelu`。本条里的 `xiecun-app` 组织换成官方组织 `{official-org}`（候选 `seelu`，2026-11-01 查 GitHub 仍空着）；topic `xiecun-plugin` 换成 `seelu-plugin`；第三方仓库前缀换成 `seelu-fetch-`、`seelu-transform-`、`seelu-export-`，两个组织内的仓库不加前缀；导出文件里的 `xiecun_id` 换成 `seelu_id`，`.xiecun/` 换成 `.seelu/`。两个组织名都没定，文档里写占位 `{official-org}`、`{fetch-org}`。
+2. **获取方式组织单独设**（改 [§5](#5-仓库拆分)、[§6](#6-分发与校验)）。自己维护的获取插件放进单独的 GitHub 组织 `{fetch-org}`：照 Tachiyomi 拆成 Mihon（应用）与 Keiyoushi（扩展）的分法，应用和获取插件分属两个组织；和 Keiyoushi 的单一大仓库 extensions-source 不同，`{fetch-org}` 里每个插件一个仓库。官方组织只放应用、plugin-kit、转换和导出插件。客户端不预置任何获取来源，用户手动添加组织名或 `owner/repo`。来源分三种显示：官方、第三方来源 · 组织名、第三方 · 未经思鹭审核。理由和仓库结构的取舍见 [plugin-protocol §8.8](../plugin-protocol.md#88-获取方式组织的仓库结构)。
+3. **风险的处理方式。**
+   - 获取插件的清单加两个描述性的必填字段：`access`（七层之一，含义照 [调研 06 §1.1](../research/06-platform-access-and-account-risk.md#11-七个层级)）和 `login`（`none`、`optional`、`required`）；能力之间不同时按能力分别声明，顶层取最高一档。另用 `sites` 写明会用到哪个站点的账号。这些是给用户挑选用的标签，不是闸门。
+   - 不由宿主推导风险档，不做平台修正表；运行器按用户排的顺序依次试，失败换下一个，不限制往哪一层换；不对 `private-api`、`client-hook`、微信的视觉层单独弹确认。
+   - 新版本调高 `access` 或 `login` 只在更新说明里标出，不停用。[§4](#4-权限与隔离) 的「扩大权限要用户重新同意」照旧，这是防经自动更新下发恶意代码的安全规则；`permissions` 加了设备类；登录站点的 (`site`, `credential`, `domains`) 出现新值、新增密钥设置或改了密钥的注入目标，也算扩大权限（[plugin-protocol §8.5](../plugin-protocol.md#85-添加来源更新与权限扩大)）。
+   - 责任：用户添加第三方插件来源（组织名或 `owner/repo`）时确认一次声明：用途是个人备份、离线阅读、注意力整理，平台账号和法律上的后果由用户自己承担，链到 [调研 06 §16](../research/06-platform-access-and-account-risk.md#16-账号风险的证据) 的证据。主仓库 README、获取方式组织的主页、插件 README 模板里也写声明，模板见 [plugin-protocol 附录 A](../plugin-protocol.md#附录-a-声明模板)。不做逐个插件的弹窗。
+4. **清单与协议在新文档定稿**（改 [§3](#3-清单)）。清单文件名定为 `seelu-plugin.yaml`，不再沿用 `adapter.yaml`；字段、获取插件的子命令与错误码、转换与导出的 JSON-RPC 方法、投递接口、凭据、设备类权限、发版与来源证明都写在 [plugin-protocol](../plugin-protocol.md)。`pkg/contract` 的 Go 类型、JSON Schema 和 `testdata/` 仍在实现插件运行器时改。
+5. **仍待定：导入插件放哪个组织。** 只读导出文件的导入插件不访问平台，但导入算获取的一种，默认放获取方式组织；要改进官方组织、随安装包预装，得单独定，见 [open-decisions P3](../open-decisions.md#7-获取与插件)。
+6. **schema 以 plugin-kit 为准。** 插件清单、信封、JSON-RPC 消息的 schema 以 plugin-kit 为准，内核经 Go 模块引用；`pkg/contract` 只留资料库自己的类型，实现插件运行器时迁移（[plugin-protocol §10](../plugin-protocol.md#10-契约测试与-plugin-kit)）。取代 [影响](#影响) 里「以内核的 `pkg/contract` 还是 `plugin-kit` 为准，实现时定」那一句。
+7. **插件身份与拦截条件**（改 [§6](#6-分发与校验)）。插件 `id` 等于 `owner/repo`，客户端另按 GitHub 的数字仓库 id 认仓库，改名、转移或旧名被重新注册时停止更新。官方组织的插件缺来源证明、或 GitHub App 的校验没通过就拒装，不再只是显示结果；用户添加的来源（包括 `{fetch-org}`）在添加时固定签发者，以后签发者变了就停止更新；第三方插件校验没通过时拦下还是只标出，仍待定（[open-decisions P12](../open-decisions.md#7-获取与插件)）。细节见 [plugin-protocol §8.3](../plugin-protocol.md#83-校验与来源证明)。
+8. **投递接口。** 浏览器扩展、油猴脚本、手机、Agent 经本机 HTTP 接口或收件文件夹投递；令牌按投递端分别发，`api` 类令牌只交链接，身份由宿主重新算。见 [plugin-protocol §5](../plugin-protocol.md#5-投递接口)。
+
+以上改动带来的设置项变化列在 [plugin-protocol §0.4](../plugin-protocol.md#04-需要同步的文档)，[product-model §8.1](../product-model.md#81-设置清单) 照那张表改。
 
 <a id="待核实"></a>
 ## 待核实

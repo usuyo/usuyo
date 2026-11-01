@@ -141,30 +141,14 @@ url: https://...
 <a id="8-适配器协议-v0"></a>
 ## 8. 适配器协议 v0
 
-适配器是独立进程。声明文件 `adapter.yaml`：
+v0 由 [思鹭插件协议 v1（草案）](plugin-protocol.md) 取代，字段、调用约定、错误码、凭据、权限和分发都以那份文档为准。v0 没有发布过，不做兼容。概要：
 
-```yaml
-id: community/wechat-mp-basic
-platforms: [wechat-mp]
-match: ["mp.weixin.qq.com/s/*"]
-capabilities: [fetch]          # fetch | list | watch
-method: cli                    # cli | local-service | mcp | http-api | browser
-upstream: {project: "...", license: "MIT", install: {...}}
-requires: {cookie: none, proxy: none}
-cost: free
-outputs: [text, raw-html, images]
-limits: "仅个人使用；单条触发"
-```
-
-调用约定（cli 方式）：`<bin> canonicalize <url>`、`<bin> fetch <url> --out <dir>`、`<bin> list <source> --cursor <c>`、`<bin> health`，stdout 输出 JSON。fetch 输出：
-
-```json
-{"identity": {...}, "kind": "article", "title": "...", "author": {...}, "publishedAt": "...",
- "text": "...", "html": "raw/page.html", "images": ["raw/img1.jpg"], "media": [],
- "platformTags": [...], "completeness": "full", "missing": [], "evidence": {"fetchedAt": "...", "status": 200}}
-```
-
-运行器：每个平台按用户排序依次尝试；失败换下一个；全部失败停在 `link`。契约校验器用 `testdata/` 固定样例跑。
+- 插件分获取、转换、导出三类，都是独立进程，共用一份清单 `seelu-plugin.yaml`（取代 `adapter.yaml`）。旧字段的去向见 [plugin-protocol §2.12](plugin-protocol.md#212-旧字段对照)。
+- 获取插件用子命令 `canonicalize`、`fetch`、`sources`、`list`、`health`、`unfavorite`，stdout 只输出一个 JSON 信封；支持可选的常驻模式（[plugin-protocol §3](plugin-protocol.md#3-获取插件协议)）。fetch 输出和 `pkg/contract/schema/fetch-output.schema.json` 的差异见 [plugin-protocol §3.7](plugin-protocol.md#37-fetch-输出)。
+- 转换、导出插件走 stdio 上换行分隔的 JSON-RPC 2.0（[plugin-protocol §4](plugin-protocol.md#4-转换与导出插件协议)）。
+- 运行器：每个平台按用户排的顺序依次试，失败换下一个，全部失败停在 `link`（[plugin-protocol §3.1](plugin-protocol.md#31-运行器与节奏)）。
+- 契约测试：插件仓库放 `testdata/`，作者用 `seelu plugin check` 做离线检查，用 `seelu plugin try` 在真实的沙箱和凭据下跑一次，不用 plugin-kit 发版工作流的用 `seelu plugin pack` 生成发布清单（[plugin-protocol §10](plugin-protocol.md#10-契约测试与-plugin-kit)）。
+- `pkg/contract` 的 Go 类型、JSON Schema 和 `testdata/` 仍是 v0；实现插件运行器时，插件相关的 schema 迁到 plugin-kit，`pkg/contract` 只留资料库自己的类型（[plugin-protocol §10](plugin-protocol.md#10-契约测试与-plugin-kit)）。
 
 <a id="9-clim0"></a>
 ## 9. CLI（M0）
