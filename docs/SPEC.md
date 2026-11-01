@@ -1,7 +1,9 @@
+<a id="歇存-xiecun--技术规格-v01m0"></a>
 # 歇存 Xiecun — 技术规格 v0.1（M0）
 
 状态：草案 · 2026-10-21。契约字段一旦 M0 落地即视为稳定，变更需 ADR。
 
+<a id="1-仓库布局monorepo"></a>
 ## 1. 仓库布局（monorepo）
 
 ```
@@ -22,6 +24,7 @@ xiecun/
   Makefile
 ```
 
+<a id="2-资料库目录真相源"></a>
 ## 2. 资料库目录（真相源）
 
 ```
@@ -54,6 +57,7 @@ xiecun/
 
 目录名：`<platform>` 为适配器声明的平台 id（`douyin`、`xiaohongshu`、`bilibili`、`wechat-mp`、`x`、`web`、`file`）；`<id8>` 为平台内容 ID 的前 8 位（无平台 ID 时为内容哈希前 8 位）；`<rand4>` 防撞。目录名创建后不变，标题改了也不改。
 
+<a id="3-manifestjson"></a>
 ## 3. manifest.json
 
 ```json
@@ -92,6 +96,7 @@ xiecun/
 }
 ```
 
+<a id="4-contentmd"></a>
 ## 4. content.md
 
 frontmatter 复制 manifest 里的标题/作者/平台/时间（便于 grep 与 Obsidian），正文为平台原文的规范化文本。机器永不改写正文；需要修正时产生新快照。
@@ -107,6 +112,7 @@ url: https://...
 <原文>
 ```
 
+<a id="5-derived-文件约定"></a>
 ## 5. derived/ 文件约定
 
 - 每个文件头部或同名 `.meta.json` 记录 `{by, version, at, input}`。
@@ -115,6 +121,7 @@ url: https://...
 - `vision.md`：关键帧画面描述，每段注明帧时间
 - `attention.json`：`{opens, lastOpenedAt, referencedBy: [thoughtSlug...], state: "unseen|noticed|digested|released"}`
 
+<a id="6-标签规则"></a>
 ## 6. 标签规则
 
 - `platform`：原样保留，不编辑。
@@ -122,6 +129,7 @@ url: https://...
 - `user`：用户确认或手打；Agent 通过 propose/apply 进入这里。
 - 搜索三种都索引；画布默认只显示 `user`。
 
+<a id="7-去重"></a>
 ## 7. 去重
 
 1. 身份层：适配器实现 `canonicalize(url) -> identity`（展开短链、去追踪参数、提取平台 ID）。同身份不新建条目，追加快照；新快照更完整则升级 `completeness`。无平台 ID 的条目不参与身份层。
@@ -130,6 +138,7 @@ url: https://...
 
 并发：条目创建对 identity 加唯一约束（index 层）+ 任务队列按 identity 去重。
 
+<a id="8-适配器协议-v0"></a>
 ## 8. 适配器协议 v0
 
 适配器是独立进程。声明文件 `adapter.yaml`：
@@ -157,6 +166,7 @@ limits: "仅个人使用；单条触发"
 
 运行器：每个平台按用户排序依次尝试；失败换下一个；全部失败停在 `link`。契约校验器用 `testdata/` 固定样例跑。
 
+<a id="9-clim0"></a>
 ## 9. CLI（M0）
 
 ```
@@ -171,6 +181,7 @@ xiecun daemon                     # 常驻：任务队列 + 本地 API + 文件�
 xiecun mcp                        # stdio MCP 服务（转发到 daemon，daemon 不在则内嵌）
 ```
 
+<a id="10-mcp-工具m0"></a>
 ## 10. MCP 工具（M0）
 
 - `search(query, filters) -> [{id, title, hitLayer, snippet, untrusted:true, source}]`
@@ -183,10 +194,12 @@ xiecun mcp                        # stdio MCP 服务（转发到 daemon，daemon
 
 按 MCP 2026-07-28 规范实现为无状态；changesetId 为显式句柄。
 
+<a id="11-索引"></a>
 ## 11. 索引
 
 bleve（纯 Go）。中文用 CJK 双字分析器（解决二字词），同时索引拼音字段（go-pinyin）。字段：title、body、ocr、asr、vision、summary、notes、tags.*、platform、kind、author、publishedAt。向量检索 M1 再加（候选：bleve vector 或 sqlite-vec）。
 
+<a id="12-m0-范围"></a>
 ## 12. M0 范围
 
 做：第 2–11 节全部，但适配器只内置一个 `web-generic`（通用网页：抓取 + go-readability 抽正文 + 图片下载），用来验证整条链路；OCR/ASR 留接口不实现。
