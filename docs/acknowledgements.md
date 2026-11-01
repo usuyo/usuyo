@@ -19,18 +19,20 @@
 收录范围：
 
 - [06 调研](research/06-platform-access-and-account-risk.md#调研-06--平台内容获取的开源生态与账号风险)里标「（致谢）」的 260 条，按类别放进下面各节，出处链到 06 的同名小节；用户点名的项目链到 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)。
-- 用户点名、06 没标致谢的 5 条。用户说过，点名的项目都是以后的致谢候选，所以照收，按 06 里的类别和关系放进各节，限制写在各自那一行：
+- 用户点名、06 没标致谢的 7 条。用户说过，点名的项目都是以后的致谢候选，所以照收，按 06 里的类别和关系放进各节，限制写在各自那一行：
   - NanmiCoder/MediaCrawler：自定义的非商业学习许可，条款里没有分发授权，只借做法，不 fork、不分发、不包装。
   - ahang008/ah-skills：Skill 索引仓库，本身不从平台取内容，许可为非商业源码可见；同作者的 ah-douyin-clean-downloader 在 06 标了致谢，已收。
   - open-wxa/wxa-runner：在浏览器里运行自己的小程序、做本地调试和测试的工具，不取平台内容；内置的基础库是腾讯代码，不能分发。
   - pabatiba89-sys/kali-publish：social-auto-upload 派生的商业产品发布模块，视频号流程写死了推广话题和商品逻辑，只借登录经验；上游 social-auto-upload 已收。
   - ycccccccy/echotrace：用户写的是 `echo`，对应关系是推断；属 client-hook，已停更，作者的另一个仓库在腾讯 2026 年的 DMCA 通知里。
+  - yikart/AiToEarn：用户 2026-11-01 给的视频号链接介绍的项目；发布和互动工具，不读收藏夹，互动功能是对平台账号的批量写操作，只记录。
+  - google-gemini/computer-use-preview：用户 2026-11-01 给的视频号链接演示 Gemini 的 Computer Use，对应到这个参考实现是推断；截图要发到 Gemini 接口。
 - [02](research/02-adapter-ecosystems.md#调研-02--社区维护的来源适配器生态) 和 [05](research/05-note-apps-and-plugins.md#调研-05--笔记软件互通与插件化) 里被当作做法来源、准备兼容或借代码的 61 条，出处链到对应小节。只在表格里出现、没被引为做法的，以及只被当作反例的，不收。这 61 个仓库 2026-10-30 用 `gh api` 确认存在，许可证以返回值为准。
 - 归档、停更、删库的项目照收，状态写在一句话里。
 
-合计 326 条：计划适配 127 条，参考设计 184 条，相邻项目 15 条。
+合计 328 条：计划适配 127 条，参考设计 185 条，相邻项目 16 条。
 
-用户给的视频号链接，按视频演示的内容推断对应 mingjuner123-spec/wechat-inbox-sync（待核实）。
+用户给的视频号链接，按视频演示的内容推断对应 mingjuner123-spec/wechat-inbox-sync（待核实）。2026-11-01 又给了 4 条：MediaCrawler 已收；AiToEarn、computer-use-preview 新收；开源文件搜索工具那条认不出是哪个项目，没有收录（见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)）。
 
 用户写的 `echo`，按名字和星数推断对应 ycccccccy/echotrace（待核实），其他同名候选见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)。
 
@@ -274,9 +276,10 @@
 - [web-infra-dev/midscene](https://github.com/web-infra-dev/midscene)：视觉驱动的 UI 自动化 SDK，截图加视觉模型定位和操作，支持网页、Android、iOS、鸿蒙和桌面。MIT。计划适配。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
 - [zai-org/Open-AutoGLM](https://github.com/zai-org/Open-AutoGLM)：智谱开源的手机 Agent 框架和 9B 视觉模型，截图交给模型理解界面，再经 ADB、HDC 或 WDA 点按输入。Apache-2.0。计划适配。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
 
-**参考设计（3）**
+**参考设计（4）**
 
 - [danzey0425-lgtm/web-image-sourcing](https://github.com/danzey0425-lgtm/web-image-sourcing)：用真实 Edge 浏览器加桌面操控，从小红书、抖音、B站收集图片素材，经视觉质检后生成图鉴和 PDF 的 Agent Skill。MIT。参考设计。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
+- [google-gemini/computer-use-preview](https://github.com/google-gemini/computer-use-preview)：Google 给 Gemini Computer Use 模型的参考实现，模型看截图给出点击和输入，由本机 Playwright 浏览器或 Browserbase 云浏览器执行；用户给的视频号链接演示的就是这个模型，对应到仓库是推断。Apache-2.0。参考设计。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
 - [insidegui/AudioCap](https://github.com/insidegui/AudioCap)：macOS 14.4 起 Core Audio 进程 tap 的示例代码，按进程或全系统录制其他 App 发出的声音。BSD-2-Clause。参考设计。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
 - [screenpipe/screenpipe](https://github.com/screenpipe/screenpipe)：持续记录屏幕和音频的本地电脑记忆，读系统无障碍树或做 OCR，用本地 Whisper 转写，可搜索并经 MCP 交给 AI。NOASSERTION（Screenpipe Commercial License，源码可见，商业使用需购买许可）。参考设计。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
 
@@ -470,7 +473,7 @@
 - [pabatiba89-sys/kali-publish](https://github.com/pabatiba89-sys/kali-publish)：social-auto-upload 的派生，喀理 AI 的开源发布后端，用本机 Chrome 保存的登录态把视频发到小红书、视频号、抖音等 10 个平台；用户点名；只借登录与会话导出的经验，视频号流程写死了推广话题和商品逻辑，不包装。MIT。参考设计。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
 - [ZJU-REAL/Easel](https://github.com/ZJU-REAL/Easel)：浙江大学 REAL Lab 发起的社媒运营 Agent 工作台，用 Agent Skill 做热点发现、选题和图文音视频创作，扫码登录七个国内平台发布并读回账号数据。Apache-2.0（内置的 gzh-design 为 AGPL-3.0，抖音发布脚本的来源许可待核实）。参考设计。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
 
-**相邻项目（12）**
+**相邻项目（13）**
 
 - [ahang008/ah-skills](https://github.com/ahang008/ah-skills)：阿杭的 Codex Skill 目录仓库，主要是指向独立仓库的索引，另有短视频制作入口、口播润色与剪辑包，本身不从平台取数据；用户点名；源码可见的非商业许可，只借来源说明的写法，不 fork、不分发。NOASSERTION（AH Source Available Non-Commercial License 1.0）。相邻项目。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
 - [caol64/wenyan-mcp](https://github.com/caol64/wenyan-mcp)：文颜的 MCP 版本，把 Markdown 转成公众号样式，连同图片、封面经官方接口上传到草稿箱。Apache-2.0。相邻项目。见 [06 §15](research/06-platform-access-and-account-risk.md#15-相邻创作发布与分析)
@@ -482,5 +485,6 @@
 - [linyqh/NarratoAI](https://github.com/linyqh/NarratoAI)：用大模型给本地影视素材写解说文案，再自动剪辑、配音、加字幕合成解说视频的工具。MIT。相邻项目。见 [06 §15](research/06-platform-access-and-account-risk.md#15-相邻创作发布与分析)
 - [Waboodoo/HTTP-Shortcuts](https://github.com/Waboodoo/HTTP-Shortcuts)：Android 上创建可从桌面、快捷设置或分享菜单触发的 HTTP 请求的 App，能把分享来的网址发到局域网里的本机服务。MIT。相邻项目。见 [06 §15](research/06-platform-access-and-account-risk.md#15-相邻创作发布与分析)
 - [wechatsync/Wechatsync](https://github.com/wechatsync/Wechatsync)：浏览器扩展加命令行和 MCP，用浏览器里已有的登录态把 Markdown 或当前网页文章同步成知乎、头条、公众号等平台的草稿。GPL-3.0（部分适配器不开源）。相邻项目。见 [06 §15](research/06-platform-access-and-account-risk.md#15-相邻创作发布与分析)
+- [yikart/AiToEarn](https://github.com/yikart/AiToEarn)：一人公司的 AI 内容营销平台，按平台授权把内容发到 14 个以上平台，浏览器插件在已登录页面上自动点赞、收藏、关注和回复，另有 AI 生成视频图文和商单结算；用户给的视频号链接介绍的项目。MIT。相邻项目。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
 - [YILS-LIN/short-video-factory](https://github.com/YILS-LIN/short-video-factory)：Electron 桌面应用，用大模型写口播文案、Edge TTS 配音，再把用户自备的素材混剪成带字幕的短视频。AGPL-3.0。相邻项目。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
 - [zhouxiaoka/autoclip](https://github.com/zhouxiaoka/autoclip)：开源 AI 剪辑桌面工具，从长视频自动挑高光切成短视频，并生成字幕、封面和发布文案。MIT。相邻项目。见 [06 §15](research/06-platform-access-and-account-risk.md#15-相邻创作发布与分析)

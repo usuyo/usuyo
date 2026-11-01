@@ -9,7 +9,7 @@
 ## 约定
 
 - **数据来源与日期**：每个仓库的 ★、最近推送、最近 release、许可证、是否归档，都是 2026-10-30 调用 `gh api repos/<owner>/<repo>` 与 `gh api repos/<owner>/<repo>/releases/latest` 的返回。★ 用 `stargazers_count`；推送用 `pushed_at` 的日期；release 写「tag（日期）」，没有 release 写 none；许可证用 `spdx_id`，没有许可证写 none，GitHub 识别不出的写 NOASSERTION，实际条款写在「歇存怎么用」一列。只有 Readeck 维护的 go-readability 不在 GitHub（在 Codeberg），★ 一栏写「—」。判断只依据代码、文档和 issue，没有运行任何抓取工具，也没有对平台发请求。
-- **范围**：共收录 470 个项目，层级分布 official-export 41、public-web 62、vision-ui 47、browser-session 46、session-api 31、private-api 112、client-hook 30、not-applicable 101。主要用途是刷量、刷赞刷粉、批量私信、养号、撞库或收集他人隐私数据的项目不收录，也不算相邻项目。复现签名和 Hook 客户端的项目只记它是什么、属于哪一层、维护和下架情况，不写技术细节。
+- **范围**：共收录 473 个项目，层级分布 official-export 41、public-web 62、vision-ui 49、browser-session 46、session-api 31、private-api 112、client-hook 30、not-applicable 102。主要用途是刷量、刷赞刷粉、批量私信、养号、撞库或收集他人隐私数据的项目不收录，也不算相邻项目。复现签名和 Hook 客户端的项目只记它是什么、属于哪一层、维护和下架情况，不写技术细节。
 - **获取层级**：按「实际怎么拿到数据」判断，不按项目自己的宣传。风险对比见 [§1.1](#11-七个层级)。
   - `official-export`：平台官方的数据导出、用户授权的官方开放 API，或读取用户已经导出的文件；
   - `public-web`：不登录，读公开页面或分享链接，不自己复现平台的请求签名；
@@ -109,7 +109,7 @@
 | 小红书 | 用户自己浏览器里的油猴脚本导出清单（[wkwunju/xhs-vault](https://github.com/wkwunju/xhs-vault)），或只读当前可见的收藏卡片（[themrv1ck/xiaohongshu-web-collection-organizing](https://github.com/themrv1ck/xiaohongshu-web-collection-organizing)） | 凭带 `xsec_token` 的链接取单篇（[chenjin-cmd/xhs-account-teardown](https://github.com/chenjin-cmd/xhs-account-teardown)、[JoeanAmier/XHS-Downloader](https://github.com/JoeanAmier/XHS-Downloader)） | 有条件可行 | token 和笔记绑定，错配时返回空数据；token 只在会话内有效，几小时后链接打开是 404（[danzey0425-lgtm/web-image-sourcing](https://github.com/danzey0425-lgtm/web-image-sourcing)）；分享链接带跟踪参数，不登录批量取后复制链接的账号被下线（[JoeanAmier/XHS-Downloader #305](https://github.com/JoeanAmier/XHS-Downloader/issues/305)）。只适合单条、低频，拿到链接尽快取 |
 | B站 | 用户浏览器里的扩展导出收藏夹（[ayasa520/bilibili-favorites-exporter](https://github.com/ayasa520/bilibili-favorites-exporter)） | 公开视频的元数据；字幕只有部分视频不登录可取，接口标记 `need_login_subtitle` 的要登录 | 有条件可行 | B站 一个搜索接口在 AWS 服务器 IP 上匿名请求返回 412，同一台服务器上另一个搜索接口不带 cookie 也正常，按链接取内容的接口这里没有报告（[Panniantong/Agent-Reach #180](https://github.com/Panniantong/Agent-Reach/issues/180)）；2026-06 起缺指纹参数的部分接口返回 412（[JefferyHcool/BiliNote #397](https://github.com/JefferyHcool/BiliNote/issues/397)）；B站 的律师函针对逆向适配非公开接口、认证体系、访问控制的工具和文档，点名了登录态、反爬风控、签名鉴权的适配（见 [§16.3](#163-下架停更与法律风险)），取内容只用公开页面，避开需要签名或补风控参数的接口 |
 | 公众号 | 电脑版微信（Windows、Mac）收藏里逐条复制文章链接（[Hello-Mr-Crab/pywechat](https://github.com/Hello-Mr-Crab/pywechat)、[pengyulong/wechat-favorites-exporter](https://github.com/pengyulong/wechat-favorites-exporter)） | 读文章页（[wechat-article/wechat-article-exporter](https://github.com/wechat-article/wechat-article-exporter) 的单篇管线、[fengxxc/wechatmp2markdown](https://github.com/fengxxc/wechatmp2markdown)） | 可行，是目前最完整的组合 | 匿名抓取会出现环境验证页，2025-03 有用户在 RSS 阅读器里直接抓文章页时每篇都被拦，改由服务端抓取后恢复（[cooderl/wewe-rss #388](https://github.com/cooderl/wewe-rss/issues/388)），自动化浏览器抓取也被拦过（[Bwkyd/wexin-read-mcp #3](https://github.com/Bwkyd/wexin-read-mcp/issues/3)）；微信对 UI 自动化有强制下线记录，复制链接要按人的节奏 |
-| 视频号 | 手动分享，或客户端里看过时录屏 | 不登录只能拿基础信息（[ucmao/media-parser](https://github.com/ucmao/media-parser) 的说明），文中嵌的视频号卡片只有元数据和封面（[jj-cheng25/weixin-articles-mcp](https://github.com/jj-cheng25/weixin-articles-mcp)），视频地址要借腾讯元宝的登录态换凭证（[joeseesun/qiaomu-clipper](https://github.com/joeseesun/qiaomu-clipper)、[MuZiJin701/wx-video-account-notes](https://github.com/MuZiJin701/wx-video-account-notes)） | 不完整 | 账号风险转到元宝账号，已有部署者的元宝账号被封（[ltaoo/wx_channels_download #495](https://github.com/ltaoo/wx_channels_download/issues/495)）；另一条路是录下播放的声音再转写（[insidegui/AudioCap](https://github.com/insidegui/AudioCap)、[Genymobile/scrcpy](https://github.com/Genymobile/scrcpy)） |
+| 视频号 | 手动分享，或客户端里看过时录屏 | 不登录只能拿基础信息（[ucmao/media-parser](https://github.com/ucmao/media-parser) 的说明；2026-11-01 在浏览器里打开 4 条分享链接，页面发出的匿名 `get_feed_info` 都返回了作者、描述、封面和互动数，没有视频地址），文中嵌的视频号卡片只有元数据和封面（[jj-cheng25/weixin-articles-mcp](https://github.com/jj-cheng25/weixin-articles-mcp)），视频地址要借腾讯元宝的登录态换凭证（[joeseesun/qiaomu-clipper](https://github.com/joeseesun/qiaomu-clipper)、[MuZiJin701/wx-video-account-notes](https://github.com/MuZiJin701/wx-video-account-notes)） | 不完整 | 账号风险转到元宝账号，已有部署者的元宝账号被封（[ltaoo/wx_channels_download #495](https://github.com/ltaoo/wx_channels_download/issues/495)）；另一条路是录下播放的声音再转写（[insidegui/AudioCap](https://github.com/insidegui/AudioCap)、[Genymobile/scrcpy](https://github.com/Genymobile/scrcpy)） |
 | 微博 | 用户浏览器里翻自己的收藏（[Chilfish/Weibo-archiver](https://github.com/Chilfish/Weibo-archiver) 的油猴版） | 访客方式取公开微博（[dataabc/weibo-crawler](https://github.com/dataabc/weibo-crawler)、[qinyuanpei/mcp-server-weibo](https://github.com/qinyuanpei/mcp-server-weibo)） | 可行 | 访客路径只有 IP 层限制 |
 | 知乎 | 收藏夹页面或开放平台接口（[klarkxy/zhihu-search](https://github.com/klarkxy/zhihu-search)） | 公开收藏夹和回答不登录可取（[Geralt-TYH/obsidian-zhihu-crawler](https://github.com/Geralt-TYH/obsidian-zhihu-crawler)） | 可行 | 私密收藏夹要带 cookie |
 | 豆瓣 | 本人主页的标记页 | 公开 RSS 做日常增量（[cosformula/douban-sync-skill](https://github.com/cosformula/douban-sync-skill)） | 可行 | 全量翻页会遇到算力验证（[Doubak/doubak-extension](https://github.com/Doubak/doubak-extension) 记录） |
@@ -172,13 +172,13 @@
 <a id="3-用户点名的项目"></a>
 ## 3. 用户点名的项目
 
-用户先点了 24 个名字，对应 27 个仓库：逸尘名下另有 3 个仓库一并列出；之后又补了 `easel` 和 `echo` 两个，合计 26 个名字、29 个仓库，`echo` 的对应关系是推断。「用户写的」一列照抄原文。这些项目在各类别表里也各有一行。
+用户先点了 24 个名字，对应 27 个仓库：逸尘名下另有 3 个仓库一并列出；之后又补了 `easel` 和 `echo` 两个，合计 26 个名字、29 个仓库，`echo` 的对应关系是推断。2026-11-01 又给了 4 条视频号链接，表里新增 2 行，共 28 行、31 个仓库，说明见本节末尾「2026-11-01 的 4 条视频号链接」一段。「用户写的」一列照抄原文。这些项目在各类别表里也各有一行。
 
 | 项目 | 用户写的 | 层级 | 登录 | 许可证 | 歇存怎么用 |
 |---|---|---|---|---|---|
 | [pabatiba89-sys/kali-publish](https://github.com/pabatiba89-sys/kali-publish) | `kali-publish` | `not-applicable`（发布） | 必须 | MIT | 不接入；借登录和会话导出的经验 |
 | [dreammis/social-auto-upload](https://github.com/dreammis/social-auto-upload) | `social-auto-upload` | `not-applicable`（发布，交互等同 `browser-session`） | 必须 | MIT | 不接入；借会话检查、Skill 分发、人工验证交接 |
-| [NanmiCoder/MediaCrawler](https://github.com/NanmiCoder/MediaCrawler) | `NanmiCoder/MediaCrawler` | `private-api` | 必须 | 自定义非商业学习许可 | 只作 `private-api` 层的风险例子；不 fork、不包装 |
+| [NanmiCoder/MediaCrawler](https://github.com/NanmiCoder/MediaCrawler) | `NanmiCoder/MediaCrawler`；另有 `https://weixin.qq.com/sph/Ahkw0JduLz` | `private-api` | 必须 | 自定义非商业学习许可 | 只作 `private-api` 层的风险例子；不 fork、不包装 |
 | [YILS-LIN/short-video-factory](https://github.com/YILS-LIN/short-video-factory) | `short-video-factory` | `not-applicable` | — | AGPL-3.0 | 不接入；借签名清单校验 |
 | [wendy7756/AI-Video-Transcriber](https://github.com/wendy7756/AI-Video-Transcriber) | `ai-videio-transcriber` | `private-api`（链接模式跟随 yt-dlp） | 不用 | Apache-2.0 | 官方转换插件包装它的本地文件模式 |
 | [Panniantong/Agent-Reach](https://github.com/Panniantong/Agent-Reach) | `agent reach` | `private-api` | 可选 | MIT，依赖另计 | 第三方获取插件按链接补全单条；借输出信封和错误码 |
@@ -205,6 +205,8 @@
 | [hanliang97/MatrixMedia](https://github.com/hanliang97/MatrixMedia) | `hanliang97/MatrixMedia` | `session-api` | 必须 | GPL-2.0-only | 借登录态页面里取列表的适配器结构 |
 | [ZJU-REAL/Easel](https://github.com/ZJU-REAL/Easel) | `easel` | `private-api`（B站 登录模拟 TV 端） | 可选 | Apache-2.0，内置 gzh-design 为 AGPL-3.0 | 不接入；借登录状态文件、读回分档和资料目录锁 |
 | [ycccccccy/echotrace](https://github.com/ycccccccy/echotrace) | `echo` | `client-hook`（微信本地数据） | 必须 | MIT，默认分支只剩文档 | 不接入；对应关系是推断，只记录层级和下架情况 |
+| [yikart/AiToEarn](https://github.com/yikart/AiToEarn) | `https://weixin.qq.com/sph/AXfoePFyGa` | `not-applicable`（发布与互动） | 必须 | MIT | 不接入；只记录 |
+| [google-gemini/computer-use-preview](https://github.com/google-gemini/computer-use-preview) | `https://weixin.qq.com/sph/AZZh6HUpV7` | `vision-ui` | 可选 | Apache-2.0 | 不接入；对应关系是推断，作视觉层的参考 |
 
 **kali-publish（pabatiba89-sys/kali-publish）。** GitHub 按名字搜不到，按描述搜「kali 发布」找到这个仓库；npm、PyPI 上没有同名包。它是 social-auto-upload 的派生，喀理 AI 商业产品的开源发布模块，用本机 Chrome 保存的登录态把视频发到小红书、视频号、抖音等 10 个平台，不取内容。对歇存有用的只有登录这一块的踩坑记录：Google 系平台不接受在 Playwright 控制的 Chrome 里登录，所以首次登录用普通 Chrome 加独立资料目录，再经本机 CDP 导出 `storage-state.json`；macOS 上自动化启动的 Chrome 读不到系统钥匙串加密的 Cookie；判断登录是否完成只查必需 Cookie 的名字，不读也不解密值。这几条可以写进获取插件的登录指南。不包装也不 fork：视频号流程会在每条作品后追加推广话题、按账号名挂课程商品，本机 5409 端口的服务没有认证，按链接下载时忽略证书错误。MIT；单人维护，没有 issue，能否持续不确定。
 
@@ -220,7 +222,7 @@
 
 **Somarkai/oxr（SoMarkAI/OXR）。** SoMark 开源的 1.3B 文档解析模型和配套服务，把 PDF 与文档图片转成 Markdown 和带版面坐标的 JSON，能识别正文、标题、表格、公式、代码块等 13 类元素，不访问平台。版面分析是独立可替换的服务，识别和阅读顺序由主模型负责，这种拆分可作为歇存 OCR 契约的参考。接入：做转换插件的薄客户端（[ADR-003 §2](../decisions/ADR-003-plugins.md#2-进程与协议) 允许后端是用户自己跑的服务），把块级结果写成 `derived/ocr/<image>.json`，坐标换算成 `[x,y,w,h]`。适合 PDF 和表格、公式多的截图，不适合当默认 OCR：本地部署要 Linux 加 NVIDIA GPU，起步 24GB 显存；免费托管 API 会把文件传到 SoMark，插件要标「离开本机」并默认关闭。许可证是 OXR License：以 Apache-2.0 为基础、附加条款优先，营收或融资超过 200 万美元的商业使用要另购许可，任何规模都不得提供与 SoMark 竞争的托管文档解析或 OCR 接口；不把源码复制进 MIT 的官方插件。2026-10-05 才建仓，接口和条款可能变，插件要锁定版本。
 
-**视频号链接（mingjuner123-spec/wechat-inbox-sync）。** 用户给的是一条视频号分享链接。对应关系是推断出来的：视频是「张张AI视界」2026-10-24 发的「蝴蝶号一键转存obsidian」；这个插件的 manifest 作者是 Zhang Zhang，最早的 LICENSE 署名「张张」，同一 GitHub 账号的另一个仓库写明作者的公众号叫「张张AI视界」；网页搜「蝴蝶号」没有别的结果。所以「蝴蝶号」应该就是视频号（图标像蝴蝶），这个插件就是视频里演示的工具。它是 Obsidian 插件：手机经作者的小程序（另有 iOS 快捷指令）把公众号、视频号、抖音、小红书、B站、小宇宙等链接和文件存进作者云端的收件箱，电脑端插件拉取、解析、转写后写成 Markdown。视频号链接默认交给作者的云端解析，抖音、小红书用插件自己的登录会话：抖音在匿名接口和隐藏页面都失败后，会自动带这个会话的 Cookie 直接请求作品详情接口，再交给本地 yt-dlp，所以条目记 `session-api`。可借的是「手机先存、电脑后理」的顺序，以及运营节点的失败分类（需要登录、风控、内容不可用、不支持、网络、上传、转写），可以对照歇存插件协议的错误枚举；但歇存的收件箱应由用户自己掌控，不经开发者的云端。只借设计，不 fork、不打包：1.3.117（2026-08-23）起是 MIT 加 Commons Clause，手机端小程序和云端后端不开源；如确需复用代码，只能基于 1.3.116 及更早的 MIT 版本。作者几乎每天发版，有一位用户反映 4 条链接里 3 条同步失败，失败的是视频号和抖音链接（[mingjuner123-spec/wechat-inbox-sync #135](https://github.com/mingjuner123-spec/wechat-inbox-sync/issues/135)）。
+**视频号链接（mingjuner123-spec/wechat-inbox-sync）。** 用户给的是一条视频号分享链接。对应关系是推断出来的：视频是「张张AI视界」2026-10-24 发的「蝴蝶号一键转存obsidian」；这个插件的 manifest 作者是 Zhang Zhang，最早的 LICENSE 署名「张张」，同一 GitHub 账号的另一个仓库写明作者的公众号叫「张张AI视界」；网页搜「蝴蝶号」没有别的结果。所以「蝴蝶号」应该就是视频号（图标像蝴蝶；2026-11-01 另一条视频把「DY蝴蝶号」并列成发布平台，见本节末尾），这个插件就是视频里演示的工具。它是 Obsidian 插件：手机经作者的小程序（另有 iOS 快捷指令）把公众号、视频号、抖音、小红书、B站、小宇宙等链接和文件存进作者云端的收件箱，电脑端插件拉取、解析、转写后写成 Markdown。视频号链接默认交给作者的云端解析，抖音、小红书用插件自己的登录会话：抖音在匿名接口和隐藏页面都失败后，会自动带这个会话的 Cookie 直接请求作品详情接口，再交给本地 yt-dlp，所以条目记 `session-api`。可借的是「手机先存、电脑后理」的顺序，以及运营节点的失败分类（需要登录、风控、内容不可用、不支持、网络、上传、转写），可以对照歇存插件协议的错误枚举；但歇存的收件箱应由用户自己掌控，不经开发者的云端。只借设计，不 fork、不打包：1.3.117（2026-08-23）起是 MIT 加 Commons Clause，手机端小程序和云端后端不开源；如确需复用代码，只能基于 1.3.116 及更早的 MIT 版本。作者几乎每天发版，有一位用户反映 4 条链接里 3 条同步失败，失败的是视频号和抖音链接（[mingjuner123-spec/wechat-inbox-sync #135](https://github.com/mingjuner123-spec/wechat-inbox-sync/issues/135)）。
 
 **wechat article exporter（wechat-article/wechat-article-exporter）。** 可自部署的公众号文章批量导出网站：用自己的公众号后台扫码登录，列出目标公众号的文章，再导出 HTML、JSON、Markdown 等格式，属 `session-api`。依赖的后台接口在 2026-07 下旬被微信关闭，作者 2026-07-30 宣布停止维护（[wechat-article/wechat-article-exporter #200](https://github.com/wechat-article/wechat-article-exporter/issues/200)）。还能用的是单篇管线：按公开文章 URL 取页面，整理正文和懒加载图片，区分正常、已删除、异常，在不联网的 QuickJS 沙箱里执行文章页自带的数据脚本，取回标题、作者、公众号、发布时间。这一段不需要登录，正对应 [SPEC §8](../SPEC.md#8-适配器协议-v0) 示例里的公众号适配器。接入：fork 到第三方仓库，只留单篇管线，删掉后台扫码、批量列表、会员限流和凭证通道，入口改成 `canonicalize`、`fetch` 命令行；用户以前用它导出的文件可以作为导入格式。MIT；配套的 wxdown-service 没有许可证，不复用。凭证通道要装根证书对微信客户端做中间人，属 `client-hook`，不提供。
 
@@ -276,6 +278,13 @@
 - [Kerinlin/EchoDistill](https://github.com/Kerinlin/EchoDistill)：在浏览器里读评论区、交给模型归纳的油猴脚本，见 [§15](#15-相邻创作发布与分析)。
 
 另有一条和 easel 有关：[ZJU-REAL/Awesome-GUI-Agents](https://github.com/ZJU-REAL/Awesome-GUI-Agents) 是同一组织维护的 GUI Agent 论文清单，没有代码，见 [§10](#10-视觉与-ui-自动化)。
+
+**2026-11-01 的 4 条视频号链接。** 都在浏览器里打开分享页读取，视频本身要在微信里看，所以只依据页面上的描述和封面。
+
+- `https://weixin.qq.com/sph/Ahkw0JduLz`：「Agent分享」2026-09-20 介绍 MediaCrawler，上表已有。视频里说它不做 JS 逆向、靠 Playwright 保存的登录态拿签名参数；本报告按默认路径记 `private-api`（见 [§4](#4-多平台下载与抓取) 的条目），不因这段描述改层级。
+- `https://weixin.qq.com/sph/AXfoePFyGa`：「榕哥AI落地」2026-05-29 介绍 [yikart/AiToEarn](https://github.com/yikart/AiToEarn)，封面写着把内容一键发到「DY蝴蝶号等十多个平台」。这是发布和互动工具，不读收藏夹，记在 [§15](#15-相邻创作发布与分析)。封面把「蝴蝶号」和抖音并列成发布平台，独立印证了上面「蝴蝶号就是视频号」的推断。
+- `https://weixin.qq.com/sph/AZZh6HUpV7`：「AI驯化指南」2026-10-30 演示 Gemini 的 Computer Use 模型，经 Antigravity 的自定义 MCP 工具接浏览器、桌面和安卓执行器。没有对上具体仓库；最接近的开源实现是 Google 的参考实现 [google-gemini/computer-use-preview](https://github.com/google-gemini/computer-use-preview) 和 [trycua/cua](https://github.com/trycua/cua)，都记在 [§10](#10-视觉与-ui-自动化)，对应关系是推断。
+- `https://weixin.qq.com/sph/AfUjcHEzn8`：「克莱加德」2026-10-19 的「好用的开源文件搜索工具」。页面只有这一句，封面是戴墨镜看报的企鹅和一个以「Describ」开头的搜索框，认不出是哪个项目，没有收录，待用户告知。
 
 <a id="4-多平台下载与抓取"></a>
 ## 4. 多平台下载与抓取
@@ -586,6 +595,7 @@
 | 项目 | ★ / 推送 / release / 许可证 | 平台 | 做什么 | 层级 | 登录 | 接口 | 歇存怎么用 |
 |---|---|---|---|---|---|---|---|
 | [Genymobile/scrcpy](https://github.com/Genymobile/scrcpy)（致谢） | 153578 / 2026-10-26 / v5.0.1（2026-10-08） / Apache-2.0 | 其他 | 经 ADB 把 Android 的画面和声音投到电脑，可键鼠操作、可录屏，手机端不装 App | vision-ui | 可选 | 命令行、桌面应用 | 获取方式：包装它的命令行，放第三方仓库。Apache-2.0，可 fork。 |
+| [trycua/cua](https://github.com/trycua/cua) | 31483 / 2026-11-01 / cua-spaces-v0.19.2（2026-10-30） / MIT | 其他 | 开源的 computer use 底座：macOS、Linux、Windows 的虚拟机沙箱和桌面驱动，Agent 经它截图、点按，驱动附 MCP 服务；可接 Gemini、Claude 等模型 | vision-ui | 可选 | 库、命令行、MCP | 获取方式：在沙箱里跑客户端的做法可参考，放第三方仓库。MIT。 |
 | [zai-org/Open-AutoGLM](https://github.com/zai-org/Open-AutoGLM)（致谢） | 26509 / 2026-03-06 / none / Apache-2.0 | 多平台：微信聊天、抖音、快手、头条/西瓜、小红书、B站、知乎、豆瓣、微博、其他 | 智谱的手机 Agent 框架和 9B 视觉模型：截图理解界面，经 ADB、HDC 或 WDA 点按 | vision-ui | 可选 | 命令行、库、模型 | 获取方式：fork 后改造，放第三方仓库。Apache-2.0，保留版权声明；ADB Keyboard 是 GPL-2.0，要用户自装。 |
 | [microsoft/OmniParser](https://github.com/microsoft/OmniParser) | 25594 / 2026-07-20 / v.2.0.1（2025-09-12） / CC-BY-4.0 | 其他 | 微软的纯视觉屏幕解析：把截图拆成可交互元素，供只看截图的 Agent 定位 | vision-ui | — | 模型、库 | 获取方式：调它的 HTTP 接口，放第三方仓库。仓库 CC-BY-4.0；v3 检测器权重 MIT，旧检测器是 AGPL-3.0。 |
 | [screenpipe/screenpipe](https://github.com/screenpipe/screenpipe)（致谢） | 22174 / 2026-10-30 / app-v2.7.130（2026-10-28） / NOASSERTION | 其他 | 持续记录屏幕和音频的本地「电脑记忆」：读无障碍树或 OCR，本地转写，可搜索 | vision-ui | 不用 | 桌面应用、命令行、HTTP 接口、MCP、Agent Skill | 获取加转换：借做法自己写，获取部分放第三方仓库。Screenpipe 商业许可（源码可见）：只借做法或读它的接口。 |
@@ -606,6 +616,7 @@
 | [MaaXYZ/MaaFramework](https://github.com/MaaXYZ/MaaFramework) | 5108 / 2026-10-29 / v5.14.3（2026-10-10） / LGPL-3.0 | 其他 | 基于图像识别的黑盒自动化框架：截图、模板匹配、OCR 后点按，流程用 JSON 描述 | vision-ui | 可选 | 库 | 参考：借做法自己写。LGPL-3.0：用户自装，独立进程调用。 |
 | [yuka-friends/Windrecorder](https://github.com/yuka-friends/Windrecorder) | 3966 / 2026-09-25 / none / GPL-2.0 | 其他 | Windows 屏幕记忆工具：定时截图或录屏，画面变化时 OCR 并建索引 | vision-ui | 不用 | 网页应用、Agent Skill | 获取加转换：借做法自己写，获取部分放第三方仓库。GPL-2.0：用户自装，独立进程调用；它的 WeChatOCR 扩展不应采用。 |
 | [minitap-ai/mobile-use](https://github.com/minitap-ai/mobile-use) | 3340 / 2026-10-18 / v3.3.0（2026-01-12） / Apache-2.0 | 其他 | 用自然语言操作 Android、iOS 的开源 Agent，可从任意 App 抽取信息输出 JSON | vision-ui | 可选 | 命令行、库 | 获取方式：包装它的命令行，放第三方仓库。Apache-2.0，可 fork。 |
+| [google-gemini/computer-use-preview](https://github.com/google-gemini/computer-use-preview) | 3255 / 2026-07-28 / none / Apache-2.0 | 通用网页 | Google 给 Gemini Computer Use 模型的参考实现：模型看截图给出点击和输入，由本机 Playwright 浏览器或 Browserbase 云浏览器执行（用户给的视频号链接演示的是这个模型，对应到仓库是推断，见 [§3](#3-用户点名的项目)） | vision-ui | 可选 | 命令行、库 | 只作参考：截图要发到 Gemini 接口，属于离开本机。Apache-2.0。 |
 | [openrecall/openrecall](https://github.com/openrecall/openrecall) | 2967 / 2025-09-24 / none / AGPL-3.0 | 其他 | 开源 Recall 替代品：定时截屏，本地 OCR 和语义索引 | vision-ui | 不用 | 网页应用 | 相邻：借做法自己写。AGPL-3.0：只借思路；维护停滞。 |
 | [doronz88/pymobiledevice3](https://github.com/doronz88/pymobiledevice3) | 2944 / 2026-10-30 / v11.49.0（2026-10-30） / GPL-3.0 | 其他 | 纯 Python 的 iOS 设备通信库和命令行，含 iOS 17+ 的开发者工具 | vision-ui | 可选 | 命令行、库 | 相邻：包装它的命令行。GPL-3.0：用户自装，独立进程调用。 |
 | [danielpaulus/go-ios](https://github.com/danielpaulus/go-ios)（致谢） | 2305 / 2026-10-30 / v1.3.2（2026-08-11） / MIT | 其他 | 纯 Go 的 iOS 设备工具集，在三大桌面系统上截图、拉起 WDA、做无障碍检查 | vision-ui | 可选 | 命令行、库、HTTP 接口 | 获取方式：包装它的命令行，放第三方仓库。MIT，可 fork；和歇存的 Go 技术栈一致。 |
@@ -847,6 +858,7 @@
 | [pbeenigg/LittleCrawler](https://github.com/pbeenigg/LittleCrawler) | 762 / 2026-08-09 / none / MIT | 小红书、知乎、其他 | 异步爬虫框架，抓小红书、知乎、闲鱼的搜索、详情和评论 | private-api | 必须 | 命令行、HTTP 接口、网页应用 | 不接入。标 MIT，但小红书模块和 MediaCrawler 一致且去掉了原声明，不能 fork。 |
 | [atian-create/lingzao-skill](https://github.com/atian-create/lingzao-skill) | 303 / 2026-07-02 / none / MIT-0 | 小红书、抖音、公众号 | 小红书运营 Skill 包，搜索公开笔记要接作者的付费服务 | private-api | 不用 | Agent Skill、命令行 | 相邻，不接入。MIT-0。 |
 | [harry0703/MoneyPrinterTurbo](https://github.com/harry0703/MoneyPrinterTurbo)（致谢） | 136472 / 2026-10-30 / v1.3.9（2026-10-21） / MIT | TikTok、Instagram、YouTube | 按主题自动写脚本、配音、配素材和字幕，合成短视频，可经 Upload-Post 发布（用户点名，见 [§3](#3-用户点名的项目)） | not-applicable | 可选 | 命令行、HTTP 接口、网页应用、Agent Skill、Docker | 相邻，只作参考。MIT；借它给 Agent 的退出码和确认参数约定。 |
+| [yikart/AiToEarn](https://github.com/yikart/AiToEarn) | 27152 / 2026-10-31 / v2.5.0（2026-06-24） / MIT | 多平台：抖音、小红书、快手、B站、视频号、公众号、TikTok、YouTube、X、Instagram、其他 | 一人公司的 AI 内容营销平台：按平台授权把内容发到 14 个以上平台，浏览器插件在已登录的页面上自动点赞、收藏、关注和回复评论，另有 AI 生成视频和图文、商单结算（用户给的视频号链接介绍的就是它，见 [§3](#3-用户点名的项目)） | not-applicable | 必须 | 网页应用、浏览器扩展、MCP、Docker | 相邻，不接入。MIT。它的互动功能是对平台账号的批量写操作，歇存不做这类事。 |
 | [dreammis/social-auto-upload](https://github.com/dreammis/social-auto-upload)（致谢） | 15948 / 2026-10-22 / v1.0.0-skills.2（2026-10-22） / MIT | 多平台：抖音、B站、小红书、快手、视频号、微博、知乎、TikTok、YouTube、Instagram、其他 | 命令行加 Agent Skill 的多平台发布工具，用浏览器自动化把视频、图文发到 17 个平台入口（用户点名，见 [§3](#3-用户点名的项目)） | not-applicable | 必须 | 命令行、Agent Skill、库、网页应用、HTTP 接口、Docker | 参考：借做法自己写。MIT，可 fork；借会话检查、Skill 分发和人工验证交接的做法。 |
 | [FujiwaraChoki/MoneyPrinter](https://github.com/FujiwaraChoki/MoneyPrinter) | 14122 / 2026-03-26 / none / MIT | YouTube | 按主题自动生成 YouTube Shorts，可选经官方接口上传 | not-applicable | 可选 | 网页应用、HTTP 接口、Docker | 相邻，不接入。MIT。 |
 | [doocs/md](https://github.com/doocs/md)（致谢） | 13488 / 2026-10-30 / @doocs/md-cli@2.1.4（2026-10-30） / WTFPL | 公众号 | 把 Markdown 渲染成公众号样式的编辑器，有网页版、浏览器扩展和命令行 | not-applicable | 可选 | 网页应用、浏览器扩展、命令行、其他 | 相邻，只作参考。WTFPL。 |
@@ -1030,6 +1042,8 @@
 
 以下都是提议。清单、契约和设置的改动留到实现插件运行器时再做，这次不改 [SPEC §8](../SPEC.md#8-适配器协议-v0)、ADR-003 和 product-model。
 
+**2026-11-01 更新。** 用户定了方向：风控由用户自己承担，产品按实用优化，声明写清楚，仓库按 Tachiyomi / Keiyoushi 的方式分开。据此，[§17.1](#171-清单里声明获取层级) 的 `access`、`login` 两个字段保留为给用户挑选用的标签；宿主推导的 `risk` 档、平台修正表，以及 [§17.2](#172-设置里怎么让用户选) 的「失败后不往上换」默认值和高风险层单独确认，都不再采用。采纳情况和定稿的字段见 [插件协议](../plugin-protocol.md)；本报告的风险证据保留作参考。
+
 <a id="171-清单里声明获取层级"></a>
 ### 17.1 清单里声明获取层级
 
@@ -1210,7 +1224,7 @@ permissions:
 
 **[§1.3](#13-混合路径视觉层拿链接公开页面取内容)、[§10](#10-视觉与-ui-自动化) 与 [§17.3](#173-首批自己适配的插件)：混合路径与视觉层**
 
-- 视频号分享链接不登录能拿到什么：作者和封面能拿到，标题和描述是否返回、个别作品能否不登录拿到视频地址，各仓库的说法不一致。
+- 视频号分享链接不登录能拿到什么：作者和封面能拿到；2026-11-01 打开的 4 条链接，匿名 `get_feed_info` 都返回了描述（视频号的标题就是描述的开头），`picInfo` 为空，没有视频地址。个别作品能否不登录拿到视频地址，各仓库的说法仍不一致。
 - 抖音、小红书、B站、快手、微博、知乎 App 收藏页逐条读取或复制链接的现成流程，本次没有找到。
 - scrcpy 同步 Android 剪贴板的行为、mirroir-mcp 有没有读剪贴板的办法、iPhone 镜像能否带出声音（视频号转写要用）。
 - 小红书 `xsec_token` 的有效期；「几小时后链接 404」只有一个项目的实测。
@@ -1223,8 +1237,9 @@ permissions:
 
 **[§3](#3-用户点名的项目)：用户点名的项目**
 
-- 「蝴蝶号」对应 wechat-inbox-sync 是推断：依据是作者署名和账号关联，没有作者本人确认；它的 iOS 快捷指令本体不在仓库里，是否直接调用提交接口核实不了。
+- 「蝴蝶号」对应 wechat-inbox-sync 是推断：依据是作者署名和账号关联，没有作者本人确认（「蝴蝶号」指视频号这一点，2026-11-01 已由 AiToEarn 的介绍视频印证）；它的 iOS 快捷指令本体不在仓库里，是否直接调用提交接口核实不了。
 - kali-publish 只有 1 个 ★、没有 issue，能否持续维护不确定。
+- 视频号链接 `https://weixin.qq.com/sph/AfUjcHEzn8`（开源文件搜索工具）对应哪个项目，页面上认不出，待用户告知。
 - OXR 的许可条款和接口都很新，可能变化；indra 权重的竞争条款能否用于官方插件需要法律意见。
 - 阿杭的源码可见许可下，第三方插件调用用户自装的副本是否算「包含」，需要法律意见。
 - Hypit 改过的 Apache-2.0 与歇存 AGPL 内核的关系，需要法律意见。
