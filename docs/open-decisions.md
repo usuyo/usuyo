@@ -23,7 +23,7 @@
 | D-c | 运行器按你排的顺序依次试，失败换下一个，全部失败停在只有链接（[SPEC §8](SPEC.md#8-适配器协议-v0)），不论 access 高低 | [插件协议 §3.1](plugin-protocol.md#31-运行器与节奏) | 默认顺序：[P4](#7-获取与插件)；拿到一部分时要不要接着补：[P5](#7-获取与插件)。限流、拦截时只暂停出错的那个插件在这个平台上的调用，别的照顺序继续（[插件协议 §3.1](plugin-protocol.md#31-运行器与节奏)），按 D-c 定的技术做法，不另问 |
 | D-d | 你添加第三方插件来源（组织名或 owner/repo）时确认一次声明：用途是个人备份、离线阅读、注意力整理；平台账号和法律上的后果由用户自己承担；链到 [06 §16](research/06-platform-access-and-account-risk.md#16-账号风险的证据) 的证据。主仓库 README、获取方式组织主页、插件 README 模板里也写。不做逐个插件的弹窗 | [插件协议 §8.5](plugin-protocol.md#85-添加来源更新与权限扩大)、[插件协议 附录 A](plugin-protocol.md#附录-a-声明模板) | 措辞定稿、改版后要不要重新确认、命令行怎么确认：[R1–R3](#12-声明与责任) |
 | D-e | 每个平台一组节奏上限（单条触发、间隔、每日上限），该平台所有获取方式共用；目的是不被限流、能一直用 | [插件协议 §3.1](plugin-protocol.md#31-运行器与节奏) | 默认值，以及大批量导入要跑几天：[P6](#7-获取与插件) |
-| D-f | 自己维护的获取插件放单独的 GitHub 组织（Tachiyomi → Mihon / Keiyoushi 的分法），每个插件一个仓库；客户端不预置任何获取来源，用户手动添加组织名；官方组织只放应用、plugin-kit、转换和导出插件。两个组织名先写占位 `{official-org}`、`{fetch-org}` | [插件协议 §8.4](plugin-protocol.md#84-三种来源)、[插件协议 §8.8](plugin-protocol.md#88-获取方式组织的仓库结构)、[ADR-003 修订](decisions/ADR-003-plugins.md#修订-2026-11-01) 第 2 条 | 组织名：[N1、N2](#2-命名与组织)；通用网页获取和导入插件算不算例外：[P1、P3](#7-获取与插件) |
+| D-f | 自己维护的获取插件放单独的 GitHub 组织（Tachiyomi → Mihon / Keiyoushi 的分法），每个插件一个仓库；客户端不预置任何获取来源，用户手动添加组织名；官方组织只放应用、plugin-kit、转换和导出插件。两个组织名先写占位 `{official-org}`、`{fetch-org}` | [插件协议 §8.4](plugin-protocol.md#84-三种来源)、[插件协议 §8.8](plugin-protocol.md#88-获取方式组织的仓库结构)、[ADR-003 修订](decisions/ADR-003-plugins.md#修订-2026-11-01) 第 2 条 | 组织名：[N1、N2](#2-命名与组织)；通用网页获取和别的工具的导入 11-01 定为例外，随安装包预装（[P1、P3](#7-获取与插件)） |
 | D-g | 视频号走腾讯元宝换 token 的路线可以接受。清单用 `sites` 写明用的是哪个站点的登录（例如 yuanbao.tencent.com），界面据此写「会用到你的腾讯元宝账号」 | [插件协议 §2.5](plugin-protocol.md#25-登录站点-sites) | 元宝用微信登录时要不要多写一句：[P15](#7-获取与插件) |
 | D-h | 命令 `seelu`；资料库里的隐藏目录 `.seelu/`；GitHub topic `seelu-plugin`；个人仓库里的第三方插件用前缀 `seelu-fetch-`、`seelu-transform-`、`seelu-export-`；两个组织内的仓库不加 `seelu-` 前缀 | [插件协议 §0.3](plugin-protocol.md#03-名字)、[插件协议 §8.1](plugin-protocol.md#81-仓库命名) | 应用显示名：[N8](#2-命名与组织)；资料库默认目录：[K7](#11-存储同步与联网)；Obsidian 里的文件夹名：[E3](#10-导出与互通) |
 | D-i | 只做开源，不商业化，不做官网；用你自己的一级域名，不买域名，seelu.com、seelu.cn 不再跟进（[07 §9](research/07-positioning-and-naming.md#9-待核实清单) 第 10 条就此关闭） | [07 §10.1](research/07-positioning-and-naming.md#101-定名说明) | 域名用在哪：[N6](#2-命名与组织)；捐赠入口：[O6](#13-开源与发布) |
@@ -39,7 +39,7 @@
 | 只读导出文件的导入插件放哪个组织（[06 §17.4](research/06-platform-access-and-account-risk.md#174-fork-与许可证)） | 还开着 | 见 [P3](#7-获取与插件) |
 | 视频号走腾讯元宝换凭证的路线 | 接受，界面写明会用到元宝账号 | D-g |
 | 自己维护的获取方式要不要单独设组织 | 单独设，客户端不预置 | D-f |
-| 改名 | 思鹭 / Seelu，命令 `seelu`（[07 §0](research/07-positioning-and-naming.md#0-推荐)）。D-h 之外仍带旧名的标识，由改名会话统一换成 seelu：导出身份键 `seelu_id`、Logseq 的 `seelu-id::`、思源的 `custom-seelu-id`、用户区标记 `%% seelu:begin notes %%`、URL scheme `seelu://`、MCP 服务名 `seelu`、环境变量前缀 `SEELU_`、配置目录 `~/.config/seelu/`、画布扩展字段 `x-seelu`、「Seelu contributors」（清单见 [07 §8](research/07-positioning-and-naming.md#8-改名要动的地方)）。导出身份键会写进你的笔记库，要在第一个能导出的版本之前定死 | 你 11-01 选定；D-h |
+| 改名 | 11-01 又重新打开，见 [§1.4](#14-11-01-第二次回复定下的)。原结论：思鹭 / Seelu，命令 `seelu`（[07 §0](research/07-positioning-and-naming.md#0-推荐)）。D-h 之外仍带旧名的标识，由改名会话统一换成 seelu：导出身份键 `seelu_id`、Logseq 的 `seelu-id::`、思源的 `custom-seelu-id`、用户区标记 `%% seelu:begin notes %%`、URL scheme `seelu://`、MCP 服务名 `seelu`、环境变量前缀 `SEELU_`、配置目录 `~/.config/seelu/`、画布扩展字段 `x-seelu`、「Seelu contributors」（清单见 [07 §8](research/07-positioning-and-naming.md#8-改名要动的地方)）。导出身份键会写进你的笔记库，要在第一个能导出的版本之前定死 | 你 11-01 选定；D-h |
 
 <a id="13-随之改写的文档"></a>
 ### 1.3 随之改写的文档
@@ -51,10 +51,22 @@
 - [ADR-003 影响](decisions/ADR-003-plugins.md#影响) 一节列的文档改动还没落到各文档里：[PRD §4](PRD.md) 原则 4 的「一切可插拔」加「导出」，[product-model §8.1](product-model.md#81-设置清单) 加「导出」分组，[CLAUDE.md](../CLAUDE.md) 技术栈里「适配器」一行改为三类插件。ADR-003 改为 accepted 时一起改。
 - ADR-003 已加 [修订 2026-11-01](decisions/ADR-003-plugins.md#修订-2026-11-01) 一节，状态仍是 proposed；改名会话改完正文后改为 accepted。这一条默认会做，你不同意就在回复里说。
 
+<a id="14-11-01-第二次回复定下的"></a>
+### 1.4 11-01 第二次回复定下的
+
+| 编号 | 你的回复 | 结论 | 改了哪里 |
+|---|---|---|---|
+| N3 | 「seelu我感觉缺少meme属性，不够独立，或者还是有点蹭和被误解」，像思源那类中文名太 NPC、太国风，「我在想其实只需要英文就够？」 | 思鹭 / Seelu 不用了。这一轮只定英文名，不另起正式的中文名，起名和细查见 [调研 08](research/08-english-name.md)。D-h 的规则不变（命令、数据目录、topic、仓库前缀都跟着英文名），文档里的 `seelu` 和思鹭先当暂名，定名后统一换掉 | [07 §0](research/07-positioning-and-naming.md#0-推荐)、[插件协议 §0.3](plugin-protocol.md#03-名字)、[ADR-003 修订](decisions/ADR-003-plugins.md#修订-2026-11-01) 第 1 条；全仓改名暂停 |
+| P1 | 同意 | 选 B：官方组织出一个通用网页获取插件，随安装包预装，`id` 用 `builtin/` 前缀；只做 public-web、不登录、没有站点专用规则 | [插件协议 §8.4](plugin-protocol.md#84-三种来源)、[附录 A.1](plugin-protocol.md#a1-主仓库-readme)、[ADR-003 修订](decisions/ADR-003-plugins.md#修订-2026-11-01) 第 2、5 条、[07 §10](research/07-positioning-and-naming.md#10-叙事与介绍定名后第二版) |
+| P3 | 同意 | 选 B：别的工具的导出（书签 HTML、Pocket、Readwise 一类）的导入插件进官方组织并预装；平台官方导出包的导入插件放 `{fetch-org}`；本机文件、截图、粘贴文字是宿主自己的功能 | 同 P1 |
+| S3 | 按建议 | 选 A：一句话用「在推荐流外，维护一套你自己的思路。」，后面接那句带「添加获取插件后」的说明。句子用的是你的原话，不依赖名字；「思路」和思鹭的谐音随名字作废，英文那句「See what you kept, outside the feed.」借的是 Seelu 的 see，定名后重写 | [07 §10.7](research/07-positioning-and-naming.md#107-还要用户挑的地方) 第 2 条 |
+
+还没跟着改的：[SPEC §1](SPEC.md#1-仓库布局monorepo) 和 [SPEC §12](SPEC.md#12-m0-范围) 仍写内核内置 `web-generic`、验收用公众号链接，要按 P1 改成预装的官方插件、验收换成不属于任何平台的网页；连同 [O8](#13-开源与发布) 的分期一起，由改名会话改。
+
 <a id="2-命名与组织"></a>
 ## 2. 命名与组织
 
-编号前缀 N。组织名、包名一旦有人用就很难改，这一节大多要在建仓库之前定。
+编号前缀 N。组织名、包名一旦有人用就很难改，这一节大多要在建仓库之前定。11-01 你又否了思鹭 / Seelu（[§1.4](#14-11-01-第二次回复定下的)），下面各条里的 `seelu` 都是暂名：N1、N4、N5、N6、N8 等新英文名定了再照换，N3 的查法改成查新名字，候选和细查见 [调研 08](research/08-english-name.md)。
 
 | 编号 | 问题 | 现状 | 选项 | 建议 | 影响 |
 |---|---|---|---|---|---|
@@ -77,7 +89,7 @@
 |---|---|---|---|---|---|
 | S1 | 品类词「看重地图」留不留 | [07 §1](research/07-positioning-and-naming.md#1-这是什么东西) 提议品类叫「看重地图」，并放弃「注意力回收工具」（「回收」撞上产品自己的回收站，又依赖已作废的「放下」）；[CLAUDE.md](../CLAUDE.md)、[README](../README.md)、[PRD §1](PRD.md) 还写着「注意力回收工具」；[07 §10.7](research/07-positioning-and-naming.md#107-还要用户挑的地方) 第 3 条建议对外不用 | A 对外用「看重地图」；B 不设品类词，只留「看重」作定位词（「知识库管你知道什么，思鹭管你看重什么」）；C 用 [07 §1](research/07-positioning-and-naming.md#1-这是什么东西) 三个角度的其他说法：注意力存档、个人判断层、在意地图 | B。造出来的品类词读者听不出是什么；「看重地图」可以留在解释地图界面的段落里。「注意力回收工具」不再用 | CLAUDE.md、README、PRD 定位一节、GitHub 简介、关于页 |
 | S2 | 官方仓库的文案点不点平台名 | [07 §10.7](research/07-positioning-and-naming.md#107-还要用户挑的地方) 第 1 条推荐不点，平台名只写在 `{fetch-org}` 主页和各获取插件的 README 里；依据是 2026-11-01 看 Mihon 的 README 只写功能，不点任何内容来源。点名版写在 [07 §10.3](research/07-positioning-and-naming.md#103-各部分备选) | A 不点，写「各平台」「各个 App」；B 点名（抖音、小红书、B站、公众号、视频号、X） | A。点名更具体，但官方首页会被读成「它支持抖音」，而客户端其实一个获取来源也不带 | README 第一段、GitHub description、口播稿 |
-| S3 | 一句话用哪个支点 | [07 §10.2.1](research/07-positioning-and-naming.md#1021-一句话) 推荐「在推荐流外，维护一套你自己的思路。」（17 字），被问「这是什么」时接一句说明；[07 §10.3](research/07-positioning-and-naming.md#103-各部分备选) 的备选是「收下的存在自己电脑上，判断由你自己写。」和「知识库管你知道什么，思鹭管你看重什么。」；[CLAUDE.md](../CLAUDE.md) 现在的一句话是「先收好，心思回到当下。」 | A 推荐句：谐音加流外，讲立场；B 讲做什么的备选 1；C 对照的备选 2 | A，后面固定接 [07 §10.2.1](research/07-positioning-and-naming.md#1021-一句话) 的那句说明，说明里带「添加获取插件后」这个条件。你也可以直接改字 | 仓库首行、README 第二行、社交预览图、口播结尾、`seelu --help` 的简介 |
+| S3 | 一句话用哪个支点 | [07 §10.2.1](research/07-positioning-and-naming.md#1021-一句话) 推荐「在推荐流外，维护一套你自己的思路。」（17 字），被问「这是什么」时接一句说明；[07 §10.3](research/07-positioning-and-naming.md#103-各部分备选) 的备选是「收下的存在自己电脑上，判断由你自己写。」和「知识库管你知道什么，思鹭管你看重什么。」；[CLAUDE.md](../CLAUDE.md) 现在的一句话是「先收好，心思回到当下。」 | A 推荐句：谐音加流外，讲立场；B 讲做什么的备选 1；C 对照的备选 2 | **11-01 已定：A**（[§1.4](#14-11-01-第二次回复定下的)），后面固定接 [07 §10.2.1](research/07-positioning-and-naming.md#1021-一句话) 的那句说明，说明里带「添加获取插件后」这个条件。你也可以直接改字 | 仓库首行、README 第二行、社交预览图、口播结尾、`seelu --help` 的简介 |
 | S4 | 中英文用不用同一个支点 | [07 §10.7](research/07-positioning-and-naming.md#107-还要用户挑的地方) 第 2 条连带一问；英文 Seelu 不能当动词，[07 §0](research/07-positioning-and-naming.md#0-推荐) 建议用 see 去讲；[07 §10.2.2](research/07-positioning-and-naming.md#1022-英文-one-liner) 推荐 "See what you kept, outside the feed." | A 不用：中文讲「思路」，英文讲 see；B 都讲「思路」，英文用备选 "Your own line of thought, kept outside the feed." | A。「思路」的谐音英文读者接不住 | 英文 README、英文社交预览 |
 | S5 | 旧口号怎么处理 | [PRD §1](PRD.md) 的口号「平台要你一直刷，歇存让你歇一下」靠「歇」字，换名后失效；[CLAUDE.md](../CLAUDE.md) 的「先收好，心思回到当下」和新定位不冲突（[07 §8](research/07-positioning-and-naming.md#8-改名要动的地方)），[07 §10.7](research/07-positioning-and-naming.md#107-还要用户挑的地方) 第 7 条建议改名时换掉 | A 不另设口号，用 S3 的一句话顶替，两处旧口号都换掉；B 留「先收好，心思回到当下」作口号；C 保留 PRD 的句式换词，例如「平台要你一直刷，思鹭让你站在流外」 | A。一句话和口号分成两套，传播时会互相打架 | PRD 定位一节、CLAUDE.md |
 | S6 | 「不是死路，是思鹭」用不用、用在哪 | [07 §0](research/07-positioning-and-naming.md#0-推荐) 提议先自己用掉这个谐音；[07 §10.2.7](research/07-positioning-and-naming.md#1027-梗句和固定写法) 定的分寸：只在口播和自我介绍收尾、有人读成「死路」时回一句，一篇最多一次，停更、出错的公告和界面里都不用 | A 照 [07 §10.2.7](research/07-positioning-and-naming.md#1027-梗句和固定写法) 的分寸用；B 不用，因为带负面字；C 放进 README | A | 口播稿、评论区回复 |
@@ -149,9 +161,9 @@
 
 | 编号 | 问题 | 现状 | 选项 | 建议 | 影响 |
 |---|---|---|---|---|---|
-| P1 | 装好思鹭、一个获取方式都没有时，粘贴一个普通网页链接会怎样；通用网页获取放哪 | 几处说法不一致：[SPEC §12](SPEC.md#12-m0-范围) 和 [feature 001](features/001-m0-core-loop.md) 在内核里内置 `web-generic`（抓取、go-readability 抽正文、下载图片），验收用的是公众号链接；[ADR-003 §5](decisions/ADR-003-plugins.md#5-仓库拆分) 写客户端不预置任何获取方式；[06 §17.3](research/06-platform-access-and-account-risk.md#173-首批自己适配的插件) 把「通用网页」列进获取方式组织的首批；[插件协议 §13](plugin-protocol.md#13-待定) 第 5 条。D-f：官方组织只放应用、plugin-kit、转换和导出插件 | A 内核内置通用网页获取，只做 public-web、不登录、不带任何站点专用规则，要给 [ADR-003 §5](decisions/ADR-003-plugins.md#5-仓库拆分) 加例外；B 官方组织出一个通用网页获取插件，随安装包预装，内核仍不含获取逻辑，要给 D-f 加例外；C 只放获取方式组织，粘贴后停在只有链接，第一次打开时引导你添加来源 | B，要你确认这个例外。通用网页获取不含平台知识，和 Obsidian 官方剪藏扩展、Mihon 自带的读本机文件的来源是一类；同时守住「内核只调插件」。它的 `network.hosts` 写 `"*"`，宿主的代理照样挡住内网和云元数据地址（[插件协议 §3.2](plugin-protocol.md#32-调用约定)）；`id` 可以用 [插件协议 §2.2](plugin-protocol.md#22-共有字段) 保留的 `builtin/` 前缀。C 的开箱体验最差。无论选哪个：不许有站点专用规则，验收和测试样例换成不属于任何平台的网页 | SPEC 仓库布局与 M0 范围、feature 001、ADR-003、`builtin/` 前缀用不用、[插件协议 §8.4](plugin-protocol.md#84-三种来源)「官方组织只列转换和导出」和 [附录 A.1](plugin-protocol.md#a1-主仓库-readme)「不随思鹭分发」两句、[07 §10.2](research/07-positioning-and-naming.md#102-推荐的一套) 里「客户端不预置获取来源」的写法、第一次打开的流程、[S9](#3-叙事与介绍) |
+| P1 | 装好思鹭、一个获取方式都没有时，粘贴一个普通网页链接会怎样；通用网页获取放哪 | 几处说法不一致：[SPEC §12](SPEC.md#12-m0-范围) 和 [feature 001](features/001-m0-core-loop.md) 在内核里内置 `web-generic`（抓取、go-readability 抽正文、下载图片），验收用的是公众号链接；[ADR-003 §5](decisions/ADR-003-plugins.md#5-仓库拆分) 写客户端不预置任何获取方式；[06 §17.3](research/06-platform-access-and-account-risk.md#173-首批自己适配的插件) 把「通用网页」列进获取方式组织的首批；[插件协议 §13](plugin-protocol.md#13-待定) 第 5 条。D-f：官方组织只放应用、plugin-kit、转换和导出插件 | A 内核内置通用网页获取，只做 public-web、不登录、不带任何站点专用规则，要给 [ADR-003 §5](decisions/ADR-003-plugins.md#5-仓库拆分) 加例外；B 官方组织出一个通用网页获取插件，随安装包预装，内核仍不含获取逻辑，要给 D-f 加例外；C 只放获取方式组织，粘贴后停在只有链接，第一次打开时引导你添加来源 | **11-01 已定：B**（[§1.4](#14-11-01-第二次回复定下的)）。通用网页获取不含平台知识，和 Obsidian 官方剪藏扩展、Mihon 自带的读本机文件的来源是一类；同时守住「内核只调插件」。它的 `network.hosts` 写 `"*"`，宿主的代理照样挡住内网和云元数据地址（[插件协议 §3.2](plugin-protocol.md#32-调用约定)）；`id` 可以用 [插件协议 §2.2](plugin-protocol.md#22-共有字段) 保留的 `builtin/` 前缀。C 的开箱体验最差。无论选哪个：不许有站点专用规则，验收和测试样例换成不属于任何平台的网页 | SPEC 仓库布局与 M0 范围、feature 001、ADR-003、`builtin/` 前缀用不用、[插件协议 §8.4](plugin-protocol.md#84-三种来源)「官方组织只列转换和导出」和 [附录 A.1](plugin-protocol.md#a1-主仓库-readme)「不随思鹭分发」两句、[07 §10.2](research/07-positioning-and-naming.md#102-推荐的一套) 里「客户端不预置获取来源」的写法、第一次打开的流程、[S9](#3-叙事与介绍) |
 | P2 | 平台链接还没有获取方式时，那一条上怎么写 | [product-model §3](product-model.md#3-词汇表) 只写「只有链接」；D-f 客户端不预置来源；Mihon 的 FAQ 写应用不提供、不关联任何扩展仓库（[02 §15.7](research/02-adapter-ecosystems.md#157-适配器源信任与治理)） | A 只写「只有链接」；B 写「只有链接：抖音还没有获取方式」，旁边一个「添加来源」，打开来源设置、输入框是空的；C 在 B 上再链到一页说明怎么找来源 | B。说事实、给出口，不在应用里点名任何来源（和 [R9](#12-声明与责任) 一致） | 条目页、收下浮层的文案 |
-| P3 | 读导出文件的导入插件放哪个组织、要不要预装；本机文件、截图、粘贴文字算不算插件 | 上次留下的问题，[ADR-003 修订](decisions/ADR-003-plugins.md#修订-2026-11-01) 第 5 条、[插件协议 §13](plugin-protocol.md#13-待定) 第 2 条。导入是获取的一种（[ADR-003 §1](decisions/ADR-003-plugins.md#1-插件分三类)），默认放获取方式组织；照 D-f 的字面，新装的思鹭连浏览器书签、Pocket 导出都导不进。[01 §4](research/01-comparable-products.md#4-对歇存的启示) 第 1 条列了现在就能定的格式；[插件协议 §3.9](plugin-protocol.md#39-从文件导入) 已定导入插件不联网 | A 都放获取方式组织；B 分两类：别的工具的导出（Netscape HTML 书签、Pocket、Omnivore、Readwise、Instapaper、Wallabag、Obsidian Web Clipper、flomo 一类）进官方组织并预装，平台官方导出包（抖音个人信息下载、Google Takeout、X 归档、Instagram 导出）放获取方式组织；C 都进官方组织 | B，算 D-f 的一个例外，要你确认。通用格式不涉及任何平台；平台导出包虽然不联网，但带平台名、跟着平台改版。另外写明：本机文件、截图、粘贴文字的收下是宿主自己的功能，不是插件 | [ADR-003 修订](decisions/ADR-003-plugins.md#修订-2026-11-01) 第 5 条、安装包预装列表、[插件协议 §8.4](plugin-protocol.md#84-三种来源)「官方组织只列转换和导出」一句、[07 §10.2](research/07-positioning-and-naming.md#102-推荐的一套) 里「客户端不预置获取来源」的写法、[PRD §5](PRD.md) 导入方式、第一次打开的流程 |
+| P3 | 读导出文件的导入插件放哪个组织、要不要预装；本机文件、截图、粘贴文字算不算插件 | 上次留下的问题，[ADR-003 修订](decisions/ADR-003-plugins.md#修订-2026-11-01) 第 5 条、[插件协议 §13](plugin-protocol.md#13-待定) 第 2 条。导入是获取的一种（[ADR-003 §1](decisions/ADR-003-plugins.md#1-插件分三类)），默认放获取方式组织；照 D-f 的字面，新装的思鹭连浏览器书签、Pocket 导出都导不进。[01 §4](research/01-comparable-products.md#4-对歇存的启示) 第 1 条列了现在就能定的格式；[插件协议 §3.9](plugin-protocol.md#39-从文件导入) 已定导入插件不联网 | A 都放获取方式组织；B 分两类：别的工具的导出（Netscape HTML 书签、Pocket、Omnivore、Readwise、Instapaper、Wallabag、Obsidian Web Clipper、flomo 一类）进官方组织并预装，平台官方导出包（抖音个人信息下载、Google Takeout、X 归档、Instagram 导出）放获取方式组织；C 都进官方组织 | **11-01 已定：B**（[§1.4](#14-11-01-第二次回复定下的)），算 D-f 的一个例外。通用格式不涉及任何平台；平台导出包虽然不联网，但带平台名、跟着平台改版。另外写明：本机文件、截图、粘贴文字的收下是宿主自己的功能，不是插件 | [ADR-003 修订](decisions/ADR-003-plugins.md#修订-2026-11-01) 第 5 条、安装包预装列表、[插件协议 §8.4](plugin-protocol.md#84-三种来源)「官方组织只列转换和导出」一句、[07 §10.2](research/07-positioning-and-naming.md#102-推荐的一套) 里「客户端不预置获取来源」的写法、[PRD §5](PRD.md) 导入方式、第一次打开的流程 |
 | P4 | 同一个平台装了几个获取方式时，默认按什么顺序试 | D-c 留下的待定项，[插件协议 §13](plugin-protocol.md#13-待定) 第 3 条；[product-model §8.1](product-model.md#81-设置清单) 现写「按安装顺序」。Agent-Reach 每个动作先用公开网页工具，失败才动用登录态；wechat-inbox-sync 的抖音路径先试匿名接口，都失败才带会话 cookie（[06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)） | A 按安装顺序；B 先试不用账号的，再试用账号的；同类里按 `access` 从低到高，相同的按安装顺序；C 用账号的优先，因为往往拿得全；D 按这台电脑上最近的成功率自动排 | B，你拖动过的平台就按你排的。平时不用等登录、不动账号；按链接取单条在抖音、公众号上不登录就能取（[06 §0](research/06-platform-access-and-account-risk.md#0-要点) 第 4 条），用账号的留给它取不到的时候；视觉层一条要几秒到十几秒（[06 §17.3](research/06-platform-access-and-account-risk.md#173-首批自己适配的插件)），`vision-ui` 层级虽低，在用账号的那一类里排最后。D 会让顺序自己变，你看不懂这次为什么用了账号 | product-model 设置清单、插件列表、运行器默认值、[插件协议 §12](plugin-protocol.md#12-调研-06-提议的采纳情况)「默认按风险从低到高排序」一行的结论 |
 | P5 | 第一个获取方式只拿到一部分（例如只有低清视频）时，要不要接着用下一个补全 | [插件协议 §3.7](plugin-protocol.md#37-fetch-输出)：`partial` 表示缺了一部分，缺什么写进 `missing`；[插件协议 §3.1](plugin-protocol.md#31-运行器与节奏) 的情况表已定每个成功的快照都保留，运行器能带 `--want=<missing>` 让后面的插件只补缺的部分，完整度只升不降；默认自动接着试还是等你点「补全」没定（[插件协议 §13](plugin-protocol.md#13-待定) 第 16 项） | A 停下，条目写缺什么，你点「补全」再试下一个；B 自动接着试下一个，两份快照都留；C 只在下一个不用账号时自动接着试，要用账号的等你点「补全」 | B。和失败换下一个用同一条规则（D-c）：按你排的顺序接着试，直到拿全或试完，两份快照都留，完整度只升不降。你排的顺序已经表示你愿意用哪些方式，不再按用不用账号另设一道。代价是多用一次这个平台的节奏额度。想让用不用账号这件事更可控，就选 C | 运行器、条目页的「补全」按钮 |
 | P6 | 节奏上限的默认值；上千条的第一次批量导入要跑几天 | D-e 定了机制；[插件协议 §3.1](plugin-protocol.md#31-运行器与节奏)：默认值取已装插件建议里最严的一组，你可以改；每日上限只管批量导入、跟着收和取消收藏，手动收下的单条不计。证据：小红书 45 秒间隔两三天被封（Spider_XHS #150），抖音单作品接口约 200 次后限流、IP 约两小时解封（[06 §16.2](research/06-platform-access-and-account-risk.md#162-issue-里的账号问题)、[06 §5](research/06-platform-access-and-account-risk.md#5-抖音快手与-tiktok)） | A 保守默认，大批量导入按天分批跑完；B 默认快，你自己调慢；C 按平台给不同默认，小红书最慢 | A 加 C：按插件建议取最严，小红书这类按天跑完。你改高时，设置旁边写一句这个平台已知的限流情况，不弹窗、不拦。要你确认的只有一件：上千条的导入可能要跑几天，可以接受 | 导入预览、跟着收、平台设置页 |
@@ -268,15 +280,15 @@
 
 按影响面排：越靠前，挡住的后续工作越多。
 
-1. [N3](#2-命名与组织) 国内同名与商标核查：唯一可能推翻名字的一项，挡住建组织、占包名和全仓改名。
+1. 新英文名（[调研 08](research/08-english-name.md)，取代原来的 [N3](#2-命名与组织)）：11-01 你否了思鹭 / Seelu，挡住建组织、占包名和全仓改名；定下后对新名字做一次 N3 的核查。
 2. [N1](#2-命名与组织) 官方组织名：定了才能建仓库、写 Go 模块路径、替换文档里的占位。
 3. [N2](#2-命名与组织) 获取方式组织名：获取方式组织的主页、声明和深链接都要它。
-4. [S3](#3-叙事与介绍) 一句话的支点：仓库首行、README、`seelu --help`、口播都等它。
+4. ~~[S3](#3-叙事与介绍) 一句话的支点~~：11-01 已定 A。
 5. [S2](#3-叙事与介绍) 官方仓库点不点平台名：决定 README 第一段、GitHub description 和口播的写法。
 6. [M1](#6-地图与界面) 「关注」模型：product-model 要重写的四节、地图交互和产品动词（[S11](#3-叙事与介绍)）都等它。
 7. [K1](#11-存储同步与联网) 删掉、回收站和删除记录：放下作废后 product-model、PRD、SPEC 要一起改的部分，K2–K4 跟着它，K5 和 K2 一起定。
-8. [P1](#7-获取与插件) 通用网页获取放哪：决定装好后第一次粘贴链接的体验，也决定 SPEC 和 feature 001 怎么重写。
-9. [P3](#7-获取与插件) 导入插件放哪：决定安装包预装什么、ADR-003 怎么修订。
+8. ~~[P1](#7-获取与插件) 通用网页获取放哪~~：11-01 已定 B，SPEC 和 feature 001 跟着改。
+9. ~~[P3](#7-获取与插件) 导入插件放哪~~：11-01 已定 B。
 10. [R5](#12-声明与责任) 获取方式组织收到哪一层：决定首批插件的范围和组织的规矩。
 
-接着是 [O2](#13-开源与发布)（哪些文档公开）、[O3](#13-开源与发布)（GitHub App 还是工作流）、[P4](#7-获取与插件)（默认顺序）、[P8](#7-获取与插件)（登录来源的默认）。
+空出来的三个位置依次补上 [P16](#7-获取与插件)（`login: optional` 默认带不带账号）、[R4](#12-声明与责任)（权利人通知的地址）和 [M2](#6-地图与界面)。接着是 [O2](#13-开源与发布)（哪些文档公开）、[O3](#13-开源与发布)（GitHub App 还是工作流）、[P4](#7-获取与插件)（默认顺序）、[P8](#7-获取与插件)（登录来源的默认）。

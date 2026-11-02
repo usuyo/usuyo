@@ -27,7 +27,7 @@
 <a id="03-名字"></a>
 ### 0.3 名字
 
-产品名思鹭 / Seelu，命令 `seelu`。本文里的标识符都用新名：清单 `seelu-plugin.yaml`、环境变量前缀 `SEELU_`、资料库隐藏目录 `.seelu/`、GitHub topic `seelu-plugin`、导出文件里的 `seelu_id`、URL scheme `seelu://`。仓库里其他文档还写着旧名「歇存 / Xiecun」，改名另做；本文引用它们时照现有文件名和锚点。
+产品名思鹭 / Seelu，命令 `seelu`。2026-11-01 用户又否了这个名字，这一轮只定英文名（[调研 08](research/08-english-name.md)）；本文里的 `seelu`、`SEELU_`、思鹭都是暂名，定名后照换，规则不变。本文里的标识符都用这个暂名：清单 `seelu-plugin.yaml`、环境变量前缀 `SEELU_`、资料库隐藏目录 `.seelu/`、GitHub topic `seelu-plugin`、导出文件里的 `seelu_id`、URL scheme `seelu://`。仓库里其他文档还写着旧名「歇存 / Xiecun」，改名另做；本文引用它们时照现有文件名和锚点。
 
 两个 GitHub 组织的名字没定，本文写占位：官方组织 `{official-org}`（候选 `seelu`，2026-11-01 查 GitHub 仍空着），获取方式组织 `{fetch-org}`。权利人联系地址写 `{contact}`，两个组织用不用同一个地址见 [§13](#13-待定) 第 1 项。
 
@@ -85,7 +85,7 @@
 | 字段 | 类型 | 必填 | 含义 | 例子 |
 |---|---|---|---|---|
 | `protocol` | 整数 | 是 | 插件协议版本 | `1` |
-| `id` | 字符串 | 是 | 等于发布它的 GitHub 仓库 `owner/repo`，全小写；客户端核对，不一致就拒装。`builtin/` 前缀保留，只在 [§13](#13-待定) 第 5 项定为随客户端提供时使用 | `someone/seelu-fetch-douyin` |
+| `id` | 字符串 | 是 | 等于发布它的 GitHub 仓库 `owner/repo`，全小写；客户端核对，不一致就拒装。`builtin/` 前缀留给随安装包预装的插件（[§8.4](#84-三种来源)） | `someone/seelu-fetch-douyin` |
 | `kind` | 枚举 | 是 | `fetch`、`transform`、`export` | `fetch` |
 | `name` | 字符串 | 是 | 界面上显示的名字 | `抖音` |
 | `description` | 字符串 | 否 | 一句话说明 | `列出我的抖音收藏夹，按分享页取单条` |
@@ -421,7 +421,7 @@ settings:
 | v0（`adapter.yaml`） | v1（`seelu-plugin.yaml`） | 说明 |
 |---|---|---|
 | 文件名 `adapter.yaml` | `seelu-plugin.yaml` | [§2.1](#21-文件名与位置) |
-| `id`（`<namespace>/<name>`） | `id`（`<owner>/<repo>`） | 和仓库对得上，客户端核对；`builtin/` 前缀保留，只在 [§13](#13-待定) 第 5 项定为随客户端提供时使用 |
+| `id`（`<namespace>/<name>`） | `id`（`<owner>/<repo>`） | 和仓库对得上，客户端核对；`builtin/` 前缀留给随安装包预装的插件（[§8.4](#84-三种来源)） |
 | `platforms` | `platforms`，另加能力里的 `perPlatform` | 平台 id 取自 plugin-kit 的列表 |
 | `match` | `match` | 语义写清：`host/path` glob、`*.` 不含裸域、只作粗筛 |
 | `capabilities: [fetch, list, watch]` | `capabilities` 映射：`fetch`、`list`、`unfavorite` | `watch` 去掉，由宿主定时调 `list`（[02 §15.5](research/02-adapter-ecosystems.md#155-批量导入与同步)） |
@@ -1189,11 +1189,12 @@ GitHub App 的检查加三条：`env` 里有凭据类变量判失败；`access` 
 
 | 来源 | 客户端里怎么来 | 标签 |
 |---|---|---|
-| 官方组织 `{official-org}` | 客户端内置，列出组织里带 topic `seelu-plugin` 的仓库；只认 `kind: transform` 和 `export`，组织里出现 `kind: fetch` 也不列 | 官方 |
+| 官方组织 `{official-org}` | 客户端内置，列出组织里带 topic `seelu-plugin` 的仓库；认 `kind: transform`、`export`，`kind: fetch` 只认下面说的两类预装插件，别的不列 | 官方 |
 | 用户添加的组织，包括 `{fetch-org}` | 用户在设置里输入组织名；列出组织里带 topic 的仓库 | 第三方来源 · 组织名 |
 | 用户添加的单个仓库 | 用户输入 `owner/repo` | 第三方 · 未经思鹭审核 |
 
-- 客户端不预置任何获取来源，`{fetch-org}` 也要用户手动添加，代码里不对它特殊处理；对它的要求和别的用户来源一样，靠添加时固定的签发者（[§8.3](#83-校验与来源证明) 第 4 步）。
+- 随安装包预装两类不含任何平台知识的获取插件（2026-11-01 用户同意，[open-decisions P1、P3](open-decisions.md#7-获取与插件)）：通用网页获取（只做 `public-web`、不登录、没有站点专用规则，`network.hosts` 写 `"*"`，宿主代理照样挡住内网和云元数据地址），和读别的工具导出文件的导入（Netscape HTML 书签、Pocket、Omnivore、Readwise、Instapaper、Wallabag、Obsidian Web Clipper、flomo 一类，`network: none`）。它们的源码在官方组织，`id` 用 `builtin/` 前缀，跟着客户端一起发版和更新。平台官方导出包（抖音个人信息下载、Google Takeout、X 归档一类）的导入插件仍放 `{fetch-org}`。
+- 除了这两类，客户端不预置任何获取来源，`{fetch-org}` 也要用户手动添加，代码里不对它特殊处理；对它的要求和别的用户来源一样，靠添加时固定的签发者（[§8.3](#83-校验与来源证明) 第 4 步）。
 - 浏览第三方插件靠 GitHub 搜索 topic `seelu-plugin`，客户端里给一个打开搜索结果的链接，不做商店。
 - 每个平台的插件列表显示：名字、`access`、会用到哪个账号（`sites[].name`，没有就写「不用账号」）、来源标签、校验结果、来源证明、最近一次失败的原因。
 
@@ -1504,7 +1505,7 @@ seelu plugin pack --version 0.3.1 dist/*
 - D-c：运行器按用户排的顺序依次试，失败换下一个，全部失败停在 `link`。
 - D-d：用户添加第三方来源时确认一次声明，不做逐个插件的弹窗。
 - D-e：每个平台一组节奏上限，该平台所有获取方式共用。
-- D-f：自己维护的获取插件放单独的 GitHub 组织，客户端不预置任何获取来源。
+- D-f：自己维护的获取插件放单独的 GitHub 组织，客户端不预置任何获取来源；11-01 加了两个例外，通用网页获取和别的工具的导入随安装包预装（P1、P3）。
 - D-g：清单能声明用的是哪个站点的登录，界面据此写「会用到你的某某账号」。
 
 
@@ -1535,7 +1536,7 @@ seelu plugin pack --version 0.3.1 dist/*
 | 通用视觉层插件：设备通道、固定流程、按人的节奏 | [§17.3](research/06-platform-access-and-account-risk.md#173-首批自己适配的插件) | 采纳 | 设备权限、`waiting` 事件、节奏建议（[§9.5](#95-视觉层流程)） |
 | 只提供 Skill，让用户的 Agent 操作完交给本地接口 | [§17.3](research/06-platform-access-and-account-risk.md#173-首批自己适配的插件) | 改写 | 能走投递接口，不作为视觉层的默认 |
 | fork 与许可证的分档 | [§17.4](research/06-platform-access-and-account-risk.md#174-fork-与许可证) | 采纳 | [§9.6](#96-许可证) |
-| 自己维护的获取方式放单独组织，客户端不预置 | [§17.4](research/06-platform-access-and-account-risk.md#174-fork-与许可证) | 采纳 | D-f |
+| 自己维护的获取方式放单独组织，客户端不预置 | [§17.4](research/06-platform-access-and-account-risk.md#174-fork-与许可证) | 采纳 | D-f；通用网页获取和别的工具的导入例外，随安装包预装（[§8.4](#84-三种来源)） |
 | fork 时要做的事：保留许可证、去掉写操作和推广、锁定外部二进制 | [§17.4](research/06-platform-access-and-account-risk.md#174-fork-与许可证) | 采纳 | 另加：不用 fork 按钮（[§8.8](#88-获取方式组织的仓库结构)） |
 | 官方组织收转换和导出 | [§17.4](research/06-platform-access-and-account-risk.md#174-fork-与许可证) | 采纳 | 平台中立的共用代码进 plugin-kit |
 | 只读导出文件的导入插件放哪个组织 | [§17.4](research/06-platform-access-and-account-risk.md#174-fork-与许可证) | 待定 | [open-decisions P3](open-decisions.md#7-获取与插件) |
@@ -1547,10 +1548,10 @@ seelu plugin pack --version 0.3.1 dist/*
 需要用户在产品层面拍板的问题都在 [open-decisions](open-decisions.md)，选项、建议和影响以那里为准。本文其他地方引用本节时写的「第 N 项」就是下面的编号；open-decisions 的表格行没有单独的锚点，链接指向条目所在的节，条目编号写在链接文字里。
 
 1. 两个组织的名字和权利人联系地址：[N1、N2](open-decisions.md#2-命名与组织)，[R4](open-decisions.md#12-声明与责任)。
-2. 只读导出文件的导入插件放哪个组织、要不要预装：[P3](open-decisions.md#7-获取与插件)。
+2. 只读导出文件的导入插件放哪个组织、要不要预装：[P3](open-decisions.md#7-获取与插件)。11-01 已定：别的工具的导出进官方组织并预装，平台官方导出包放 `{fetch-org}`（[§8.4](#84-三种来源)）。
 3. 运行器的默认顺序，新装的插件排在哪：[P4](open-decisions.md#7-获取与插件)。
 4. 第一次用到要登录的获取方式时，登录态默认从哪来：[P8](open-decisions.md#7-获取与插件)。
-5. 通用网页获取放哪里（内核内置、官方组织出插件随安装包预装、只放获取方式组织），`builtin/` 前缀用不用：[P1](open-decisions.md#7-获取与插件)。
+5. 通用网页获取放哪里（内核内置、官方组织出插件随安装包预装、只放获取方式组织），`builtin/` 前缀用不用：[P1](open-decisions.md#7-获取与插件)。11-01 已定：官方组织出插件，随安装包预装，用 `builtin/` 前缀（[§8.4](#84-三种来源)）。
 6. 手机投递默认走哪条：[C2](open-decisions.md#5-收下与入口)。
 7. 第三方插件校验没通过、或没有来源证明时，拦下还是只标出：[P12](open-decisions.md#7-获取与插件)。
 8. 「在平台上取消收藏」v1 在界面上露不露面：[P11](open-decisions.md#7-获取与插件)。
@@ -1576,7 +1577,7 @@ seelu plugin pack --version 0.3.1 dist/*
 
 思鹭是在你自己电脑上运行的开源软件，用来做个人备份、离线阅读和注意力整理：把你在各平台存下的内容收回到本机的资料库里，变成能搜、能整理的文字。
 
-- 思鹭本身不含任何平台的获取代码，也不托管、不转发任何平台内容。从平台取内容的是获取插件。它们是独立的程序，放在单独的仓库和组织里，不随思鹭分发；客户端不预置任何获取来源，要你自己添加。
+- 思鹭本身不含任何平台的获取代码，也不托管、不转发任何平台内容。从平台取内容的是获取插件。它们是独立的程序，放在单独的仓库和组织里，不随思鹭分发，要你自己添加。随思鹭一起装好的只有两类不含任何平台知识的插件：通用网页获取，和读别的工具导出文件（书签、Pocket、Readwise 一类）的导入。
 - 用不用某个获取插件、用哪个账号，由你决定。平台可能因此限制或封禁你的账号；这些后果和相关的法律责任由你自己承担。各种获取方式的已知情况见 [调研 06 第 16 节](https://github.com/{official-org}/seelu/blob/main/docs/research/06-platform-access-and-account-risk.md#16-账号风险的证据)。
 - 请遵守各平台的用户协议，尊重内容作者和版权人。收回来的内容只供你自己查看，不要再发布或分发。
 - 思鹭不提供默认开启的平台写操作。插件声明的「在平台上取消收藏」默认关闭，每次执行前要你确认。
