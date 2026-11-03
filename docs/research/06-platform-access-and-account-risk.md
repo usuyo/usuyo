@@ -3,13 +3,15 @@
 
 状态：草案 · 2026-10-30
 
+2026-11-03 补：agent-desktop、Mika，见 [调研 10](10-desktop-and-android-agents.md)
+
 目的：回答用户 2026-10-30 提的四件事。第一，用户点名的项目和它们的同类各是什么、怎么拿内容、怎么接进歇存：点名的项目见 [§3](#3-用户点名的项目)，同类按类别列在 [§4](#4-多平台下载与抓取) 到 [§15](#15-相邻创作发布与分析)。第二，获取方式按账号风险怎么分层：分层见 [§1](#1-账号风险分层)，每个平台有哪些层级可选见 [§2](#2-覆盖矩阵每个平台有哪些层级可选)，证据见 [§16](#16-账号风险的证据)。第三，哪些值得自己适配或 fork、许可证允不允许，见 [§17](#17-对歇存的启示)。第四，以后可能放进致谢名单的项目，在各表里标「致谢」，见 [约定](#约定)。不确定的事实汇总在 [§18](#18-待核实清单)。
 
 <a id="约定"></a>
 ## 约定
 
 - **数据来源与日期**：每个仓库的 ★、最近推送、最近 release、许可证、是否归档，都是 2026-10-30 调用 `gh api repos/<owner>/<repo>` 与 `gh api repos/<owner>/<repo>/releases/latest` 的返回。★ 用 `stargazers_count`；推送用 `pushed_at` 的日期；release 写「tag（日期）」，没有 release 写 none；许可证用 `spdx_id`，没有许可证写 none，GitHub 识别不出的写 NOASSERTION，实际条款写在「歇存怎么用」一列。只有 Readeck 维护的 go-readability 不在 GitHub（在 Codeberg），★ 一栏写「—」。判断只依据代码、文档和 issue，没有运行任何抓取工具，也没有对平台发请求。
-- **范围**：共收录 473 个项目，层级分布 official-export 41、public-web 62、vision-ui 49、browser-session 46、session-api 31、private-api 112、client-hook 30、not-applicable 102。主要用途是刷量、刷赞刷粉、批量私信、养号、撞库或收集他人隐私数据的项目不收录，也不算相邻项目。复现签名和 Hook 客户端的项目只记它是什么、属于哪一层、维护和下架情况，不写技术细节。
+- **范围**：共收录 475 个项目，层级分布 official-export 41、public-web 62、vision-ui 51、browser-session 46、session-api 31、private-api 112、client-hook 30、not-applicable 102。主要用途是刷量、刷赞刷粉、批量私信、养号、撞库或收集他人隐私数据的项目不收录，也不算相邻项目。复现签名和 Hook 客户端的项目只记它是什么、属于哪一层、维护和下架情况，不写技术细节。
 - **获取层级**：按「实际怎么拿到数据」判断，不按项目自己的宣传。风险对比见 [§1.1](#11-七个层级)。
   - `official-export`：平台官方的数据导出、用户授权的官方开放 API，或读取用户已经导出的文件；
   - `public-web`：不登录，读公开页面或分享链接，不自己复现平台的请求签名；
@@ -602,6 +604,7 @@
 | [appium/appium](https://github.com/appium/appium) | 22166 / 2026-10-29 / @appium/opencv@5.0.2（2026-10-27） / Apache-2.0 | 其他 | 基于 W3C WebDriver 协议的跨平台 App 自动化框架 | vision-ui | 可选 | 命令行、HTTP 接口、库 | 获取方式：调它的 HTTP 接口，放第三方仓库。Apache-2.0，可 fork。 |
 | [ExistentialAudio/BlackHole](https://github.com/ExistentialAudio/BlackHole) | 19987 / 2026-10-28 / v0.7.1（2026-07-03） / NOASSERTION | — | macOS 虚拟音频回环驱动，把一个 App 的声音送进另一个 App | vision-ui | 不用 | 其他 | 相邻，只作参考。源码 GPL-3.0 加名称限制：只让用户自装。 |
 | [mobile-dev-inc/Maestro](https://github.com/mobile-dev-inc/Maestro)（致谢） | 16271 / 2026-10-28 / cli-2.12.0（2026-10-26） / Apache-2.0 | 其他 | 用 YAML 写移动端流程的测试框架，经系统无障碍层驱动 App，内置 MCP | vision-ui | 可选 | 命令行、MCP | 获取方式：包装它的命令行，放第三方仓库。Apache-2.0，可 fork；iOS 只支持模拟器。 |
+| [vercel-labs/agent-desktop](https://github.com/vercel-labs/agent-desktop) | 11299 / 2026-11-03 / v1.1.0（2026-11-03） / Apache-2.0 | 其他 | Vercel Labs 的 Rust 命令行加 C 库，经 macOS AX、Windows UI Automation、Linux AT-SPI 读桌面 App 的无障碍树、按 ref 对元素发动作，默认不聚焦、不合成输入，不需要模型、不联网 | vision-ui | 可选 | 命令行、库 | 获取方式：作为视觉层插件的运行时，插件自带固定版本的发布包、包装它的命令行，放第三方仓库；不用 `launch --cdp`（那样算 client-hook），见 [调研 10 §1](10-desktop-and-android-agents.md#1-agent-desktop)。Apache-2.0，可 fork；npm 包和发布压缩包里没有 LICENSE 文件，分发时从仓库带上。★ 等为 2026-11-03 查询。 |
 | [CursorTouch/Windows-MCP](https://github.com/CursorTouch/Windows-MCP) | 10770 / 2026-10-29 / v0.8.8（2026-10-10） / MIT | 其他 | Windows 上的 computer use MCP，靠 UI Automation 读控件并操作键鼠 | vision-ui | 可选 | MCP | 获取方式：经 MCP 调用，放第三方仓库。MIT，可 fork；默认开遥测，包装时设 ANONYMIZED_TELEMETRY=false。 |
 | [mobile-next/mobile-mcp](https://github.com/mobile-next/mobile-mcp)（致谢） | 10144 / 2026-10-30 / 1.0.14（2026-10-26） / Apache-2.0 | 其他 | 面向 iOS、Android 真机与模拟器的 MCP，优先读无障碍树，必要时退回截图 | vision-ui | 可选 | MCP | 获取方式：经 MCP 调用，放第三方仓库。Apache-2.0，可 fork；默认发匿名统计，可关闭；底层 mobilecli 的许可另看。 |
 | [droidrun/mobilerun](https://github.com/droidrun/mobilerun) | 9879 / 2026-10-28 / v0.7.4（2026-10-27） / MIT | 其他 | 用自然语言驱动 Android、iOS 的 Agent 框架，Android 端装 Portal 应用提供控件树 | vision-ui | 可选 | 命令行、库 | 获取方式：包装它的命令行，放第三方仓库。MIT，可 fork；默认开匿名遥测，包装时关闭。 |
@@ -610,6 +613,7 @@
 | [openatx/uiautomator2](https://github.com/openatx/uiautomator2)（致谢） | 8458 / 2026-10-23 / 3.7.1（2026-10-23） / MIT | 其他 | Python 库：经 ADB 在 Android 上跑 UiAutomator，读控件树、截图、点击和输入 | vision-ui | 可选 | 库 | 获取方式：包装它的命令行，放第三方仓库。MIT，可 fork。 |
 | [TencentQQGYLab/AppAgent](https://github.com/TencentQQGYLab/AppAgent) | 6913 / 2025-03-19 / none / MIT | 其他 | 腾讯 2023 年的多模态手机 Agent 研究：先探索或看演示生成操作文档，再按文档执行 | vision-ui | 可选 | 命令行 | 参考：借做法自己写。MIT，可 fork。 |
 | [SuperMonster003/AutoJs6](https://github.com/SuperMonster003/AutoJs6) | 6550 / 2026-03-16 / v6.7.0（2026-03-14） / MPL-2.0 | 其他 | Android 上的 JavaScript 自动化工具，靠无障碍服务读控件和点按，带 OCR 插件 | vision-ui | 可选 | 手机应用 | 获取方式：借做法自己写，放第三方仓库。MPL-2.0：改动的文件要公开。 |
+| [wangzan101/Mika](https://github.com/wangzan101/Mika) | 5795 / 2026-11-02 / v0.1.34（2026-11-02） / Apache-2.0 | 多平台：微信聊天、抖音、快手、头条/西瓜、小红书、B站、知乎、微博、其他 | 装在安卓手机上、由模型驱动的 Agent：自带 ADB 客户端连本机无线调试，以 shell 身份起助手、开一块虚拟屏操作 App，读无障碍树加 ML Kit 补字；对外的 MCP、HTTP、命令行只收一句目标 | vision-ui | 可选 | 手机应用、MCP、HTTP 接口、命令行 | 参考：借做法自己写（虚拟屏的建法、逐屏去重、操作节奏、路线回放的格式），不包装它的 MCP，见 [调研 10 §2](10-desktop-and-android-agents.md#2-mika)。Apache-2.0，借代码保留 LICENSE、NOTICE 和改动说明；随 APK 带的 PRoot 是 GPL-2.0，ML Kit 是闭源 SDK，都不打包。★ 等为 2026-11-03 查询。 |
 | [openclaw/Peekaboo](https://github.com/openclaw/Peekaboo)（致谢） | 5415 / 2026-10-27 / v4.9.7（2026-10-23） / MIT | 其他 | macOS 命令行与菜单栏应用：截取窗口、读无障碍树、执行原生 UI 自动化，附 MCP | vision-ui | 可选 | 命令行、MCP、桌面应用 | 获取方式：包装它的命令行，放第三方仓库。MIT，可 fork。 |
 | [meta/idb](https://github.com/meta/idb) | 5398 / 2026-10-30 / v1.7.7（2026-10-22） / MIT | 其他 | Meta 的 iOS 自动化命令行，查询类功能只支持模拟器 | vision-ui | 可选 | 命令行、库 | 相邻，只作参考。MIT。 |
 | [callstack/agent-device](https://github.com/callstack/agent-device) | 5199 / 2026-10-30 / v0.21.35（2026-10-29） / MIT | 其他 | 命令行、MCP 和 Node API，基于无障碍快照操作 iOS、Android、鸿蒙设备 | vision-ui | 可选 | 命令行、MCP、库 | 获取方式：包装它的命令行，放第三方仓库。MIT，可 fork。 |

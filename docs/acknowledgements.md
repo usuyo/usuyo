@@ -1,7 +1,7 @@
 <a id="致谢候选"></a>
 # 致谢候选
 
-状态：候选 · 2026-10-30
+状态：候选 · 2026-11-03
 
 歇存从下面这些项目学到了做法，或者计划包装、适配它们。这是以后放进 README 或关于页的候选名单，正式发布前要逐个确认许可证和署名要求。每条都注明它和歇存的关系。
 
@@ -28,9 +28,10 @@
   - yikart/AiToEarn：用户 2026-11-01 给的视频号链接介绍的项目；发布和互动工具，不读收藏夹，互动功能是对平台账号的批量写操作，只记录。
   - google-gemini/computer-use-preview：用户 2026-11-01 给的视频号链接演示 Gemini 的 Computer Use，对应到这个参考实现是推断；截图要发到 Gemini 接口。
 - [02](research/02-adapter-ecosystems.md#调研-02--社区维护的来源适配器生态) 和 [05](research/05-note-apps-and-plugins.md#调研-05--笔记软件互通与插件化) 里被当作做法来源、准备兼容或借代码的 61 条，出处链到对应小节。只在表格里出现、没被引为做法的，以及只被当作反例的，不收。这 61 个仓库 2026-10-30 用 `gh api` 确认存在，许可证以返回值为准。
+- [调研 10](research/10-desktop-and-android-agents.md#调研-10--电脑端与安卓端的界面驱动agent-desktop-与-mika) 读的 2 条：用户 2026-11-03 点名的 vercel-labs/agent-desktop、wangzan101/Mika。[06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化) 同一天补了这两行，但 06 的「（致谢）」标注是 10-30 做的，没有重标，所以不在上面的 260 条里。agent-desktop 是视觉层获取插件可能依赖的运行时，记计划适配；Mika 只借做法，记参考设计。
 - 归档、停更、删库的项目照收，状态写在一句话里。
 
-合计 328 条：计划适配 127 条，参考设计 185 条，相邻项目 16 条。
+合计 330 条：计划适配 128 条，参考设计 186 条，相邻项目 16 条。
 
 用户给的视频号链接，按视频演示的内容推断对应 mingjuner123-spec/wechat-inbox-sync（待核实）。2026-11-01 又给了 4 条：MediaCrawler 已收；AiToEarn、computer-use-preview 新收；开源文件搜索工具那条认不出是哪个项目，没有收录（见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)）。
 
@@ -262,7 +263,7 @@
 <a id="视觉与-ui-自动化"></a>
 ## 视觉与 UI 自动化
 
-**计划适配（11）**
+**计划适配（12）**
 
 - [appium/WebDriverAgent](https://github.com/appium/WebDriverAgent)：以 XCTest 方式跑在 iPhone 上的 WebDriver 服务端，提供截图、控件树、点按和输入接口。NOASSERTION（LICENSE 为 BSD 3-Clause 文本）。计划适配。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
 - [danielpaulus/go-ios](https://github.com/danielpaulus/go-ios)：纯 Go 实现的 iOS 设备工具集和库，在 macOS、Linux、Windows 上都能截图、拉起 WebDriverAgent、做无障碍检查。MIT。计划适配。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
@@ -273,15 +274,17 @@
 - [mobile-next/mobile-mcp](https://github.com/mobile-next/mobile-mcp)：面向 iOS、Android 真机和模拟器的 MCP 服务，优先读原生无障碍树，必要时退回截图和坐标。Apache-2.0。计划适配。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
 - [openatx/uiautomator2](https://github.com/openatx/uiautomator2)：经 ADB 在 Android 设备上运行 UiAutomator 服务，读取控件树、截图、点按和输入的 Python 库。MIT。计划适配。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
 - [openclaw/Peekaboo](https://github.com/openclaw/Peekaboo)：macOS 命令行和菜单栏应用，可截取任意窗口、检查无障碍树、执行原生 UI 自动化，也提供 MCP 服务。MIT。计划适配。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
+- [vercel-labs/agent-desktop](https://github.com/vercel-labs/agent-desktop)：Vercel Labs 的 Rust 命令行加 C 库，经 macOS AX、Windows UI Automation、Linux AT-SPI 读桌面 App 的无障碍树、按 ref 对元素发动作，每条命令输出一个 JSON 信封，不需要模型、不联网；用户点名；电脑端视觉层获取插件可能自带固定版本的它作为运行时（插件依赖它），不让用户 `npm i -g`。Apache-2.0（npm 包和发布压缩包里没有 LICENSE 文件，分发时从仓库带上）。计划适配。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)、[调研 10 §1](research/10-desktop-and-android-agents.md#1-agent-desktop)
 - [web-infra-dev/midscene](https://github.com/web-infra-dev/midscene)：视觉驱动的 UI 自动化 SDK，截图加视觉模型定位和操作，支持网页、Android、iOS、鸿蒙和桌面。MIT。计划适配。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
 - [zai-org/Open-AutoGLM](https://github.com/zai-org/Open-AutoGLM)：智谱开源的手机 Agent 框架和 9B 视觉模型，截图交给模型理解界面，再经 ADB、HDC 或 WDA 点按输入。Apache-2.0。计划适配。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
 
-**参考设计（4）**
+**参考设计（5）**
 
 - [danzey0425-lgtm/web-image-sourcing](https://github.com/danzey0425-lgtm/web-image-sourcing)：用真实 Edge 浏览器加桌面操控，从小红书、抖音、B站收集图片素材，经视觉质检后生成图鉴和 PDF 的 Agent Skill。MIT。参考设计。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
 - [google-gemini/computer-use-preview](https://github.com/google-gemini/computer-use-preview)：Google 给 Gemini Computer Use 模型的参考实现，模型看截图给出点击和输入，由本机 Playwright 浏览器或 Browserbase 云浏览器执行；用户给的视频号链接演示的就是这个模型，对应到仓库是推断。Apache-2.0。参考设计。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
 - [insidegui/AudioCap](https://github.com/insidegui/AudioCap)：macOS 14.4 起 Core Audio 进程 tap 的示例代码，按进程或全系统录制其他 App 发出的声音。BSD-2-Clause。参考设计。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
 - [screenpipe/screenpipe](https://github.com/screenpipe/screenpipe)：持续记录屏幕和音频的本地电脑记忆，读系统无障碍树或做 OCR，用本地 Whisper 转写，可搜索并经 MCP 交给 AI。NOASSERTION（Screenpipe Commercial License，源码可见，商业使用需购买许可）。参考设计。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
+- [wangzan101/Mika](https://github.com/wangzan101/Mika)：装在安卓手机上、由模型驱动的 Agent，自带 ADB 客户端连本机无线调试，以 shell 身份起助手、在一块虚拟屏上替人操作 App；用户点名；只借做法（虚拟屏的建法、逐屏去重、操作节奏、路线回放的格式），不包装它的 MCP，借代码时保留 LICENSE、NOTICE 和改动说明。Apache-2.0（随 APK 带的 PRoot 为 GPL-2.0-or-later，OCR 用闭源的 Google ML Kit）。参考设计。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)、[调研 10 §2](research/10-desktop-and-android-agents.md#2-mika)
 
 <a id="agent-接入层"></a>
 ## Agent 接入层
