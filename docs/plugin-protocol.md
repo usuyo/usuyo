@@ -1,7 +1,7 @@
 <a id="思鹭插件协议-v1草案"></a>
 # 思鹭插件协议 v1（草案）
 
-状态：草案 · 2026-11-01 · `protocol: 1`
+状态：草案 · 2026-11-03 · `protocol: 1`
 
 把自己的工具接进思鹭，读这一份就够：清单怎么写、宿主怎么调用、输出什么 JSON、凭据和权限怎么给、怎么发版和分发。三类插件（获取、转换、导出）都在这里；投递接口给浏览器扩展、油猴脚本、手机快捷指令这类不能由宿主启动的工具用。
 
@@ -12,7 +12,7 @@
 ### 0.1 读者与状态
 
 - **读者**：插件作者（包装现成工具或自己写）、实现插件运行器的人、在 [§13](#13-待定) 拍板产品问题的人。
-- **状态**：草案。字段名、子命令、方法名、错误码按这里写；实现插件运行器时如有改动，在本文修订并同步 plugin-kit 的 schema（[§10](#10-契约测试与-plugin-kit)）。
+- **状态**：草案。2026-11-03 按 [调研 10](research/10-desktop-and-android-agents.md) 补了视觉层的两种做法（电脑端读无障碍树、安卓经 ADB，[§9.5](#95-视觉层流程)）和获取插件经宿主代发用模型（[§4.3](#43-模型与密钥由宿主代发)）。字段名、子命令、方法名、错误码按这里写；实现插件运行器时如有改动，在本文修订并同步 plugin-kit 的 schema（[§10](#10-契约测试与-plugin-kit)）。
 - **版本**：清单里的 `protocol` 是整数，本文是 `1`。宿主只加载 `protocol` 在支持集合里的插件，拒载原因显示在插件列表里（做法同 Mihon 的 `extensionLib`，见 [02 §15.1](research/02-adapter-ecosystems.md#151-声明与匹配)）。同一个 `protocol` 内只加可选字段；插件不得输出它声明的版本里没有的字段，宿主遇到未知字段时忽略并记日志，`seelu plugin check` 把未知字段当失败。[SPEC §8](SPEC.md#8-适配器协议-v0) 的 v0 没有发布过，不做兼容。
 
 <a id="02-和其他文档的关系"></a>
@@ -27,9 +27,9 @@
 <a id="03-名字"></a>
 ### 0.3 名字
 
-产品名思鹭 / Seelu，命令 `seelu`。2026-11-01 用户又否了这个名字，这一轮只定英文名（[调研 08](research/08-english-name.md)）；本文里的 `seelu`、`SEELU_`、思鹭都是暂名，定名后照换，规则不变。本文里的标识符都用这个暂名：清单 `seelu-plugin.yaml`、环境变量前缀 `SEELU_`、资料库隐藏目录 `.seelu/`、GitHub topic `seelu-plugin`、导出文件里的 `seelu_id`、URL scheme `seelu://`。仓库里其他文档还写着旧名「歇存 / Xiecun」，改名另做；本文引用它们时照现有文件名和锚点。
+产品名思鹭 / Seelu，命令 `seelu`。2026-11-01 用户又否了这个名字，只定英文名（[调研 08](research/08-english-name.md)、[调研 09](research/09-fog-and-name.md)）；11-03 用户倾向 Dokokara，还没定名（[open-decisions §1.6](open-decisions.md#16-11-03-回复记下的)）；本文里的 `seelu`、`SEELU_`、思鹭都是暂名，定名后照换，规则不变。本文里的标识符都用这个暂名：清单 `seelu-plugin.yaml`、环境变量前缀 `SEELU_`、资料库隐藏目录 `.seelu/`、GitHub topic `seelu-plugin`、导出文件里的 `seelu_id`、URL scheme `seelu://`。仓库里其他文档还写着旧名「歇存 / Xiecun」，改名另做；本文引用它们时照现有文件名和锚点。
 
-两个 GitHub 组织的名字没定，本文写占位：官方组织 `{official-org}`（候选 `seelu`，2026-11-01 查 GitHub 仍空着），获取方式组织 `{fetch-org}`。权利人联系地址写 `{contact}`，两个组织用不用同一个地址见 [§13](#13-待定) 第 1 项。
+两个 GitHub 组织的名字没定，本文写占位：官方组织 `{official-org}`（等定名），获取方式组织 `{fetch-org}`。权利人联系地址写 `{contact}`，两个组织用不用同一个地址见 [§13](#13-待定) 第 1 项。
 
 <a id="04-需要同步的文档"></a>
 ### 0.4 需要同步的文档
@@ -49,6 +49,8 @@
 | 平台与获取方式 | 调用超时加长（[§3.4](#34-超时与取消)） | 按插件声明 | | 新增 |
 | 平台与获取方式 | 一次获取的输出大小上限（[§3.6](#36-fetch-与输出目录)） | 8 GiB | | 新增 |
 | 平台与获取方式 | GitHub 令牌（只读公开仓库，用来提高查询限额，[§8.7](#87-github-api-限额与缓存)） | 无 | | 新增 |
+| 平台与获取方式 | 视觉层调用（会占屏幕、剪贴板或手机）在跟着收、批量导入里能不能自己跑（[§3.1](#31-运行器与节奏)） | 待定，见 [§13](#13-待定) 第 19 项 | | 新增 |
+| 平台与获取方式 | Android 设备：用哪一台、无线调试配对（[§7](#7-权限与隔离)） | 无 | | 新增 |
 | 隐私 | 本地接口的访问令牌：按投递端分别生成（名字、入口类型），可单独撤销（[§5.1](#51-本机-http-接口)） | 无 | | 替换「本地接口的访问令牌：重新生成 · 自动生成」 |
 
 <a id="1-概念"></a>
@@ -134,6 +136,8 @@ upstream:
 | `order` | `list` | 是 | `newest-first`（按加入时间从新到旧）或 `unordered`，决定跟着收怎么停（[§3.8](#38-list-与跟着收)） | `newest-first` |
 | `sources` | `list` | 否 | 固定的来源，界面在登录前就能显示；运行时以 `sources` 子命令为准 | `[{source: "douyin:favorites", title: 我的收藏夹, action: favorite}]` |
 | `files` | `list` | 导入插件必填 | 能读的导出文件名 glob（[§3.9](#39-从文件导入)） | `["twitter-*.zip"]` |
+| `interaction` | 全部 | 否，默认 `background` | 这次调用用户看不看得见：`background` 只读，不弹菜单、不改剪贴板、不抢焦点、不动指针、不占手机屏幕；`foreground` 是上面任何一样会发生。宿主只拿它排程和加锁（[§3.1](#31-运行器与节奏)），不拦、不弹确认 | `foreground` |
+| `provider` | 全部 | 否，默认 `none` | 这个能力要不要模型：`none`、`optional`、`required`，含义同 [§2.9](#29-转换插件的字段)；不是 `none` 时经宿主代发（[§4.3](#43-模型与密钥由宿主代发)） | `optional` |
 
 一个按 [06 §1.3](research/06-platform-access-and-account-risk.md#13-混合路径视觉层拿链接公开页面取内容) 混合路径写的抖音插件，源清单是这样（cookie 名是示例；`install` 发版时生成，见 [§2.8](#28-安装与启动)）：
 
@@ -210,6 +214,7 @@ run:
 
 - **按能力分别声明，顶层取最高。** 列表走登录侧、单条走公开页这类混合路径要分开写；顶层 `access`、`login` 是所有能力（含 `perPlatform`）里最高的一档，用于列表展示。
 - **按实际默认路径填，不按宣传填。** 一条路径用到多层时取最高的一层；上游工具有不同模式时，按插件实际调用的模式填。
+- **读界面的插件怎么填。** 只读无障碍树、控件树或截图，动作走无障碍接口或系统输入的，填 `vision-ui`：读用户日常浏览器里渲染出来的网页、经 ADB 或手机上的程序读安卓控件树再发输入，都算；开后台虚拟屏、以 shell 身份起助手进程不改变层级。经 CDP、远程调试、扩展或页面脚本读 DOM 或请求的，填 `browser-session`。带调试端口重启官方客户端、在它的渲染进程里执行脚本（例如对抖音、B站这类 Electron 客户端用 agent-desktop 的 `launch --cdp`），或注入、Hook 目标 App 的进程、读它的私有数据，填 `client-hook`（[调研 10](research/10-desktop-and-android-agents.md)）。
 - **它们是给用户挑选用的标签，不是闸门。** 宿主不据此推风险档、不拦截、不弹单独的确认；运行器只按用户排的顺序试（[§3.1](#31-运行器与节奏)）。
 - **`login: none` 的能力拿不到任何平台账号凭据**：宿主不传 cookie、站点存储和浏览器资料目录（[§6](#6-凭据)）。插件自己的密钥设置照 [§2.11](#211-插件设置-settings) 另行传入，和 `login` 无关。`optional` 表示没有凭据也能跑；用户登录过时带不带上，由宿主按用户的设置决定（默认见 [§13](#13-待定) 第 11 项）。
 - **新版本调高 `access` 或 `login`** 时，客户端在更新说明里标出，不停用这个版本（[§8.5](#85-添加来源更新与权限扩大)）。
@@ -280,7 +285,7 @@ capabilities:
 | `fs.write` | 占位符数组 | `[]` | 可写的路径 | `["${OUT}"]` |
 | `network.mode` | 枚举 | `none` | `none` 或 `allowlist` | `allowlist` |
 | `network.hosts` | 字符串数组 | `[]` | 允许出站的主机，可带端口，不带端口指 80 与 443；`*.` 匹配子域；单写 `"*"` 表示任意公开主机（通用网页一类插件用，权限页写「可以连任何公开主机」）；可以引用设置 `${setting.<key>}`，宿主取其中的主机和端口。回环和内网地址只在显式写了带端口的地址时放行（[§3.2](#32-调用约定)） | `["*.douyin.com", "127.0.0.1:5556"]` |
-| `exec` | 字符串数组 | `requires.runtime` 里的名字 | 允许再起的程序名，管整个进程树：被包装的工具再起的程序也要算进来。缺省等于 `requires.runtime` 里的名字，只有额外的程序（例如系统自带的 `osascript`）才另写；解析见 [§2.13](#213-运行时解析) | `[osascript]` |
+| `exec` | 字符串数组 | `requires.runtime` 里的名字 | 允许再起的程序名，管整个进程树：被包装的工具再起的程序也要算进来。`${PLUGIN_DIR}` 里的可执行文件（插件自带的工具和它们再起的 helper）总是可以执行，不用写。缺省等于 `requires.runtime` 里的名字，只有额外的程序（例如系统自带的 `osascript`）才另写；解析见 [§2.13](#213-运行时解析) | `[osascript]` |
 | `env` | 字符串数组 | `[]` | 允许从用户环境透传的变量名；不能用来传凭据，名字里带 `TOKEN`、`COOKIE`、`KEY`、`SECRET`、`PASSWORD` 的，`seelu plugin check` 判失败 | `[LANG]` |
 | `gpu` | 布尔 | `false` | 要不要 GPU | `false` |
 | `devices` | 枚举数组 | `[]` | 设备类权限，见下 | `[ios-device, clipboard]` |
@@ -304,12 +309,16 @@ capabilities:
 
 | 值 | 用来做什么 |
 |---|---|
-| `adb` | 经 ADB 驱动 Android 手机（scrcpy、uiautomator2） |
+| `adb` | 经宿主管的 adb 服务操作用户选定的一台 Android 设备（USB 或无线调试，[§7](#7-权限与隔离)）；adb shell 能做的都能做：读屏幕和控件树、截图、模拟点按、读剪贴板、开虚拟屏、推送并运行程序、装卸 App。权限页照这句写 |
 | `ios-device` | 经 usbmux 一类通道驱动 iPhone（WebDriverAgent、go-ios） |
 | `screen-capture` | 截屏、录屏，包括读 iPhone 镜像窗口 |
 | `accessibility` | 用辅助功能、UI Automation 读界面和发送输入 |
 | `audio-capture` | 录系统声音，例如录下视频号的口播再转写 |
 | `clipboard` | 读写剪贴板，例如「分享 → 复制链接」后读链接 |
+
+- `accessibility`、`screen-capture`、`clipboard`、`audio-capture` 指电脑本机。安卓上的读屏、截图、剪贴板都经 `adb`，不另声明这几项。
+- 不为虚拟屏、合成输入另加取值：开不开后台虚拟屏是插件的做法，做成插件设置（[§2.11](#211-插件设置-settings)）；会不会动指针、弹菜单、占屏幕，由能力的 `interaction` 说（[§2.3](#23-获取插件的字段)）。
+- 插件推到手机上的文件、装的 App 或输入法、改的设置，要在 README 列出，并在进程退出前还原。
 
 各平台能强制到什么程度见 [§7](#7-权限与隔离)。
 
@@ -340,6 +349,7 @@ run:
 | `run.serve` | 布尔 | 否 | 获取插件是否支持常驻模式（[§3.12](#312-常驻模式-serve)）；转换、导出插件总是常驻 |
 
 - 宿主安装时只下载 release 资产，不调用 npm、pip 一类包管理器。脚本类插件把依赖打进资产，或做成单个可执行文件（`bun build --compile`、`deno compile`、PyInstaller 一类）；要的运行时写进 `requires.runtime`。
+- **插件自带的第三方程序**（例如视觉层插件带的 agent-desktop，推到手机上的 scrcpy-server 或自己写的 `app_process` 助手）放进插件自己的资产，只打包当前平台那一份，锁定版本，不让用户另装（agent-desktop 不走 `npm i -g`）。插件仓库的 CI 先核上游发布的 sha256 和来源证明，agent-desktop 是 `gh attestation verify <archive> --repo vercel-labs/agent-desktop`，通过了才打进资产；上游的 LICENSE 一并带上，agent-desktop 的 npm 包和 release 压缩包里都没有，要从它的仓库拿。运行时不另下载，推到手机上的文件只从 `${PLUGIN_DIR}` 推；GPL 的手机端组件只让用户自装（[§9.6](#96-许可证)）。
 - 安装目录按版本分开：`<本机配置目录>/plugins/<owner>/<repo>/<version>/`，保留上一个版本便于回退。
 - 插件的启用状态、设置、密钥放本机配置目录，不放进资料库（[ADR-003 §4](decisions/ADR-003-plugins.md#4-权限与隔离)）。
 
@@ -466,6 +476,8 @@ settings:
 - **`batch: false`**：只接受用户一条条收下，不做批量导入和跟着收。
 - **不计入节奏的**：`canonicalize` 不占单调用锁，不计 `interval` 和 `daily`，展开短链另有每平台每分钟上限（默认 30 次），所以正在下大视频时，新贴的链接照样几秒内拿到身份；`health` 不计（`--probe` 只在用户点「检查登录」时发一次）；`access: official-export` 且 `network.mode: none` 的能力只读本机文件，不受节奏限制，可以并行。
 - **队列顺序**：用户手动收下 > 跟着收 > 批量导入。
+- **整机锁和设备锁。** 平台锁之外，宿主再加三把锁，不分平台、不分插件：声明了 `interaction: foreground` 的调用，全机同一时间只跑一个；声明了 `devices: [clipboard]` 的调用，全机同一时间只跑一个；同一台安卓设备同一时间只跑一个调用。原因：「复制链接」一类流程就算全走无障碍接口，也会弹菜单、改剪贴板，两个视觉层插件同时跑会互相弄坏（[§9.5](#95-视觉层流程)）。
+- **视觉层调用什么时候跑。** `interaction: foreground` 的调用和用到安卓设备的调用，能不能在跟着收、批量导入里自己跑，是待定项（[§13](#13-待定) 第 19 项）。插件在 `foreground` 的步骤之间发现用户在动键鼠，就发 `waiting`（`user-active`），等用户停手，等不到就回 `blocked`；分辨是不是用户的输入由 plugin-kit 的视觉层 SDK 做，插件自己合成的事件会不会被算进去，待核实。安卓设备没连、没解锁、没授权时，插件回 `dependency-missing`，跟着收跳过这一轮，不算失败；宿主不存手机的解锁密码，不替用户解锁。
 - **默认值**取已装插件 `pacing` 里最严的一组，用户在设置里可以改。用户改过的值不会被新装插件的建议覆盖，设置里只提示「有插件建议更慢」。
 
 **几种情况运行器怎么做：**
@@ -509,6 +521,9 @@ settings:
 | `SEELU_CREDENTIALS` | 这次调用要带账号、且用户已登录时（[§2.4](#24-access-与-login)） | 凭据 JSON 文件路径（[§6](#6-凭据)） |
 | `SEELU_COOKIES_TXT` | 同上，`credential: cookies` | 同一批 cookie 的 Netscape 格式文件，给 yt-dlp 一类工具的 `--cookies` 用；可写，调用结束后丢弃 |
 | `SEELU_BROWSER_PROFILE` | `credential: browser-profile` | `${PROFILE}` |
+| `SEELU_PROVIDER` | 能力的 `provider` 不是 `none`、用户配了模型时（[§4.3](#43-模型与密钥由宿主代发)） | 这次调用的代发参数，JSON 文件路径，内容是 `{baseUrl, token, model}` |
+| `ADB_SERVER_SOCKET` | 声明了 `devices: [adb]` | 宿主管的 adb 服务，`tcp:127.0.0.1:<端口>`（[§7](#7-权限与隔离)）；adb 认这个变量 |
+| `ANDROID_SERIAL` | 同上 | 用户选定的那台设备的序列号；adb 认这个变量 |
 | `HOME` | 总是 | `${HOME}`（[§2.7](#27-权限-permissions)），不指向用户主目录：被包装的工具不会读到用户自己的配置，例如 yt-dlp 配置里的 `--cookies-from-browser` |
 | `XDG_CONFIG_HOME`、`XDG_CACHE_HOME` | 总是 | `${HOME}/.config`、`${CACHE}` |
 | `TMPDIR`、`TMP`、`TEMP` | 总是 | `${TMP}` |
@@ -540,7 +555,7 @@ settings:
 | 事件 | 字段 | 用途 |
 |---|---|---|
 | `progress` | `done`、`total`、`unit`、`message` | 进度条 |
-| `waiting` | `reason`（`user-action`、`device-locked`、`device-disconnected`）、`message` | 插件在等用户在可见的窗口或手机上操作；等不到就在超时前返回 `blocked` 或 `dependency-missing` |
+| `waiting` | `reason`（`user-action`、`device-locked`、`device-disconnected`、`device-unauthorized`（手机上还没点「允许 USB 调试」）、`user-active`（用户正在用键鼠，[§3.1](#31-运行器与节奏)））、`message` | 插件在等用户在可见的窗口或手机上操作；等不到就在超时前返回 `blocked` 或 `dependency-missing` |
 
 **退出码。** `0`：stdout 是 `ok: true` 的信封；`1`：stdout 是 `ok: false` 的信封；`2`：用法错误（不认识的子命令或参数），可以没有信封，宿主记为 `invalid-args`、当 bug 记下，然后换下一个（宿主只调用声明过的能力，所以这里多半是包装脚本自己出错，例如 `set -e` 下 curl 失败）。成败以信封为准，退出码只是兜底。
 
@@ -581,7 +596,7 @@ settings:
 | `permission:` | 系统没给思鹭的授权：`accessibility`、`screen-capture`、`audio-capture` | `permission:accessibility` |
 | `service:` | 设置里指向的本机服务连不上，值是那个设置的 `key` | `service:endpoint` |
 | `app:` | 要开着的客户端 | `app:wechat` |
-| `state:` | 要用户处理的状态：`unlocked`（屏幕或手机没解锁）、`logged-in`（客户端里没登录） | `state:unlocked` |
+| `state:` | 要用户处理的状态：`unlocked`（屏幕或手机没解锁）、`logged-in`（客户端里没登录）、`debugging`（手机没开开发者选项或 USB 调试）、`authorized`（手机还没允许这台电脑调试） | `state:unlocked` |
 | `file:` | 导入文件的副本已经不在 | `file:twitter-2026-10-30.zip` |
 
 插件返回的错误码：
@@ -852,7 +867,7 @@ SEELU_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip"
 {"jsonrpc":"2.0","id":3,"method":"list","params":{"source":"douyin:favorites","cursor":null,"since":null,"context":{"credentials":"/private/var/folders/xx/seelu-proc-07/cred/3/credentials.json","cookiesTxt":null,"browserProfile":"/Users/me/Library/Application Support/Seelu/profiles/www.douyin.com","settings":null,"secrets":null,"input":null}}}
 ```
 
-- `context` 里是这一次调用的文件路径，对应一次一进程时的环境变量：`credentials` ↔ `SEELU_CREDENTIALS`、`cookiesTxt` ↔ `SEELU_COOKIES_TXT`、`browserProfile` ↔ `SEELU_BROWSER_PROFILE`、`settings` ↔ `SEELU_SETTINGS`、`secrets` ↔ `SEELU_SECRETS`、`input` ↔ `SEELU_INPUT`。这些路径都在进程的暂存目录里（[§7.1](#71-常驻进程的路径)），凭据和密钥文件在这次响应之后删除。`HOME`、代理等进程级的变量在启动时给定。
+- `context` 里是这一次调用的文件路径，对应一次一进程时的环境变量：`credentials` ↔ `SEELU_CREDENTIALS`、`cookiesTxt` ↔ `SEELU_COOKIES_TXT`、`browserProfile` ↔ `SEELU_BROWSER_PROFILE`、`settings` ↔ `SEELU_SETTINGS`、`secrets` ↔ `SEELU_SECRETS`、`input` ↔ `SEELU_INPUT`、`provider` ↔ `SEELU_PROVIDER`（这一个是代发参数本身，不是路径）。这些路径都在进程的暂存目录里（[§7.1](#71-常驻进程的路径)），凭据和密钥文件在这次响应之后删除。`HOME`、代理等进程级的变量在启动时给定。
 - **按站点集合分进程。** `permissions` 按插件声明，沙箱按进程生效，凭据按能力发。所以宿主按「这次调用用到的站点集合」分别起常驻进程，沙箱也按这个集合生成：`login: none` 的能力只发给不带站点的那个进程。抖音的例子里，`fetch` 和 `list` 各一个进程，`list` 那个进程里开着带登录的浏览器，`fetch` 那个进程碰不到它。
 - **资料目录的交接。** 带 `browser-profile` 站点的常驻进程从第一次用到这个目录起持有它的锁，调用之间可以让浏览器开着。别的进程要用同一个目录时，宿主先让持有它的进程退出，再交出去（[§6](#6-凭据)）。
 - 失败返回 JSON-RPC `error`：`code: -32000`，`data` 是 [§3.3](#33-信封与错误码) 的错误对象。
@@ -913,6 +928,8 @@ SEELU_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip"
 ```
 
 - 插件按 OpenAI 兼容接口请求 `baseUrl`（`/chat/completions`、`/audio/transcriptions`），带 `Authorization: Bearer <token>`。这个 token 是至少 128 位的随机值，只对这一次调用、这个插件、宿主的本机端点有效，调用结束即作废；宿主比对时用常数时间比较，因为本机任何进程都能连这个端口；宿主换上真正的密钥转发给用户配的 provider，记下这次请求是否离开本机。宿主自动把这个端点加进插件的网络许可。
+- **获取插件也可以用。** 能力声明了 `provider`（[§2.3](#23-获取插件的字段)）、用户配了模型时，一次一进程的调用经 `SEELU_PROVIDER` 拿到同样的 `{baseUrl, token, model}`，常驻进程在请求的 `context.provider` 里拿到；token 的规则不变：一次调用、一个插件、宿主的本机端点。视觉层插件用看图模型找控件时走这里，界面照样标「离开本机」（[§9.5](#95-视觉层流程)）。
+- 包装自带模型的第三方 Agent（Mika 的 MCP 或 HTTP 接口一类）不在这一条之内：它的模型调用在手机上、由它自己发，宿主标不了「离开本机」，节奏也管不到。这类插件 `{fetch-org}` 收不收是待定项（[§13](#13-待定) 第 20 项）。
 - 带 `inject` 的密钥设置（导出到 Notion 这类云端目标）用同一个办法：宿主在 `run` 参数的 `endpoints` 里给一个本机地址，例如 `{"notion": "http://127.0.0.1:47823/"}`，转发时按 `inject` 填请求头。插件始终拿不到密钥明文。
 
 <a id="44-导出的-run-与-readback"></a>
@@ -1064,7 +1081,7 @@ curl -X POST http://127.0.0.1:47821/v1/deliver \
 
 - **资料目录按站点建，同一站点的插件共用**，用户每个站点只登录一次。锁由用到它的进程持有：一次一进程的调用到进程结束；常驻进程从第一次用到起，调用之间可以让浏览器开着。宿主自己导出 cookie 也要拿这把锁。运行器换到需要同一目录的下一个插件（或宿主自己要用）时，先让持有锁的常驻进程退出：关闭 stdin，5 秒后杀进程组；最多等锁 10 秒，等不到就给这个插件记宿主错误 `profile-busy`，换下一个。每次把目录交给插件前，宿主检查并清掉目录里新出现的浏览器扩展，免得一个插件留下的扩展影响下一个插件和用户在这个目录里的登录。
 - 首次登录不在自动化控制的浏览器里做：有的站点不接受在 Playwright 控制的 Chrome 里登录，macOS 上自动化启动的 Chrome 也读不到钥匙串加密的 cookie（kali-publish 的记录，见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)）。
-- `credential: app` 的站点（驱动已登录的微信客户端、手机 App），宿主什么都不传；界面照样写「会用到你在微信里登录的账号」。
+- `credential: app` 的站点（驱动已登录的微信客户端、手机 App），宿主什么都不传；界面照样写「会用到你在微信里登录的账号」。`site` 写这个平台账号的站点（例如 `weixin.qq.com`、`www.douyin.com`），和浏览器类插件写同一个 `site` 没关系，`credential` 不同；登录状态由插件在 `health` 的 `login[]` 里报（[§3.10](#310-health)）。
 
 <a id="7-权限与隔离"></a>
 ## 7. 权限与隔离
@@ -1075,16 +1092,18 @@ curl -X POST http://127.0.0.1:47821/v1/deliver \
 
 | `devices` | macOS | Linux | Windows |
 |---|---|---|---|
-| `adb` | 部分：经 `exec` 放行 adb，经网络许可放行本机 adb 服务端口 | 部分：同左 | 仅告知 |
+| `adb` | 部分：插件只连宿主管的 adb 服务端口，不自己起 adb 服务 | 部分：同左 | 仅告知 |
 | `ios-device` | 待核实：能否用 Seatbelt 只对声明的插件放行 usbmux 套接字 | 部分：bind usbmux 套接字 | 仅告知 |
 | `screen-capture` | 仅告知 | 仅告知 | 仅告知 |
 | `accessibility` | 仅告知 | 仅告知 | 仅告知 |
 | `audio-capture` | 仅告知 | 仅告知 | 仅告知 |
 | `clipboard` | 待核实：能否用 Seatbelt 拦下未声明插件的剪贴板服务 | 仅告知 | 仅告知 |
 
-- macOS 的屏幕录制、辅助功能、系统录音权限是授给思鹭本身的；推断子进程会按「负责进程」继承这些权限，所以思鹭一旦拿到，未声明的插件也可能用得上，能否拦下待核实，先按「仅告知」显示。
+- macOS 的屏幕录制、辅助功能、系统录音权限是授给思鹭本身的。子进程按「负责进程」用这些授权：第三方工具 agent-desktop 的权限引导代码和故障文档都说授权记在启动它的 App 上，也说系统设置有时会单独列出子程序、要一起打开（第三方旁证，没有查到 Apple 文档）。所以思鹭一旦拿到，未声明的插件也可能用得上；不做按插件分开授权（[§11](#11-设计取舍)），先按「仅告知」显示。
+- **adb 服务由宿主管。** 宿主自己起一个 adb 服务，用私有端口；这个服务进程的 `HOME` 指向本机配置目录下的一个子目录，让 adb 的密钥（`$HOME/.android/adbkey`）固定下来。不这样的话，插件的私有 `${HOME}` 每次调用都会生成新密钥，手机每次都要重新点授权（推断）。adb 密钥算凭据，放本机配置目录、权限 0600，不放 `${CACHE}`。插件只拿到 `ADB_SERVER_SOCKET` 和 `ANDROID_SERIAL`（[§3.2](#32-调用约定)），沙箱只放行这个端口；无线调试的配对和连接在宿主界面里做，插件拿不到手机的局域网地址。连着几台设备时，插件经同一个服务仍能点名别的设备，所以是「部分」。插件用 scrcpy 时，宿主给它 `ADB=<解析出的 adb>`，免得两个版本的 adb 互相重启服务端（推断，待核实）。
 - 用到 `devices` 的插件，安装时在权限页单独列出这几项；第一次真正用到时，宿主先请用户在系统设置里授权思鹭。
-- 声明了 `accessibility`、`screen-capture`、`audio-capture`、`clipboard` 的插件要连系统服务（推断）。宿主在这个插件的沙箱里放行对应的系统服务，具体放行哪些规则待核实；做不到的话，这几项在 macOS 上不进 Seatbelt，界面显示「仅告知」。要紧的是声明了的插件不被挡住，而不是拦下未声明的插件。
+- 剪贴板：Apple 给通用剪贴板加了「程序读之前先问」（[NSPasteboard.AccessBehavior](https://developer.apple.com/documentation/appkit/nspasteboard/accessbehavior-swift.enum)，macOS 26 上还是开发者预览），以后默认开不开待核实；开了以后弹窗大概率记在思鹭上（推断，和上一条同理），宿主在第一次用到 `clipboard` 时先跟用户说清楚：跑的时候会动剪贴板，跑完写回原来的内容。
+- 声明了 `accessibility`、`screen-capture`、`audio-capture`、`clipboard` 的插件要连系统服务（推断）。宿主在这个插件的沙箱里放行对应的系统服务，具体放行哪些规则待核实，实现时先在 Seatbelt profile 里跑一次 agent-desktop 的只读快照试出来；做不到的话，这几项在 macOS 上不进 Seatbelt，界面显示「仅告知」。要紧的是声明了的插件不被挡住，而不是拦下未声明的插件。
 - 宿主不代用户安装根证书、不向别的进程注入；需要这些的插件让用户自己装、自己负责。
 
 <a id="71-常驻进程的路径"></a>
@@ -1394,14 +1413,21 @@ function sendToSeelu(links) {
 }
 ```
 
-- 不改原工具：它照旧导出 JSON 文件，再写一个导入插件读这个文件（[§3.9](#39-从文件导入)）。导入插件按自己做的事填 `access: official-export`、`login: none`，和 [§3.9](#39-从文件导入) 一致；文件怎么来的写进 `description` 和插件 README，例如「读 xhs-vault 导出的清单；清单由你在登录的浏览器里导出」。
+- 不改原工具：它照旧导出 JSON 文件，再写一个导入插件读这个文件（[§3.9](#39-从文件导入)）。导入插件按自己做的事填 `access: official-export`、`login: none`，和 [§3.9](#39-从文件导入) 一致；文件怎么来的写进 `description` 和插件 README，例如「读 xhs-vault 导出的清单；清单由你在登录的浏览器里导出」。手机上的 Agent（Mika 一类）导出的清单同样处理，`description` 写「清单由你手机上的某某导出，导出时用的是它自己的模型」。
 
 令牌由用户粘贴进脚本设置；小红书链接里的 `xsec_token` 只在会话内有效，清单交过来后宜尽快取（[06 §1.3](research/06-platform-access-and-account-risk.md#13-混合路径视觉层拿链接公开页面取内容)）。
 
 <a id="95-视觉层流程"></a>
 ### 9.5 视觉层流程
 
-例子：Mac 上读微信收藏里的公众号文章链接，再交给公众号的 `public-web` 插件取正文（[06 §17.3](research/06-platform-access-and-account-risk.md#173-首批自己适配的插件)）。
+视觉层插件读屏幕上渲染出来的界面、替用户点已登录的客户端。`list` 一页处理几条，只返回 `url`，不带 `ref`；内容由别的插件按 [§3.1](#31-运行器与节奏) 去取。底层有两种做法（[调研 10](research/10-desktop-and-android-agents.md)）：
+
+- **电脑端读系统的无障碍树。** 例如 agent-desktop（Vercel Labs，Apache-2.0）：读 macOS AX、Windows UI Automation、Linux AT-SPI 的树，给可交互的元素编号，动作默认走无障碍接口，不聚焦、不动指针；命令行不要模型、不联网。
+- **安卓经 ADB。** 电脑上的获取插件经宿主管的 adb 服务连用户的手机（[§7](#7-权限与隔离)），读控件树、截图、按坐标点，在手机侧经 adb shell 读剪贴板；手机上不装 App、不常开无障碍服务。
+
+两种都拿不到链接本身：无障碍树和控件树里没有 URL，链接要「分享 → 复制链接」后读剪贴板。
+
+**例子一：Mac 上读微信收藏里的公众号文章链接**，再交给公众号的 `public-web` 插件取正文（[06 §17.3](research/06-platform-access-and-account-risk.md#173-首批自己适配的插件)）。
 
 ```yaml
 platforms: [wechat-mp]
@@ -1409,33 +1435,87 @@ access: vision-ui
 login: required
 sites:
   - {site: weixin.qq.com, name: 微信, credential: app}
+upstream:
+  - {name: agent-desktop, url: https://github.com/vercel-labs/agent-desktop, license: Apache-2.0}
 capabilities:
   list:
     access: vision-ui
     login: required
     sites: [weixin.qq.com]
     order: newest-first
+    interaction: foreground
+    timeout: 10m
     sources:
       - {source: "wechat:favorites:articles", title: 微信收藏里的文章, action: favorite}
 pacing:
-  wechat-mp: {batch: true, interval: 6s, daily: 100}
+  wechat-mp: {batch: true, interval: 6s, daily: 30}
 permissions:
-  devices: [accessibility, screen-capture, clipboard]
-  exec: [osascript]
+  devices: [accessibility, clipboard, screen-capture]   # screen-capture 只给截图加 OCR 的退路用
   network: {mode: none}
 ```
 
-用 AppleScript 驱动微信时要在 `exec` 里写 `osascript`；用 `open -a WeChat` 拉起客户端的再加 `open`。
+- `exec` 不写：agent-desktop 和它的 helper 在 `${PLUGIN_DIR}` 里（[§2.7](#27-权限-permissions)）。
+- 流程：找到「收藏」点开；对列表容器取快照；每一行先往剪贴板写一个哨兵值，再右键、读菜单、点「复制链接」、读剪贴板；滚一屏，前后两屏有重叠，按 `canonicalize` 后的身份去重，不按整行文字比；连续两屏没有新条目就停。每处理一条发一次 `progress`，取快照之前也先发一次（一次快照可能要几十秒），能力里的 `timeout` 设成分钟级，卡住靠 120 秒无进度发现（[§3.4](#34-超时与取消)）。游标记最后一条的链接和已读条数，下一页先在可见的几行里找它，找不到就回到顶部重新滚。`title` 原样保留界面文字，拿不到收藏时间就让 `actedAt` 留空。
+- 为什么是 `foreground`：macOS 上走无障碍接口的右键（`AXShowMenu`）照样把菜单弹到屏幕上，读链接要改剪贴板；Windows 上右键只能用物理输入，要抢焦点、动鼠标。
+- **受版本限制。** Mac 微信 4.1.x 在 macOS 26 上只给浅层窗口（报告测的是聊天界面，收藏页同样读不到是推断）；PC 微信 4.1 起没开过无障碍模式的新账号拿不到树。读不到时回 `upstream-changed`，`hint` 写「这个版本的微信不给读界面」；要不要退到「截窗口 → 本机 OCR 找行 → 按坐标点」，是待定项（[§13](#13-待定) 第 17 项）。Windows 版另写一份。
+- 改造 wechat-favorites-exporter 的做法时保留它的 MIT 版权声明（[§9.6](#96-许可证)）；流程总共几步，自己写比 fork 省事。
+- `pacing` 是示意值：每条大约四次 agent-desktop 调用，加 0.5 秒左右的等待，没有微信这边的阈值数据（推断）。
 
-- `list` 一页处理几条：打开收藏、逐条「复制链接」、读剪贴板，只返回 `url`，不带 `ref`；内容由别的插件按 [§3.1](#31-运行器与节奏) 去取。
-- 流程固定下来（Maestro 的 YAML、mirroir-mcp 的录制回放一类），不每次让模型现场决定；客户端改版就要改流程。
-- 手机没解锁、窗口被挡住时发 `waiting` 事件；等不到就返回 `dependency-missing`，`needs` 照 [§3.3](#33-信封与错误码) 的前缀写，例如 `["state:unlocked"]`、`["permission:accessibility"]`、`["app:wechat"]`。
-- 截图默认用本机 OCR 和本机模型；用户选云端视觉模型时走 [§4.3](#43-模型与密钥由宿主代发) 的代发，界面标「离开本机」。
+**例子二：安卓手机上的小红书收藏，经 ADB**（包名 `com.xingin.xhs` 出自 Mika 的 App 知识文件）。
+
+```yaml
+platforms: [xiaohongshu]
+access: vision-ui
+login: required
+sites:
+  - {site: www.xiaohongshu.com, name: 小红书, credential: app}
+capabilities:
+  list:
+    access: vision-ui
+    login: required
+    sites: [www.xiaohongshu.com]
+    order: newest-first
+    interaction: foreground
+    timeout: 10m
+    sources:
+      - {source: "xiaohongshu:favorites", title: 我在手机上收藏的笔记, action: favorite}
+pacing:
+  xiaohongshu: {batch: true, interval: 10s, daily: 60}
+settings:
+  - {key: display, label: 在哪块屏上跑, type: enum, options: [main, virtual], default: main}
+permissions:
+  devices: [adb]
+  network: {mode: none}
+requires:
+  runtime: ["adb"]
+run:
+  command: ["${PLUGIN_DIR}/seelu-fetch-xiaohongshu-android"]
+  serve: true
+```
+
+- 默认在主屏上跑：跑的时候手机要连着、解锁、亮屏，不能用。后台虚拟屏是插件设置（`display`），默认关：它多出一块公开屏，App 自己就查得到不在 0 号屏上（推断）。微信在 Mika 的虚拟屏上整屏读不到、点按没反应（Mika #237，只在虚拟屏上测过，主屏上行不行待核实），所以微信和视频号不用虚拟屏。
+- 读树用 `uiautomator dump`，它要等屏幕安静一秒，十秒内等不到就失败；自动播放视频的页面改用截图加本机 OCR。
+- 链接：每条点开 → 分享 → 复制链接，在手机侧经 adb shell 读剪贴板；不靠 scrcpy 的剪贴板同步，那会盖掉电脑上的剪贴板。不用屏上位置当 `ref`，新收藏会把位置往后挤。小红书分享链接里的 `xsec_token` 只在会话内有效，宜尽快取（[§9.4](#94-浏览器扩展与油猴脚本)）。
+- 流程格式可以参考 Mika 的路线回放（Route、Selector、Anchors，Apache-2.0，借代码要保留 LICENSE、NOTICE 和改动说明）：选择器记角色、名字、资源 ID、位置、同类序号；每步核对前台包名和几段稳定文字，对不上就停（`upstream-changed`），碰到验证或风控提示回 `blocked`。
+- `pacing`、`requires.runtime` 都是示意值，没有证据支撑具体数字。一次调用内部的节奏可以参考 Mika 给 `careful` 一类 App 的数：换一屏停 2.5–5 秒，按屏上字数每字加 15 ms，一次至多换 24 屏；`interval`、`daily` 另按平台给。
+
+两种做法共用的规则：
+
+- **流程固定下来**（Maestro 的 YAML、mirroir-mcp 的录制回放、Mika 的路线一类），不每次让模型现场决定；客户端改版就要改流程。运行时默认不用模型，对不上就停。能力声明了 `provider: optional` 的，用户打开后可以让看图模型找一个控件，找到后再在树里核对；模型经 [§4.3](#43-模型与密钥由宿主代发) 代发，本机和云端都行，云端的界面标「离开本机」。
+- 屏幕或手机没解锁、窗口被挡住时发 `waiting` 事件；等不到就返回 `dependency-missing`，`needs` 照 [§3.3](#33-信封与错误码) 的前缀写，例如 `["state:unlocked"]`、`["permission:accessibility"]`、`["app:wechat"]`、`["state:authorized"]`。
+- **底层工具的错误怎么翻**（plugin-kit 的视觉层 SDK 做）：没给系统授权 → `dependency-missing` 加 `permission:accessibility` 或 `permission:screen-capture`；客户端没开 → `dependency-missing` 加 `app:`；窗口里是登录或扫码页 → `login-required`；树是空的或太浅、找不到列表 → `upstream-changed`；界面上出现验证、风控或下线提示 → `blocked`；元素过期、对不上 → 插件自己重新快照再试，还不行回 `upstream-changed`；快照没取全不算错，回已经读到的条目，`nextCursor` 指回这一屏。
+- **隐私**（视觉层 SDK 做，契约测试也查）：
+  - agent-desktop 的状态目录设在 `${TMP}`（常驻时设在 `${HOME}`），不用 `${CACHE}`：它的元素映射里存着界面上的文字。不开会话、不开 trace、不用 `--screenshots`。
+  - 进了列表以后每次快照都限在列表容器上（`--root`），整窗快照只在导航时做一次：微信主窗口里有联系人名字和消息预览。
+  - 截图只截目标窗口，写在 `${TMP}`，本机 OCR 用完马上删，不进 `${OUT}`。
+  - 剪贴板：一页开始前把原内容读进内存，一页结束写回；全程不写日志、不写盘。剪贴板管理工具会记下客户端复制出的每条链接，宿主拦不住；第一次用到 `clipboard` 时界面说清楚。
+  - stderr 不写屏幕上的文字、标题、链接，只写计数和错误码。
+- **包 agent-desktop 时**：只按名字调 `${PLUGIN_DIR}` 里那份固定版本；检查信封的版本号，主版本和锁定的不一样就回 `internal`；只有 `interaction: foreground` 的能力才用 `--headed`；每条命令都带 `--app`（不带时它读的是前台 App），最好也带 `--window-id`；不用 `launch --cdp`（那等于在官方客户端里执行代码，按 [§2.4](#24-access-与-login) 要记 `client-hook`），不用 `skills`，也不用它仓库里的 JEV 脚本（它把屏幕描述发给第三方的模型服务，不经 [§4.3](#43-模型与密钥由宿主代发)）。
 
 <a id="96-许可证"></a>
 ### 9.6 许可证
 
-按 [06 §17.4](research/06-platform-access-and-account-risk.md#174-fork-与许可证)：MIT、Apache、BSD 一类可以 fork、可以打进插件资产，保留版权声明；GPL 系只做用户自装、插件以独立进程或 HTTP 调用，不随资产分发（[ADR-003 §8](decisions/ADR-003-plugins.md#8-gpl-工具)）；非商业或源码可见许可不打包、不进两个组织；没有许可证的只参考做法。插件 README 写明上游、许可证和改动，`upstream` 字段照填。
+按 [06 §17.4](research/06-platform-access-and-account-risk.md#174-fork-与许可证)：MIT、Apache、BSD 一类可以 fork、可以打进插件资产，保留版权声明；GPL 系只做用户自装、插件以独立进程或 HTTP 调用，不随资产分发（[ADR-003 §8](decisions/ADR-003-plugins.md#8-gpl-工具)）；非商业或源码可见许可不打包、不进两个组织；没有许可证的只参考做法。插件 README 写明上游、许可证和改动，`upstream` 字段照填。上游的发布包里没有 LICENSE 文件时（agent-desktop 就是这样），从上游仓库取一份放进资产。
 
 <a id="10-契约测试与-plugin-kit"></a>
 ## 10. 契约测试与 plugin-kit
@@ -1494,6 +1574,14 @@ seelu plugin pack --version 0.3.1 dist/*
 | schema 以 plugin-kit 为准 | 插件作者只依赖 MIT 的 plugin-kit，不用拉整个内核模块；只有一份不会漂移 | 内核改契约时要先给 plugin-kit 发版 |
 | 投递接口按投递端发令牌，来源由令牌决定 | 撤销一个脚本不影响别的；来源不靠投递方自称 | 每接一个工具要建一个令牌 |
 | 改造上游不用 GitHub 的 fork 按钮 | 不进上游的派生网络；派生多的网络会被整体处理（[§8.8](#88-获取方式组织的仓库结构)） | GitHub 上看不到「forked from」，要在 README 写明上游 |
+| 能力加 `interaction`；宿主加两把整机锁（占屏幕的、用剪贴板的），每台安卓设备一把锁 | 「复制链接」类流程走无障碍接口也会弹菜单、改剪贴板，两个视觉层插件同时跑会互相弄坏；`devices` 只说要什么权限，说不出会不会打扰用户 | 不同平台的视觉层插件不能并行 |
+| 不为虚拟屏、合成输入加 `devices` 取值；安卓上的读屏、截图、剪贴板都归 `adb` | 虚拟屏是插件的做法，做成插件设置；会不会动指针由 `interaction` 说；电脑本机的三项权限和手机上的不是一回事 | 权限页看不出插件开不开虚拟屏，要看插件设置和 README |
+| 视觉层插件自带固定版本的底层工具（例如 agent-desktop），不让用户 `npm i -g`；`${PLUGIN_DIR}` 里的程序不用写进 `exec` | 安装时不跑 npm 的安装脚本，流程锁在一个信封版本上，照样按 sha256 和来源证明核过；底层工具会自己起 helper | 每个插件多几 MB，底层工具升级要跟着发插件版本；`exec` 看不出包里带了哪些程序，要看 `upstream` 和 README。三个以上插件都带同一个工具时，再考虑做成宿主管的共用运行时 |
+| 不做按插件分开的 macOS 授权 | 要让插件进程自己当负责进程，得用私有接口；ad-hoc 签名的插件每次升级可能都要重新授权（推断） | 宿主拿到辅助功能、屏幕录制授权以后，没声明的插件也用得上，只能「仅告知」 |
+| 宿主自己管 adb 服务和密钥，插件只拿到端口和设备序列号 | 密钥固定下来，手机只授权一次；插件拿不到手机的局域网地址 | 宿主多管一个进程；连着几台设备时插件仍能点名别的设备 |
+| 安卓视觉层默认在主屏上跑，后台虚拟屏是插件设置、默认关 | 和人用手机一样，不多出一块别的 App 查得到的公开屏；微信在虚拟屏上读不到、点不动 | 跑的时候手机不能用；主屏上微信行不行还没有实测 |
+| 获取插件也能经宿主代发用模型；视觉层默认不用模型，对不上就停 | 只靠回放的流程可预期，也不会把收藏页上的字发出去；要兜底时照转换插件的规矩，插件拿不到密钥，界面能标「离开本机」 | 客户端小改版也会让流程停下，要等插件更新 |
+| 信封不加「投递」字段（agent-desktop 有 `disposition`） | v1 的 `list`、`fetch` 只读，重试或换下一个都安全；唯一的写操作 `unfavorite` 是幂等的 | 以后加不幂等的写操作时要改协议 |
 
 <a id="12-调研-06-提议的采纳情况"></a>
 ## 12. 调研 06 提议的采纳情况
@@ -1539,7 +1627,7 @@ seelu plugin pack --version 0.3.1 dist/*
 | 自己维护的获取方式放单独组织，客户端不预置 | [§17.4](research/06-platform-access-and-account-risk.md#174-fork-与许可证) | 采纳 | D-f；通用网页获取和别的工具的导入例外，随安装包预装（[§8.4](#84-三种来源)） |
 | fork 时要做的事：保留许可证、去掉写操作和推广、锁定外部二进制 | [§17.4](research/06-platform-access-and-account-risk.md#174-fork-与许可证) | 采纳 | 另加：不用 fork 按钮（[§8.8](#88-获取方式组织的仓库结构)） |
 | 官方组织收转换和导出 | [§17.4](research/06-platform-access-and-account-risk.md#174-fork-与许可证) | 采纳 | 平台中立的共用代码进 plugin-kit |
-| 只读导出文件的导入插件放哪个组织 | [§17.4](research/06-platform-access-and-account-risk.md#174-fork-与许可证) | 待定 | [open-decisions P3](open-decisions.md#7-获取与插件) |
+| 只读导出文件的导入插件放哪个组织 | [§17.4](research/06-platform-access-and-account-risk.md#174-fork-与许可证) | 已定 | 11-01 用户选 B：别的工具的导出进官方组织并预装，平台官方导出包放 `{fetch-org}`（[open-decisions P3](open-decisions.md#7-获取与插件)、[§8.4](#84-三种来源)） |
 | 法律意见 | [§17.4](research/06-platform-access-and-account-risk.md#174-fork-与许可证) | 保留 | 仍待核实 |
 
 <a id="13-待定"></a>
@@ -1563,6 +1651,10 @@ seelu plugin pack --version 0.3.1 dist/*
 14. 主仓库公开前，`docs/research` 里按平台写取法的部分放在哪，附录 A 的风险证据链接指向哪：[O2](open-decisions.md#13-开源与发布)。
 15. 收件文件夹里的导入文件直接收下，还是进导入预览：[C7](open-decisions.md#5-收下与入口)。
 16. 第一个获取方式只拿到一部分时，要不要自动用下一个补全：[P5](open-decisions.md#7-获取与插件)。
+17. 电脑端视觉层先做什么，微信收藏读不到界面时退不退到截图加 OCR（[§9.5](#95-视觉层流程) 例子一）：[P10](open-decisions.md#7-获取与插件)。
+18. 安卓要不要做、做到哪（[§7](#7-权限与隔离) 的 adb 管理、[§9.5](#95-视觉层流程) 例子二）：[P18](open-decisions.md#7-获取与插件)。
+19. 视觉层调用（会占屏幕、剪贴板或手机）能不能在跟着收、批量导入里自己跑（[§3.1](#31-运行器与节奏)）：[P19](open-decisions.md#7-获取与插件)。
+20. `{fetch-org}` 收不收包装自带模型的第三方手机 Agent 的获取插件（[§4.3](#43-模型与密钥由宿主代发)）：[R11](open-decisions.md#12-声明与责任)。
 
 <a id="附录-a-声明模板"></a>
 ## 附录 A. 声明模板
