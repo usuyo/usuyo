@@ -133,10 +133,11 @@
 
 **已定**（11-03，[插件协议](plugin-protocol.md#39-从文件导入)）：别的工具导出的文件按 official-export 导入，文件怎么来的写进说明，读本机客户端数据的工具导出的也一样。
 
+**已定**（11-04，[open-decisions §1.8](open-decisions.md#18-grill-回答)）：`{fetch-org}` 七层都收，含 client-hook（R5 A，[第 9 条](discussion.md#9-自己的获取插件组织收什么)）。插件校验照 10-28 做 GitHub App，用无服务器中转接 webhook，校验在 GitHub Actions 里跑（O3 A，[第 8 条](discussion.md#8-插件怎么校验)）。
+
 **待讨论**：
 
-- `{fetch-org}` 收到哪一层（[第 9 条](discussion.md#9-自己的获取插件组织收什么)）：建议收到 session-api 为止；private-api 只收包装你自装上游的薄插件；client-hook 不收（R5 B）。所以不做微信专用的 client-hook 插件；官方组织出一个和平台无关的「链接清单导入」，读 JSON、CSV。
-- 插件怎么校验（[第 8 条](discussion.md#8-插件怎么校验)）：10-28 定的是一开始就做 GitHub App；建议先不做，校验放进发版用的可复用工作流（O3 C）。
+- 官方组织出一个和平台无关的「链接清单导入」，读 JSON、CSV（建议）。
 - 首批平台（[第 10 条](discussion.md#10-首批平台)）：建议按你最常用的平台，每个先做按链接取单条、列你平台收藏夹的两个插件（P9 B）。
 - 默认用不用账号（[第 11 条](discussion.md#11-默认用不用账号)）：建议先试不用账号的；轮到能带账号的，你登录过就带上，每行能关（P4 B + P16 A）。
 - 读浏览器的登录状态（[第 12 条](discussion.md#12-能不能读浏览器的登录状态)）：建议只读你选的那个站点的 cookie（P7 A）。
@@ -317,7 +318,7 @@
 | 风险 | 怎么应对 | 标 |
 |---|---|---|
 | 平台改版，插件失效 | 插件外置，按你排的顺序换下一个；原样留着 | 已定（11-01，[D-c](open-decisions.md#11-十条方向)） |
-| 维护者收到律师函 | 函件发给维护者（[调研 06](research/06-platform-access-and-account-risk.md#163-下架停更与法律风险)）。例如 jackwener/wx-cli 因腾讯方面的 DMCA 通知，2026-07-15 起被 GitHub 屏蔽（[通知](https://github.com/github/dmca/blob/master/2026/07/2026-07-13-wechat.md)，2026-07-13；[调研 11](research/11-subscriptions-compat-and-wx-cli.md#1-wx-cli)）。应对：内核和官方组织里没有平台获取逻辑 | 待讨论：`{fetch-org}` 收到哪一层，[第 9 条](discussion.md#9-自己的获取插件组织收什么) |
+| 维护者收到律师函 | 函件发给维护者（[调研 06](research/06-platform-access-and-account-risk.md#163-下架停更与法律风险)）。例如 jackwener/wx-cli 因腾讯方面的 DMCA 通知，2026-07-15 起被 GitHub 屏蔽（[通知](https://github.com/github/dmca/blob/master/2026/07/2026-07-13-wechat.md)，2026-07-13；[调研 11](research/11-subscriptions-compat-and-wx-cli.md#1-wx-cli)）。应对：内核和官方组织里没有平台获取逻辑；`{fetch-org}` 七层都收（11-04），一个插件一个仓库，一次通知只波及那个仓库和它的 fork（推断） | 已定（11-04，[第 9 条](discussion.md#9-自己的获取插件组织收什么)）；再隔离一层，见下一问 |
 | 平台账号受限 | 后果由你担，添加插件来源时确认一次声明；节奏上限 | 已定（11-01，见 [7.2](#72-获取插件)） |
 | 本机算力不够 | 识别能选本机或云端，第一次打开时说清 | 已定（10-21，v0.3） |
 | 地图变成一团乱麻 | 位置稳定、语义缩放、不整体重排 | 已定（10-21，v0.3） |
