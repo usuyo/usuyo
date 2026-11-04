@@ -5,6 +5,8 @@
 
 2026-11-03 补：agent-desktop、Mika，见 [调研 10](10-desktop-and-android-agents.md)
 
+2026-11-04 补：[§8](#8-微信生态) 换了 wx-cli-again 一行、加了 pandorafuture/wx-cli 和 r266-tech/wx-cli 两行（★ 等为 11-04 查询；[约定](#约定) 里的收录数和层级分布仍是 10-30 的统计，没算这两行），10-30 写的两处「不接入」加了注；[§16.2](#162-issue-里的账号问题) 的 `client-hook` 一行加了 WeFlow #411；[§16.3](#163-下架停更与法律风险) 加了 wx-cli 的 DMCA 一条；[§0](#0-要点)、[§1.2](#12-视觉层的风险从哪里来)、[§16.1](#161-平台规则与可检测性)、[§17.2](#172-设置里怎么让用户选)、[§18](#18-待核实清单) 里 USB 调试「恒返回 0」的说法改成只在 Android 17 起、功能开关打开时成立（[调研 10 §5.1](10-desktop-and-android-agents.md#51-平台能不能察觉)）。wx-cli 的细查见 [调研 11 §1](11-subscriptions-compat-and-wx-cli.md#1-wx-cli)
+
 目的：回答用户 2026-10-30 提的四件事。第一，用户点名的项目和它们的同类各是什么、怎么拿内容、怎么接进歇存：点名的项目见 [§3](#3-用户点名的项目)，同类按类别列在 [§4](#4-多平台下载与抓取) 到 [§15](#15-相邻创作发布与分析)。第二，获取方式按账号风险怎么分层：分层见 [§1](#1-账号风险分层)，每个平台有哪些层级可选见 [§2](#2-覆盖矩阵每个平台有哪些层级可选)，证据见 [§16](#16-账号风险的证据)。第三，哪些值得自己适配或 fork、许可证允不允许，见 [§17](#17-对歇存的启示)。第四，以后可能放进致谢名单的项目，在各表里标「致谢」，见 [约定](#约定)。不确定的事实汇总在 [§18](#18-待核实清单)。
 
 <a id="约定"></a>
@@ -41,7 +43,7 @@
 <a id="0-要点"></a>
 ## 0. 要点
 
-1. **视觉层的账号风险低，但不是零。** iPhone 镜像目前没有公开 API 让 App 识别，也没找到平台据此处罚的记录；但微信协议明文禁止用第三方软件读界面、自动操作，2026-01 点名辅助服务读取和模拟按键，豆包手机助手操作微信时，微信异常退出甚至无法登录；Android 上已开启的无障碍服务能被 App 查到；USB 调试在旧系统上也能查到，新系统对第三方 App 恒返回 0，起始版本和国内 ROM 待核实。见 [§1.2](#12-视觉层的风险从哪里来)。
+1. **视觉层的账号风险低，但不是零。** iPhone 镜像目前没有公开 API 让 App 识别，也没找到平台据此处罚的记录；但微信协议明文禁止用第三方软件读界面、自动操作，2026-01 点名辅助服务读取和模拟按键，豆包手机助手操作微信时，微信异常退出甚至无法登录；Android 上已开启的无障碍服务能被 App 查到；USB 调试的开关在 Android 16 及以前读得到真值，Android 17 起、功能开关打开时才对第三方 App 返回 0，国内 ROM 待核实（[调研 10 §5.1](10-desktop-and-android-agents.md#51-平台能不能察觉)）。见 [§1.2](#12-视觉层的风险从哪里来)。
 2. **小红书是 2026 年风控最严的平台。** 浏览器驱动和本地签名两条路都有低频只读被警告、封号的报告；禁言 7 天的报告来自发帖流程，永久封禁来自没写频率的检索采集；不登录批量取公开页，也有复制链接的那个账号被下线。见 [§6](#6-小红书)、[§16.2](#162-issue-里的账号问题)。
 3. **抖音网页端在收紧页面外的请求。** 2026-08 起，代码里带 cookie 直接调收藏接口的工具常返回 403，有用户补上 uifid 等请求头后暂时恢复，由页面自己发请求的工具仍能取列表；抖音的限制多是几小时的临时限制，没有找到封号报告。见 [§5](#5-抖音快手与-tiktok)。
 4. **不登录基本没有账号风险（小红书例外），但拿不到「我的收藏」。** 收藏列表这一步要登录，或者走官方导出。「视觉层或浏览器拿链接、公开页面取内容」的混合路径在抖音、公众号可行；小红书受 xsec_token 和链接跟踪参数限制；视频号要借腾讯元宝的登录态。见 [§1.3](#13-混合路径视觉层拿链接公开页面取内容)。
@@ -88,7 +90,7 @@
 
 1. **平台规则把「读界面」也算进去。** 《腾讯微信软件许可及服务协议》8.2.1.6 禁止借助第三方软件登录、使用或进行自动化操作，也禁止用它访问、读取软件的界面和数据（[来源](https://weixin.qq.com/agreement?lang=zh_CN)）。微信 2025-04 点名两类违规服务，一类是注入，一类是授权后监听或录屏、转储聊天记录（[IT之家](https://www.ithome.com/0/850/207.htm)）；2026-01 又点名录屏、截图、辅助服务读取、模拟按键（[快科技转述](https://tech.ifeng.com/c/8qKOznNW4za)）。其他平台的协议禁止的是「用自动化程序接入、收集」（抖音 5.1、小红书 4.1、B站 5.6、知乎二.9），字面上视觉自动化也在其中，但没有找到据此处罚的案例。
 2. **设备环境能被 App 查到。**
-   - Android：任何 App 都能列出已开启的无障碍服务，不需要权限（[AccessibilityManager](https://developer.android.com/reference/android/view/accessibility/AccessibilityManager)）；API 34 起 App 能让非辅助工具读不到、点不了敏感视图（[View](https://developer.android.com/reference/android/view/View#setAccessibilityDataSensitive(int))）；有 Google Play 服务时，Play Integrity 会报告正在运行的录屏类和控制类应用（[文档](https://developer.android.com/google/play/integrity/verdicts)），国内多数机型是否适用待核实；USB 调试开关现在对第三方 App 恒返回 0，旧系统和国内 ROM 是否跟进待核实；uiautomator2 目前的版本主服务改为推送 jar 启动，只在用输入法输入文字时安装辅助应用，包名固定（[openatx/uiautomator2 #808](https://github.com/openatx/uiautomator2/issues/808)）。无障碍服务生成或改动的输入事件带 0x800 标志（`INPUT_EVENT_FLAG_IS_ACCESSIBILITY_EVENT`；SDK 里这个常量是隐藏的，但公开的 `getFlags()` 能读到这一位），ADB、UiAutomation 注入的事件有没有类似标志没有核实；App 还要靠这些环境信号和节奏判断。
+   - Android：任何 App 都能列出已开启的无障碍服务，不需要权限（[AccessibilityManager](https://developer.android.com/reference/android/view/accessibility/AccessibilityManager)）；API 34 起 App 能让非辅助工具读不到、点不了敏感视图（[View](https://developer.android.com/reference/android/view/View#setAccessibilityDataSensitive(int))）；有 Google Play 服务时，Play Integrity 会报告正在运行的录屏类和控制类应用（[文档](https://developer.android.com/google/play/integrity/verdicts)），国内多数机型是否适用待核实；USB 调试开关只在 Android 17 起、功能开关打开时对第三方 App 返回 0，Android 16 及以前读得到真值（[调研 10 §5.1](10-desktop-and-android-agents.md#51-平台能不能察觉)），国内 ROM 待核实；uiautomator2 目前的版本主服务改为推送 jar 启动，只在用输入法输入文字时安装辅助应用，包名固定（[openatx/uiautomator2 #808](https://github.com/openatx/uiautomator2/issues/808)）。无障碍服务生成或改动的输入事件带 0x800 标志（`INPUT_EVENT_FLAG_IS_ACCESSIBILITY_EVENT`；SDK 里这个常量是隐藏的，但公开的 `getFlags()` 能读到这一位），ADB、UiAutomation 注入的事件有没有类似标志没有核实；App 还要靠这些环境信号和节奏判断。
    - Windows：低级鼠标钩子能看到 `LLMHF_INJECTED` 标志（[文档](https://learn.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-msllhookstruct)）；PC 微信 4.1 起对从没开过无障碍模式的新账号不再暴露 UI Automation 树，用讲述人打开 UI 树的办法也已失效（[pywechat 的说明](https://github.com/Hello-Mr-Crab/pywechat/blob/main/Weixin4.0.md)）。
    - macOS：事件里有来源进程 PID 字段，没有找到客户端读取它的资料。
    - iOS：App 能感知录屏和投屏（`UIScreen.isCaptured`、`sceneCaptureState`）；iPhone 镜像目前没有公开 API 能识别，Apple DTS 2024-07 在开发者论坛这样答复（[thread 759314](https://developer.apple.com/forums/thread/759314)）。镜像时 iPhone 保持锁定并显示正被哪台 Mac 使用，欧盟不可用（[Apple 120421](https://support.apple.com/en-us/120421)），中国大陆能否使用待核实。
@@ -520,15 +522,18 @@
 | [nobiyou/wx_channel](https://github.com/nobiyou/wx_channel) | 2858 / 2026-10-28 / v5.7.13（2026-10-15） / MIT | 视频号 | Windows 视频号下载助手：本机代理注入按钮，支持收藏和点赞列表下载 | client-hook | 必须 | 桌面应用、HTTP 接口、网页应用 | 获取方式：调它的 HTTP 接口，放第三方仓库。MIT；和 ltaoo 早期代码的关系未核实，暂不 fork。 |
 | [huohuoer/wechat-cli](https://github.com/huohuoer/wechat-cli) | 2684 / 2026-04-06 / none / Apache-2.0 | 微信聊天 | 面向大模型的本地微信数据命令行，可查聊天记录、联系人和收藏 | client-hook | 必须 | 命令行 | 不接入。Apache-2.0；依赖已被 DMCA 屏蔽。 |
 | [ppwwyyxx/wechat-dump](https://github.com/ppwwyyxx/wechat-dump) | 2017 / 2026-02-23 / 0.2-wxgf（2025-01-29） / GPL-3.0 | 微信聊天 | 从已 root 的安卓手机读微信消息，导出为 HTML 并做统计 | client-hook | 必须 | 命令行 | 不接入。GPL-3.0。 |
-| [jackwener/wx-cli-again](https://github.com/jackwener/wx-cli-again) | 886 / 2026-09-14 / none / Apache-2.0 | 微信聊天 | 读本机微信加密数据库的命令行，wx-cli 被 DMCA 屏蔽后重开的仓库 | client-hook | 必须 | 命令行、Agent Skill | 不接入。Apache-2.0；同类已被整网屏蔽，不推荐。 |
+| [pandorafuture/wx-cli](https://github.com/pandorafuture/wx-cli) | 1027 / 2026-08-26 / v0.7.4（2026-07-22） / MIT | 微信聊天 | Mac 微信 4.1.7 以上的本地数据库解密与查询命令行，带本机 REST 接口和 SSE 推送；取密钥要关 SIP（或重签微信），不读收藏；和 jackwener 的 wx-cli 同名不同源 | client-hook | 必须 | 命令行、HTTP 接口、Agent Skill | 不接入（2026-11-04 的建议，自己组织收不收见 [discussion 第 9 条](../discussion.md#9-自己的获取插件组织收什么)）。MIT。★ 等为 2026-11-04 查询。 |
+| [jackwener/wx-cli-again](https://github.com/jackwener/wx-cli-again) | 897 / 2026-09-14 / none / Apache-2.0 | 微信聊天、公众号 | 读微信 4.x 本机加密数据库的命令行加常驻进程：聊天、联系人、收藏（文章类带链接）、公众号推送、朋友圈；wx-cli 被 DMCA 按 1,464 个仓库的网络屏蔽后重开，是 0.6.3 的单提交快照，作者说后续代码在私有仓库 | client-hook | 必须 | 命令行、Agent Skill | 不接入。Apache-2.0；同类已被整网屏蔽，不推荐。★ 等为 2026-11-04 查询。2026-11-04：用户说所有方案都可以做成插件；本条记的是 10-30 的判断，自己组织收不收见 [discussion 第 9 条](../discussion.md#9-自己的获取插件组织收什么)。 |
 | [zhuyansen/wx-favorites-report](https://github.com/zhuyansen/wx-favorites-report) | 642 / 2026-10-19 / none / MIT | 微信聊天、公众号 | 把 Mac 微信收藏做成 HTML 报告的 Skill：提取密钥、解密本地库、解析收藏 | client-hook | 必须 | Agent Skill、命令行 | 只作参考。MIT；只参考收藏类型与字段，不用密钥提取部分。 |
 | [joeseesun/qiaomu-wx-video](https://github.com/joeseesun/qiaomu-wx-video)（致谢） | 139 / 2026-08-05 / none / MIT | 视频号 | 下载视频号分享链接和直播回放的 Skill，按在线解析、本机捕获、浏览器捕获、录屏逐级降级 | client-hook | 可选 | Agent Skill | 获取方式：借做法自己写，放第三方仓库。MIT，可 fork。 |
+| [r266-tech/wx-cli](https://github.com/r266-tech/wx-cli) | 16 / 2026-10-15 / v2.0.1-rc.5（2026-09-16） / MIT | 微信聊天、公众号 | Go 写的只读本机微信数据命令行（macOS、Windows 微信 4.x），收藏带标题和链接；取密钥交给同作者的 wxkey，管理员密码存进钥匙串；前身 r266-tech/wechat-cli 被 2026-08-04 的 DMCA 通知点名，08-06 起屏蔽 | client-hook | 必须 | 命令行、Agent Skill、网页应用 | 不接入（2026-11-04 的建议，自己组织收不收见 [discussion 第 9 条](../discussion.md#9-自己的获取插件组织收什么)）。MIT。★ 等为 2026-11-04 查询。 |
 | [open-wxa/wxa-runner](https://github.com/open-wxa/wxa-runner) | 631 / 2026-10-30 / v0.12.0（2026-10-30） / MIT | 小程序 | 在普通浏览器里用官方基础库运行自己的小程序编译产物，用于调试和 E2E 测试（用户点名，见 [§3](#3-用户点名的项目)） | not-applicable | 可选 | 命令行、库、网页应用 | 相邻，不接入。代码 MIT；内置的基础库是腾讯代码，不能分发。 |
 | [dlv2008/weixin-favor-kb](https://github.com/dlv2008/weixin-favor-kb)（致谢） | 27 / 2026-04-12 / none / none | 视频号 | 把视频号收藏视频整理成 Obsidian 知识库的流水线：转写、关键帧 OCR、模型分类 | not-applicable | — | 命令行 | 转换插件：借做法自己写。没有许可证，只参考流程。 |
 
 - **公众号：单篇不登录可取，批量列表的路断了。** wechat-article-exporter 的单篇管线、wechatmp2markdown、wexin-read-mcp 不用账号；批量列文章依赖的公众号后台接口 2026-07 下旬被关闭，we-mp-rss、wewe-rss 走的公众号后台或微信读书通道有频率控制和「小黑屋」，没有微信号被处罚的报告。
 - **微信收藏：视觉层拿链接，公开页取正文。** 电脑版微信（Windows、Mac）收藏可由 UI 自动化逐条复制文章链接（pywechat、wechat-favorites-exporter、wechat-favorites-to-obsidian），再交给公开页取正文，这是目前最完整的混合路径；合并转发导出（WeChatBridge）走的是微信官方功能。代价是微信对 UI 自动化有强制下线记录（[§1.2](#12-视觉层的风险从哪里来)）。
 - **本地数据库解密是下架重灾区。** 腾讯 2026 年发了 37 份 DMCA 通知，其中 10 份按派生网络处理，一月那份覆盖 4,195 个仓库；PyWxDump、chatlog、WeChatMsg 的代码已删，wx-cli 被屏蔽后又有人重开。歇存不接入这一类。
+  - 2026-11-04：用户说所有方案都可以做成插件；本条记的是 10-30 的判断，自己组织收不收见 [discussion 第 9 条](../discussion.md#9-自己的获取插件组织收什么)。
 - **视频号和微信读书。** 视频号不装证书、不注入的路只有借腾讯元宝登录态换凭证（qiaomu-clipper、media-parser、wx-video-account-notes），账号风险转到元宝账号；其余（wx_channels_download、wx_channel、res-downloader）是本机代理改写页面。微信读书有官方的个人 API Key（Tencent/WeChatReading），是这一节唯一的官方接口，但书架里的文章收藏只返回入口。
 
 <a id="9-微博知乎豆瓣与海外社交平台"></a>
@@ -937,7 +942,7 @@
 | Android 无障碍服务 | 任何 App 都能列出已开启和已安装的无障碍服务，不需要权限；API 33 起还能监听变化 | [AccessibilityManager](https://developer.android.com/reference/android/view/accessibility/AccessibilityManager) |
 | Android 敏感视图 | API 34 起 App 能让非辅助工具读不到、点不了指定视图 | [View](https://developer.android.com/reference/android/view/View#setAccessibilityDataSensitive%28int%29) |
 | Play Integrity | 有 Google Play 服务时，报告正在录屏或控制设备的应用；发现 API Hook 或 root 时判设备不完整 | [文档](https://developer.android.com/google/play/integrity/verdicts)（2026-10-23） |
-| USB 调试 | 相关设置项现在对第三方 App 恒返回 0；从哪个版本开始、国内 ROM 是否跟进待核实 | [Settings.Global](https://developer.android.com/reference/android/provider/Settings.Global) |
+| USB 调试 | 相关设置项只在 Android 17 起、功能开关打开时对第三方 App 返回 0，Android 16 及以前读得到真值（[调研 10 §5.1](10-desktop-and-android-agents.md#51-平台能不能察觉)，按 AOSP 源码）；国内 ROM 是否跟进待核实 | [Settings.Global](https://developer.android.com/reference/android/provider/Settings.Global)（2026-11-03 取） |
 | 注入的触摸 | 无障碍服务生成或改动的触摸事件带 0x800 标志，常量在 SDK 里隐藏，但公开的 `getFlags()` 能读到；ADB、UiAutomation 注入的事件有没有类似标志没有核实 | [MotionEvent](https://developer.android.com/reference/android/view/MotionEvent) |
 | uiautomator2 | 目前的版本主服务改为推送 jar 启动，只在用输入法输入文字时安装辅助应用；辅助应用包名固定，任何 App 都能查到（2022 年的用户说法，未见处罚） | [openatx/uiautomator2 #808](https://github.com/openatx/uiautomator2/issues/808) |
 | Windows | 低级鼠标钩子能看到注入标志；没找到国内客户端据此处罚的资料 | [MSLLHOOKSTRUCT](https://learn.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-msllhookstruct) |
@@ -966,7 +971,7 @@
 | `browser-session` | xiaohongshu-mcp（434 / 15 / 15 / 13，其中 9 条禁言或封号）；OpenCLI（最近 2500 条里的 600 条 issue / 4；主表记 `private-api`，这里按小红书走用户 Chrome 的路径计）；twitter-web-exporter（136 / 2，没有使用者被锁） | 小红书一次登录、两次采集、一天低频只读都有人被警告或封；一个用工具发帖的账号在两次让 AI 读取确认后，先被警告、再被禁言 7 天；换成内置指纹浏览器后仍有报告；复用用户自己 Chrome 的 OpenCLI 也有只读被判违规 | [xpzouying/xiaohongshu-mcp #715](https://github.com/xpzouying/xiaohongshu-mcp/issues/715)、[xpzouying/xiaohongshu-mcp #726](https://github.com/xpzouying/xiaohongshu-mcp/issues/726)、[xpzouying/xiaohongshu-mcp #877](https://github.com/xpzouying/xiaohongshu-mcp/issues/877)、[jackwener/OpenCLI #842](https://github.com/jackwener/OpenCLI/issues/842)、[jackwener/OpenCLI #2208](https://github.com/jackwener/OpenCLI/issues/2208) |
 | `session-api` | we-mp-rss（358 / 3，没有封号）；wewe-rss（428 / 7 / 8 / 4，都在微信读书一侧）；wechat-article-exporter（153 / 1）；yutto | 公众号后台的频率控制和会话 2–4 天过期；微信读书「小黑屋」、半天到一天失效；没有微信号被处罚的报告；B站 有一例大会员被冻结，因果不明 | [rachelos/we-mp-rss #469](https://github.com/rachelos/we-mp-rss/issues/469)、[cooderl/wewe-rss #86](https://github.com/cooderl/wewe-rss/issues/86)、[wechat-article/wechat-article-exporter #200](https://github.com/wechat-article/wechat-article-exporter/issues/200)、[yutto-dev/yutto #452](https://github.com/yutto-dev/yutto/issues/452) |
 | `private-api` | MediaCrawler（634 / 19 / 22 / 8，其中 3 条封号）；Spider_XHS（136 / 6 / 8 / 5，其中 3 条封号）；ReaJason/xhs（153 / 6，没有封号）；TikTokDownloader（675 / 9 / 9 / 1）；bili-sync（468 / 8 / 6 / 2）；twikit（314 / 15 / 8 / 7，其中 4 条封号）；twscrape（266 / 10 / 7 / 6）；instaloader（2399 / 22 / 7 / 4）；instagrapi（1166 / 12）；Agent-Reach（269 / 5） | 小红书最重；抖音以 1–12 小时的按功能限制为主；B站 常规风控会自行解除，个别账号持续半年；X 注册 3 年的主号一次取 800 个关注后也被封，申诉很少恢复；Instagram 有人几年前备份自己的帖子后被永久封号 | [NanmiCoder/MediaCrawler #865](https://github.com/NanmiCoder/MediaCrawler/issues/865)、[cv-cat/Spider_XHS #150](https://github.com/cv-cat/Spider_XHS/issues/150)、[Johnserf-Seed/f2 #406](https://github.com/Johnserf-Seed/f2/issues/406)、[amtoaer/bili-sync #756](https://github.com/amtoaer/bili-sync/issues/756)、[d60/twikit #338](https://github.com/d60/twikit/issues/338)、[instaloader/instaloader #2680](https://github.com/instaloader/instaloader/issues/2680) |
-| `client-hook` | WeChatFerry（306 / 6 / 7 / 5，其中 4 条封号）；wx_channels_download（471 / 1，本机代理路径没有微信账号被处罚；借元宝解析分享链接的路径有元宝账号被封，是维护者公开部署的解析服务被大量调用后被封，见 [ltaoo/wx_channels_download #495](https://github.com/ltaoo/wx_channels_download/issues/495)、[ltaoo/wx_channels_download #590](https://github.com/ltaoo/wx_channels_download/issues/590)）；res-downloader（322 / 1，与账号无关） | 注入进程：警告、强制下线、封 7 天、再犯被警告永久封号，按实名牵连大号，只读监听也会被处理；本机代理类的风险主要在证书安全：有工具附带全体用户共用的根证书和私钥 | [lich0821/WeChatFerry #126](https://github.com/lich0821/WeChatFerry/issues/126)、[lich0821/WeChatFerry #422](https://github.com/lich0821/WeChatFerry/issues/422)、[ltaoo/wx_channels_download #586](https://github.com/ltaoo/wx_channels_download/issues/586) |
+| `client-hook` | WeChatFerry（306 / 6 / 7 / 5，其中 4 条封号）；wx_channels_download（471 / 1，本机代理路径没有微信账号被处罚；借元宝解析分享链接的路径有元宝账号被封，是维护者公开部署的解析服务被大量调用后被封，见 [ltaoo/wx_channels_download #495](https://github.com/ltaoo/wx_channels_download/issues/495)、[ltaoo/wx_channels_download #590](https://github.com/ltaoo/wx_channels_download/issues/590)）；res-downloader（322 / 1，与账号无关） | 注入进程：警告、强制下线、封 7 天、再犯被警告永久封号，按实名牵连大号，只读监听也会被处理；本机代理类的风险主要在证书安全：有工具附带全体用户共用的根证书和私钥；读本地库的工具（2026-11-04 补，不在上面的扫描里）：WeFlow 用户 2026-03-11 起在同一个 issue 里成批报告收到微信警告，API 记 109 条评论（分页取到 110 条），65 条提到警告、风险、封、限制或异常，协作者当天说经确认是取密钥时被记录，仓库主 03-14 说自己被警告是因为曾 Hook 过微信；报告的流程只读本地库、不发消息。这两条都是开发者的判断，腾讯没有公开说法 | [lich0821/WeChatFerry #126](https://github.com/lich0821/WeChatFerry/issues/126)、[lich0821/WeChatFerry #422](https://github.com/lich0821/WeChatFerry/issues/422)、[ltaoo/wx_channels_download #586](https://github.com/ltaoo/wx_channels_download/issues/586)、[hicccc77/WeFlow #411](https://github.com/hicccc77/WeFlow/issues/411) |
 | `official-export` | 没有收集到 issue 证据 | — | — |
 
 **规律。**
@@ -1039,6 +1044,7 @@
 - **非商业许可挡不住追责。** yichen-skills 有自写的非商业许可，仍收到律师函；这类许可限制的是再分发和商业使用。
 - **收函后的公告写法。** BiliTools 写明停止维护是综合法律风险、平台规则和维护成本后的决定，公告不构成对任何法律主张的承认（[btjawa/BiliTools](https://github.com/btjawa/BiliTools)）。
 - **fork 保存不可靠。** 派生超过 100 个且通知方主张派生同样侵权时，GitHub 按整个派生网络处理，被屏蔽的仓库返回 451（[示例](https://github.com/github/dmca/blob/master/2026/07/2026-07-07-wechat.md)）。B站 的函件直接发给维护者，派生仓库是否被追没有公开记录。
+- **点名的是取密钥工具，重开的和拷贝还在。** 腾讯 2026-07-13 点名 jackwener/wx-cli 的通知以反规避条款（17 U.S.C. 1201）为主、服务条款为辅，主张本地库的「Protected Database Design」受版权保护、提取密钥即规避，没有主张商标，并请 GitHub 防止同一人或他人再上传类似内容；GitHub 2026-07-15 按 1,464 个仓库的派生网络屏蔽（[通知](https://github.com/github/dmca/blob/master/2026/07/2026-07-13-wechat.md)）。一键部署的整条链里含取密钥工具的 bjdr69/docker-wxcli 也被点名并删除（[通知](https://github.com/github/dmca/blob/master/2026/09/2026-09-25-wechat.md)）；只调用用户自装 wx-cli 的仓库（如 JimLiu/baoyu-skills）到 2026-11-04 没有被点名。r266-tech/wechat-cli 被屏蔽后同作者另起 r266-tech/wx-cli（[通知](https://github.com/github/dmca/blob/master/2026/08/2026-08-04-wechat.md)）。同一作者 2026-09-14 重开的 jackwener/wx-cli-again 到 2026-11-04 仍可访问、有 1,793 个 fork；另有至少 4 个不挂 fork 关系的全历史拷贝仍可访问（hum0r23/wx-cli、Steady775/wx-cli、RealMnzn/wx-cli、Markjinli/wx-cli-gui），hum0r23 那个还带 v0.3.0 二进制；npm 上的 @jackwener/wx-cli 0.3.0 也还能装。36 份通知点名的仓库 2026-11-04 有 25 个返回 451、5 个已删、6 个仍可访问（其中 4 个只剩 0–15 KB，推断已清空）。账号一侧：WeFlow 用户 2026-03-11 成批收到微信警告，协作者说是取密钥时被记录（[hicccc77/WeFlow #411](https://github.com/hicccc77/WeFlow/issues/411)）。详见 [§16.2](#162-issue-里的账号问题) 的 `client-hook` 一行。
 - **源码删除后发布物还在。** bilibili-api-python、BBDown、downkyi、BilibiliDown 的发布包仍可下载，依赖它们的下游拿不到后续修复，法律状态也不清楚。
 
 <a id="17-对歇存的启示"></a>
@@ -1178,7 +1184,7 @@ permissions:
 
 - 每个 App 要单独写流程，客户端改版就要重写；本次没有找到抖音、小红书、B站、快手、微博、知乎 App 收藏页的现成流程。
 - 剪贴板这一环各平台不同：Android 经 scrcpy 能同步到电脑；iPhone 镜像只能经通用剪贴板，mirroir-mcp 目前没有读剪贴板的工具（都待核实）。
-- 微信明文禁止，要单独确认；Android 的无障碍服务可被 App 查到，USB 调试在旧系统和部分国内 ROM 上可能查到（新系统对第三方 App 恒返回 0，见 [§16.1](#161-平台规则与可检测性)，待核实）；iPhone 镜像要 macOS 15 以上、欧盟不可用，中国大陆能否使用待核实。
+- 微信明文禁止，要单独确认；Android 的无障碍服务可被 App 查到，USB 调试在 Android 16 及以前查得到（Android 17 起、功能开关打开时才对第三方 App 返回 0，见 [§16.1](#161-平台规则与可检测性)），国内 ROM 待核实；iPhone 镜像要 macOS 15 以上、欧盟不可用，中国大陆能否使用待核实。
 - 慢，每条要几秒到十几秒；只拿到渲染出来的内容，原始文件要靠链接那一步；受保护的画面截图为黑。
 - 默认用本机 OCR 和本机模型，不把截图发给云端；用户选云端视觉模型时标「离开本机」。
 - 另一种形态是不做插件、只提供 Skill，让用户自己的 Agent（例如 Claude Code 的 computer use）按流程操作，再把链接交给歇存的本地接口。这把节奏和判断交给 Agent，更难控制，不建议作为默认。
@@ -1215,7 +1221,7 @@ permissions:
 - X 自动化规则页被验证页拦截，条款来自搜索摘要，页面日期未核实；Instagram 条款页注明 2027-01-20 生效的新版本没有读。
 - X 服务条款页（x.com/en/tos）复核时返回 402，页面日期 2026-10-09 和每 100 万条帖子 1.5 万美元的违约金条款没有对照原文。
 - 微信个人账号使用规范、微博、知乎、豆瓣、YouTube、Instagram 的条款号来自抓取工具的摘要，没有逐条和原文比对。
-- Android 的 USB 调试设置项对第三方 App 恒返回 0 从哪个版本开始（二手来源称 Android 17 QPR1、Pixel），国内厂商 ROM 是否跟进，App 有没有其他办法判断 USB 调试状态。
+- Android 的 USB 调试设置项：起始版本已按 AOSP 源码核实，Android 17 起、功能开关打开时对第三方 App 返回 0，Android 16 及以前读得到真值（[调研 10 §5.1](10-desktop-and-android-agents.md#51-平台能不能察觉)）；还待核实的是国内厂商 ROM 是否跟进，App 直接查 settings provider 或用其他办法能不能判断 USB 调试状态。
 - 列出已开启无障碍服务的接口在 Android 11 起的包可见性限制下是否过滤结果；文档没标权限要求，没有实机验证。
 - 国内 App 在没有 Google Play 服务的机型上用什么风控 SDK，能否识别无障碍服务、ADB、注入点击，没有公开资料。
 - iPhone 镜像在中国大陆能否使用；iOS 26、27 有没有新增识别镜像的 API；录屏感知接口在 iPhone 镜像时的取值；镜像的输入在 iPhone 上以触摸还是指针事件到达。

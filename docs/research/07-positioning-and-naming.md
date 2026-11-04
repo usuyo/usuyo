@@ -769,6 +769,8 @@ You could call it a personal knowledge base, but it isn't one: a knowledge base 
 <a id="105-用词表"></a>
 ### 10.5 用词表
 
+2026-11-04：用户定了不要角色或动物，下面关于鹭和形象的内容只作记录。见 [open-decisions §1.7](../open-decisions.md#17-11-04-回复记下的)。
+
 管对外文案，在 [§1.2](#12-名字要体现什么) 的「应该避开的词」和 [product-model §4](../product-model.md#4-文案规则) 的基础上补。前一张表原本管名字，这里按它也管文案：表里的词只在描述外部（推荐流、知识库对照、用户原话）时出现，不用来说思鹭是什么、做什么。
 
 **要用**

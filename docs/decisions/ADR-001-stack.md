@@ -2,6 +2,10 @@
 
 日期：2026-10-21 · 状态：accepted
 
+2026-11-04：用户问内核用 Rust 还是 Go，重新讨论，见 discussion [第 6 条](../discussion.md#6-桌面壳)、[第 7 条](../discussion.md#7-内核语言) 和 [调研 12](../research/12-shell-and-core-language.md#0-结论)；用户回答之前本 ADR 仍有效。
+
+2026-11-04：下文的版本说法停在 2026-10-21，已过时：MyGo 最新是 0.7.4（2026-11-01 发布，[releases](https://github.com/egoist/mygo/releases)），不是 0.5.x，要求 Go 1.27.3+（[调研 12 §4.1](../research/12-shell-and-core-language.md#41-选项-a)）；Wails v3 在 2026-10-26 发了正式版 v3.0.0（[发布说明](https://github.com/wailsapp/wails/releases/tag/v3.0.0)）。
+
 ## 决定
 - 内核、CLI、MCP、daemon 用 Go（单二进制、纯 Go 依赖优先、无 cgo）。
 - 桌面壳用 MyGo，web 前端 TypeScript + Vite + pnpm。

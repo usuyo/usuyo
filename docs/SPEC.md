@@ -3,6 +3,8 @@
 
 状态：草案 · 2026-10-21。契约字段一旦 M0 落地即视为稳定，变更需 ADR。
 
+2026-11-04：本篇是 v0，和插件协议 v1、product-model 有 [18 处对不上](#附和别的文档对不上的-18-处)，接口要分五层重写，见 [overview §5](overview.md#5-接口做到哪了) 和 [TODO](TODO.md#2-文档和接口设计)。
+
 <a id="1-仓库布局monorepo"></a>
 ## 1. 仓库布局（monorepo）
 
@@ -195,3 +197,27 @@ bleve（纯 Go）。中文用 CJK 双字分析器（解决二字词），同时�
 5. 删除 `.xiecun/index/` 后 `xiecun reindex` 恢复搜索。
 
 不做：GUI、扩展、手机桥、平台适配器、OCR/ASR、同步。
+
+<a id="附和别的文档对不上的-18-处"></a>
+## 附：和别的文档对不上的 18 处
+
+2026-11-04 记，第 1 层重写时逐条对齐。标「已知」的，open-decisions 或插件协议里已经记过。
+
+1. **本机接口**：[§1](#1-仓库布局monorepo) 和 `internal/api/doc.go` 写 HTTP/JSON-RPC；[ADR-002](decisions/ADR-002-frontend-stack.md#和内核的接口) 写 HTTP 加 WebSocket 事件；[协议 §5.1](plugin-protocol.md#51-本机-http-接口) 是 `/v1/*` 的 REST。
+2. **知识层目录**：[§2](#2-资料库目录真相源) 是 `threads/`、`thoughts/`，[§10](#10-mcp-工具m0) 的 op 叫 `set_thread`；product-model 和协议的导出例子用 `topics/`、`cards/`。已知。
+3. **画布几个**：[§2](#2-资料库目录真相源) 只有一个 `canvas.json`；[product-model](product-model.md#12-待决问题) D7 建议多个。
+4. **任务状态**：[§3](#3-manifestjson) 和 schema 的 `jobs` 只有 `pending`、`done`、`failed`；[product-model §7.2](product-model.md#72-处理任务) 有六种。
+5. **注意力**：[§5](#5-derived-文件约定) 的 `attention.json` 带 `unseen|noticed|digested|released`；product-model 只记发生过的事，放下已作废。
+6. **存在状态和私密**：[§3](#3-manifestjson) 用 `slimmed`、`trashed`，product-model 叫只留文字（K1、K2 待定）；[§10](#10-mcp-工具m0) 按 `private: true` 过滤，manifest 里却没有这个字段。
+7. **通用网页获取**：[§12](#12-m0-范围) 写内核内置 `web-generic`，验收用公众号链接；P1 已定为官方插件，随安装包预装，`builtin/` 前缀，不带站点规则（[协议 §8.4](plugin-protocol.md#84-三种来源)）。已知。
+8. **MCP 里不可信内容怎么标**：[§10](#10-mcp-工具m0) 每条结果带 `untrusted`；feature 001 外面套一层；[03 §7](research/03-agent-protocols.md#7-对歇存-mcp-与-acp-设计的启示) 在信封顶层写一次。
+9. **配置目录**：feature 001 写 `~/.config/xiecun/`，open-decisions 写 `~/.config/seelu/`，协议示例在 `~/Library/Application Support/Seelu/`；[§2](#2-资料库目录真相源) 的资料库里还有 `.xiecun/config.json`。
+10. **本机接口的令牌**：product-model 只有一个，能重新生成；协议按投递端分别生成；03 建议放进库内的 `.xiecun/`。已知。
+11. **`.meta.json`**：[§5](#5-derived-文件约定) 是 `{by, version, at, input}`；[协议 §4.2](plugin-protocol.md#42-转换的-run) 改由宿主代写，另记输入文件的哈希和 `model`。
+12. **快照字段**：协议要宿主记 `inputUrl`、`resolvedUrl`、实际拿到的输出、`access`、投递来的 `adapter: deliver:<令牌名>`；schema 的快照只有 6 个字段，还是 `additionalProperties: false`。
+13. **`missing`**：[§3](#3-manifestjson) 是自由字符串；协议要用 `outputs` 的词表。
+14. **导出身份键和导出记录**：[ADR-003](decisions/ADR-003-plugins.md#7-导出与读回) 写 `xiecun_id`、`.xiecun/exports/`，协议写 `seelu_id`、`.seelu/exports/`，都是旧占位。已知。
+15. **插件来源怎么显示**：product-model 写官方不内置插件来源、显示签名指纹；[协议 §8.4](plugin-protocol.md#84-三种来源) 预装两个 `builtin/` 插件，显示由哪个发版工作流构建。已知。
+16. **GitHub App**：[ADR-003 §6](decisions/ADR-003-plugins.md#6-分发与校验) 定了一开始就做；O3 建议先不做，在 [discussion 第 8 条](discussion.md#8-插件怎么校验)。
+17. **改动提议多久作废**：product-model 写 7 天，03 举例 24 小时；A2 建议 7 天，没定。
+18. **插件清单是 v0 还是 v1**：[§8](#8-适配器协议-v0) 说 v0 已由协议取代，`pkg/contract/README.md` 仍把 [§8](#8-适配器协议-v0) 当规范来源；按 D-j 有意保留。
