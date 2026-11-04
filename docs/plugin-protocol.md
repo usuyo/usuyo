@@ -1660,6 +1660,9 @@ seelu plugin pack --version 0.3.1 dist/*
 23. OPML 导进来的是订阅，不是条目：[§3.9](#39-从文件导入) 的导入插件只会列出条目，要有地方建一批跟着收的订阅。只在 [discussion 第 1 条](discussion.md#1-什么东西进资料库)选 B 时需要：[调研 11 §6](research/11-subscriptions-compat-and-wx-cli.md#6-对插件协议的影响)。
 24. 上游 AI 产物放哪：fetch 输出加一个可选的 `derived` 字段，放 Horizon 这类上游已经算好的摘要、打分和标签，宿主照转换插件的规矩移进 `derived/`；另加一个原文来源标记（例如 `textOrigin: platform | machine`），界面据此标出原文是机器写的。`derived` 那半要不要做，随 [discussion 第 1 条](discussion.md#1-什么东西进资料库)一起答：[调研 11 §6](research/11-subscriptions-compat-and-wx-cli.md#6-对插件协议的影响)。
 25. 连本机 Unix socket 的权限：包装常驻进程类的工具（例如 wx-cli 的 `daemon.sock`）时，`fs.read`、`network.hosts` 都表达不了「连本机某个 socket」，要么加一个权限项，要么要求这类插件走本机 HTTP（[§2.7](#27-权限-permissions)）。只在第三方写包装常驻进程的插件时用得到：[调研 11 §6](research/11-subscriptions-compat-and-wx-cli.md#6-对插件协议的影响)。
+26. 按关键词搜、按创作者主页列：现有 `list` 只列用户自己的收藏夹和列表，没有带查询词的搜索，也没有「某个创作者的主页」这种来源；结果只列出、不进库，用户挑了才 `fetch`（2026-11-04 用户要，[open-decisions §1.8](open-decisions.md#18-grill-回答)）。
+27. 评论：`fetch` 输出没有评论这一类；要可选、默认不取，按平台或按条打开，能设上限（同上）。
+28. 扫码登录：要账号的平台在内置浏览器里打开登录页、用户扫码，登录态按站点存本机；和 [§6](#6-凭据) 的凭据怎么接、过期后怎么提示重扫（同上）。
 
 调研 11 建议的其余几处还没编号：`owner` 的含义、同时带 `url` 和 `ref` 时先用哪个、`sites[].site` 引用设置项、`origin.subscription`、`feed:` 来源按主机算节奏，见[调研 11 §6.2](research/11-subscriptions-compat-and-wx-cli.md#62-要补的地方)。
 
