@@ -175,7 +175,7 @@ flowchart LR
 | 主题页、记一句 | `topic`、`takeaway` | 你起名的一组条目和它的 Markdown 页；你对一整条写的一句 |
 | 卡片 | `card` | 你自己写的一段话，能引用条目；留不留等 [3](discussion.md#3-知识的单位) |
 | 获取层级 | `access`、`login` | 插件靠哪一层拿内容、要不要登录；七层见 [§6](#6-插件能接哪些方案) |
-| 获取插件组织 | `{fetch-org}` | 见文首 |
+| 获取插件组织 | `{fetch-org}`、`{fetch-org}-hook` | 见文首；client-hook 插件单独放后一个（11-04） |
 | 插件来源 | `pluginSource`（新） | 你添加的组织名或 `owner/repo` |
 | 列表 | `source` | 插件能列出的一个收藏夹或清单 |
 | 出处 | `origin` | 一条从哪个平台、链接、入口进来 |
