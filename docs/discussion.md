@@ -104,6 +104,8 @@
 <a id="5-名字"></a>
 ## 5. 名字
 
+**已答（11-04）**：「dokokara备选，然后我想再找个yohaku这种的」。Dokokara 是备选，再找一个像 Yohaku 的名字。记在 [open-decisions §1.8](open-decisions.md#18-grill-回答)。
+
 **问题**：Innei 有一个还在更新的「余白 / Yohaku」，Mac 上还有「YOHAKU – liquid notes」（[调研 09 §12.3](research/09-fog-and-name.md#123-yohaku-细查)，11-03 查）。和它们同名你能接受吗？不能就定 Dokokara。答了，命令、`.{name}/`、配置目录、环境变量前缀、MCP 服务名、`{name}_id` 才能定。
 
 **为什么现在问**：不挡写文档，但越晚改得越多；`{name}_id` 会写进你的笔记库，能导出之前要定死。
