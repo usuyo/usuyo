@@ -45,7 +45,7 @@
 - [ ] 权限项加连本机 Unix socket，只在第三方写包装时要 — 文档会话 · 小 · 不挡
 - [ ] `builtin/` 的身份和发版对上[插件协议 §8.4](plugin-protocol.md#84-三种来源)；`web` 免 `match`、按主机分节奏 — 文档会话 · 中 · 挡预装的通用网页获取插件
 - [ ] 照建议把 [L5–L7](open-decisions.md#4-借鉴其他软件)、[R2、R3](open-decisions.md#12-声明与责任) 写进协议 — 文档会话 · 小 · 挡首批插件
-- [ ] [CLAUDE.md](../CLAUDE.md)：改文档地图、原则 1、原则 2（11-04 K5 A 的措辞）、原则 6（11-04 A3 A 的措辞）、技术栈、里程碑、一句话；中英文你定 — 文档会话拟稿，你点头 · 小 · 不改则新会话照 M0 开工
+- [x] [CLAUDE.md](../CLAUDE.md)：一句话、文档地图、原则 1、2、6、技术栈、第一版范围（11-04，你点头后改；名字等定名再换）
 - [ ] [03](research/03-agent-protocols.md#13-现状2026-07-28-修订要点) 第 80 行加注：rmcp 3.0.0 已在 2026-07-28 发正式版（[crates.io](https://crates.io/crates/rmcp/versions)，11-04 查） — 文档会话 · 一行 · 不挡
 - [ ] [04 §6.4](research/04-tech-options.md#64-桌面壳mygo-与回退路径) 的版本说法过时：MyGo 0.7.4、Wails v3 正式版，出处见[调研 12](research/12-shell-and-core-language.md#25-壳的成熟度) — 文档会话 · 小 · 不挡
 - [ ] [ADR-002](decisions/ADR-002-frontend-stack.md#和内核的接口) 第 37 行：接受 SSE 就把 WebSocket 换掉 — 文档会话 · 一句 · 不挡
@@ -61,7 +61,7 @@
 ## 3. 原型和量测
 
 - [ ] 迷雾画布原型：点阵雾、口子、所有变化走一个时钟；顺带试壳 — 主会话做，你看 · 大 · 挡地图界面
-- [ ] `go.mod` 从 Go 1.26.0 升到 MyGo 要求的 1.27.3 以上，CLAUDE.md 的「Go 1.23+」跟着改 — 主会话 · 小 · 挡接壳
+- [ ] `go.mod` 从 Go 1.26.0 升到 MyGo 要求的 1.27.3 以上（CLAUDE.md 已写 1.27.3+） — 主会话 · 小 · 挡接壳
 - [ ] 可选：agent-desktop 给 Mac 微信收藏页拍只读快照（[10 §6 第 1 条](research/10-desktop-and-android-agents.md#6-待核实清单)），要你同意并给终端授辅助功能 — 主会话 · 十分钟 · 让 P10 有实测
 - [ ] 补 [06 §18](research/06-platform-access-and-account-risk.md#18-待核实清单) 里首批平台的事实（抖音、小红书、元宝、视频号） — 文档会话 · 中 · 挡对应插件
 
