@@ -173,7 +173,7 @@ A（Go + MyGo，即现在的 ADR-001）随[第 6 条](#6-桌面壳)出局；D（
 <a id="8-插件怎么校验"></a>
 ## 8. 插件怎么校验
 
-**已答（11-04）**：照 10-28 做 GitHub App（O3 A），不改。记在 [open-decisions §1.8](open-decisions.md#18-grill-回答)。
+**已答（11-04）**：照 10-28 做 GitHub App（O3 A），不改；App 用无服务器中转接 webhook，校验在 GitHub Actions 里跑。记在 [open-decisions §1.8](open-decisions.md#18-grill-回答)。
 
 **问题**：10-28 你定了 GitHub App 一开始就做。我们建议先不做，把校验放进发版的可复用工作流，同意改吗？答了，[插件协议 §8](plugin-protocol.md#8-打包发布与分发)和 ADR-003 就能定稿。
 
