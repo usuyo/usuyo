@@ -1,8 +1,11 @@
 # 歇存 Xiecun
 
-开源的注意力回收工具。把散落在各平台收藏夹里的内容，变成你自己的、可搜索、可交给 Agent 处理的文本资料库。
+在推荐流外，维护一套你自己的思路。
 
+- 整体设计（先读）：[docs/overview.md](docs/overview.md)
 - 产品定义：[docs/PRD.md](docs/PRD.md)
+- 待讨论：[docs/discussion.md](docs/discussion.md)
+- 要做的事：[docs/TODO.md](docs/TODO.md)
 - 技术规格：[docs/SPEC.md](docs/SPEC.md)
 - 功能文档：[docs/features/](docs/features/)
 - 架构决策：[docs/decisions/](docs/decisions/)
