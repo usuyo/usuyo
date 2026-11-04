@@ -24,7 +24,7 @@
 - [ ] [12. 能不能读浏览器的登录状态](discussion.md#12-能不能读浏览器的登录状态) — 你 · 一句 · 挡宿主读不读 cookie 库
 - [ ] [13. 占屏幕的插件能不能自己跑](discussion.md#13-占屏幕的插件能不能自己跑) — 你 · 一句 · 挡视觉层调用的排法
 - [ ] [14. 资料库能不能放进同步盘](discussion.md#14-资料库能不能放进同步盘) — 你 · 一句 · 挡隐藏目录的结构
-- [ ] [15. Agent 能不能直接收下](discussion.md#15-agent-能不能直接收下) — 你 · 一句 · 挡 MCP 工具表
+- [x] [15. Agent 能不能直接收下](discussion.md#15-agent-能不能直接收下)：直接生效，可撤销（11-04）
 - [ ] [16. 哪些文档公开](discussion.md#16-哪些文档公开) — 你 · 一句 · 挡声明里的链接
 - [ ] [17. 兼容和开创各指什么](discussion.md#17-兼容和开创各指什么) — 你 · 三问 · 挡 PRD 这两句定稿
 
@@ -45,7 +45,7 @@
 - [ ] 权限项加连本机 Unix socket，只在第三方写包装时要 — 文档会话 · 小 · 不挡
 - [ ] `builtin/` 的身份和发版对上[插件协议 §8.4](plugin-protocol.md#84-三种来源)；`web` 免 `match`、按主机分节奏 — 文档会话 · 中 · 挡预装的通用网页获取插件
 - [ ] 照建议把 [L5–L7](open-decisions.md#4-借鉴其他软件)、[R2、R3](open-decisions.md#12-声明与责任) 写进协议 — 文档会话 · 小 · 挡首批插件
-- [ ] [CLAUDE.md](../CLAUDE.md)：改文档地图、原则 1、原则 2（11-04 K5 A 的措辞）、技术栈、里程碑、一句话；中英文你定 — 文档会话拟稿，你点头 · 小 · 不改则新会话照 M0 开工
+- [ ] [CLAUDE.md](../CLAUDE.md)：改文档地图、原则 1、原则 2（11-04 K5 A 的措辞）、原则 6（11-04 A3 A 的措辞）、技术栈、里程碑、一句话；中英文你定 — 文档会话拟稿，你点头 · 小 · 不改则新会话照 M0 开工
 - [ ] [03](research/03-agent-protocols.md#13-现状2026-07-28-修订要点) 第 80 行加注：rmcp 3.0.0 已在 2026-07-28 发正式版（[crates.io](https://crates.io/crates/rmcp/versions)，11-04 查） — 文档会话 · 一行 · 不挡
 - [ ] [04 §6.4](research/04-tech-options.md#64-桌面壳mygo-与回退路径) 的版本说法过时：MyGo 0.7.4、Wails v3 正式版，出处见[调研 12](research/12-shell-and-core-language.md#25-壳的成熟度) — 文档会话 · 小 · 不挡
 - [ ] [ADR-002](decisions/ADR-002-frontend-stack.md#和内核的接口) 第 37 行：接受 SSE 就把 WebSocket 换掉 — 文档会话 · 一句 · 不挡
