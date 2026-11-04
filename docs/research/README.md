@@ -17,4 +17,5 @@
 | [10 电脑端与安卓端的界面驱动](10-desktop-and-android-agents.md) | agent-desktop（经系统无障碍树读写桌面 App 的命令行）和 Mika（在隐藏的后台屏上替人操作 App 的安卓 Agent）各是什么、怎么工作、要授予什么、靠不靠模型；电脑端和安卓端怎么接进获取插件、access 与 login 怎么标；对插件协议各节的建议；平台能不能察觉、隐私和供应链风险 |
 | [11 订阅、兼容与 wx-cli](11-subscriptions-compat-and-wx-cli.md) | wx-cli 是哪个、DMCA 通知写了什么、收藏能拿到什么、做成插件卡在哪、获取插件组织放不放；Horizon 怎么挑、怎么接；feed 条目进不进资料库：五个选项（A、A2、B、C、D）的对比和推荐；兼容矩阵；开创性哪些站得住；插件协议要补什么 |
 | [12 桌面壳与内核语言：Rust 还是 Go](12-shell-and-core-language.md) | 语言到底由什么决定；MyGo、Wails v3、Tauri 2、Electron 各成熟到哪；六个选项（A、A′、B、C、D、E）的对比、迁移成本和推荐；什么会改变推荐；切换要改哪些文档和代码 |
+| [13 第四轮：像 Yohaku 的名字](13-yohaku-like-names.md) | 「像 Yohaku」按你选的四条怎么挑（审美或版面词、留白、短而安静、不限日语）；101 个候选的占用，24 个细查词义、误读和同名产品，和 Dokokara 一起打分；怀疑者复核后推荐 usuyo，能接受被叫「飞白」就换 hihaku，rangai 第三；要你回答的一问 |
 | [14 同步：学 Hatoba 的 Cloudflare 方案](14-sync-like-hatoba.md) | Hatoba 怎么在你自己的 Cloudflare 账号里同步（Worker、D1、端到端加密、冲突、撤销设备）；本产品要同步什么、R2 放媒体、花多少钱和额度卡在哪；本机不加密、只加密离开本机的；冲突按层分；先文字后媒体；后端做成内核里只经手密文的接口；要你回答的十二问 |
