@@ -115,6 +115,7 @@
 | [第 4 条 删掉以后留下什么](discussion.md#4-删掉以后留下什么) | 11-04 | 选了「回收站加删除记录 (Recommended)」（预览：回收站 30 天；删除记录只记身份和标题；跟着收再遇到就跳过，你自己再粘贴时问一句；「彻底忘掉」连记录一起清；原则 2 改成机器永不改写或删除原样，只在你选「只留文字」或「删掉」时移走，先进回收站） | [K1](#11-存储同步与联网) 定为 A，K3 A 和 K5 A 按预览一并记下。K2（「只留文字」放哪）和 K4 没在预览里，仍按建议 | [PRD 原则 2](PRD.md#4-原则)、[PRD 7.10](PRD.md#710-存储删除与联网)、[PRD §8](PRD.md#8-条目的状态)、[discussion 第 4 条](discussion.md#4-删掉以后留下什么)；[CLAUDE.md](../CLAUDE.md) 原则 2 要跟着改，等你点头（[TODO](TODO.md#2-文档和接口设计)） |
 | [第 5 条 名字](discussion.md#5-名字) | 11-04 | 「dokokara备选，然后我想再找个yohaku这种的」 | 名字还没定。Dokokara 降为备选；Yohaku 本身因撞名不用，你想再找一个像 Yohaku 的名字。哪些地方「像」先问清，再开第四轮。全仓改名继续暂停 | [discussion 第 5 条](discussion.md#5-名字) |
 | [第 5 条 名字](discussion.md#5-名字)（追问） | 11-04 | 问「像 Yohaku」像哪几点，四项都选了：「日语里的美学或版面词」「意思：留白、不填满」「发音短、安静、字母少」「不限日语，只要气质像」 | 第四轮照这四条找：真实词，有词典出处；意思落在留白、不填满；2–3 个音节、至多 6 个字母，命令名就是它；日语优先，别的语言气质像也行。结果写进调研 13 | 调研 13（进行中） |
+| [第 6 条 桌面壳](discussion.md#6-桌面壳)、[第 7 条 内核语言](discussion.md#7-内核语言) | 11-04 | 「之前我们想的mygo呢，感觉也可以吧，然后就是要跨平台」；「手机上也要，但是能不要tauri2不，gpui呢？或者electron？不然就还是tauri2」；「其实就桌面端吧，手机端其实可以考虑native去重写，不用考虑手机上的跨平台，所以go感觉也是够的」 | 定为 A：Go 内核加 MyGo 壳，[ADR-001](decisions/ADR-001-stack.md) 照旧。只做桌面三系统（macOS、Windows、Linux）；手机以后原生重写，不要求和桌面共用内核。你不想用 Tauri 2（没说原因）。退路是 A′：MyGo 出问题就换 Wails v3，内核和前端不动；退出条件写进 ADR-001。调研 12 推荐的 C（Rust + Tauri 2）不采用 | [ADR-001](decisions/ADR-001-stack.md)、[PRD §0](PRD.md#0-状态与读法)、[overview](overview.md#3-已经定了的)、[调研 12](research/12-shell-and-core-language.md#0-结论)、discussion [第 6 条](discussion.md#6-桌面壳)和[第 7 条](discussion.md#7-内核语言) |
 
 <a id="2-命名与组织"></a>
 ## 2. 命名与组织

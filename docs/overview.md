@@ -12,7 +12,7 @@ v0.1 · 2026-11-04。名字没定：正文写「本产品」，标识写 `{name}
 - **已定**：见 [§3](#3-已经定了的)；原则是 CLAUDE.md 的六条（[PRD §4](PRD.md#4-原则) 扩成九条）。
 - **待定**：17 条，按 [discussion](discussion.md#1-什么东西进资料库) 的顺序一次问一条。
 - **接口**：设计了一半。插件协议是 v1 草案，其余多在 v0 或只有一句（[§5](#5-接口做到哪了)）。
-- **语言**：推荐 Rust 内核加 Tauri 2 壳（C）；不要 Rust 就 Go 加 Wails v3（A′）。
+- **语言**：Go 内核加 MyGo 壳（11-04 定）；只做桌面，手机以后原生重写；MyGo 出问题换 Wails v3。
 - **wx-cli**：2026-07-15 起被 GitHub 屏蔽（腾讯方面的 DMCA），你这台微信 3.8.8.19 也用不了。建议 `{fetch-org}` 不收微信 client-hook 插件，导出文件照 official-export 导入，见 [9](discussion.md#9-自己的获取插件组织收什么)。
 - **RSS、Horizon**：建议在现成阅读器里读，加星算收下；Horizon 当普通 feed，见 [1](discussion.md#1-什么东西进资料库)。
 
@@ -42,7 +42,9 @@ v0.1 · 2026-11-04。名字没定：正文写「本产品」，标识写 `{name}
 | 不用 Seelu，只定英文名；倾向 Dokokara，没定 | 11-01、11-03 | 「然后Dokokara我感觉挺合适」（[§1.6](open-decisions.md#16-11-03-回复记下的)） |
 | 不要角色或动物（M14 关，M10–M13 不再问）；调研过的方案都能做成插件，`{fetch-org}` 收哪些见 [9](discussion.md#9-自己的获取插件组织收什么)；兼容和开创都要，以后支持 RSS、Horizon 一类，是方向，见 [17](discussion.md#17-兼容和开创各指什么) | 11-04 | 「不要角色或者动物」（[§1.7](open-decisions.md#17-11-04-回复记下的)） |
 
-**定了、在重问**：Go 加 MyGo（10-21，[ADR-001](decisions/ADR-001-stack.md)），回答前照旧，见 [6](discussion.md#6-桌面壳)、[7](discussion.md#7-内核语言)；分发用 GitHub App（10-28，[ADR-003](decisions/ADR-003-plugins.md)），见 [8](discussion.md#8-插件怎么校验)。
+**定了、11-04 重问后确认**：Go 加 MyGo（10-21，[ADR-001](decisions/ADR-001-stack.md)），只做桌面，退路 Wails v3（[6](discussion.md#6-桌面壳)、[7](discussion.md#7-内核语言)）。
+
+**定了、在重问**：分发用 GitHub App（10-28，[ADR-003](decisions/ADR-003-plugins.md)），见 [8](discussion.md#8-插件怎么校验)。
 
 **你说过、理解待确认**：你说雾是收了一大堆之后的脑雾（11-02，「不知道从何开始去处理」，[§1.5](open-decisions.md#15-11-02-回复记下的)）；只给口子、不驱散是我们的理解，见 [2](discussion.md#2-地图上一直清楚的是什么)。
 
@@ -84,7 +86,7 @@ flowchart LR
 
 设计分五层：0 占位规则、版本、错误模型、ID，现在能写；1 资料库 v1，加改动提议和改动记录的格式；2 一份内核服务契约，派生 HTTP、MCP、命令行；3 plugin-kit；4 投递、导出、分发、订阅。
 
-接口和语言无关，不等 [7](discussion.md#7-内核语言)；只有界面端口认哪个 `Origin`、内核是否跑在壳里要等它。
+接口和语言无关；内核用 Go（[7](discussion.md#7-内核语言)），界面端口认哪个 `Origin`、内核是否跑在壳里，在第 2 层按 MyGo 定。
 
 <a id="6-插件能接哪些方案"></a>
 ## 6. 插件能接哪些方案
@@ -187,6 +189,6 @@ flowchart LR
 ## 11. 文档地图
 
 - **入口**：overview、[PRD](PRD.md)、[discussion](discussion.md)、[TODO](TODO.md)。
-- **参考**：[open-decisions](open-decisions.md)（完整登记表；「先定哪些」由 discussion 取代）、[product-model](product-model.md)（部分并入 PRD v0.4）、[plugin-protocol](plugin-protocol.md)（v1 草案）、[acknowledgements](acknowledgements.md)（致谢候选）、[ADR-001](decisions/ADR-001-stack.md)（可能被 [7](discussion.md#7-内核语言) 改写）、[ADR-002](decisions/ADR-002-frontend-stack.md)、[TEMPLATE](features/TEMPLATE.md)。
+- **参考**：[open-decisions](open-decisions.md)（完整登记表；「先定哪些」由 discussion 取代）、[product-model](product-model.md)（部分并入 PRD v0.4）、[plugin-protocol](plugin-protocol.md)（v1 草案）、[acknowledgements](acknowledgements.md)（致谢候选）、[ADR-001](decisions/ADR-001-stack.md)（11-04 确认，补了退出条件）、[ADR-002](decisions/ADR-002-frontend-stack.md)、[TEMPLATE](features/TEMPLATE.md)。
 - **调研**：[research/README](research/README.md) 是索引；01–10 是参考，08 被 09 取代，07 部分被取代，06 公开不公开等 [16](discussion.md#16-哪些文档公开)；新的 [11](research/11-subscriptions-compat-and-wx-cli.md#0-结论) 讲订阅和 wx-cli，[12](research/12-shell-and-core-language.md#0-结论) 讲壳和语言。
 - **过时待改**：[SPEC](SPEC.md)、[ADR-003](decisions/ADR-003-plugins.md)、[feature 001](features/001-m0-core-loop.md)，还按 M0 写、用旧名。

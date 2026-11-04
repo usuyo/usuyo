@@ -15,8 +15,7 @@
 - [ ] [3. 知识的单位](discussion.md#3-知识的单位) — 你 · 一句 · 挡资料库目录、MCP 的 `op`
 - [ ] [4. 删掉以后留下什么](discussion.md#4-删掉以后留下什么) — 你 · 一句 · 挡条目的 `state`、回收站
 - [ ] [5. 名字](discussion.md#5-名字) — 你 · 想一想 · 挡写进磁盘的标识、注册组织
-- [ ] [6. 桌面壳](discussion.md#6-桌面壳) — 你 · 一句 · 挡改 ADR-001
-- [ ] [7. 内核语言](discussion.md#7-内核语言) — 你 · 一句 · 挡第一行代码
+- [x] [6. 桌面壳](discussion.md#6-桌面壳)、[7. 内核语言](discussion.md#7-内核语言)：Go 加 MyGo（11-04）
 - [ ] [8. 插件怎么校验](discussion.md#8-插件怎么校验) — 你 · 一句 · 挡发版流程、ADR-003
 - [ ] [9. 自己的获取插件组织收什么](discussion.md#9-自己的获取插件组织收什么) — 你 · 想一想 · 挡首批插件的范围
 - [ ] [10. 首批平台](discussion.md#10-首批平台) — 你 · 给三个事实 · 挡 `{fetch-org}` 的第一批仓库
@@ -56,7 +55,7 @@
 ## 3. 原型和量测
 
 - [ ] 迷雾画布原型：点阵雾、口子、所有变化走一个时钟；顺带试壳 — 主会话做，你看 · 大 · 挡地图界面
-- [ ] 内核选 C（Rust）时：搭空的 Tauri 2 + tantivy + rusqlite + rmcp + tokio 骨架，量增量重编和 `cargo test`；重编超过约 10 秒就退回 A′（[调研 12](research/12-shell-and-core-language.md#5-什么会改变推荐)） — 主会话 · 半天 · 挡写代码
+- [ ] `go.mod` 从 Go 1.26.0 升到 MyGo 要求的 1.27.3 以上，CLAUDE.md 的「Go 1.23+」跟着改 — 主会话 · 小 · 挡接壳
 - [ ] 可选：agent-desktop 给 Mac 微信收藏页拍只读快照（[10 §6 第 1 条](research/10-desktop-and-android-agents.md#6-待核实清单)），要你同意并给终端授辅助功能 — 主会话 · 十分钟 · 让 P10 有实测
 - [ ] 补 [06 §18](research/06-platform-access-and-account-risk.md#18-待核实清单) 里首批平台的事实（抖音、小红书、元宝、视频号） — 文档会话 · 中 · 挡对应插件
 
