@@ -477,7 +477,7 @@ settings:
 - **不计入节奏的**：`canonicalize` 不占单调用锁，不计 `interval` 和 `daily`，展开短链另有每平台每分钟上限（默认 30 次），所以正在下大视频时，新贴的链接照样几秒内拿到身份；`health` 不计（`--probe` 只在用户点「检查登录」时发一次）；`access: official-export` 且 `network.mode: none` 的能力只读本机文件，不受节奏限制，可以并行。
 - **队列顺序**：用户手动收下 > 跟着收 > 批量导入。
 - **整机锁和设备锁。** 平台锁之外，宿主再加三把锁，不分平台、不分插件：声明了 `interaction: foreground` 的调用，全机同一时间只跑一个；声明了 `devices: [clipboard]` 的调用，全机同一时间只跑一个；同一台安卓设备同一时间只跑一个调用。原因：「复制链接」一类流程就算全走无障碍接口，也会弹菜单、改剪贴板，两个视觉层插件同时跑会互相弄坏（[§9.5](#95-视觉层流程)）。
-- **视觉层调用什么时候跑。** `interaction: foreground` 的调用和用到安卓设备的调用，能不能在跟着收、批量导入里自己跑，是待定项（[§13](#13-待定) 第 19 项）。插件在 `foreground` 的步骤之间发现用户在动键鼠，就发 `waiting`（`user-active`），等用户停手，等不到就回 `blocked`；分辨是不是用户的输入由 plugin-kit 的视觉层 SDK 做，插件自己合成的事件会不会被算进去，待核实。安卓设备没连、没解锁、没授权时，插件回 `dependency-missing`，跟着收跳过这一轮，不算失败；宿主不存手机的解锁密码，不替用户解锁。
+- **视觉层调用什么时候跑。** `interaction: foreground` 的调用和用到安卓设备的调用，能不能在跟着收、批量导入里自己跑：2026-11-04 定为每个插件单独设置，三种模式 `anytime`、`idle`（用户没在用时跑，一动键鼠就停）、`manual`（只在用户点开始时跑）。默认按 `interaction` 定：`background` 为 `anytime`，`foreground` 为 `idle`，用到安卓设备的为 `manual`；声明了 `devices: [clipboard]` 的调用，宿主在调用前存下剪贴板、结束后放回（[open-decisions §1.8](open-decisions.md#18-grill-回答)；字段名在实现运行器时定稿）。插件在 `foreground` 的步骤之间发现用户在动键鼠，就发 `waiting`（`user-active`），等用户停手，等不到就回 `blocked`；分辨是不是用户的输入由 plugin-kit 的视觉层 SDK 做，插件自己合成的事件会不会被算进去，待核实。安卓设备没连、没解锁、没授权时，插件回 `dependency-missing`，跟着收跳过这一轮，不算失败；宿主不存手机的解锁密码，不替用户解锁。
 - **默认值**取已装插件 `pacing` 里最严的一组，用户在设置里可以改。用户改过的值不会被新装插件的建议覆盖，设置里只提示「有插件建议更慢」。
 
 **几种情况运行器怎么做：**
@@ -1653,7 +1653,7 @@ seelu plugin pack --version 0.3.1 dist/*
 16. 第一个获取方式只拿到一部分时，要不要自动用下一个补全：[P5](open-decisions.md#7-获取与插件)。
 17. 电脑端视觉层先做什么，微信收藏读不到界面时退不退到截图加 OCR（[§9.5](#95-视觉层流程) 例子一）：[P10](open-decisions.md#7-获取与插件)。
 18. 安卓要不要做、做到哪（[§7](#7-权限与隔离) 的 adb 管理、[§9.5](#95-视觉层流程) 例子二）：[P18](open-decisions.md#7-获取与插件)。
-19. 视觉层调用（会占屏幕、剪贴板或手机）能不能在跟着收、批量导入里自己跑（[§3.1](#31-运行器与节奏)）：[P19](open-decisions.md#7-获取与插件)。
+19. ~~视觉层调用能不能自己跑~~：2026-11-04 已定，见 [§3.1](#31-运行器与节奏)（[P19](open-decisions.md#7-获取与插件)）。
 20. `{fetch-org}` 收不收包装自带模型的第三方手机 Agent 的获取插件（[§4.3](#43-模型与密钥由宿主代发)）：[R11](open-decisions.md#12-声明与责任)。
 21. 用户自己填的来源参数：`sources` 只能列插件自己知道的来源，填不进一个 feed 地址或一个账号（[§3.8](#38-list-与跟着收)）。提议加子命令 `resolve-source <输入>`，返回 `{match, source, title, order, owner}`；先例是 RSSHub 路由的 `:param`：[调研 11 §6](research/11-subscriptions-compat-and-wx-cli.md#6-对插件协议的影响)。
 22. feed 条目的身份和第一次拉：`guid`、`atom:id` 是任意字符串，套不进 plugin-kit 要求的 `contentId` 正则；别人的来源第一次拉只记下已有条目、不收，以后只收新出现的（[§3.8](#38-list-与跟着收)）：[调研 11 §6](research/11-subscriptions-compat-and-wx-cli.md#6-对插件协议的影响)。
