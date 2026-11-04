@@ -1,7 +1,7 @@
 <a id="致谢候选"></a>
 # 致谢候选
 
-状态：候选 · 2026-11-03
+状态：候选 · 2026-11-04
 
 歇存从下面这些项目学到了做法，或者计划包装、适配它们。这是以后放进 README 或关于页的候选名单，正式发布前要逐个确认许可证和署名要求。每条都注明它和歇存的关系。
 
@@ -29,9 +29,10 @@
   - google-gemini/computer-use-preview：用户 2026-11-01 给的视频号链接演示 Gemini 的 Computer Use，对应到这个参考实现是推断；截图要发到 Gemini 接口。
 - [02](research/02-adapter-ecosystems.md#调研-02--社区维护的来源适配器生态) 和 [05](research/05-note-apps-and-plugins.md#调研-05--笔记软件互通与插件化) 里被当作做法来源、准备兼容或借代码的 61 条，出处链到对应小节。只在表格里出现、没被引为做法的，以及只被当作反例的，不收。这 61 个仓库 2026-10-30 用 `gh api` 确认存在，许可证以返回值为准。
 - [调研 10](research/10-desktop-and-android-agents.md#调研-10--电脑端与安卓端的界面驱动agent-desktop-与-mika) 读的 2 条：用户 2026-11-03 点名的 vercel-labs/agent-desktop、wangzan101/Mika。[06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化) 同一天补了这两行，但 06 的「（致谢）」标注是 10-30 做的，没有重标，所以不在上面的 260 条里。agent-desktop 是视觉层获取插件可能依赖的运行时，记计划适配；Mika 只借做法，记参考设计。
+- [调研 11](research/11-subscriptions-compat-and-wx-cli.md#调研-11--订阅兼容与-wx-cli) 推荐的 1 条：用户 2026-11-04 点名的 Thysrael/Horizon。只读它发布的 Atom 或 Markdown 日报，不包装它的 MCP，记参考设计。调研 11 读的 wx-cli 系工具不接入，不收。
 - 归档、停更、删库的项目照收，状态写在一句话里。
 
-合计 330 条：计划适配 128 条，参考设计 186 条，相邻项目 16 条。
+合计 331 条：计划适配 128 条，参考设计 187 条，相邻项目 16 条。
 
 用户给的视频号链接，按视频演示的内容推断对应 mingjuner123-spec/wechat-inbox-sync（待核实）。2026-11-01 又给了 4 条：MediaCrawler 已收；AiToEarn、computer-use-preview 新收；开源文件搜索工具那条认不出是哪个项目，没有收录（见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)）。
 
@@ -382,7 +383,7 @@
 - [vzhd1701/evernote-backup](https://github.com/vzhd1701/evernote-backup)：把 Evernote 或印象笔记账号里的全部笔记增量同步到本地 SQLite，再离线导出为 ENEX 的命令行。MIT。计划适配。见 [06 §13](research/06-platform-access-and-account-risk.md#13-笔记知识库与收藏归档)
 - [Y2Z/monolith](https://github.com/Y2Z/monolith)：把整个网页连同 CSS、图片、脚本内嵌进单个 HTML 文件的命令行和 Rust 库。CC0-1.0。计划适配。见 [06 §13](research/06-platform-access-and-account-risk.md#13-笔记知识库与收藏归档)
 
-**参考设计（34）**
+**参考设计（35）**
 
 - [adbar/trafilatura](https://github.com/adbar/trafilatura)：Python 的网页正文与元数据提取工具，也能按站点地图和订阅源发现、下载网页。Apache-2.0（v1.7.0 及更早版本为 GPL-3.0）。参考设计。见 [06 §13](research/06-platform-access-and-account-risk.md#13-笔记知识库与收藏归档)
 - [aidenlx/media-extended](https://github.com/aidenlx/media-extended)：Obsidian 的媒体播放与时间戳笔记插件，识别 `media`、`video` 属性和 `#t=` 时间片段链接。无许可证文件（主分支闭源，v3 分支为 MIT）。参考设计。见 [05 §1.1](research/05-note-apps-and-plugins.md#11-obsidian-社区插件)
@@ -415,6 +416,7 @@
 - [Raven7979/cyber-bookhouse](https://github.com/Raven7979/cyber-bookhouse)：一套 Agent Skill，用户把链接发给 Agent 后，在本机整理成带来源、逐字稿和截图的 Markdown 写进 Obsidian。MIT。参考设计。见 [06 §13](research/06-platform-access-and-account-risk.md#13-笔记知识库与收藏归档)
 - [readwiseio/obsidian-readwise](https://github.com/readwiseio/obsidian-readwise)：Readwise 官方的 Obsidian 导出插件，按文件哈希判断用户是否改过，改过就只在末尾追加。GPL-3.0。参考设计。见 [05 §1.1](research/05-note-apps-and-plugins.md#11-obsidian-社区插件)
 - [siyuan-note/siyuan](https://github.com/siyuan-note/siyuan)：开源的本地优先笔记软件，有本地 HTTP API 和 `custom-*` 块属性，是歇存的导出目标之一。AGPL-3.0。参考设计。见 [05 §5.3](research/05-note-apps-and-plugins.md#53-思源笔记)
+- [Thysrael/Horizon](https://github.com/Thysrael/Horizon)：AI 新闻雷达，每次抓 RSS、Hacker News 等来源最近 24 小时的内容，由模型按用户写的评分标准打分、筛选，生成中英文每日简报，发布成 Markdown 和 Atom。MIT。参考设计。见 [11 §2](research/11-subscriptions-compat-and-wx-cli.md#2-horizon)
 - [volcengine/OpenViking](https://github.com/volcengine/OpenViking)：火山引擎开源的 Agent 上下文数据库，把资料、记忆和技能组织成虚拟文件系统，自动生成分层摘要供 Agent 检索。AGPL-3.0（部分目录为 Apache-2.0，README 另有改写与翻译限制）。参考设计。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
 - [wallabag/wallabag](https://github.com/wallabag/wallabag)：可自托管的稍后读应用，保存网页正文，支持标签、标注和 EPUB、PDF 等格式导出。MIT。参考设计。见 [06 §13](research/06-platform-access-and-account-risk.md#13-笔记知识库与收藏归档)
 - [windingwind/zotero-better-notes](https://github.com/windingwind/zotero-better-notes)：Zotero 笔记与 Markdown 双向同步插件，记下两边上次同步的 MD5，两边都改时弹出对比窗口手动合并。AGPL-3.0。参考设计。见 [05 §5.9](research/05-note-apps-and-plugins.md#59-读回双向的先例与歇存的做法)
