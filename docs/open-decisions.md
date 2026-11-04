@@ -117,7 +117,7 @@
 | [第 5 条 名字](discussion.md#5-名字)（追问） | 11-04 | 问「像 Yohaku」像哪几点，四项都选了：「日语里的美学或版面词」「意思：留白、不填满」「发音短、安静、字母少」「不限日语，只要气质像」 | 第四轮照这四条找：真实词，有词典出处；意思落在留白、不填满；2–3 个音节、至多 6 个字母，命令名就是它；日语优先，别的语言气质像也行。结果写进调研 13 | 调研 13（进行中） |
 | [第 6 条 桌面壳](discussion.md#6-桌面壳)、[第 7 条 内核语言](discussion.md#7-内核语言) | 11-04 | 「之前我们想的mygo呢，感觉也可以吧，然后就是要跨平台」；「手机上也要，但是能不要tauri2不，gpui呢？或者electron？不然就还是tauri2」；「其实就桌面端吧，手机端其实可以考虑native去重写，不用考虑手机上的跨平台，所以go感觉也是够的」 | 定为 A：Go 内核加 MyGo 壳，[ADR-001](decisions/ADR-001-stack.md) 照旧。只做桌面三系统（macOS、Windows、Linux）；手机以后原生重写，不要求和桌面共用内核。你不想用 Tauri 2（没说原因）。退路是 A′：MyGo 出问题就换 Wails v3，内核和前端不动；退出条件写进 ADR-001。调研 12 推荐的 C（Rust + Tauri 2）不采用 | [ADR-001](decisions/ADR-001-stack.md)、[PRD §0](PRD.md#0-状态与读法)、[overview](overview.md#3-已经定了的)、[调研 12](research/12-shell-and-core-language.md#0-结论)、discussion [第 6 条](discussion.md#6-桌面壳)和[第 7 条](discussion.md#7-内核语言) |
 | [第 8 条 插件怎么校验](discussion.md#8-插件怎么校验) | 11-04 | 选了「照 10-28 做 App」 | [O3](#13-开源与发布) 定为 A：GitHub App 从一开始就做，照 [ADR-003 §6](decisions/ADR-003-plugins.md#6-分发与校验)；第三方插件也能拿到校验结果。App 跑在哪接着问 | [discussion 第 8 条](discussion.md#8-插件怎么校验) |
-| [第 8 条](discussion.md#8-插件怎么校验)（追问：App 跑在哪） | 11-04 | 选了「无服务器中转 + Actions 跑测试 (Recommended)」 | webhook 由无服务器平台接，验签、排队，再触发官方组织的 GitHub Actions 拉插件、跑契约测试、写回 check run。没有自己的服务器；App 私钥放在中转平台上；受 Actions 免费额度限制。平台具体用哪家，实现时定 | [TODO](TODO.md#2-文档和接口设计)：写进 ADR-003 §6 和插件协议 §8.3 |
+| [第 8 条](discussion.md#8-插件怎么校验)（追问：App 跑在哪） | 11-04 | 选了「无服务器中转 + Actions 跑测试 (Recommended)」 | webhook 由无服务器平台接，验签、排队，再触发官方组织的 GitHub Actions 拉插件、跑契约测试、写回 check run。没有自己的服务器；App 私钥放在中转平台上；受 Actions 免费额度限制。平台具体用哪家，实现时定 | [TODO](TODO.md#2-文档和接口设计)：写进 [ADR-003 §6](decisions/ADR-003-plugins.md#6-分发与校验) 和[插件协议 §8.3](plugin-protocol.md#83-校验与来源证明) |
 
 <a id="2-命名与组织"></a>
 ## 2. 命名与组织
