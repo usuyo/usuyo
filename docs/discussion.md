@@ -311,7 +311,7 @@ A（Go + MyGo，即现在的 ADR-001）随[第 6 条](#6-桌面壳)出局；D（
 <a id="14-资料库能不能放进同步盘"></a>
 ## 14. 资料库能不能放进同步盘
 
-**你 11-04 给了方向**：同步学 Hatoba，用你自己的 Cloudflare 账号，以后再支持 WebDAV（推断「web那个」指它）等。下面的选项改问细节，等调研 14。记在 [open-decisions §1.8](open-decisions.md#18-grill-回答)。
+**你 11-04 给了方向**：同步学 Hatoba，用你自己的 Cloudflare 账号，以后再支持 WebDAV（推断「web那个」指它）等。11-04 又定了：同步算主要功能，文字同步进第一版，媒体稍后（[调研 14](research/14-sync-like-hatoba.md#0-结论)）。下面的选项改问细节。记在 [open-decisions §1.8](open-decisions.md#18-grill-回答)。
 
 **问题**：WebDAV、S3、自有云盘能直接放资料库，还是只做备份？答了，隐藏目录 `.{name}/` 怎么分就定了。
 

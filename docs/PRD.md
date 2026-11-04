@@ -264,7 +264,7 @@
 **待讨论**：
 
 - 「只留文字」放在设置的存储页和条目页的「更多」里（K2 B，建议）。
-- 同步：方向已定（11-04，[open-decisions §1.8](open-decisions.md#18-grill-回答)）。学 [Hatoba](https://github.com/scarletkc/Hatoba)：跑在你自己的 Cloudflare 账号里，没有本产品的服务器；设备上先端到端加密再上传；增量同步，冲突逐条看；以后再支持 WebDAV 等。媒体放哪、索引按机器分开、要不要也允许同步盘，见[第 14 条](discussion.md#14-资料库能不能放进同步盘)。
+- 同步：方向已定（11-04，[open-decisions §1.8](open-decisions.md#18-grill-回答)）。学 [Hatoba](https://github.com/scarletkc/Hatoba)：跑在你自己的 Cloudflare 账号里，没有本产品的服务器；设备上先端到端加密再上传；增量同步，冲突逐条看；以后再支持 WebDAV 等。同步算主要功能：资料库 v1 按能同步的格式写，文字同步（Worker + D1）进第一版，媒体（R2）、WebDAV 稍后（11-04，[调研 14](research/14-sync-like-hatoba.md#0-结论)）。R2 开不开、主密码丢了怎么办等，见[第 14 条](discussion.md#14-资料库能不能放进同步盘)。
 - 晚点：默认连哪些网络服务（[K8](open-decisions.md#11-存储同步与联网)）。
 
 <a id="生命周期"></a>
