@@ -45,7 +45,7 @@
 - [ ] 权限项加连本机 Unix socket，只在第三方写包装时要 — 文档会话 · 小 · 不挡
 - [ ] `builtin/` 的身份和发版对上[插件协议 §8.4](plugin-protocol.md#84-三种来源)；`web` 免 `match`、按主机分节奏 — 文档会话 · 中 · 挡预装的通用网页获取插件
 - [ ] 照建议把 [L5–L7](open-decisions.md#4-借鉴其他软件)、[R2、R3](open-decisions.md#12-声明与责任) 写进协议 — 文档会话 · 小 · 挡首批插件
-- [ ] [CLAUDE.md](../CLAUDE.md)：改文档地图、原则 1、技术栈、里程碑、一句话；中英文你定 — 文档会话拟稿，你点头 · 小 · 不改则新会话照 M0 开工
+- [ ] [CLAUDE.md](../CLAUDE.md)：改文档地图、原则 1、原则 2（11-04 K5 A 的措辞）、技术栈、里程碑、一句话；中英文你定 — 文档会话拟稿，你点头 · 小 · 不改则新会话照 M0 开工
 - [ ] [03](research/03-agent-protocols.md#13-现状2026-07-28-修订要点) 第 80 行加注：rmcp 3.0.0 已在 2026-07-28 发正式版（[crates.io](https://crates.io/crates/rmcp/versions)，11-04 查） — 文档会话 · 一行 · 不挡
 - [ ] [04 §6.4](research/04-tech-options.md#64-桌面壳mygo-与回退路径) 的版本说法过时：MyGo 0.7.4、Wails v3 正式版，出处见[调研 12](research/12-shell-and-core-language.md#25-壳的成熟度) — 文档会话 · 小 · 不挡
 - [ ] [ADR-002](decisions/ADR-002-frontend-stack.md#和内核的接口) 第 37 行：接受 SSE 就把 WebSocket 换掉 — 文档会话 · 一句 · 不挡
