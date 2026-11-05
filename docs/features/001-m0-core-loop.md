@@ -7,7 +7,7 @@
 不带 GUI 跑通整条链路：粘贴一条链接变成内容包，CLI 能搜到，Claude Code 通过 MCP 能读能提议标签。从这一天起作者自己开始使用。
 
 ## 用户故事
-- 作为作者，我想 `xiecun add <url>` 后立刻拿到 id 并继续手头的事，以便不被"先整理"打断。
+- 作为作者，我想 `usuyo add <url>` 后立刻拿到 id 并继续手头的事，以便不被"先整理"打断。
 - 作为作者，我想在 Claude Code 里直接搜我的资料库，以便让 Agent 基于我存的材料写东西。
 
 ## 范围
@@ -33,12 +33,12 @@
 首次定义，见 SPEC §9–10。
 
 ## 实现要点
-- Go 1.23，`cmd/xiecun` 用 cobra；配置 `~/.config/xiecun/config.json` 指向当前库。
+- Go 1.23，`cmd/usuyo` 用 cobra；配置 `~/.config/usuyo/config.json` 指向当前库。
 - 通用正文抽取：`go-shiori/go-readability`；HTML 快照原样存 `raw/s1/page.html`。
 - 索引：`blevesearch/bleve/v2`，自定义 analyzer：CJK bigram + 拼音（`mozillazg/go-pinyin`）。
 - 队列：`modernc.org/sqlite`（纯 Go），表 `jobs(id, itemId, type, state, attempts, nextAt, error)`。
 - MCP：`modelcontextprotocol/go-sdk`（若其尚未支持 2026-07-28 无状态语义，先按其当前稳定版实现，changesetId 仍作显式参数）。
-- journal：`.xiecun/journal/YYYY-MM.jsonl`，每行 `{at, actor, op, itemId, before, after, changesetId}`。
+- journal：`.usuyo/journal/YYYY-MM.jsonl`，每行 `{at, actor, op, itemId, before, after, changesetId}`。
 - 所有返回给 MCP 的正文包在 `{untrusted: true, source: {...}, content}` 信封里。
 
 ## 验收标准

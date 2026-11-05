@@ -8,17 +8,17 @@
 <a id="背景"></a>
 ## 背景
 
-歇存要接三种外部能力：从平台取回内容，把音视频和图片变成文字，把资料库导出到笔记软件。[PRD §4](../PRD.md) 原则 1 要求内核平台中立，原则 4 要求一切可插拔；[ADR-001](ADR-001-stack.md) 要求重计算与适配器都是独立进程，不进内核。
+usuyo 要接三种外部能力：从平台取回内容，把音视频和图片变成文字，把资料库导出到笔记软件。[PRD §4](../PRD.md) 原则 1 要求内核平台中立，原则 4 要求一切可插拔；[ADR-001](ADR-001-stack.md) 要求重计算与适配器都是独立进程，不进内核。
 
 调研 05 的发现：
 
-- 平台抓取正在从笔记插件里搬出去。24 个 Obsidian 社区插件里有 7 个把抓取和转写放进本机的独立后端或命令行工具，做的就是歇存「获取方式」的事（[05 §1.4](../research/05-note-apps-and-plugins.md#14-共性与对歇存的含义)）。
+- 平台抓取正在从笔记插件里搬出去。24 个 Obsidian 社区插件里有 7 个把抓取和转写放进本机的独立后端或命令行工具，做的就是 usuyo「获取方式」的事（[05 §1.4](../research/05-note-apps-and-plugins.md#14-共性与对歇存的含义)）。
 - 别人的插件依赖宿主 API，拿不出来用；能复用的是背后的协议和命令行工具，转写基本都是 OpenAI 转写接口的形状（[05 §2.5](../research/05-note-apps-and-plugins.md#25-运行方式统计与可复用协议)）。
 - GitHub App 能做而 Actions 做不了的有四件事，其中一件是不需要作者配合就收到插件仓库的 release 事件（[05 §3.9](../research/05-note-apps-and-plugins.md#39-github-app-与-actions-的能力差别)）。
 - 主流笔记宿主都没有运行时强制隔离；ffmpeg、ASR、OCR、本地视觉模型只能跑原生进程（[05 §4.1](../research/05-note-apps-and-plugins.md#41-宿主插件的安全模型)、[05 §4.4](../research/05-note-apps-and-plugins.md#44-原生进程还是-wasm)）。
 - 没有工具从笔记软件读回改动（[05 §5.9](../research/05-note-apps-and-plugins.md#59-读回双向的先例与歇存的做法)）。
 
-2026-10-28 用户定了分发方式：主仓库和官方插件都放在 GitHub 组织 `xiecun-app` 里，进组织就是上架；第三方插件放在作者自己的仓库，用户按仓库直接安装；不做靠 PR 收录的索引仓库；GitHub App 从一开始就做。获取方式不进组织。
+2026-10-28 用户定了分发方式：主仓库和官方插件都放在 GitHub 组织 `usuyo` 里，进组织就是上架；第三方插件放在作者自己的仓库，用户按仓库直接安装；不做靠 PR 收录的索引仓库；GitHub App 从一开始就做。获取方式不进组织。
 
 <a id="决定"></a>
 ## 决定
@@ -87,22 +87,22 @@
 
 | 仓库 | 内容 | 许可证 |
 |---|---|---|
-| `xiecun-app/xiecun` | 内核、CLI、MCP、桌面壳；插件运行器、权限落实、provider 代理、导出记录与读回合并；屏蔽清单 `security/plugin-blocklist.json`；不含任何平台抓取逻辑 | AGPL-3.0 |
-| `xiecun-app/plugin-kit` | 清单与消息的 JSON Schema、`derived/` 文件格式、契约测试套件与 `testdata/`、Go / TypeScript / Python SDK、插件模板、本地校验命令 | MIT |
-| `xiecun-app/<kind>-<name>` | 官方插件，只有转换与导出，一个插件一个仓库，例如 `transform-ffmpeg`、`transform-asr-sherpa`、`transform-ocr-rapid`、`export-obsidian`、`export-notion`；release 附各平台二进制，清单列出各资产的 sha256 | MIT |
-| `xiecun-app` 下的 GitHub App 服务 | 接收 release 事件，跑校验，写 check run；仓库名实现时定 | 实现时定 |
+| `usuyo/usuyo` | 内核、CLI、MCP、桌面壳；插件运行器、权限落实、provider 代理、导出记录与读回合并；屏蔽清单 `security/plugin-blocklist.json`；不含任何平台抓取逻辑 | AGPL-3.0 |
+| `usuyo/plugin-kit` | 清单与消息的 JSON Schema、`derived/` 文件格式、契约测试套件与 `testdata/`、Go / TypeScript / Python SDK、插件模板、本地校验命令 | MIT |
+| `usuyo/<kind>-<name>` | 官方插件，只有转换与导出，一个插件一个仓库，例如 `transform-ffmpeg`、`transform-asr-sherpa`、`transform-ocr-rapid`、`export-obsidian`、`export-notion`；release 附各平台二进制，清单列出各资产的 sha256 | MIT |
+| `usuyo` 下的 GitHub App 服务 | 接收 release 事件，跑校验，写 check run；仓库名实现时定 | 实现时定 |
 | 第三方插件 | 作者自己的仓库，三类都可以；获取方式只能以这种形式存在 | 作者自定 |
 
-- **命名**：官方插件在 `xiecun-app` 组织下不加 `xiecun-` 前缀；第三方插件仓库名用前缀 `xiecun-transform-`、`xiecun-export-`、`xiecun-fetch-`。两者都加 GitHub topic `xiecun-plugin`。
+- **命名**：官方插件在 `usuyo` 组织下不加 `usuyo-` 前缀；第三方插件仓库名用前缀 `usuyo-transform-`、`usuyo-export-`、`usuyo-fetch-`。两者都加 GitHub topic `usuyo-plugin`。
 - **官方插件也走插件协议。** Obsidian 导出、ffmpeg、默认 ASR、默认 OCR 都做成组织里独立仓库的官方插件，随安装包预装，不写进内核。第三方插件拿到的是同一套能力。
-- **按法律风险分组织内外。** 获取方式是唯一涉及平台的一类，一律不进 `xiecun-app` 组织，客户端也不预置任何获取方式。这样即使某个获取方式出事，组织和官方插件不受连累。
+- **按法律风险分组织内外。** 获取方式是唯一涉及平台的一类，一律不进 `usuyo` 组织，客户端也不预置任何获取方式。这样即使某个获取方式出事，组织和官方插件不受连累。
 
 <a id="6-分发与校验"></a>
 ### 6. 分发与校验
 
-- **官方插件列表就是组织本身。** 客户端列出 `xiecun-app` 组织里带 topic `xiecun-plugin` 的仓库，版本和资产取各自的 GitHub Release。不另做索引文件，不走 PR 收录。仓库进组织就是上架，由组织成员审核。
-- **第三方插件不经过歇存。** 作者在自己的仓库发布；用户输入 `owner/repo` 直接安装；浏览靠搜索 topic `xiecun-plugin`。客户端清楚标出「官方」和「第三方 · 未经歇存审核」两种来源。
-- **GitHub App 从一开始就做**，归 `xiecun-app` 组织所有，装在组织上：
+- **官方插件列表就是组织本身。** 客户端列出 `usuyo` 组织里带 topic `usuyo-plugin` 的仓库，版本和资产取各自的 GitHub Release。不另做索引文件，不走 PR 收录。仓库进组织就是上架，由组织成员审核。
+- **第三方插件不经过 usuyo。** 作者在自己的仓库发布；用户输入 `owner/repo` 直接安装；浏览靠搜索 topic `usuyo-plugin`。客户端清楚标出「官方」和「第三方 · 未经 usuyo 审核」两种来源。
+- **GitHub App 从一开始就做**，归 `usuyo` 组织所有，装在组织上：
   - 每次 release 自动校验清单 schema、各平台资产的 sha256、跑契约测试，结果写成 check run；
   - 第三方作者也可以把它装到自己的仓库，拿到同样的校验；
   - 客户端显示每个版本的校验结果：通过、失败、没有校验。
@@ -113,18 +113,18 @@
 ### 7. 导出与读回
 
 - **只读回用户写的层**：`notes.md` 的 `takeaway` 与正文、主题页、用户标签。原文、图里的字、口播文字、画面描述、AI 摘要每次导出都重写，界面上写明。
-- **身份写在文件里**：每个导出文件带 `xiecun_id`（Obsidian frontmatter、Logseq `xiecun-id::`、思源 `custom-xiecun-id`、Notion 属性）。导出记录放 `.xiecun/exports/<target>.json`，只是缓存，丢了可以按 `xiecun_id` 扫描重建；用户重命名、移动导出文件后照样认得回来。
-- **用户区用正文标记划出**：Obsidian 用 `%% xiecun:begin notes %%` 与 `%% xiecun:end notes %%`，通用 Markdown 与 Logseq 用 HTML 注释；不用 YAML 注释，因为 Obsidian 改属性时会删掉它。标记缺失、重复或嵌套时不覆盖，只报告。
-- **变更检测用上次导出的哈希。** 读回的改动作为「用户自己的改动」写进改动记录，可以整批撤销，不走 Agent 的改动提议。歇存和笔记软件两边都改过同一个用户区时不自动合并，两版并列让用户选。
+- **身份写在文件里**：每个导出文件带 `usuyo_id`（Obsidian frontmatter、Logseq `usuyo-id::`、思源 `custom-usuyo-id`、Notion 属性）。导出记录放 `.usuyo/exports/<target>.json`，只是缓存，丢了可以按 `usuyo_id` 扫描重建；用户重命名、移动导出文件后照样认得回来。
+- **用户区用正文标记划出**：Obsidian 用 `%% usuyo:begin notes %%` 与 `%% usuyo:end notes %%`，通用 Markdown 与 Logseq 用 HTML 注释；不用 YAML 注释，因为 Obsidian 改属性时会删掉它。标记缺失、重复或嵌套时不覆盖，只报告。
+- **变更检测用上次导出的哈希。** 读回的改动作为「用户自己的改动」写进改动记录，可以整批撤销，不走 Agent 的改动提议。usuyo 和笔记软件两边都改过同一个用户区时不自动合并，两版并列让用户选。
 - **导出插件不直接写目标目录**，结果交给宿主写，宿主记哈希。
-- **frontmatter 沿用 Web Clipper 默认键** `title`、`source`、`author`、`published`、`created`、`description`、`tags`，再加 `xiecun_id`、`platform`、`kind`。
+- **frontmatter 沿用 Web Clipper 默认键** `title`、`source`、`author`、`published`、`created`、`description`、`tags`，再加 `usuyo_id`、`platform`、`kind`。
 - **目标顺序**：Obsidian（同时产出通用 Markdown 文件夹）、思源、Notion、Logseq OG、飞书、语雀。云端目标的读回只做轮询；飞书、语雀先只做单向导出。
-- **主题页**：默认导出一份副本到已有 vault，按上面的规则读回；也支持「资料库即 vault」，`topics/` 直接作为 vault 里的文件夹，用户在 Obsidian 里改的就是真相文件，歇存监听变化后重新读取。
+- **主题页**：默认导出一份副本到已有 vault，按上面的规则读回；也支持「资料库即 vault」，`topics/` 直接作为 vault 里的文件夹，用户在 Obsidian 里改的就是真相文件，usuyo 监听变化后重新读取。
 
 <a id="8-gpl-工具"></a>
 ### 8. GPL 工具
 
-取得法律意见前，GPL、AGPL 授权的工具只做「用户自己安装、歇存以独立进程调用」，不随安装包分发。官方插件本身用 MIT；它调用的第三方二进制只从上游官方 release 下载，并锁定 sha256。
+取得法律意见前，GPL、AGPL 授权的工具只做「用户自己安装、usuyo 以独立进程调用」，不随安装包分发。官方插件本身用 MIT；它调用的第三方二进制只从上游官方 release 下载，并锁定 sha256。
 
 <a id="放弃的"></a>
 ## 放弃的
@@ -137,7 +137,7 @@
 | 三类插件各一份清单 | 字段大半重合，三套 schema 会各自漂移 |
 | 现在就做 `wasm-runner`，或只用 Wasm | ffmpeg、ASR、OCR、本地视觉模型做不了；眼下没有纯变换插件需要它 |
 | wazero 或 Extism 嵌进内核 | [ADR-001](ADR-001-stack.md) 要求重计算与插件外置；Extism 的 Go SDK 停滞 |
-| 在歇存里运行 Obsidian 插件 | 依赖 Obsidian API、跑在渲染进程、没有隔离。改为导出格式对齐、协议兼容、包装命令行工具、把别的工具的产物当导入来源（[05 §6.5](../research/05-note-apps-and-plugins.md#65-怎么复用现有插件与工具)） |
+| 在 usuyo 里运行 Obsidian 插件 | 依赖 Obsidian API、跑在渲染进程、没有隔离。改为导出格式对齐、协议兼容、包装命令行工具、把别的工具的产物当导入来源（[05 §6.5](../research/05-note-apps-and-plugins.md#65-怎么复用现有插件与工具)） |
 | 插件直接写资料库或目标目录 | 宿主是唯一写方，才能校验、记哈希、整批撤销 |
 | 插件自己持有模型密钥 | 一个插件就能读走全部密钥；改为宿主注入或代发 |
 | 通过管道传大块数据 | 只传文件路径 |
@@ -150,7 +150,7 @@
 
 - [PRD §4](../PRD.md) 原则 4 的「一切可插拔」加「导出」，和获取方式、识别器并列。
 - [SPEC §8](../SPEC.md#8-适配器协议-v0) 扩展清单：加 `kind`、转换与导出的字段、`permissions`；补转换插件的 JSON-RPC 协议。顺带把 [SPEC §2](../SPEC.md#2-资料库目录真相源) 的 `threads/`、`thoughts/` 改成 product-model 的 `topics/`，导出读的是 `topics/`。
-- [product-model §8.1](../product-model.md#81-设置清单) 设置清单加「导出」分组；「自动更新获取方式」保留，但扩大了权限的新版本要等用户同意；「获取方式来源列表」改为按仓库安装的插件列表，标出「官方」与「第三方 · 未经歇存审核」。
+- [product-model §8.1](../product-model.md#81-设置清单) 设置清单加「导出」分组；「自动更新获取方式」保留，但扩大了权限的新版本要等用户同意；「获取方式来源列表」改为按仓库安装的插件列表，标出「官方」与「第三方 · 未经 usuyo 审核」。
 - CLAUDE.md 重写时，技术栈里「适配器」一行改为三类插件，并指向本条。
 
 代码，实现时做：
@@ -169,16 +169,16 @@
 <a id="修订-2026-11-01"></a>
 ## 修订 2026-11-01
 
-按用户 2026-11-01 的方向修订插件范围的几处决定。上面的正文不改，有冲突的以本节为准；字段和调用细节见 [思鹭插件协议 v1（草案）](../plugin-protocol.md)。
+按用户 2026-11-01 的方向修订插件范围的几处决定。上面的正文不改，有冲突的以本节为准；字段和调用细节见 [usuyo 插件协议 v1（草案）](../plugin-protocol.md)。
 
-1. **名字跟着改名走。** 产品改名思鹭 / Seelu，命令 `seelu`。本条里的 `xiecun-app` 组织换成官方组织 `{official-org}`（候选 `seelu`，2026-11-01 查 GitHub 仍空着）；topic `xiecun-plugin` 换成 `seelu-plugin`；第三方仓库前缀换成 `seelu-fetch-`、`seelu-transform-`、`seelu-export-`，两个组织内的仓库不加前缀；导出文件里的 `xiecun_id` 换成 `seelu_id`，`.xiecun/` 换成 `.seelu/`。两个组织名都没定，文档里写占位 `{official-org}`、`{fetch-org}`。2026-11-01 用户又否了思鹭 / Seelu，这一轮只定英文名（[调研 08](../research/08-english-name.md)）；本条里的 `seelu` 都是暂名，定名后照换，规则不变。
-2. **获取方式组织单独设**（改 [§5](#5-仓库拆分)、[§6](#6-分发与校验)）。自己维护的获取插件放进单独的 GitHub 组织 `{fetch-org}`：照 Tachiyomi 拆成 Mihon（应用）与 Keiyoushi（扩展）的分法，应用和获取插件分属两个组织；和 Keiyoushi 的单一大仓库 extensions-source 不同，`{fetch-org}` 里每个插件一个仓库。官方组织放应用、plugin-kit、转换和导出插件，外加两类不含平台知识、随安装包预装的获取插件（见第 5 条）；除此之外客户端不预置任何获取来源，用户手动添加组织名或 `owner/repo`。来源分三种显示：官方、第三方来源 · 组织名、第三方 · 未经思鹭审核。理由和仓库结构的取舍见 [plugin-protocol §8.8](../plugin-protocol.md#88-获取方式组织的仓库结构)。
+1. **名字跟着改名走。** 产品名 2026-11-05 定为 usuyo，命令 `usuyo`（[open-decisions §1.8](../open-decisions.md#18-grill-回答)）。本 ADR 的组织写官方组织 `{official-org}`（建议 `usuyo`）；topic 是 `usuyo-plugin`；第三方仓库前缀是 `usuyo-fetch-`、`usuyo-transform-`、`usuyo-export-`，两个组织内的仓库不加前缀；导出文件里的身份键是 `usuyo_id`，记录目录是 `.usuyo/`。获取方式组织写占位 `{fetch-org}`。之前用过的暂名 `xiecun`（歇存）、`seelu`（思鹭）只留在调研和 open-decisions 里。
+2. **获取方式组织单独设**（改 [§5](#5-仓库拆分)、[§6](#6-分发与校验)）。自己维护的获取插件放进单独的 GitHub 组织 `{fetch-org}`：照 Tachiyomi 拆成 Mihon（应用）与 Keiyoushi（扩展）的分法，应用和获取插件分属两个组织；和 Keiyoushi 的单一大仓库 extensions-source 不同，`{fetch-org}` 里每个插件一个仓库。官方组织放应用、plugin-kit、转换和导出插件，外加两类不含平台知识、随安装包预装的获取插件（见第 5 条）；除此之外客户端不预置任何获取来源，用户手动添加组织名或 `owner/repo`。来源分三种显示：官方、第三方来源 · 组织名、第三方 · 未经 usuyo 审核。理由和仓库结构的取舍见 [plugin-protocol §8.8](../plugin-protocol.md#88-获取方式组织的仓库结构)。
 3. **风险的处理方式。**
    - 获取插件的清单加两个描述性的必填字段：`access`（七层之一，含义照 [调研 06 §1.1](../research/06-platform-access-and-account-risk.md#11-七个层级)）和 `login`（`none`、`optional`、`required`）；能力之间不同时按能力分别声明，顶层取最高一档。另用 `sites` 写明会用到哪个站点的账号。这些是给用户挑选用的标签，不是闸门。
    - 不由宿主推导风险档，不做平台修正表；运行器按用户排的顺序依次试，失败换下一个，不限制往哪一层换；不对 `private-api`、`client-hook`、微信的视觉层单独弹确认。
    - 新版本调高 `access` 或 `login` 只在更新说明里标出，不停用。[§4](#4-权限与隔离) 的「扩大权限要用户重新同意」照旧，这是防经自动更新下发恶意代码的安全规则；`permissions` 加了设备类；登录站点的 (`site`, `credential`, `domains`) 出现新值、新增密钥设置或改了密钥的注入目标，也算扩大权限（[plugin-protocol §8.5](../plugin-protocol.md#85-添加来源更新与权限扩大)）。
    - 责任：用户添加第三方插件来源（组织名或 `owner/repo`）时确认一次声明：用途是个人备份、离线阅读、注意力整理，平台账号和法律上的后果由用户自己承担，链到 [调研 06 §16](../research/06-platform-access-and-account-risk.md#16-账号风险的证据) 的证据。主仓库 README、获取方式组织的主页、插件 README 模板里也写声明，模板见 [plugin-protocol 附录 A](../plugin-protocol.md#附录-a-声明模板)。不做逐个插件的弹窗。
-4. **清单与协议在新文档定稿**（改 [§3](#3-清单)）。清单文件名定为 `seelu-plugin.yaml`，不再沿用 `adapter.yaml`；字段、获取插件的子命令与错误码、转换与导出的 JSON-RPC 方法、投递接口、凭据、设备类权限、发版与来源证明都写在 [plugin-protocol](../plugin-protocol.md)。`pkg/contract` 的 Go 类型、JSON Schema 和 `testdata/` 仍在实现插件运行器时改。
+4. **清单与协议在新文档定稿**（改 [§3](#3-清单)）。清单文件名定为 `usuyo-plugin.yaml`，不再沿用 `adapter.yaml`；字段、获取插件的子命令与错误码、转换与导出的 JSON-RPC 方法、投递接口、凭据、设备类权限、发版与来源证明都写在 [plugin-protocol](../plugin-protocol.md)。`pkg/contract` 的 Go 类型、JSON Schema 和 `testdata/` 仍在实现插件运行器时改。
 5. **两类预装的获取插件**（2026-11-01 用户同意，[open-decisions P1、P3](../open-decisions.md#7-获取与插件)）。通用网页获取（只做 `public-web`、不登录、没有站点专用规则）和读别的工具导出文件的导入（书签 HTML、Pocket、Readwise 一类，不联网）进官方组织，随安装包预装，`id` 用 `builtin/` 前缀；内核仍不含获取逻辑，只调插件。平台官方导出包（抖音个人信息下载、Google Takeout、X 归档一类）的导入插件放 `{fetch-org}`。本机文件、截图、粘贴文字的收下是宿主自己的功能，不是插件。见 [plugin-protocol §8.4](../plugin-protocol.md#84-三种来源)。
 6. **schema 以 plugin-kit 为准。** 插件清单、信封、JSON-RPC 消息的 schema 以 plugin-kit 为准，内核经 Go 模块引用；`pkg/contract` 只留资料库自己的类型，实现插件运行器时迁移（[plugin-protocol §10](../plugin-protocol.md#10-契约测试与-plugin-kit)）。取代 [影响](#影响) 里「以内核的 `pkg/contract` 还是 `plugin-kit` 为准，实现时定」那一句。
 7. **插件身份与拦截条件**（改 [§6](#6-分发与校验)）。插件 `id` 等于 `owner/repo`，客户端另按 GitHub 的数字仓库 id 认仓库，改名、转移或旧名被重新注册时停止更新。官方组织的插件缺来源证明、或 GitHub App 的校验没通过就拒装，不再只是显示结果；用户添加的来源（包括 `{fetch-org}`）在添加时固定签发者，以后签发者变了就停止更新；第三方插件校验没通过时拦下还是只标出，仍待定（[open-decisions P12](../open-decisions.md#7-获取与插件)）。细节见 [plugin-protocol §8.3](../plugin-protocol.md#83-校验与来源证明)。
@@ -191,7 +191,7 @@
 
 完整清单见 [05 §7](../research/05-note-apps-and-plugins.md#7-待核实清单)。和本条直接相关的：
 
-- GPL、AGPL 工具作为独立进程被调用并随歇存分发的合规边界，需要法律意见；随包预装的 ffmpeg 用哪种许可证的构建。
+- GPL、AGPL 工具作为独立进程被调用并随 usuyo 分发的合规边界，需要法律意见；随包预装的 ffmpeg 用哪种许可证的构建。
 - Seatbelt 放行 Metal、VideoToolbox 需要的最少规则；macOS 上 `RLIMIT_AS` 是否生效。
 - Linux 桌面会话里 cgroup v2 委派是否普遍可用；GPU 设备最少要 bind 哪些；Ubuntu 限制 userns 时 bubblewrap 的降级与报错。
 - Windows AppContainer 对 GPU 与 Media Foundation 的影响；MXC 执行器能否用于生产。

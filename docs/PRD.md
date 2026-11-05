@@ -10,7 +10,7 @@
 - 它吸收了 [product-model](product-model.md) 的大部分；文案规则、设置清单、任务状态、界面地图留在那里当参考。
 - 字段、目录、命令、错误码不写，见 [SPEC](SPEC.md) 和 [插件协议](plugin-protocol.md)。
 - **已定**后面写日期和出处，日期都在 2026 年。**待讨论**链到 [discussion.md](discussion.md) 的条目，写的是现在的建议，不是定论；不在这一轮问的标「晚点」，链到 [open-decisions](open-decisions.md) 的编号。
-- 名字没定（[第 5 条](discussion.md#5-名字)），正文写「本产品」；占位规则见 [overview](overview.md#整体设计供-review)。
+- 产品名 usuyo（2026-11-05 定，[第 5 条](discussion.md#5-名字)）；正文有时仍写「本产品」。
 - 技术栈见 [ADR-001](decisions/ADR-001-stack.md)：Go 内核加 MyGo 壳，11-04 确认；只做桌面三系统，手机以后原生重写（[open-decisions §1.8](open-decisions.md#18-grill-回答)）。
 
 <a id="1-定位"></a>

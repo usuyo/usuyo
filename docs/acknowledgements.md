@@ -3,18 +3,18 @@
 
 状态：候选 · 2026-11-04
 
-歇存从下面这些项目学到了做法，或者计划包装、适配它们。这是以后放进 README 或关于页的候选名单，正式发布前要逐个确认许可证和署名要求。每条都注明它和歇存的关系。
+usuyo 从下面这些项目学到了做法，或者计划包装、适配它们。这是以后放进 README 或关于页的候选名单，正式发布前要逐个确认许可证和署名要求。每条都注明它和 usuyo 的关系。
 
 <a id="怎么用这份名单"></a>
 ## 怎么用这份名单
 
 每条一行，依次是项目、一句话介绍、许可证、关系、详细出处。关系分三种：
 
-- **计划适配**：计划包装它的命令行、HTTP 接口或 MCP，或者 fork 后改成插件。获取方式只能放在第三方仓库（[ADR-003 §1](decisions/ADR-003-plugins.md#1-插件分三类)）；GPL、AGPL 工具在取得法律意见前只由用户自己安装、歇存以独立进程调用（[ADR-003 §8](decisions/ADR-003-plugins.md#8-gpl-工具)）。
+- **计划适配**：计划包装它的命令行、HTTP 接口或 MCP，或者 fork 后改成插件。获取方式只能放在第三方仓库（[ADR-003 §1](decisions/ADR-003-plugins.md#1-插件分三类)）；GPL、AGPL 工具在取得法律意见前只由用户自己安装、usuyo 以独立进程调用（[ADR-003 §8](decisions/ADR-003-plugins.md#8-gpl-工具)）。
 - **参考设计**：借鉴它的做法、格式或协议，不用它的代码。
-- **相邻项目**：同一生态里的创作、发布、录屏、自动化等工具，歇存不接入。
+- **相邻项目**：同一生态里的创作、发布、录屏、自动化等工具，usuyo 不接入。
 
-名单不是依赖清单。歇存代码直接依赖的库，致谢以后从 `go.mod` 和 `package.json` 生成。计划适配里有几条预计会直接编进歇存（readeck/go-readability、go-trafilatura、go-domdistiller、html-to-markdown、chromedp、kooky），编进去以后改由依赖清单致谢；[05 §4](research/05-note-apps-and-plugins.md#4-安全与隔离) 里的隔离工具也属于依赖，这里不收。
+名单不是依赖清单。usuyo 代码直接依赖的库，致谢以后从 `go.mod` 和 `package.json` 生成。计划适配里有几条预计会直接编进 usuyo（readeck/go-readability、go-trafilatura、go-domdistiller、html-to-markdown、chromedp、kooky），编进去以后改由依赖清单致谢；[05 §4](research/05-note-apps-and-plugins.md#4-安全与隔离) 里的隔离工具也属于依赖，这里不收。
 
 收录范围：
 
@@ -214,7 +214,7 @@
 
 **相邻项目（2）**
 
-- [open-wxa/wxa-runner](https://github.com/open-wxa/wxa-runner)：在普通浏览器里用微信官方基础库运行自己的小程序编译产物，用于本地调试和 Playwright E2E 测试，不取平台内容；用户点名；内置的基础库是腾讯代码、没有许可证，不能随歇存分发。MIT。相邻项目。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
+- [open-wxa/wxa-runner](https://github.com/open-wxa/wxa-runner)：在普通浏览器里用微信官方基础库运行自己的小程序编译产物，用于本地调试和 Playwright E2E 测试，不取平台内容；用户点名；内置的基础库是腾讯代码、没有许可证，不能随 usuyo 分发。MIT。相邻项目。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
 - [ycccccccy/echotrace](https://github.com/ycccccccy/echotrace)：微信 4.x PC 端聊天记录的本地导出与分析工具，解密本机数据库后导出 JSON、HTML、Excel 并生成年度报告，2026-01-18 停止维护，默认分支只剩文档；用户点名的 echo，对应关系是推断；client-hook，作者的另一个仓库 wx_key 在腾讯 2026 年的 DMCA 通知里。MIT。相邻项目。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
 
 <a id="微博知乎豆瓣与海外社交平台"></a>
@@ -406,7 +406,7 @@
 - [kepano/clipper-templates](https://github.com/kepano/clipper-templates)：Obsidian Web Clipper 的示例模板集合，12 个 JSON 模板，没有中文平台的模板。MIT。参考设计。见 [05 §1.1](research/05-note-apps-and-plugins.md#11-obsidian-社区插件)
 - [kepano/defuddle](https://github.com/kepano/defuddle)：Obsidian Web Clipper 使用的正文提取库，输出 HTML 或 Markdown，附带 YouTube、B站、X、Reddit 等站点提取器。MIT。参考设计。见 [06 §13](research/06-platform-access-and-account-risk.md#13-笔记知识库与收藏归档)
 - [LifeArchiveProject/HistoryHub](https://github.com/LifeArchiveProject/HistoryHub)：个人历史记录中心，同步 B站 观看历史并用扩展导入浏览器记录，存进本地 SQLite 供搜索和按时间查看。MIT。参考设计。见 [06 §13](research/06-platform-access-and-account-risk.md#13-笔记知识库与收藏归档)
-- [logseq/logseq](https://github.com/logseq/logseq)：开源大纲笔记软件，OG 版是本地 Markdown 文件，DB 版改用 SQLite，是歇存的导出目标之一。AGPL-3.0。参考设计。见 [05 §5.2](research/05-note-apps-and-plugins.md#52-logseq)
+- [logseq/logseq](https://github.com/logseq/logseq)：开源大纲笔记软件，OG 版是本地 Markdown 文件，DB 版改用 SQLite，是 usuyo 的导出目标之一。AGPL-3.0。参考设计。见 [05 §5.2](research/05-note-apps-and-plugins.md#52-logseq)
 - [mixmark-io/turndown](https://github.com/mixmark-io/turndown)：JS 写的 HTML 转 Markdown 库，规则可扩展，配插件支持表格等。MIT。参考设计。见 [06 §13](research/06-platform-access-and-account-risk.md#13-笔记知识库与收藏归档)
 - [MODSetter/SurfSense](https://github.com/MODSetter/SurfSense)：可离线运行的 NotebookLM 替代品，在本机对用户的文件做带引用的问答、生成和编辑。Apache-2.0（`backend/plugins/proprietary/` 为 BSL 1.1）。参考设计。见 [06 §13](research/06-platform-access-and-account-risk.md#13-笔记知识库与收藏归档)
 - [mozilla/readability](https://github.com/mozilla/readability)：Firefox 阅读视图使用的正文提取 JS 库，是多数阅读器和剪藏工具的算法来源。Apache-2.0。参考设计。见 [06 §13](research/06-platform-access-and-account-risk.md#13-笔记知识库与收藏归档)
@@ -415,7 +415,7 @@
 - [omnivore-app/obsidian-omnivore](https://github.com/omnivore-app/obsidian-omnivore)：Omnivore 的 Obsidian 同步插件，frontmatter 写稳定 id，单文件模式用区段标记只替换机器区；服务 2024-11 关停后已不可用。MIT。参考设计。见 [05 §1.1](research/05-note-apps-and-plugins.md#11-obsidian-社区插件)
 - [Raven7979/cyber-bookhouse](https://github.com/Raven7979/cyber-bookhouse)：一套 Agent Skill，用户把链接发给 Agent 后，在本机整理成带来源、逐字稿和截图的 Markdown 写进 Obsidian。MIT。参考设计。见 [06 §13](research/06-platform-access-and-account-risk.md#13-笔记知识库与收藏归档)
 - [readwiseio/obsidian-readwise](https://github.com/readwiseio/obsidian-readwise)：Readwise 官方的 Obsidian 导出插件，按文件哈希判断用户是否改过，改过就只在末尾追加。GPL-3.0。参考设计。见 [05 §1.1](research/05-note-apps-and-plugins.md#11-obsidian-社区插件)
-- [siyuan-note/siyuan](https://github.com/siyuan-note/siyuan)：开源的本地优先笔记软件，有本地 HTTP API 和 `custom-*` 块属性，是歇存的导出目标之一。AGPL-3.0。参考设计。见 [05 §5.3](research/05-note-apps-and-plugins.md#53-思源笔记)
+- [siyuan-note/siyuan](https://github.com/siyuan-note/siyuan)：开源的本地优先笔记软件，有本地 HTTP API 和 `custom-*` 块属性，是 usuyo 的导出目标之一。AGPL-3.0。参考设计。见 [05 §5.3](research/05-note-apps-and-plugins.md#53-思源笔记)
 - [Thysrael/Horizon](https://github.com/Thysrael/Horizon)：AI 新闻雷达，每次抓 RSS、Hacker News 等来源最近 24 小时的内容，由模型按用户写的评分标准打分、筛选，生成中英文每日简报，发布成 Markdown 和 Atom。MIT。参考设计。见 [11 §2](research/11-subscriptions-compat-and-wx-cli.md#2-horizon)
 - [volcengine/OpenViking](https://github.com/volcengine/OpenViking)：火山引擎开源的 Agent 上下文数据库，把资料、记忆和技能组织成虚拟文件系统，自动生成分层摘要供 Agent 检索。AGPL-3.0（部分目录为 Apache-2.0，README 另有改写与翻译限制）。参考设计。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
 - [wallabag/wallabag](https://github.com/wallabag/wallabag)：可自托管的稍后读应用，保存网页正文，支持标签、标注和 EPUB、PDF 等格式导出。MIT。参考设计。见 [06 §13](research/06-platform-access-and-account-risk.md#13-笔记知识库与收藏归档)

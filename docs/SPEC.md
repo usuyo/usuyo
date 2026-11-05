@@ -1,5 +1,6 @@
 <a id="歇存-xiecun--技术规格-v01m0"></a>
-# 歇存 Xiecun — 技术规格 v0.1（M0）
+<a id="usuyo--技术规格-v01m0"></a>
+# usuyo — 技术规格 v0.1（M0）
 
 状态：草案 · 2026-10-21。契约字段一旦 M0 落地即视为稳定，变更需 ADR。
 
@@ -9,8 +10,8 @@
 ## 1. 仓库布局（monorepo）
 
 ```
-xiecun/
-  cmd/xiecun/            # CLI 入口（也负责启动 daemon 和 mcp 子命令）
+usuyo/
+  cmd/usuyo/            # CLI 入口（也负责启动 daemon 和 mcp 子命令）
   internal/
     core/                # 内容包读写、生命周期状态机、去重
     index/               # bleve 索引（可重建）
@@ -49,7 +50,7 @@ xiecun/
   threads/<slug>.md        # 线索（画布分组/主题），frontmatter 列出条目 id
   thoughts/<slug>.md       # 念头，frontmatter 列出出处条目 id
   canvas.json              # 仅位置与视图状态
-  .xiecun/
+  .usuyo/
     index/                 # bleve，可删除重建
     jobs.db                # 任务队列（sqlite，纯 Go 驱动 modernc）
     journal/YYYY-MM.jsonl  # 只追加操作日志（撤销与审计）
@@ -143,28 +144,28 @@ url: https://...
 <a id="8-适配器协议-v0"></a>
 ## 8. 适配器协议 v0
 
-v0 由 [思鹭插件协议 v1（草案）](plugin-protocol.md) 取代，字段、调用约定、错误码、凭据、权限和分发都以那份文档为准。v0 没有发布过，不做兼容。概要：
+v0 由 [usuyo 插件协议 v1（草案）](plugin-protocol.md) 取代，字段、调用约定、错误码、凭据、权限和分发都以那份文档为准。v0 没有发布过，不做兼容。概要：
 
-- 插件分获取、转换、导出三类，都是独立进程，共用一份清单 `seelu-plugin.yaml`（取代 `adapter.yaml`）。旧字段的去向见 [plugin-protocol §2.12](plugin-protocol.md#212-旧字段对照)。
+- 插件分获取、转换、导出三类，都是独立进程，共用一份清单 `usuyo-plugin.yaml`（取代 `adapter.yaml`）。旧字段的去向见 [plugin-protocol §2.12](plugin-protocol.md#212-旧字段对照)。
 - 获取插件用子命令 `canonicalize`、`fetch`、`sources`、`list`、`health`、`unfavorite`，stdout 只输出一个 JSON 信封；支持可选的常驻模式（[plugin-protocol §3](plugin-protocol.md#3-获取插件协议)）。fetch 输出和 `pkg/contract/schema/fetch-output.schema.json` 的差异见 [plugin-protocol §3.7](plugin-protocol.md#37-fetch-输出)。
 - 转换、导出插件走 stdio 上换行分隔的 JSON-RPC 2.0（[plugin-protocol §4](plugin-protocol.md#4-转换与导出插件协议)）。
 - 运行器：每个平台按用户排的顺序依次试，失败换下一个，全部失败停在 `link`（[plugin-protocol §3.1](plugin-protocol.md#31-运行器与节奏)）。
-- 契约测试：插件仓库放 `testdata/`，作者用 `seelu plugin check` 做离线检查，用 `seelu plugin try` 在真实的沙箱和凭据下跑一次，不用 plugin-kit 发版工作流的用 `seelu plugin pack` 生成发布清单（[plugin-protocol §10](plugin-protocol.md#10-契约测试与-plugin-kit)）。
+- 契约测试：插件仓库放 `testdata/`，作者用 `usuyo plugin check` 做离线检查，用 `usuyo plugin try` 在真实的沙箱和凭据下跑一次，不用 plugin-kit 发版工作流的用 `usuyo plugin pack` 生成发布清单（[plugin-protocol §10](plugin-protocol.md#10-契约测试与-plugin-kit)）。
 - `pkg/contract` 的 Go 类型、JSON Schema 和 `testdata/` 仍是 v0；实现插件运行器时，插件相关的 schema 迁到 plugin-kit，`pkg/contract` 只留资料库自己的类型（[plugin-protocol §10](plugin-protocol.md#10-契约测试与-plugin-kit)）。
 
 <a id="9-clim0"></a>
 ## 9. CLI（M0）
 
 ```
-xiecun init [dir]                 # 建库
-xiecun add <url|file|->           # 收下；立即返回条目 id，后台获取
-xiecun get <id> [--layer original|derived|notes|all]
-xiecun search <query> [--src douyin] [--in asr] [--kind video] [--json]
-xiecun tag <id> --add a,b --rm c
-xiecun jobs [--retry <id>]
-xiecun reindex
-xiecun daemon                     # 常驻：任务队列 + 本地 API + 文件监听
-xiecun mcp                        # stdio MCP 服务（转发到 daemon，daemon 不在则内嵌）
+usuyo init [dir]                 # 建库
+usuyo add <url|file|->           # 收下；立即返回条目 id，后台获取
+usuyo get <id> [--layer original|derived|notes|all]
+usuyo search <query> [--src douyin] [--in asr] [--kind video] [--json]
+usuyo tag <id> --add a,b --rm c
+usuyo jobs [--retry <id>]
+usuyo reindex
+usuyo daemon                     # 常驻：任务队列 + 本地 API + 文件监听
+usuyo mcp                        # stdio MCP 服务（转发到 daemon，daemon 不在则内嵌）
 ```
 
 <a id="10-mcp-工具m0"></a>
@@ -190,11 +191,11 @@ bleve（纯 Go）。中文用 CJK 双字分析器（解决二字词），同时�
 
 做：第 2–11 节全部，但适配器只内置一个 `web-generic`（通用网页：抓取 + go-readability 抽正文 + 图片下载），用来验证整条链路；OCR/ASR 留接口不实现。
 验收：
-1. `xiecun add https://mp.weixin.qq.com/s/xxx` 3 秒内返回 id；`items/` 下出现内容包，`raw/` 有原 HTML，`content.md` 有正文。
-2. `xiecun search 咖啡` 命中；`--in title` 过滤生效；二字词可搜。
-3. 在 Claude Code 配置 `xiecun mcp` 后，能 `search` 并 `get_item`，返回带 `untrusted: true`。
+1. `usuyo add https://mp.weixin.qq.com/s/xxx` 3 秒内返回 id；`items/` 下出现内容包，`raw/` 有原 HTML，`content.md` 有正文。
+2. `usuyo search 咖啡` 命中；`--in title` 过滤生效；二字词可搜。
+3. 在 Claude Code 配置 `usuyo mcp` 后，能 `search` 并 `get_item`，返回带 `untrusted: true`。
 4. `propose_changes` → CLI 确认 → `apply` → `manifest.json` 的 `tags.user` 更新 → `undo` 回滚，journal 有记录。
-5. 删除 `.xiecun/index/` 后 `xiecun reindex` 恢复搜索。
+5. 删除 `.usuyo/index/` 后 `usuyo reindex` 恢复搜索。
 
 不做：GUI、扩展、手机桥、平台适配器、OCR/ASR、同步。
 
@@ -211,12 +212,12 @@ bleve（纯 Go）。中文用 CJK 双字分析器（解决二字词），同时�
 6. **存在状态和私密**：[§3](#3-manifestjson) 用 `slimmed`、`trashed`，product-model 叫只留文字（K1、K2 待定）；[§10](#10-mcp-工具m0) 按 `private: true` 过滤，manifest 里却没有这个字段。
 7. **通用网页获取**：[§12](#12-m0-范围) 写内核内置 `web-generic`，验收用公众号链接；P1 已定为官方插件，随安装包预装，`builtin/` 前缀，不带站点规则（[协议 §8.4](plugin-protocol.md#84-三种来源)）。已知。
 8. **MCP 里不可信内容怎么标**：[§10](#10-mcp-工具m0) 每条结果带 `untrusted`；feature 001 外面套一层；[03 §7](research/03-agent-protocols.md#7-对歇存-mcp-与-acp-设计的启示) 在信封顶层写一次。
-9. **配置目录**：feature 001 写 `~/.config/xiecun/`，open-decisions 写 `~/.config/seelu/`，协议示例在 `~/Library/Application Support/Seelu/`；[§2](#2-资料库目录真相源) 的资料库里还有 `.xiecun/config.json`。
-10. **本机接口的令牌**：product-model 只有一个，能重新生成；协议按投递端分别生成；03 建议放进库内的 `.xiecun/`。已知。
+9. **配置目录**：feature 001 写 `~/.config/usuyo/`，open-decisions 写 `~/.config/usuyo/`，协议示例在 `~/Library/Application Support/usuyo/`；[§2](#2-资料库目录真相源) 的资料库里还有 `.usuyo/config.json`。
+10. **本机接口的令牌**：product-model 只有一个，能重新生成；协议按投递端分别生成；03 建议放进库内的 `.usuyo/`。已知。
 11. **`.meta.json`**：[§5](#5-derived-文件约定) 是 `{by, version, at, input}`；[协议 §4.2](plugin-protocol.md#42-转换的-run) 改由宿主代写，另记输入文件的哈希和 `model`。
 12. **快照字段**：协议要宿主记 `inputUrl`、`resolvedUrl`、实际拿到的输出、`access`、投递来的 `adapter: deliver:<令牌名>`；schema 的快照只有 6 个字段，还是 `additionalProperties: false`。
 13. **`missing`**：[§3](#3-manifestjson) 是自由字符串；协议要用 `outputs` 的词表。
-14. **导出身份键和导出记录**：[ADR-003](decisions/ADR-003-plugins.md#7-导出与读回) 写 `xiecun_id`、`.xiecun/exports/`，协议写 `seelu_id`、`.seelu/exports/`，都是旧占位。已知。
+14. **导出身份键和导出记录**：11-05 改名后，[ADR-003](decisions/ADR-003-plugins.md#7-导出与读回) 和协议都写 `usuyo_id`、`.usuyo/exports/`，已一致。
 15. **插件来源怎么显示**：product-model 写官方不内置插件来源、显示签名指纹；[协议 §8.4](plugin-protocol.md#84-三种来源) 预装两个 `builtin/` 插件，显示由哪个发版工作流构建。已知。
 16. **GitHub App**：[ADR-003 §6](decisions/ADR-003-plugins.md#6-分发与校验) 定了一开始就做；O3 建议先不做，在 [discussion 第 8 条](discussion.md#8-插件怎么校验)。
 17. **改动提议多久作废**：product-model 写 7 天，03 举例 24 小时；A2 建议 7 天，没定。

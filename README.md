@@ -1,4 +1,4 @@
-# 歇存 Xiecun
+# usuyo
 
 在推荐流外，维护一套你自己的思路。
 
@@ -14,7 +14,7 @@
 ```
 make init     # 安装依赖
 make check    # lint + test
-make build    # 产出 bin/xiecun
+make build    # 产出 bin/usuyo
 ```
 
 ## 许可证

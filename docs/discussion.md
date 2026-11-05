@@ -9,7 +9,7 @@
 - 2026-11-04 整理。一次问一条，按下面的顺序。
 - 每答一条，记进 [open-decisions](open-decisions.md#17-11-04-回复记下的) 和 [PRD](PRD.md)。「不选推荐会怎样」只写表里没有的。
 - 完整登记表（112 个编号）留在 [open-decisions.md](open-decisions.md)。这里只挑会写进文件、目录、协议的 17 条，原编号和选项字母照原条目。
-- 名字没定，正文写「本产品」；占位规则见 [overview](overview.md#整体设计供-review)。
+- 名字 11-05 定为 usuyo（[第 5 条](#5-名字)）；正文有时仍写「本产品」。
 
 <a id="1-什么东西进资料库"></a>
 ## 1. 什么东西进资料库
@@ -106,9 +106,9 @@
 
 **已答（11-04）**：「dokokara备选，然后我想再找个yohaku这种的」。Dokokara 是备选，再找一个像 Yohaku 的名字。第四轮（[调研 13](research/13-yohaku-like-names.md#0-结论)）后 11-05 定为 **usuyo**，只用拉丁字母。记在 [open-decisions §1.8](open-decisions.md#18-grill-回答)。
 
-**问题**：Innei 有一个还在更新的「余白 / Yohaku」，Mac 上还有「YOHAKU – liquid notes」（[调研 09 §12.3](research/09-fog-and-name.md#123-yohaku-细查)，11-03 查）。和它们同名你能接受吗？不能就定 Dokokara。答了，命令、`.{name}/`、配置目录、环境变量前缀、MCP 服务名、`{name}_id` 才能定。
+**问题**：Innei 有一个还在更新的「余白 / Yohaku」，Mac 上还有「YOHAKU – liquid notes」（[调研 09 §12.3](research/09-fog-and-name.md#123-yohaku-细查)，11-03 查）。和它们同名你能接受吗？不能就定 Dokokara。答了，命令、`.usuyo/`、配置目录、环境变量前缀、MCP 服务名、`usuyo_id` 才能定。
 
-**为什么现在问**：不挡写文档，但越晚改得越多；`{name}_id` 会写进你的笔记库，能导出之前要定死。
+**为什么现在问**：不挡写文档，但越晚改得越多；`usuyo_id` 会写进你的笔记库，能导出之前要定死。
 
 **选项**
 
@@ -313,7 +313,7 @@ A（Go + MyGo，即现在的 ADR-001）随[第 6 条](#6-桌面壳)出局；D（
 
 **你 11-04 给了方向**：同步学 Hatoba，用你自己的 Cloudflare 账号，以后再支持 WebDAV（推断「web那个」指它）等。11-04 又定了：同步算主要功能，文字同步进第一版，媒体稍后（[调研 14](research/14-sync-like-hatoba.md#0-结论)）。11-05 其余细节全部照调研 14 的建议。下面的选项是当时的。记在 [open-decisions §1.8](open-decisions.md#18-grill-回答)。
 
-**问题**：WebDAV、S3、自有云盘能直接放资料库，还是只做备份？答了，隐藏目录 `.{name}/` 怎么分就定了。
+**问题**：WebDAV、S3、自有云盘能直接放资料库，还是只做备份？答了，隐藏目录 `.usuyo/` 怎么分就定了。
 
 **为什么现在问**：第一段代码写资料库目录时就要定。
 

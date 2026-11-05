@@ -33,7 +33,7 @@
 
 接口分五层，见 [overview](overview.md#5-接口做到哪了)。除了界面端口的 `Origin`、daemon 在不在壳里，都不等语言。
 
-- [ ] 第 0 层：`{name}` 占位、版本策略、错误模型（RFC 9457）、ID 和时间格式 — 文档会话 · 半天 · 挡第 1–4 层
+- [ ] 第 0 层：版本策略、错误模型（RFC 9457）、ID 和时间格式 — 文档会话 · 半天 · 挡第 1–4 层
 - [ ] 第 1 层：[SPEC](SPEC.md) 改成资料库 v1，加改动提议和改动记录的格式；补快照字段、`private`、`web` 身份、`jobs` 取值 — 文档会话 · 一天 · 挡 feature 001
 - [ ] 第 2 层：一份内核服务契约，派生 HTTP（OpenAPI 3.2）、MCP、CLI；含搜索语法、SSE 事件、端口 — 文档会话 · 一到两天 · 挡界面对接、MCP
 - [ ] 第 3 层：plugin-kit 的 schema、拆 `pkg/contract`、SDK 的形状 — 文档会话 · 中 · 挡插件运行器
@@ -50,7 +50,8 @@
 - [ ] [04 §6.4](research/04-tech-options.md#64-桌面壳mygo-与回退路径) 的版本说法过时：MyGo 0.7.4、Wails v3 正式版，出处见[调研 12](research/12-shell-and-core-language.md#25-壳的成熟度) — 文档会话 · 小 · 不挡
 - [ ] [ADR-002](decisions/ADR-002-frontend-stack.md#和内核的接口) 第 37 行：接受 SSE 就把 WebSocket 换掉 — 文档会话 · 一句 · 不挡
 - [ ] ADR-003 改 accepted：先定 O3、O9、G2 — 你定，文档会话改 · 小 · 不挡代码
-- [ ] 定名后全仓改名：旧占位 `xiecun`（代码）、`seelu`（插件协议）和 `{name}` 一起换，清单见 [07 §8](research/07-positioning-and-naming.md#8-改名要动的地方) — 主会话 · 中 · 挡标识定稿
+- [x] 全仓改名为 usuyo（11-05）：入口文档、CLAUDE.md、README、SPEC、插件协议、ADR、feature 001、product-model、致谢；调研和 open-decisions 留旧名作记录；代码见下一条
+- [ ] 代码改名：`go.mod` 模块 `github.com/usuyo/usuyo`、`cmd/xiecun` → `cmd/usuyo`、各包的 import、Makefile — 文档会话 · 小 · 挡第一行新代码
 
 - [ ] 插件协议 [§8.4](plugin-protocol.md#84-三种来源)、[§8.8](plugin-protocol.md#88-获取方式组织的仓库结构)：client-hook 插件放 `{fetch-org}-hook`，添加来源时能一次加两个（11-04） — 文档会话 · 小 · 挡获取插件组织的结构
 - [ ] [插件协议 §13](plugin-protocol.md#13-待定) 第 26–28 项：按关键词和创作者主页列、可选的评论、扫码登录（11-04） — 文档会话 · 中 · 挡首批插件
