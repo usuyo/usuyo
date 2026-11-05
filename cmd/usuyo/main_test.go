@@ -41,7 +41,7 @@ func TestSubcommandsReportNotImplemented(t *testing.T) {
 			root.SetArgs(args)
 			err := root.Execute()
 			if err == nil || !strings.Contains(err.Error(), "not implemented") {
-				t.Fatalf("xiecun %s: err = %v, want not implemented", strings.Join(args, " "), err)
+				t.Fatalf("usuyo %s: err = %v, want not implemented", strings.Join(args, " "), err)
 			}
 		})
 	}

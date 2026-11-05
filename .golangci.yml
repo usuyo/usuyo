@@ -35,4 +35,4 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/xiecun-app/xiecun
+        - github.com/usuyo/usuyo

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Xiecun manifest.json",
+  "title": "usuyo manifest.json",
   "description": "Index card of a content package. Normative source: docs/SPEC.md §3. Arrays are always present and may be empty.",
   "type": "object",
   "additionalProperties": false,

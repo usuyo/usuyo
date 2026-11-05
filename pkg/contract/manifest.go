@@ -1,4 +1,4 @@
-// Package contract defines the documents exchanged across Xiecun's
+// Package contract defines the documents exchanged across usuyo's
 // boundaries: the content package manifest (manifest.json), the adapter
 // fetch output and the adapter declaration (adapter.yaml). See docs/SPEC.md
 // §3 and §8.

@@ -12,7 +12,7 @@ import (
 	"github.com/goccy/go-yaml"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 
-	"github.com/xiecun-app/xiecun/pkg/contract"
+	"github.com/usuyo/usuyo/pkg/contract"
 )
 
 func TestManifestRoundTrip(t *testing.T) {

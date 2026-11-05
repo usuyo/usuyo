@@ -1,4 +1,4 @@
-module github.com/xiecun-app/xiecun
+module github.com/usuyo/usuyo
 
 go 1.26.0
 

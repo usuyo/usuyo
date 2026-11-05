@@ -17,7 +17,7 @@ $(GOLANGCI_LINT):
 
 ## dev: 启动内核守护进程。桌面壳开发模式随 M3 加入。
 dev:
-	$(GO) run ./cmd/xiecun daemon
+	$(GO) run ./cmd/usuyo daemon
 
 ## check: lint + test
 check: lint test
@@ -32,6 +32,6 @@ test:
 fmt: $(GOLANGCI_LINT)
 	$(GOLANGCI_LINT) fmt ./...
 
-## build: 产出 bin/xiecun（无 cgo，见 ADR-001）
+## build: 产出 bin/usuyo（无 cgo，见 ADR-001）
 build:
-	CGO_ENABLED=0 $(GO) build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o $(BIN)/xiecun ./cmd/xiecun
+	CGO_ENABLED=0 $(GO) build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o $(BIN)/usuyo ./cmd/usuyo

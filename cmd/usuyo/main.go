@@ -1,4 +1,4 @@
-// Command xiecun is the CLI entry point. It also starts the daemon and the
+// Command usuyo is the CLI entry point. It also starts the daemon and the
 // stdio MCP server as subcommands (SPEC §9).
 package main
 
@@ -14,15 +14,15 @@ var version = "dev"
 
 func main() {
 	if err := newRootCmd().Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "xiecun:", err)
+		fmt.Fprintln(os.Stderr, "usuyo:", err)
 		os.Exit(1)
 	}
 }
 
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
-		Use:           "xiecun",
-		Short:         "歇存：把各平台收藏夹里的内容收回本地，可搜索、可交给 Agent",
+		Use:           "usuyo",
+		Short:         "usuyo：在推荐流外，维护一套你自己的思路",
 		Version:       version,
 		SilenceUsage:  true,
 		SilenceErrors: true,

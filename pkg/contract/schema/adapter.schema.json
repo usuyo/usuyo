@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Xiecun adapter.yaml",
+  "title": "usuyo adapter.yaml",
   "description": "Declaration file of an adapter, written in YAML; convert to JSON before validating. Normative source: docs/SPEC.md §8.",
   "type": "object",
   "additionalProperties": false,
