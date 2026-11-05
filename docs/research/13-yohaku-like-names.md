@@ -1,7 +1,7 @@
 <a id="调研-13--第四轮像-yohaku-的名字"></a>
 # 调研 13 — 第四轮：像 Yohaku 的名字
 
-状态：草案 · 2026-11-04 · 2026-11-04 补 [§6](#6-11-04-复查-usuyo)
+状态：草案 · 2026-11-04 · 2026-11-04 补 [§6](#6-11-04-复查-usuyo) · 2026-11-05 补 [§7](#7-11-05-再查开源生态和各平台)
 
 回答你 11-04 的一句：「dokokara备选，然后我想再找个yohaku这种的」（记在 [open-decisions §1.8](../open-decisions.md#18-grill-回答)，对应 [discussion 第 5 条](../discussion.md#5-名字)）。推荐和要你回答的一问在 [§0](#0-结论)；挑名字的尺子在 [§1](#1-这一轮按什么挑)；查过的 101 个名字在 [§2](#2-候选和可用性)；前三名和 Dokokara 的细查在 [§3](#3-入围细查)；怀疑者改了什么在 [§4](#4-怀疑者复核)；定名前还要查的在 [§5](#5-待核实清单)。本篇不改别的文档。
 
@@ -269,3 +269,66 @@ clean 和 usable 的 28 个没有细查词义、误读和同名产品，不算�
 | client-hook `{fetch-org}-hook` | `usuyo-sources-hook` |
 
 这一组是 [N2](../open-decisions.md#2-命名与组织) 的 A（带产品名）。N2 的建议是 B：和产品名没有字面关系，像 Keiyoushi 不带 Mihon 的名字，你还没回。选 B 时有一个候选 `kamiire`（紙入れ，Jisho 释作 wallet、billfold）加 `kamiire-hook`，也都 404；只查了一部词典，「把收下的装进纸里」是推断，起名留到下一轮。
+
+<a id="7-11-05-再查开源生态和各平台"></a>
+## 7. 11-05 再查开源生态和各平台
+
+你 11-05 的两句原话（逐字）：
+
+> 「定，但是你也查一下，这些，主要是开源的这些和各种的，还有各个平台的这种」
+>
+> 「然后包括mediacr那个里面那些支持的东西」
+
+第二句按 [MediaCrawler](https://github.com/NanmiCoder/MediaCrawler) 读（推断），它的 README 列的是小红书、抖音、快手、B站、微博、贴吧、知乎（`gh api`，2026-11-05）。事实都是 2026-11-05 查的，usuyo、usuyou 都查，方法照 [约定](#约定)：每个「空」先拿一个肯定有结果的词对照，对照不过记没查成；只数名字原样相同的结果；不登录，遇到验证页就停。原始记录在流程笔记里。下面已按怀疑者改过。
+
+**查了什么**
+
+| 面 | 结果 |
+|---|---|
+| 代码托管 | Gitee 用户、组织、主页，Bitbucket，SourceHut：两种拼法都 404 或 0。AtomGit（即 GitCode）：usuyo 404，usuyou 有人（见下） |
+| 包注册表 18 家 | Maven Central、NuGet、RubyGems、Packagist、CocoaPods、pub.dev、conda-forge、Hex、CRAN、r-universe、Julia、Swift Package Index、JSR、deno.land/x、LuaRocks、opam、vcpkg、Conan 全空；ecosyste.ms 按名查它收的 117 个注册表，0（二手） |
+| 插件和应用商店 | Chrome 网上应用店（英中日）、Edge 加载项、Microsoft Store 美中日、Mac App Store 按开发者、Google Play 搜索美日、Setapp、Alfred、JetBrains、Figma 插件和小组件、Logseq、Joplin、Zotero 社区目录、Anytype 模板库：没有叫 usuyo 的 |
+| awesome 列表 | GitHub 全站 README 提到 usuyo 的仓库只有 [§6](#6-11-04-复查-usuyo) 已知的 nonQualities/usyuo，没有 awesome 列表收录 |
+| 域名 | .dev、.app、.io、.org、.sh、.so、.ai、.cc、.cn、.com.cn 两种拼法都没有注册记录；usuyo.com 同 [§6](#6-11-04-复查-usuyo) |
+| 开发者社交 | X @usuyoapp、@usuyo_app、@getusuyo，Bluesky、mastodon.social、fosstodon 的 usuyo，Discord 邀请码 usuyo，LinkedIn 公司页 usuyo：都没有 |
+| MediaCrawler 七个 | B站：用户 usuyo 是个人号，1,554 粉丝，2 个视频（最近 2025-04-10），视频和专栏搜索没有标题含 usuyo 的。微博：用户 usuyo 是个人号，682 粉丝（内置浏览器看到，复核时接口 432，没重现）。小红书、抖音、知乎、贴吧：站内要登录或验证，没查成；WebSearch 限定域名查（对照 Obsidian、Logseq 有结果），没有收录叫 usuyo 的用户、笔记或吧，二手。快手：没查成 |
+| 其他国内 | V2EX、少数派文章、掘金、CSDN、百度百科、豆瓣小组和书影音、应用宝、华为应用市场、TapTap：空。豆瓣成员 usuyo、薄樣 是 0 关注的空号 |
+| 国外 | Pinterest usuyo 是 2015 年的空号；Etsy 店名 usuyo 跳到没有商品的会员页；note、Qiita、Zenn 用户 404；pixiv 作品、niconico 0；Naver 首页是韩国零售商卖 東洋佐々木 的 USUYO 玻璃杯 |
+
+**usuyou 不像 [§6](#6-11-04-复查-usuyo) 说的那样空**：AtomGit 用户 usuyou 2024-08-16 建，0 仓库；usuyou.com 2024-10-23 在 Gname 注册，没有 A 记录，像是投资人持有（推断）；X @usuyou 是 2010 年建的受保护个人号。AtomGit 那个号最后更新和 usuyou.com 注册在同一天，可能是同一个人（推断，弱）。都不是同类产品。
+
+**東洋佐々木 那条线**的商品名写「薄葉 うすよう」（批发站 SUPER DELIVERY 原题，二手）。日国、世界大百科、日本大百科都说 薄様 也写 薄葉（[kotobank 薄様](https://kotobank.jp/word/%E8%96%84%E6%A7%98-439972)），是同一个词，[§6](#6-11-04-复查-usuyo) 的「同词源」照旧。
+
+**没查成的**
+
+| 挡在哪 | 平台 |
+|---|---|
+| 要登录 | 小红书、抖音、即刻、Instagram、微博帖子、pixiv 用户、天猫、淘宝、Libraries.io |
+| 验证页 | 贴吧（拼图）、京东（风控页）、搜狗网页（验证码）、Product Hunt、AlternativeTo、OpenHub、itch.io（Cloudflare） |
+| 拦截 | Reddit；Amazon 明说拒绝 AI 代理 |
+| 对照不过 | 快手、知乎（未登录时搜索是空壳）、微信公众号、Gitee 仓库搜索 |
+| 要客户端或网页没有搜索 | 视频号、小程序、快应用、酷安、小米和 OPPO 商店 |
+| 其他 | Figma 文件和个人页 403；商标仍没查 |
+
+Product Hunt、itch.io、Gitee 仓库也用 WebSearch 限定域名补查过，没有 usuyo（二手，只代表搜索引擎收录的部分）。
+
+**怀疑者改了什么**
+
+1. 微信公众号原记「查成：空」，不成立：搜狗公众号搜索查「少数派」「人民日报」也返回「暂无…官方认证订阅号」。→ 改为没查成。
+2. 「没有产品品牌叫 usuyo」说宽了：usuyo.com 关于页自称 Usuyo 是帮用户发现 Google Play 应用和游戏的平台，有提交应用的入口。→ 记为唯一例外，不是同类。
+3. 「这些名字能顺手占」不成立：404 只说明今天没有公开占用，[§6](#6-11-04-复查-usuyo) 的 tesuki 就是 `users/` 404、`orgs/` 存在；域名没查溢价和保留。→ 本节只写「没有公开占用」。
+4. WebSearch 的 `site:` 不严格：`ruoyi site:gitee.com` 7 条里 1 条落在 gitea.com。→ 改用限定域名加对照重查，结论没变。
+5. 最硬的几条命中原样重跑，都重现。
+
+本节更正 [§4 第 11 条](#4-怀疑者复核) 和 [§5](#5-待核实清单) 的「少数派站内搜索不可用」：文章搜索接口可用，校准词 Logseq 前 40 条有 19 条原样命中，那一轮多半用的是网页搜索（推断）。[§6](#6-11-04-复查-usuyo) 的微博 usuyo 从「二手，搜索摘要」变成直接看到；usuyou 见上。
+
+**结论：推不翻，可以定 usuyo。** 开源生态和查得到的各平台都没有叫 usuyo 的软件或同类产品；还能推翻的只剩商标。
+
+**要你自己做的**
+
+1. **商标**：J-PlatPat 查 USUYO、薄葉、うすよう（東洋佐々木 可能注册了第 21 类，不拦软件，推断）；USPTO、TMview、WIPO、CNIPA 查第 9、42 类。
+2. **代码托管尽快注册**：GitHub `usuyo`、`usuyo-sources`、`usuyo-sources-hook`；要国内镜像就在 Gitee、AtomGit 注册同名。
+3. **账号带后缀**：B站、微博、TikTok 的 usuyo 都有人；X 用 @usuyoapp 或 @getusuyo，Bluesky、Mastodon 用 usuyo。
+4. **不把 usuyou 当备用名去注册**：AtomGit、.com、X 三处已被占；README 只写一句拼法说明。
+5. **登录后在 App 里搜一遍**：小红书、抖音、快手、知乎、贴吧、公众号、视频号、即刻、小程序。
+6. **域名**（你不买就跳过）：11-05 时 usuyo.dev、.app、.io 没有注册记录。
