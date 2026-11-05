@@ -11,7 +11,7 @@ v0.1 · 2026-11-04，2026-11-05 改名。产品名 **usuyo**，只用拉丁字�
 - **是什么**：在推荐流外，维护一套你自己的思路：收下的内容原样存在你电脑上，能搜，摆在点阵迷雾地图上。
 - **已定**：见 [§3](#3-已经定了的)；原则是 CLAUDE.md 的六条（[PRD §4](PRD.md#4-原则) 扩成九条）。
 - **待讨论**：[discussion](discussion.md#1-什么东西进资料库) 的 17 条 11-04、11-05 都答了，记在 [open-decisions §1.8](open-decisions.md#18-grill-回答)；还剩获取插件组织的名字。
-- **接口**：设计了一半。插件协议是 v1 草案，其余多在 v0 或只有一句（[§5](#5-接口做到哪了)）。
+- **接口**：设计了一半。插件协议和资料库（[SPEC](SPEC.md#0-约定第-0-层) 第 0、1 层）是 v1 草案，其余多在 v0 或只有一句（[§5](#5-接口做到哪了)）。
 - **语言**：Go 内核加 MyGo 壳（11-04 定）；只做桌面，手机以后原生重写；MyGo 出问题换 Wails v3。
 - **wx-cli**：2026-07-15 起被 GitHub 屏蔽（腾讯方面的 DMCA），你这台微信 3.8.8.19 也用不了。建议 `usuyo-fetch` 不收微信 client-hook 插件，导出文件照 official-export 导入，见 [9](discussion.md#9-自己的获取插件组织收什么)。
 - **RSS、Horizon**：建议在现成阅读器里读，加星算收下；Horizon 当普通 feed，见 [1](discussion.md#1-什么东西进资料库)。
@@ -65,24 +65,24 @@ flowchart LR
 <a id="5-接口做到哪了"></a>
 ## 5. 接口做到哪了
 
-答「接口文档我们设计好了吗」：设计了一半。22 项（下表并成 12 行）没有一项算「已设计且一致」；SPEC、`pkg/contract` 和插件协议、product-model 之间有 [18 处对不上](SPEC.md#附和别的文档对不上的-18-处)。
+答「接口文档我们设计好了吗」：设计了一半。22 项（下表并成 12 行）还没有一项定稿。第 0、1 层 11-05 写成草案，等你过目；SPEC、`pkg/contract` 原来和插件协议、product-model 对不上的 18 处，草案里逐条写了去向：10 处定了，2 处定了一半，6 处归插件协议或第 2、3 层（[SPEC 附](SPEC.md#附v0-各节和-18-处的去向)）。
 
 | 接口 | 状态 | 缺什么 |
 |---|---|---|
-| [插件协议](plugin-protocol.md#01-读者与状态) | v1 草案 | [25 项待定](plugin-protocol.md#13-待定)；没有 schema 文件 |
-| 资料库格式、`pkg/contract`（[SPEC](SPEC.md#2-资料库目录真相源)） | v0，过时 | 目录名没改；manifest 缺字段；删除没写 |
-| 改动提议、改动记录 | SPEC 一行 | 文件格式、op 清单、撤销 |
-| 宿主 ↔ 界面（[ADR-002](decisions/ADR-002-frontend-stack.md#和内核的接口)） | 四条规则 | 资源、令牌、端口、错误体 |
+| [插件协议](plugin-protocol.md#01-读者与状态) | v1 草案 | [31 项待定](plugin-protocol.md#13-待定)；没有 schema 文件 |
+| 资料库格式、`pkg/contract`（[SPEC §1](SPEC.md#1-资料库-v1第-1-层)） | v1 草案 | 等你过目；schema 和 `pkg/contract` 在 feature 001 写 |
+| 改动提议、改动记录（[SPEC §1.5](SPEC.md#15-改动提议)、[§1.6](SPEC.md#16-改动记录)） | v1 草案 | 等你过目 |
+| 宿主 ↔ 界面（[ADR-002](decisions/ADR-002-frontend-stack.md#和内核的接口)） | 四条规则 | 资源、令牌、端口；错误体照 [SPEC §0.3](SPEC.md#03-错误模型) 套到各资源 |
 | 内核推的事件 | ADR-002 一句 | 事件清单、信封、补发 |
 | [MCP 工具](SPEC.md#10-mcp-工具m0) | 草案 | 输入输出 schema；收下工具 |
 | [命令行](SPEC.md#9-clim0) | 草案 | 只有 9 个子命令；输出形状 |
 | [搜索语法](SPEC.md#11-索引) | 一句话 | 查询串、筛选、分页 |
-| [投递接口](plugin-protocol.md#5-投递接口) | 草案 | 错误体、批次查询 |
+| [投递接口](plugin-protocol.md#5-投递接口) | 草案 | 批次查询；错误体照 [SPEC §0.3](SPEC.md#03-错误模型) |
 | [导出与读回](plugin-protocol.md#44-导出的-run-与-readback) | 草案 | 笔记库里的文件形状 |
-| 配置、版本策略 | 各处一句 | 放在哪；升版本怎么迁移 |
+| 配置、版本策略（[SPEC §0.2](SPEC.md#02-版本与兼容)、[§1.1](SPEC.md#11-目录树)） | v1 草案 | 等你过目；设置的完整清单归第 2 层 |
 | 订阅源 | 没有 | 你填的地址、订阅对象 |
 
-设计分五层（11-04 定）：0 占位规则、版本、错误模型、ID，现在能写；1 资料库 v1，加改动提议和改动记录的格式；2 一份内核服务契约，派生 HTTP、MCP、命令行；3 plugin-kit；4 投递、导出、分发、订阅。
+设计分五层（11-04 定）：0 占位规则、版本、错误模型、ID；1 资料库 v1，加改动提议和改动记录的格式（这两层 11-05 写成草案：[SPEC §0](SPEC.md#0-约定第-0-层)、[§1](SPEC.md#1-资料库-v1第-1-层)）；2 一份内核服务契约，派生 HTTP、MCP、命令行；3 plugin-kit；4 投递、导出、分发、订阅。
 
 接口和语言无关；内核用 Go（[7](discussion.md#7-内核语言)），界面端口认哪个 `Origin`、内核是否跑在壳里，在第 2 层按 MyGo 定。
 
@@ -188,6 +188,6 @@ flowchart LR
 ## 11. 文档地图
 
 - **入口**：overview、[PRD](PRD.md)、[discussion](discussion.md)、[TODO](TODO.md)。
-- **参考**：[open-decisions](open-decisions.md)（完整登记表；「先定哪些」由 discussion 取代）、[product-model](product-model.md)（部分并入 PRD v0.4）、[plugin-protocol](plugin-protocol.md)（v1 草案）、[acknowledgements](acknowledgements.md)（致谢候选）、[ADR-001](decisions/ADR-001-stack.md)（11-04 确认，补了退出条件）、[ADR-002](decisions/ADR-002-frontend-stack.md)、[TEMPLATE](features/TEMPLATE.md)。
+- **参考**：[open-decisions](open-decisions.md)（完整登记表；「先定哪些」由 discussion 取代）、[product-model](product-model.md)（部分并入 PRD v0.4）、[plugin-protocol](plugin-protocol.md)（v1 草案）、[SPEC](SPEC.md)（第 0、1 层 v1 草案；第 2 层重写前留着部分 v0）、[acknowledgements](acknowledgements.md)（致谢候选）、[ADR-001](decisions/ADR-001-stack.md)（11-04 确认，补了退出条件）、[ADR-002](decisions/ADR-002-frontend-stack.md)、[TEMPLATE](features/TEMPLATE.md)。
 - **调研**：[research/README](research/README.md) 是索引；01–10 是参考，08 被 09 取代，07 部分被取代，06 公开不公开等 [16](discussion.md#16-哪些文档公开)；新的 [11](research/11-subscriptions-compat-and-wx-cli.md#0-结论) 讲订阅和 wx-cli，[12](research/12-shell-and-core-language.md#0-结论) 讲壳和语言。
-- **过时待改**：[SPEC](SPEC.md)、[ADR-003](decisions/ADR-003-plugins.md)、[feature 001](features/001-m0-core-loop.md)，还按 M0 写、用旧名。
+- **过时待改**：[ADR-003](decisions/ADR-003-plugins.md)、[feature 001](features/001-m0-core-loop.md)，还按 M0 写、用旧名。

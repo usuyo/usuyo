@@ -14,13 +14,13 @@
 
 - **读者**：插件作者（包装现成工具或自己写）、实现插件运行器的人、在 [§13](#13-待定) 拍板产品问题的人。
 - **状态**：草案。2026-11-03 按 [调研 10](research/10-desktop-and-android-agents.md) 补了视觉层的两种做法（电脑端读无障碍树、安卓经 ADB，[§9.5](#95-视觉层流程)）和获取插件经宿主代发用模型（[§4.3](#43-模型与密钥由宿主代发)）。字段名、子命令、方法名、错误码按这里写；实现插件运行器时如有改动，在本文修订并同步 plugin-kit 的 schema（[§10](#10-契约测试与-plugin-kit)）。
-- **版本**：清单里的 `protocol` 是整数，本文是 `1`。宿主只加载 `protocol` 在支持集合里的插件，拒载原因显示在插件列表里（做法同 Mihon 的 `extensionLib`，见 [02 §15.1](research/02-adapter-ecosystems.md#151-声明与匹配)）。同一个 `protocol` 内只加可选字段；插件不得输出它声明的版本里没有的字段，宿主遇到未知字段时忽略并记日志，`usuyo plugin check` 把未知字段当失败。[SPEC §8](SPEC.md#8-适配器协议-v0) 的 v0 没有发布过，不做兼容。
+- **版本**：清单里的 `protocol` 是整数，本文是 `1`。宿主只加载 `protocol` 在支持集合里的插件，拒载原因显示在插件列表里（做法同 Mihon 的 `extensionLib`，见 [02 §15.1](research/02-adapter-ecosystems.md#151-声明与匹配)）。同一个 `protocol` 内只加可选字段；插件不得输出它声明的版本里没有的字段，宿主遇到未知字段时忽略并记日志，`usuyo plugin check` 把未知字段当失败。SPEC v0 的适配器协议没有发布过，不做兼容。主版本怎么升、旧主版本再加载多久，照 [SPEC §0.2](SPEC.md#02-版本与兼容)。
 
 <a id="02-和其他文档的关系"></a>
 ### 0.2 和其他文档的关系
 
 - [ADR-003](decisions/ADR-003-plugins.md) 定了插件的种类、进程模型、权限与隔离、仓库拆分、分发与校验、导出与读回；本文是它的展开。2026-11-01 的修订见 [ADR-003 修订](decisions/ADR-003-plugins.md#修订-2026-11-01)。
-- [SPEC §8](SPEC.md#8-适配器协议-v0) 现在只留概要，指向本文。资料库目录、`manifest.json`、`derived/` 文件、去重仍以 [SPEC §2](SPEC.md#2-资料库目录真相源)、[SPEC §3](SPEC.md#3-manifestjson)、[SPEC §5](SPEC.md#5-derived-文件约定)、[SPEC §7](SPEC.md#7-去重) 为准。
+- SPEC v0 的适配器协议已删，以本文为准（[SPEC 附](SPEC.md#附v0-各节和-18-处的去向)）。资料库目录、`manifest.json`、`derived/` 文件以 [SPEC 第 1 层](SPEC.md#1-资料库-v1第-1-层)为准（[§1.1](SPEC.md#11-目录树)、[§1.2.1](SPEC.md#121-manifestjson-v1)、[§1.2.2](SPEC.md#122-raw-和-derived)），身份和 id 以 [SPEC §0.4](SPEC.md#04-id) 为准，去重仍以 [SPEC §2.3](SPEC.md#23-去重)（v0）为准。
 - `pkg/contract` 的 Go 类型、JSON Schema 和 `testdata/` 仍是 v0；按 ADR-003，实现插件运行器时再按本文改，插件相关的 schema 迁到 plugin-kit（[§10](#10-契约测试与-plugin-kit)）。和 `fetch-output.schema.json` 的差异列在 [§3.7](#37-fetch-输出)，和 `adapter.schema.json` 的对照在 [§2.12](#212-旧字段对照)。
 - 依据：适配器生态 [调研 02](research/02-adapter-ecosystems.md)、Agent 协议 [调研 03](research/03-agent-protocols.md)、笔记软件与插件 [调研 05](research/05-note-apps-and-plugins.md)、平台获取与账号 [调研 06](research/06-platform-access-and-account-risk.md)。
 - 需要用户拍板的产品问题汇总在 [open-decisions](open-decisions.md)，本文相关的见 [§13](#13-待定)。
@@ -29,6 +29,8 @@
 ### 0.3 名字
 
 产品名 usuyo，命令 `usuyo`（2026-11-05 定，[open-decisions §1.8](open-decisions.md#18-grill-回答)）。本文的标识符：清单 `usuyo-plugin.yaml`、环境变量前缀 `USUYO_`、资料库隐藏目录 `.usuyo/`、GitHub topic `usuyo-plugin`、导出文件里的 `usuyo_id`、URL scheme `usuyo://`。2026-11-05 之前本文用过暂名 `seelu`（思鹭），调研和 open-decisions 里还留着它和更早的 `xiecun`（歇存），作为记录不改。
+
+本文说的「本机配置目录」「按机器目录」都是 [SPEC §0.1](SPEC.md#01-命名) 的按机器的目录。
 
 GitHub 组织（2026-11-05 定，用户自己注册）：官方组织 `usuyo`，获取方式组织 `usuyo-fetch`，client-hook 插件放 `usuyo-fetch-hook`。权利人联系地址写 `{contact}`，两个组织用不用同一个地址见 [§13](#13-待定) 第 1 项。
 
@@ -60,7 +62,7 @@ GitHub 组织（2026-11-05 定，用户自己注册）：官方组织 `usuyo`，
 | 类 | 做什么 | 输入 | 输出 | 控制协议 |
 |---|---|---|---|---|
 | 获取 `fetch` | 从平台或导出文件取回内容；导入是获取的一种，来源是文件 | 链接、列表来源、导出文件 | 输出目录里的原始文件加一份 JSON | 子命令，stdout 输出 JSON（[§3](#3-获取插件协议)） |
-| 转换 `transform` | 把条目里已有的文件变成新的一层 | 条目文件的只读路径 | `derived/` 下的约定文件、`images/keyframes/` | stdio 上换行分隔的 JSON-RPC 2.0（[§4](#4-转换与导出插件协议)） |
+| 转换 `transform` | 把条目里已有的文件变成新的一层 | 条目文件的只读路径 | `derived/` 下的约定文件，含 `derived/keyframes/` | stdio 上换行分隔的 JSON-RPC 2.0（[§4](#4-转换与导出插件协议)） |
 | 导出 `export` | 把条目和主题页写到笔记软件，可选读回用户改动 | 条目与主题页的只读路径 | 交给宿主写的文件，或经宿主代发的云端调用；读回时返回结构化改动 | 同转换 |
 
 几条贯穿全文的规则：
@@ -92,7 +94,7 @@ GitHub 组织（2026-11-05 定，用户自己注册）：官方组织 `usuyo`，
 | `kind` | 枚举 | 是 | `fetch`、`transform`、`export` | `fetch` |
 | `name` | 字符串 | 是 | 界面上显示的名字 | `抖音` |
 | `description` | 字符串 | 否 | 一句话说明 | `列出我的抖音收藏夹，按分享页取单条` |
-| `version` | 字符串 | 是 | semver，等于 tag 去掉 `v`；写进条目快照的 `adapterVersion` | `0.3.1` |
+| `version` | 字符串 | 是 | semver，等于 tag 去掉 `v`；写进条目快照的 `pluginVersion` | `0.3.1` |
 | `license` | 字符串 | 是 | 插件自身的 SPDX 许可证 | `MIT` |
 | `homepage` | URL | 否 | 默认是仓库主页 | `https://github.com/someone/usuyo-fetch-douyin` |
 | `maintainers` | 字符串数组 | 是 | 维护者的 GitHub 登录名，至少一个；不经本人同意不写别人（RSSHub 的规则，[02 §15.1](research/02-adapter-ecosystems.md#151-声明与匹配)） | `[someone]` |
@@ -132,7 +134,7 @@ upstream:
 | `sites` | 全部 | 有登录时必填 | 用到 `sites` 里的哪几个，写 `site` 值 | `[www.douyin.com]` |
 | `timeout` | 全部 | 否 | 覆盖 [§3.4](#34-超时与取消) 的默认总时长；获取插件只用这一处，不用 `permissions.limits.timeout` | `2h` |
 | `perPlatform` | 全部 | 否 | 多平台插件里某个平台走的路不同时，按平台覆盖 `access`、`login`、`sites` | `{bilibili: {access: private-api, login: optional}}` |
-| `outputs` | `fetch` | 是 | 能取到哪些东西，固定词表：`text`、`html`、`images`、`media:video`、`media:audio`、`subtitle`、`meta` | `[text, images, media:video]` |
+| `outputs` | `fetch` | 是 | 能取到哪些东西，固定词表：`text`、`html`、`images`、`media:video`、`media:audio`、`subtitle`、`meta`（要改，见 [§13](#13-待定) 第 31 项） | `[text, images, media:video]` |
 | `input` | `fetch` | 否 | 接什么：`[url]`（默认）、`[ref]`（只接 `list` 返回的 `ref`，导入插件这样写）或 `[url, ref]` | `[ref]` |
 | `order` | `list` | 是 | `newest-first`（按加入时间从新到旧）或 `unordered`，决定跟着收怎么停（[§3.8](#38-list-与跟着收)） | `newest-first` |
 | `sources` | `list` | 否 | 固定的来源，界面在登录前就能显示；运行时以 `sources` 子命令为准 | `[{source: "douyin:favorites", title: 我的收藏夹, action: favorite}]` |
@@ -352,15 +354,15 @@ run:
 - 宿主安装时只下载 release 资产，不调用 npm、pip 一类包管理器。脚本类插件把依赖打进资产，或做成单个可执行文件（`bun build --compile`、`deno compile`、PyInstaller 一类）；要的运行时写进 `requires.runtime`。
 - **插件自带的第三方程序**（例如视觉层插件带的 agent-desktop，推到手机上的 scrcpy-server 或自己写的 `app_process` 助手）放进插件自己的资产，只打包当前平台那一份，锁定版本，不让用户另装（agent-desktop 不走 `npm i -g`）。插件仓库的 CI 先核上游发布的 sha256 和来源证明，agent-desktop 是 `gh attestation verify <archive> --repo vercel-labs/agent-desktop`，通过了才打进资产；上游的 LICENSE 一并带上，agent-desktop 的 npm 包和 release 压缩包里都没有，要从它的仓库拿。运行时不另下载，推到手机上的文件只从 `${PLUGIN_DIR}` 推；GPL 的手机端组件只让用户自装（[§9.6](#96-许可证)）。
 - 安装目录按版本分开：`<本机配置目录>/plugins/<owner>/<repo>/<version>/`，保留上一个版本便于回退。
-- 插件的启用状态、设置、密钥放本机配置目录，不放进资料库（[ADR-003 §4](decisions/ADR-003-plugins.md#4-权限与隔离)）。
+- 插件的启用状态、设置放本机配置目录，密钥放系统钥匙串（[§2.11](#211-插件设置-settings)），都不放进资料库（[ADR-003 §4](decisions/ADR-003-plugins.md#4-权限与隔离)）。
 
 <a id="29-转换插件的字段"></a>
 ### 2.9 转换插件的字段
 
 | 字段 | 类型 | 必填 | 含义 | 例子 |
 |---|---|---|---|---|
-| `consumes` | 数组 | 是 | 吃什么：`media:video`、`media:audio`、`image`、`html`、`text`、`subtitle`、`derived:asr`、`derived:ocr`、`derived:vision`。只吃特定格式时写成对象 `{kind, mime}`，宿主编排时先让抽音轨一类插件转成要的格式 | `[{kind: media:audio, mime: [audio/wav]}]` |
-| `produces` | 字符串数组 | 是 | 产出 [SPEC §5](SPEC.md#5-derived-文件约定) 里的哪些文件：`derived/asr.vtt`、`derived/ocr/*.json`、`derived/vision.md`、`derived/summary.md`、`derived/embeddings.bin`、`images/keyframes/`；抽出的音轨写 `derived/audio/`（SPEC 没列，实现时补），`derived/audio/` 下的文件算 `media:audio` | `[derived/asr.vtt]` |
+| `consumes` | 数组 | 是 | 吃什么：`media:video`、`media:audio`、`image`、`html`、`text`、`subtitle`、`derived:asr`、`derived:ocr`、`derived:vision`、`derived:keyframes`。`text` 指原文那一栏：主快照的 `text`，没有就是 `derived/readable.md`（[SPEC §1.2.3](SPEC.md#123-contentmd-和各栏)）。只吃特定格式时写成对象 `{kind, mime}`，宿主编排时先让抽音轨一类插件转成要的格式 | `[{kind: media:audio, mime: [audio/wav]}]` |
+| `produces` | 字符串数组 | 是 | 产出 [SPEC §1.2.2](SPEC.md#122-raw-和-derived) 里的哪些文件：`derived/readable.md`、`derived/asr.vtt`、`derived/ocr/*.json`、`derived/vision.md`、`derived/summary.md`、`derived/embeddings.bin`、`derived/keyframes/`；抽出的音轨写 `derived/audio/`，下面的文件算 `media:audio`。`derived/thumb.jpg`、`derived/fingerprints.json` 由宿主产出，不进 `produces` | `[derived/asr.vtt]` |
 | `provider` | 枚举 | 是 | 要不要模型 provider：`none`、`optional`、`required`（[§4.3](#43-模型与密钥由宿主代发)） | `none` |
 | `models` | 对象数组 | 否 | 要宿主下载的模型：`name`、`url`、`sha256`、`size`，放进 `${MODELS}`。可选 `setting`、`value`：只在用户把这个设置选成这个值之后、第一次 `run` 之前才下载；没写的在安装时下载 | 见下 |
 
@@ -427,7 +429,7 @@ settings:
 <a id="212-旧字段对照"></a>
 ### 2.12 旧字段对照
 
-[SPEC §8](SPEC.md#8-适配器协议-v0) 与 `pkg/contract/schema/adapter.schema.json` 的字段到 v1 的去向：
+SPEC v0 的适配器协议（[SPEC 附](SPEC.md#附v0-各节和-18-处的去向)）与 `pkg/contract/schema/adapter.schema.json` 的字段到 v1 的去向：
 
 | v0（`adapter.yaml`） | v1（`usuyo-plugin.yaml`） | 说明 |
 |---|---|---|
@@ -465,7 +467,7 @@ settings:
 
 宿主怎么用获取插件，插件作者要知道的部分：
 
-- **身份**：收下一个链接时，宿主在 `match` 命中的插件上按用户排的顺序调 `canonicalize`，取第一个 `match: true` 的结果作为身份（[SPEC §7](SPEC.md#7-去重)）。`identity.contentId` 要符合平台列表里的格式（[§2.3](#23-获取插件的字段)），不符合的按 `invalid-output` 处理。
+- **身份**：收下一个链接时，宿主在 `match` 命中的插件上按用户排的顺序调 `canonicalize`，取第一个 `match: true` 的结果作为身份（[SPEC §0.4](SPEC.md#04-id)）。`identity.contentId` 要符合平台列表里的格式（[§2.3](#23-获取插件的字段)），不符合的按 `invalid-output` 处理。
 - **顺序**：每个平台按用户排的顺序依次调 `fetch`，失败换下一个，全部失败停在 `link` 并记下各自的原因。默认顺序是待定项（[§13](#13-待定) 第 3 项）。不论 `access` 高低都照这个顺序换。平台插件和 `platforms` 含 `web` 的插件都命中时，先把平台插件全部试完，再轮到 `web` 插件。
 - **暂停单个插件**：插件返回 `rate-limited` 时，宿主在 `retryAfter` 之内（没给就 15 分钟）不再在这个平台上调它；返回 `blocked` 时，暂停到用户在插件那一行点「继续」。别的插件照常按顺序试，包括用同一个账号的插件：平台的限流常按接口分开计，换一个插件、换一个接口可能还取得到（推断），这是按 D-c 和实用优先定的技术做法。
 - **完整度只升不降**：宿主给每个快照记下实际拿到的输出集合（`outputs` 词表里的值）。新快照算不算升级、用户改了「只留文字」之类的设置后要不要再取，比的是这个集合，不比 `full`、`partial` 这两个字样。失败不降级。
@@ -489,7 +491,8 @@ settings:
 | 插件回 `ok: true`、`completeness: link` | 按 `unsupported-input` 处理，换下一个 |
 | 插件自报的 `completeness` 和实际输出对不上 | 宿主按 `text`、`html`、`images`、`media[].kind` 实际出现了哪些，对照 `--want` 重算，以宿主算的为准，并记日志 |
 | 退出码 `2` 且没有信封 | 记 `invalid-args`，当 bug 记下，换下一个 |
-| 没有插件的 `match` 命中，或 `canonicalize` 全部回 `match: false` | 交给 `platforms` 含 `web` 的插件（如果装了）；没装就建一个 `platform: web`、没有身份的条目，停在 `link`，即 [SPEC §7](SPEC.md#7-去重) 说的无平台 ID 的条目 |
+| 没有插件的 `match` 命中，或 `canonicalize` 全部回 `match: false` | 交给 `platforms` 含 `web` 的插件（如果装了）；没装就由宿主照 [SPEC §0.4](SPEC.md#04-id) 自己算出 `web:` 身份建条目，停在 `link` |
+| `match` 命中的插件都没回 `match: true`，且有一个 `canonicalize` 因 `network` 或 `timeout` 失败（例如离线时收下的短链） | 不交给 `web` 插件。宿主拿这条链接本身算 `web:` 身份，马上建只有链接的条目（`completeness: link`，还没有快照；之后的快照照记 `inputUrl`），重试记进本机 `jobs.db`（[SPEC §1.1](SPEC.md#11-目录树)）；之后再调 `canonicalize`，拿到平台身份就照 [SPEC §0.4](SPEC.md#04-id) 并过去，`web-` id 留作别名 |
 | 常驻进程崩溃 | 记 `crashed`，下一次调用时重启；连续崩溃 3 次就停用这个插件，直到用户在插件那一行点「继续」 |
 
 <a id="32-调用约定"></a>
@@ -600,6 +603,8 @@ settings:
 | `state:` | 要用户处理的状态：`unlocked`（屏幕或手机没解锁）、`logged-in`（客户端里没登录）、`debugging`（手机没开开发者选项或 USB 调试）、`authorized`（手机还没允许这台电脑调试） | `state:unlocked` |
 | `file:` | 导入文件的副本已经不在 | `file:twitter-2026-10-30.zip` |
 
+这张表要改，见 [§13](#13-待定) 第 30 项。
+
 插件返回的错误码：
 
 | `code` | 含义 | 运行器怎么办 |
@@ -652,10 +657,10 @@ settings:
 {"ok": true, "match": false}
 ```
 
-- 展开短链、去掉跟踪参数、取出平台内容 ID（[SPEC §7](SPEC.md#7-去重)）。不是自己的链接回 `match: false`，退出码 0，这不是错误。
+- 展开短链、去掉跟踪参数、取出平台内容 ID（[SPEC §0.4](SPEC.md#04-id)）。不是自己的链接回 `match: false`，退出码 0，这不是错误。
 - 只为展开短链才发请求，只跟随重定向，不带凭据；这个请求不计入平台节奏，另受每平台每分钟的上限（[§3.1](#31-运行器与节奏)）。
-- `identity` 的形状和 `fetch` 输出里的一样。`identity.contentId` 照 plugin-kit 平台列表里的格式写（[§2.3](#23-获取插件的字段)）。`identity.url` 写规范化后的链接，去掉跟踪参数和会话 token 一类参数，只用于去重和显示。
-- `resolvedUrl` 可选：展开短链后的完整链接，保留全部参数。宿主把用户给的原链接另存（快照里记 `inputUrl`，[SPEC §3](SPEC.md#3-manifestjson) 实现时补），有 `resolvedUrl` 时一并记下，交给 `fetch` 的是这两者之一，不是 `identity.url`（[§3.6](#36-fetch-与输出目录)）。小红书的链接要带 `xsec_token` 才取得到（[06 §1.3](research/06-platform-access-and-account-risk.md#13-混合路径视觉层拿链接公开页面取内容)），去掉参数就取不到了。
+- `identity` 的形状和 `fetch` 输出里的一样。`identity.contentId` 照 plugin-kit 平台列表里的格式写（[§2.3](#23-获取插件的字段)）。`identity.url` 写规范化后的链接，去掉跟踪参数和会话 token 一类参数，只用于去重和显示（要改，见 [§13](#13-待定) 第 29 项）。
+- `resolvedUrl` 可选：展开短链后的完整链接，保留全部参数。宿主把用户给的原链接另存（快照里记 `inputUrl`，[SPEC §1.2.1](SPEC.md#121-manifestjson-v1)），有 `resolvedUrl` 时一并记下，交给 `fetch` 的是这两者之一，不是 `identity.url`（[§3.6](#36-fetch-与输出目录)）。小红书的链接要带 `xsec_token` 才取得到（[06 §1.3](research/06-platform-access-and-account-risk.md#13-混合路径视觉层拿链接公开页面取内容)），去掉参数就取不到了。
 
 <a id="36-fetch-与输出目录"></a>
 ### 3.6 fetch 与输出目录
@@ -668,7 +673,7 @@ settings:
 - `--want` 是宿主想要的东西，取 `outputs` 的子集；不给时按 `outputs` 全取。例如用户开了「收下后直接只留文字」，宿主就不要 `media:video`，插件不必下载视频。
 - `--out` 是宿主新建的空目录，绝对路径。插件只在里面写文件，不依赖当前目录；输出 JSON 里的路径都相对它。
 - 成功后宿主把整个目录移成 `raw/<snapshotId>/`，没被 JSON 引用的文件（例如平台原始返回）也原样留下；失败就整个丢掉。
-- **输出目录的规则**（[§4.2](#42-转换的-run)、[§4.4](#44-导出的-run-与-readback)、[§5.1](#51-本机-http-接口)、[§5.2](#52-监听文件夹) 都照这条）：宿主在移动前遍历整个目录，不只看 JSON 引用的条目。只接受普通文件和目录；遇到符号链接、`nlink > 1` 的硬链接、FIFO、套接字、设备文件，或名字含 `..`、以 `/` 开头、含控制字符的条目，整次判 `invalid-output` 并丢弃。JSON 里的路径同样不能有 `..` 或绝对路径。整个目录有大小上限，`fetch` 默认 8 GiB，转换、导出和投递默认 1 GiB，用户可以在设置里改，超了也判 `invalid-output`。原因：插件在沙箱里读不了 `~/.ssh`，但能在 `out` 里建一个指向它的符号链接；目录移进资料库后，索引、导出和 MCP 会以宿主的身份读到目标内容。
+- **输出目录的规则**（[§4.2](#42-转换的-run)、[§4.4](#44-导出的-run-与-readback)、[§5.1](#51-本机-http-接口)、[§5.2](#52-监听文件夹) 都照这条）：宿主在移动前遍历整个目录，不只看 JSON 引用的条目。只接受普通文件和目录；遇到符号链接、`nlink > 1` 的硬链接、FIFO、套接字、设备文件，或名字含 `..`、以 `/` 开头、含控制字符的条目，整次判 `invalid-output` 并丢弃（名字的规则要改，见 [§13](#13-待定) 第 32 项）。JSON 里的路径同样不能有 `..` 或绝对路径。整个目录有大小上限，`fetch` 默认 8 GiB，转换、导出和投递默认 1 GiB，用户可以在设置里改，超了也判 `invalid-output`。原因：插件在沙箱里读不了 `~/.ssh`，但能在 `out` 里建一个指向它的符号链接；目录移进资料库后，索引、导出和 MCP 会以宿主的身份读到目标内容。
 - 建议的目录布局：
 
 ```
@@ -711,20 +716,20 @@ settings:
 | 字段 | v0 | v1 |
 |---|---|---|
 | `ok` | 无 | 必填，成功为 `true` |
-| `identity` | 必填，`platform` 必填 | 没有平台内容 ID 的条目（聊天记录、转发的图片一类）可以省略，或写 `{"platform": "file"}` 不带 `contentId`；这样的条目不参与身份层，去重只走内容层（[SPEC §7](SPEC.md#7-去重)） |
+| `identity` | 必填，`platform` 必填 | 没有平台内容 ID 的条目（聊天记录、转发的图片一类）可以省略，或写 `{"platform": "file"}` 不带 `contentId`，省略等于 `{"platform": "file"}`；这样的条目不参与身份层，去重只走内容层（[SPEC §0.4](SPEC.md#04-id)） |
 | `textFormat` | 无 | 可选，`plain`（默认）或 `markdown` |
 | `media` | 路径字符串数组 | 对象数组：`path`、`kind`（`video`、`audio`、`subtitle`、`other`）必填，`mime`、`lang`、`durationSec` 可选。转换插件按 `kind` 编排，靠扩展名猜不可靠 |
 | `missing` 的取值 | 自由字符串 | 用 `outputs` 的词表，例如 `media:video` |
-| `missingReason` | 无（[SPEC §3](SPEC.md#3-manifestjson) 的 manifest 有） | 可选，给用户看的原因，例如「分享页没有给出视频地址」 |
+| `missingReason` | 无（[SPEC §1.2.1](SPEC.md#121-manifestjson-v1) 的 manifest 有） | 可选，给用户看的原因，例如「分享页没有给出视频地址」 |
 | `evidence.access` | 无 | 必填，这次实际用到的那一层。快照里另有一个值 `deliver`，由宿主给投递来的内容填（[§5.1](#51-本机-http-接口)），不出现在清单的 `access` 里 |
 | `credentialsUpdate` | 无 | 可选，调用期间平台换了会话 cookie 时交回新值（[§6](#6-凭据)） |
 | `evidence.site` | 无 | 用了登录时填站点 |
 | `evidence.upstream` | 无 | 可选，`{name, version}`，被包装工具的实际版本 |
 | `evidence.status` | 可选 | 只在 HTTP 类请求时填 |
-| 其余字段 | | 不变：`kind`、`title`、`author`、`publishedAt`、`text`、`html`、`images`、`platformTags`、`completeness`、`missing`、`evidence.fetchedAt` |
+| 其余字段 | | 不变：`kind`、`title`、`author`、`publishedAt`、`text`、`html`、`images`、`platformTags`、`completeness`、`missing`、`evidence.fetchedAt`（时间的格式要改，见 [§13](#13-待定) 第 30 项） |
 
 - `completeness`：`full` 是 `--want` 里的都拿到了；`partial` 是缺了一部分，缺什么写进 `missing`；`link` 是只认出了身份。宿主会按实际输出重算，比较完整度时比的是实际拿到的输出集合（[§3.1](#31-运行器与节奏)）。
-- `text` 是平台原文的文字，宿主据此写 `content.md`，机器永不改写（[SPEC §4](SPEC.md#4-contentmd)）。
+- `text` 是平台原文的文字，宿主据此生成 `content.md`：主快照变了就重写，用户在外面改过的不再重写；原样在 `raw/`（[SPEC §1.2.3](SPEC.md#123-contentmd-和各栏)）。
 - 数组字段总是出现，可以为空。
 
 <a id="38-list-与跟着收"></a>
@@ -758,11 +763,11 @@ settings:
 
 - `source` 是插件自己定的字符串，建议写 `<platform>:<kind>[:<id>]`；`file:` 开头的留给导入（[§3.9](#39-从文件导入)）。`sources` 列出用户能选的来源，要登录时也要先登录。
 - 每页由宿主单独调用，页与页之间按节奏等待；不传 `--cursor` 是第一页，`nextCursor: null` 是最后一页。游标是插件私有的不透明字符串。
-- 条目字段：`url` 或 `ref` 至少一个；`identity`、`title`、`author`、`publishedAt`、`action`（`favorite`、`like`、`share`、`view`、`unknown`）、`actedAt` 能给就给。拿不到加入时间时 `actedAt` 留空，不用抓取时间冒充（[02 §15.5](research/02-adapter-ecosystems.md#155-批量导入与同步)）。
+- 条目字段：`url` 或 `ref` 至少一个；`identity`、`title`、`author`、`publishedAt`、`action`（`favorite`、`like`、`share`、`view`、`unknown`）、`actedAt` 能给就给（时间的格式要改，见 [§13](#13-待定) 第 30 项）。拿不到加入时间时 `actedAt` 留空，不用抓取时间冒充（[02 §15.5](research/02-adapter-ecosystems.md#155-批量导入与同步)）。
 - 只有 `url` 的条目，宿主按 [§3.1](#31-运行器与节奏) 的顺序去取内容；带 `ref` 的条目，宿主回到这个插件调 `fetch <ref>`。`ref` 由插件自己定，对宿主不透明；宿主为每个 `ref` 记下它来自哪个插件、哪个 `source`，调 `fetch <ref>` 时按这个 `source` 设好 `${INPUT}` 一类的上下文。
-- **跟着收（增量）**：`order: newest-first` 的来源，宿主从第一页往后翻，遇到一整页都是资料库里已有的身份就停；`--since` 是上次成功同步的时间，插件拿得到 `actedAt` 时可以据此提前结束、返回 `nextCursor: null`。`unordered` 的来源每次全量翻，频率由用户的订阅设置定。
+- **跟着收（增量）**：`order: newest-first` 的来源，宿主从第一页往后翻，遇到一整页都是资料库里已有的身份就停；`--since` 是这个来源上次跟着收成功跑完的时间，插件拿得到 `actedAt` 时可以据此提前结束、返回 `nextCursor: null`。`unordered` 的来源每次全量翻，频率由用户的订阅设置定。
 - 批量导入的结果先进预览（新增、已有、可以升级完整度），用户确认后才按节奏去取内容（[PRD](PRD.md) 的批量导入）；跟着收是用户订阅过的来源，新条目直接收下，不再逐次预览。
-- 跟着收收下的条目记 `origin.entry: sync`；批量导入（`/v1/batches` 和对列表来源的一次性导入）记 `import`，同一批共用一个 `importBatch`。
+- 跟着收收下的条目，`origins[]` 里那一项记 `entry: subscription`，另记 `subscription`（订阅 id）；批量导入（`/v1/batches` 和对列表来源的一次性导入）记 `import`，同一批共用一个 `importBatch`（[SPEC §1.2.1](SPEC.md#121-manifestjson-v1)）。
 
 <a id="39-从文件导入"></a>
 ### 3.9 从文件导入
@@ -799,11 +804,11 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip"
 ```
 
 - 用户拖进一个文件或点「导入」时，宿主按 `files` 找能读它的插件；都对不上时让用户手选，插件不认识就回 `unsupported-input`。
-- 调 `list` 之前，宿主把导入文件复制到本机配置目录下的 `imports/<importBatch>/`（能用 clonefile、reflink 或硬链接就不真的复制），`${INPUT}` 和 `USUYO_INPUT` 指向这份副本；来源写 `file:<原文件名>`。导入要先进预览，用户可能几天后才确认，原文件这期间被移走也不影响；副本在这批导入结束或取消后清掉。用户下载目录的绝对路径不进 `ref`，也不随快照写进资料库。
+- 调 `list` 之前，宿主把导入文件复制到按机器目录（[SPEC §1.1](SPEC.md#11-目录树)）下的 `libraries/<libraryId>/imports/<importBatch>/`（能用 clonefile、reflink 或硬链接就不真的复制），`${INPUT}` 和 `USUYO_INPUT` 指向这份副本；来源写 `file:<原文件名>`。导入要先进预览，用户可能几天后才确认，原文件这期间被移走也不影响；副本在这批导入结束或取消后清掉。用户下载目录的绝对路径不进 `ref`，也不随快照写进资料库。
 - `ref` 由插件自己定，对宿主不透明，不含绝对路径。宿主记住每个 `ref` 来自哪个来源，`fetch <ref>` 时放行同一个 `${INPUT}`。副本已经不在时，宿主不调用插件，条目记 `dependency-missing`，`needs` 写 `file:<原文件名>`。
 - 导出包里有内容的（X 归档、flomo、BiliNote 的 `note_results`），条目带 `ref`，宿主再调 `fetch <ref>` 取出内容和文件；只有链接的（Takeout 的稍后观看、书签），条目只带 `url`，内容交给平台插件去取，取不到就停在 `link`。
 - 大文件可以在 `${CACHE}` 里留解压结果，或用常驻模式只打开一次。
-- 条目记 `origin.entry: import`，同一批共用一个 `importBatch`。
+- 条目在 `origins[]` 里那一项记 `entry: import`，同一批共用一个 `importBatch`。
 
 <a id="310-health"></a>
 ### 3.10 health
@@ -902,7 +907,7 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip"
 ### 4.2 转换的 run
 
 ```json
-{"jsonrpc":"2.0","id":7,"method":"run","params":{"item":{"id":"douyin-74312345-k9x2","kind":"video","title":"手冲咖啡：三段式注水","lang":"zh"},"inputs":[{"kind":"media:audio","mime":"audio/wav","path":"/private/var/folders/xx/usuyo-proc-03/in/7/derived/audio/audio.wav"}],"out":"/private/var/folders/xx/usuyo-proc-03/out/7","options":{"model":"sensevoice-small"},"provider":null}}
+{"jsonrpc":"2.0","id":7,"method":"run","params":{"item":{"id":"douyin-4plrcxk343onmyxibmrr672kga","kind":"video","title":"手冲咖啡：三段式注水","lang":"zh"},"inputs":[{"kind":"media:audio","mime":"audio/wav","path":"/private/var/folders/xx/usuyo-proc-03/in/7/derived/audio/audio.wav"}],"out":"/private/var/folders/xx/usuyo-proc-03/out/7","options":{"model":"sensevoice-small"},"provider":null}}
 ```
 
 ```json
@@ -915,7 +920,7 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip"
 
 - `inputs` 是条目文件放进进程暂存目录后的绝对路径，只读（`${INPUT}`，怎么放进去见 [§7.1](#71-常驻进程的路径)）。大块数据不走管道。`consumes` 写了 `mime` 的，宿主只给符合格式的文件，必要时先让抽音轨一类插件转好。
 - `options` 是这个插件的非密钥设置。
-- 插件只写 `out`。结果里每个输出写明对应 `produces` 里的哪一项和相对 `out` 的路径；`out` 照 [§3.6](#36-fetch-与输出目录) 的输出目录规则检查，宿主核对后移进 `derived/`，并替插件写 `.meta.json`（`by` 是插件 id，另记 `version`、`at`、输入文件的哈希、`model`），插件不用自己写（[SPEC §5](SPEC.md#5-derived-文件约定)）。
+- 插件只写 `out`。结果里每个输出写明对应 `produces` 里的哪一项和相对 `out` 的路径；`out` 照 [§3.6](#36-fetch-与输出目录) 的输出目录规则检查，宿主核对后移进 `derived/`，并替插件写 `<文件>.meta.json`（`by` 是插件 id，另记 `version`、`at`、`inputs: [{path, sha256}]`、`model`；`empty: true` 时只写 meta），插件不用自己写（[SPEC §1.2.2](SPEC.md#122-raw-和-derived)）。
 - `empty: true` 表示这条没有可产出的东西（例如没有语音），宿主不再往下游编排摘要，免得模型对着空文稿编造（AI-Video-Transcriber 的 `no_speech` 做法）。
 
 <a id="43-模型与密钥由宿主代发"></a>
@@ -937,30 +942,30 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip"
 ### 4.4 导出的 run 与 readback
 
 ```json
-{"jsonrpc":"2.0","id":2,"method":"run","params":{"items":[{"id":"douyin-74312345-k9x2","manifest":"/…/in/2/douyin-74312345-k9x2/manifest.json","content":"/…/content.md","notes":"/…/notes.md","derived":{"derived/summary.md":"/…/derived/summary.md","derived/asr.vtt":"/…/derived/asr.vtt","images/keyframes/":["/…/images/keyframes/0012.jpg","/…/images/keyframes/0047.jpg"]},"files":[{"path":"/…/images/001.jpg","kind":"image","mime":"image/jpeg"},{"path":"/…/media/video.mp4","kind":"video","mime":"video/mp4"}]}],"topics":[{"slug":"手冲咖啡","path":"/…/topics/手冲咖啡.md"}],"options":{"folder":"usuyo"},"previous":{"douyin-74312345-k9x2":{"target":"usuyo/手冲咖啡：三段式注水.md","hash":"sha256:9b74c9897bac770ffc029102a200c5de2d76a1e9f1c0b6c2e8a4f3b7d9e1a5c0"}},"endpoints":{},"out":"/…/out/2"}}
+{"jsonrpc":"2.0","id":2,"method":"run","params":{"items":[{"id":"douyin-4plrcxk343onmyxibmrr672kga","manifest":"/…/in/2/douyin-4plrcxk343onmyxibmrr672kga/manifest.json","content":"/…/content.md","notes":"/…/notes.md","derived":{"derived/summary.md":"/…/derived/summary.md","derived/asr.vtt":"/…/derived/asr.vtt","derived/keyframes/":["/…/derived/keyframes/0012.jpg","/…/derived/keyframes/0047.jpg"]},"files":[{"path":"/…/raw/<snapshotId>/images/001.jpg","kind":"image","mime":"image/jpeg"},{"path":"/…/raw/<snapshotId>/media/video.mp4","kind":"video","mime":"video/mp4"}]}],"topics":[{"slug":"手冲咖啡","path":"/…/in/2/topics/手冲咖啡.md"}],"options":{"folder":"usuyo"},"previous":{"douyin-4plrcxk343onmyxibmrr672kga":{"target":"usuyo/手冲咖啡：三段式注水.md","hash":"sha256:9b74c9897bac770ffc029102a200c5de2d76a1e9f1c0b6c2e8a4f3b7d9e1a5c0"}},"endpoints":{},"out":"/…/out/2"}}
 ```
 
 ```json
-{"jsonrpc":"2.0","id":2,"result":{"files":[{"path":"items/douyin-74312345-k9x2.md","target":"usuyo/手冲咖啡：三段式注水.md","usuyoId":"douyin-74312345-k9x2"},{"from":"item:images/001.jpg","target":"usuyo/附件/douyin-74312345-k9x2-001.jpg","usuyoId":"douyin-74312345-k9x2"}]}}
+{"jsonrpc":"2.0","id":2,"result":{"files":[{"path":"items/douyin-4plrcxk343onmyxibmrr672kga.md","target":"usuyo/手冲咖啡：三段式注水.md","usuyoId":"douyin-4plrcxk343onmyxibmrr672kga"},{"from":"item:raw/<snapshotId>/images/001.jpg","target":"usuyo/附件/douyin-4plrcxk343onmyxibmrr672kga-001.jpg","usuyoId":"douyin-4plrcxk343onmyxibmrr672kga"}]}}
 ```
 
-- `items[].derived` 的键是 `produces` 里的值（`derived/asr.vtt`、`derived/ocr/*.json`、`images/keyframes/` 等），值是路径，目录或通配的值是路径数组。`items[].files` 列出条目的原图和媒体：`path`、`kind`、`mime`。
-- `writes: files`：插件把文件写进 `out`，结果里写明每个文件要放到目标的哪个相对路径；`out` 照 [§3.6](#36-fetch-与输出目录) 的输出目录规则检查。原图、视频这类不用改的文件，结果里写 `{from: "item:<相对条目目录的路径>", target, usuyoId}`，由宿主从资料库直接复制，不经过 `out`。宿主写进目标文件夹、记哈希，导出记录放 `.usuyo/exports/<target>.json`。插件不碰目标文件夹（[ADR-003 §7](decisions/ADR-003-plugins.md#7-导出与读回)）。
+- `items[].derived` 的键是 `produces` 里的值（`derived/asr.vtt`、`derived/ocr/*.json`、`derived/keyframes/` 等），值是路径，目录或通配的值是路径数组。`items[].files` 列出条目的原图和媒体：`path`、`kind`、`mime`；是各快照里还在的那些，同一 `sha256` 只列一次（先取主快照那份）。
+- `writes: files`：插件把文件写进 `out`，结果里写明每个文件要放到目标的哪个相对路径；`out` 照 [§3.6](#36-fetch-与输出目录) 的输出目录规则检查。原图、视频这类不用改的文件，结果里写 `{from: "item:<相对条目目录的路径>", target, usuyoId}`（例如 `item:raw/<snapshotId>/images/001.jpg`），由宿主从资料库直接复制，不经过 `out`。宿主写进目标文件夹、记哈希，导出记录放按机器目录的 `libraries/<libraryId>/exports/<target>.json`，导出路径每台各管（[SPEC §1.1](SPEC.md#11-目录树)）。插件不碰目标文件夹（[ADR-003 §7](decisions/ADR-003-plugins.md#7-导出与读回)）。
 - `target` 必须是规范化后的相对路径，不含 `..`、不是绝对路径，解析后仍在目标文件夹内；宿主写入时不跟随目标侧已有的符号链接。目标路径上已经有文件、而文件里没有对得上的 `usuyo_id` 时，宿主不覆盖，记进这次导出的问题列表让用户处理。
 - `writes: api`：插件经 `endpoints` 调云端接口，结果里返回 `records: [{usuyoId, remoteId}]`。
 - 每个导出文件带 `usuyo_id`；用户区标记写 `%% usuyo:begin notes %%`、`%% usuyo:end notes %%`，通用 Markdown 用 HTML 注释。
 - `readback`：宿主把目标侧的当前文件复制一份只读交给插件，连同上次导出的记录；插件只解析用户区，返回结构化改动：
 
 ```json
-{"jsonrpc":"2.0","id":5,"method":"readback","params":{"files":[{"usuyoId":"douyin-74312345-k9x2","path":"/…/in/5/usuyo/手冲咖啡：三段式注水.md","previous":{"target":"usuyo/手冲咖啡：三段式注水.md","hash":"sha256:9b74c9897bac770ffc029102a200c5de2d76a1e9f1c0b6c2e8a4f3b7d9e1a5c0"}}],"topics":[{"slug":"手冲咖啡","path":"/…/in/5/usuyo/主题/手冲咖啡.md","previous":{"target":"usuyo/主题/手冲咖啡.md","hash":"sha256:<上次导出的哈希>"}}],"options":{"folder":"usuyo"}}}
+{"jsonrpc":"2.0","id":5,"method":"readback","params":{"files":[{"usuyoId":"douyin-4plrcxk343onmyxibmrr672kga","path":"/…/in/5/usuyo/手冲咖啡：三段式注水.md","previous":{"target":"usuyo/手冲咖啡：三段式注水.md","hash":"sha256:9b74c9897bac770ffc029102a200c5de2d76a1e9f1c0b6c2e8a4f3b7d9e1a5c0"}}],"topics":[{"slug":"手冲咖啡","path":"/…/in/5/usuyo/主题/手冲咖啡.md","previous":{"target":"usuyo/主题/手冲咖啡.md","hash":"sha256:<上次导出的哈希>"}}],"options":{"folder":"usuyo"}}}
 ```
 
 ```json
-{"jsonrpc":"2.0","id":5,"result":{"changes":[{"usuyoId":"douyin-74312345-k9x2","field":"notes","value":"周末试 1:15 粉水比"},{"usuyoId":"douyin-74312345-k9x2","field":"tags.user","add":["周末要试"],"remove":[]},{"usuyoId":"douyin-74312345-k9x2","field":"topic","add":["手冲咖啡"],"remove":[]},{"topic":"手冲咖啡","field":"topic.body","value":"……"}],"problems":[{"usuyoId":"web-3b9c2f1a-q7m4","reason":"markers-missing"}]}}
+{"jsonrpc":"2.0","id":5,"result":{"changes":[{"usuyoId":"douyin-4plrcxk343onmyxibmrr672kga","field":"notes","value":"周末试 1:15 粉水比"},{"usuyoId":"douyin-4plrcxk343onmyxibmrr672kga","field":"tags.user","add":["周末要试"],"remove":[]},{"usuyoId":"douyin-4plrcxk343onmyxibmrr672kga","field":"topic","add":["手冲咖啡"],"remove":[]},{"topic":"手冲咖啡","field":"topic.body","value":"……"}],"problems":[{"usuyoId":"web-q7c55xuhv5pizh5p24blocbf7u","reason":"markers-missing"}]}}
 ```
 
 - `readback` 的参数：`files[]` 是条目导出文件的只读副本，`topics[]` 是主题页的只读副本，各带上次导出的 `target` 和 `hash`。
-- `field` 只能是用户写的层：`notes`、`takeaway`、`tags.user`、`topic`、`topic.body`。`topic` 的值是主题页 slug 的 `add`、`remove`；主题页正文的改动用 `topic.body` 报，带 `topic`（slug）而不带 `usuyoId`。标记缺失、重复或嵌套时写进 `problems`，不猜。合并、冲突并列、写进改动记录都由宿主做（[05 §5.9](research/05-note-apps-and-plugins.md#59-读回双向的先例与歇存的做法)）。
+- `field` 只能是用户写的层：`notes`、`takeaway`、`tags.user`、`topic`、`topic.body`。`topic` 的值是主题页 slug 的 `add`、`remove`；主题页正文的改动用 `topic.body` 报，带 `topic`（slug）而不带 `usuyoId`（要改：`slug` 换成主题 id，另加卡片、成稿、划线区和 `item-deleted`，见 [§13](#13-待定) 第 34 项）。标记缺失、重复或嵌套时写进 `problems`，不猜。合并、冲突并列、写进改动记录都由宿主做（[05 §5.9](research/05-note-apps-and-plugins.md#59-读回双向的先例与歇存的做法)）。
 
 <a id="5-投递接口"></a>
 ## 5. 投递接口
@@ -970,19 +975,19 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip"
 <a id="51-本机-http-接口"></a>
 ### 5.1 本机 HTTP 接口
 
-对应 [SPEC §1](SPEC.md#1-仓库布局monorepo) 的 `internal/api` 和 PRD 的浏览器扩展、本地 HTTP API，约定照 [03 §6.3](research/03-agent-protocols.md#63-对歇存的意义)：
+对应 [SPEC §2.1](SPEC.md#21-仓库布局monorepo) 的 `internal/api` 和 PRD 的浏览器扩展、本地 HTTP API，约定照 [03 §6.3](research/03-agent-protocols.md#63-对歇存的意义)：
 
 - 只绑 `127.0.0.1`，默认端口 `47821`，可改。
 - 每个请求带 `Authorization: Bearer <令牌>`。令牌在设置 › 隐私 › 本地接口的访问令牌里按投递端分别生成：名字（例如「xhs-vault 脚本」）、入口类型（`extension`、`mobile`、`api`），可单独撤销。令牌存在本机配置目录，不放进资料库。
 - 除 `chrome-extension://`、`moz-extension://`、`safari-web-extension://` 以外，带任何 `Origin` 头的请求都拒绝，包括 `Origin: null`（沙箱 iframe、`file://` 页面会带它），也不回 CORS 头：普通网页发不进来，也读不到响应。没有 `Origin` 的请求放行。宿主另外核对 `Host` 头是 `127.0.0.1:<端口>` 或 `localhost:<端口>`。各油猴脚本管理器的 `GM_xmlhttpRequest` 实际带什么 `Origin` 待核实。
-- 条目的 `origin.entry` 取令牌的入口类型，快照的 `adapter` 记 `deliver:<令牌名>`。投递来的内容同样按不可信输入处理。
+- 条目在 `origins[]` 里那一项的 `entry` 取令牌的入口类型。`extension` 令牌交来已取到的内容时，快照的 `plugin` 记 `deliver:<令牌名>`；只交链接的，快照记去取它的那个插件。投递来的内容同样按不可信输入处理。
 - **令牌能交什么。** `api` 和 `mobile` 类令牌只接受链接（`url`、`text` 和 `/v1/batches`），不接受已取到的内容；已取到的内容只接受 `extension` 类令牌和收件文件夹（[§5.2](#52-监听文件夹)）。Agent 用 `api` 令牌交已取好的内容，等于没经过改动提议就改了已有条目，和「Agent 写入先提议后生效」的原则冲突。
-- **身份由宿主重新算。** 宿主不采用投递方给的 `identity`，而是用 `identity.url`（没有就用 `url`）重新调 `canonicalize` 得出身份；拿不到身份的，按无平台 ID 的条目处理（[SPEC §7](SPEC.md#7-去重)）。不然一个持有令牌的脚本报出某个已有条目的身份、再带上 `completeness: full`，就能覆盖那个条目。
+- **身份由宿主重新算。** 宿主不采用投递方给的 `identity`，而是用 `identity.url`（没有就用 `url`）重新调 `canonicalize` 得出身份；拿不到身份的（没有网址的；http(s) 链接马上就有身份，最差是这条链接的 `web:` 身份，离线时的短链也一样，之后可能并进平台 id，见 [§3.1](#31-运行器与节奏)），按无平台 ID 的条目处理（[SPEC §0.4](SPEC.md#04-id)）。不然一个持有令牌的脚本报出某个已有条目的身份、再带上 `completeness: full`，就能覆盖那个条目。
 
 | 方法与路径 | 用途 | 返回 |
 |---|---|---|
 | `GET /v1/ping` | 检查令牌和连通 | `{"name":"usuyo","version":"…","protocol":1,"client":"xhs-vault 脚本"}` |
-| `POST /v1/deliver` | 收下一条：只有链接或分享文字，或已取到的内容 | `202`，3 秒内返回条目 id |
+| `POST /v1/deliver` | 收下一条：只有链接或分享文字，或已取到的内容 | `202`，身份一算出就回条目 id（一般 3 秒内）；`canonicalize` 因网络失败或超时（例如离线时的短链）时，回这条链接的 `web-` id，联网后可能并进平台 id，旧 id 留作别名（[SPEC §0.4](SPEC.md#04-id)） |
 | `POST /v1/batches` | 交一批链接，进导入预览 | `202`，批次 id；新增、已有的数目在导入预览里随身份算出逐步出现 |
 
 只有链接时，宿主照 [§3.1](#31-运行器与节奏) 去取内容；`text` 是手机分享出来的整段文字，宿主从里面找出第一个链接：
@@ -995,8 +1000,10 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip"
 {"text": "7.94 复制打开抖音，看看【咖啡日常的作品】手冲咖啡：三段式注水 https://v.douyin.com/iRNBho6u/ 12/30 abc:/"}
 ```
 
+返回（不收的条目怎么回要改，见 [§13](#13-待定) 第 33 项）：
+
 ```json
-{"id": "douyin-74312345-k9x2", "state": "accepted", "duplicate": false}
+{"id": "douyin-4plrcxk343onmyxibmrr672kga", "state": "accepted", "duplicate": false}
 ```
 
 已经取到内容的（例如在页面里拿到了正文和图片），用 `multipart/form-data`：`item` 部分是 fetch 输出 JSON；每个文件部分的**字段名**就是 JSON 里引用的相对路径，宿主按字段名找文件，`filename` 只作参考。原因：Go 的 `mime/multipart` 的 `Part.FileName()` 会先过一遍 `filepath.Base`（已用 Go 1.26 的 `go doc` 核对），`images/001.jpg` 会变成 `001.jpg`；各家浏览器扩展对带斜杠的 `filename` 处理也不一致（推断）。字段名照 [§3.6](#36-fetch-与输出目录) 的输出目录规则校验，一次投递默认最多 1 GiB。`item` 按 fetch 输出的 schema 校验，只有 `evidence.access` 可以省略，宿主在快照里记成 `deliver`。
@@ -1033,12 +1040,12 @@ curl -X POST http://127.0.0.1:47821/v1/deliver \
 - 从收件文件夹来的导入，是直接收下，还是进导入预览等你确认：收件文件夹没人值守，放进去本身就是一次确认；默认哪种见 [§13](#13-待定) 第 15 项。
 - `<名字>.usuyo/` 里的 `item.json` 和投递接口一样，身份由宿主重新算（[§5.1](#51-本机-http-接口)）；没有平台内容 ID 的（聊天记录、转发的图片）可以不写 `identity`（[§3.7](#37-fetch-输出)）。
 - 处理完移到 `.usuyo-done/<日期>/`，失败的移到 `.usuyo-failed/`，旁边放一个 `.error.json`。
-- 条目的 `origin.entry` 记 `mobile`；收件文件夹由用户指定入口类型时照指定的记。
+- 条目在 `origins[]` 里那一项的 `entry` 记 `mobile`，收件文件夹由用户指定入口类型时照指定的记；放进来的是已取到的内容（`<名字>.usuyo/`）或其他文件时，快照的 `plugin` 记 `deliver:inbox`，链接和交给导入插件的文件，快照照常记取它的那个插件。
 
 <a id="53-各种入口怎么接"></a>
 ### 5.3 各种入口怎么接
 
-| 入口 | 走哪条 | `origin.entry` |
+| 入口 | 走哪条 | `origins[].entry` |
 |---|---|---|
 | usuyo 自己的浏览器扩展「保存当前页」 | `POST /v1/deliver`，带正文和文件 | `extension` |
 | 别人的扩展和油猴脚本（xhs-vault、Weibo-archiver 一类） | `POST /v1/batches` 交清单；或导出 JSON 文件，再用导入插件读（[§3.9](#39-从文件导入)） | `extension` 或 `import` |
@@ -1558,7 +1565,7 @@ usuyo plugin pack --version 0.3.1 dist/*
 | 进度和等待走 stderr 的 `@usuyo ` 行 | 不另开文件描述符，Windows 上也能用；普通日志照写 | 日志里刚好以这几个字开头的行会被当成事件 |
 | 每种错误都换下一个，只有 `cancelled` 不换；限流和拦截只暂停出错的那个插件 | 照 D-c（[§12](#12-调研-06-提议的采纳情况)）；不同插件的出口、接口和做法不同，一个被拦不代表别的也会被拦，一直撞同一个拦截页也没用 | 不做平台级的统一冷却；用同一个账号的插件可能被一起限住，接着试它会多碰一次限流 |
 | `health` 默认不请求平台 | 打开设置页、启动时都会跑，不该每次碰平台 | 登录是否真有效要用户点「检查登录」才知道 |
-| 跟着收靠 `newest-first` 加「一整页都已有就停」，`--since` 只是提示 | 不要插件记同步状态；平台不按时间排时退回全量 | `unordered` 的来源每次都要全量翻 |
+| 跟着收靠 `newest-first` 加「一整页都已有就停」，`--since` 只是提示 | 不要插件记跟着收的进度；平台不按时间排时退回全量 | `unordered` 的来源每次都要全量翻 |
 | 导入复用 `list` 加 `fetch <ref>` | 预览、确认、续传和网络来源走同一条路 | 大的导出包要靠缓存或常驻模式避免反复打开 |
 | 凭据用临时文件，`storageState` 加 cookies.txt；`HOME` 指向插件私有的 `${HOME}` | 两种格式能直接喂给浏览器和 yt-dlp 一类工具；私有 `HOME` 让被包装的工具读不到用户自己的配置 | 同一用户的其他进程在调用期间读得到这个 0600 文件 |
 | 节奏由插件给建议、宿主取最严、用户能改；同一平台同一时间一个调用，`canonicalize` 不占这把锁 | 内核不写平台知识也能有合理的默认值；所有插件共用一组上限；新贴的链接不用等正在下的大视频 | 一个插件写得过严会拖慢同平台的其他插件，用户要自己调 |
@@ -1634,7 +1641,7 @@ usuyo plugin pack --version 0.3.1 dist/*
 <a id="13-待定"></a>
 ## 13. 待定
 
-需要用户在产品层面拍板的问题都在 [open-decisions](open-decisions.md)，选项、建议和影响以那里为准。本文其他地方引用本节时写的「第 N 项」就是下面的编号；open-decisions 的表格行没有单独的锚点，链接指向条目所在的节，条目编号写在链接文字里。
+需要用户在产品层面拍板的问题都在 [open-decisions](open-decisions.md)，选项、建议和影响以那里为准。本文其他地方引用本节时写的「第 N 项」就是下面的编号；open-decisions 的表格行没有单独的锚点，链接指向条目所在的节，条目编号写在链接文字里。第 29–34 项例外：不是产品问题，是 SPEC v1 草案（[第 0 层](SPEC.md#0-约定第-0-层)、[第 1 层](SPEC.md#1-资料库-v1第-1-层)）带来的协议改动，用户过目 SPEC 后再写进正文（[TODO](TODO.md#2-文档和接口设计)）；正文里受影响的地方标了「要改」。
 
 1. 两个组织的名字和权利人联系地址：[N1、N2](open-decisions.md#2-命名与组织)，[R4](open-decisions.md#12-声明与责任)。
 2. 只读导出文件的导入插件放哪个组织、要不要预装：[P3](open-decisions.md#7-获取与插件)。11-01 已定：别的工具的导出进官方组织并预装，平台官方导出包放 `usuyo-fetch`（[§8.4](#84-三种来源)）。
@@ -1662,10 +1669,16 @@ usuyo plugin pack --version 0.3.1 dist/*
 24. 上游 AI 产物放哪：fetch 输出加一个可选的 `derived` 字段，放 Horizon 这类上游已经算好的摘要、打分和标签，宿主照转换插件的规矩移进 `derived/`；另加一个原文来源标记（例如 `textOrigin: platform | machine`），界面据此标出原文是机器写的。`derived` 那半要不要做，随 [discussion 第 1 条](discussion.md#1-什么东西进资料库)一起答：[调研 11 §6](research/11-subscriptions-compat-and-wx-cli.md#6-对插件协议的影响)。
 25. 连本机 Unix socket 的权限：包装常驻进程类的工具（例如 wx-cli 的 `daemon.sock`）时，`fs.read`、`network.hosts` 都表达不了「连本机某个 socket」，要么加一个权限项，要么要求这类插件走本机 HTTP（[§2.7](#27-权限-permissions)）。只在第三方写包装常驻进程的插件时用得到：[调研 11 §6](research/11-subscriptions-compat-and-wx-cli.md#6-对插件协议的影响)。
 26. 按关键词搜、按创作者主页列：现有 `list` 只列用户自己的收藏夹和列表，没有带查询词的搜索，也没有「某个创作者的主页」这种来源；结果只列出、不进库，用户挑了才 `fetch`（2026-11-04 用户要，[open-decisions §1.8](open-decisions.md#18-grill-回答)）。
-27. 评论：`fetch` 输出没有评论这一类；要可选、默认不取，按平台或按条打开，能设上限（同上）。
+27. 评论：`fetch` 输出没有评论这一类；要可选、默认不取，按平台或按条打开，能设上限（同上）。评论 JSON 的形状、上限怎么交给插件（`fetch` 现在只有 `--want`）还没定。
 28. 扫码登录：要账号的平台在内置浏览器里打开登录页、用户扫码，登录态按站点存本机；和 [§6](#6-凭据) 的凭据怎么接、过期后怎么提示重扫（同上）。
+29. web 身份的插件侧：`platform: web` 的 `identity` 不带 `contentId`，`identity.url` 必填（[§3.5](#35-canonicalize-与身份)）；宿主再照 [SPEC §0.4](SPEC.md#04-id) 规范化一遍，算出条目 id（2026-11-05 资料库 v1 草案带来的，下同）。
+30. 照 SPEC 第 0 层补的两条：`needs` 加前缀 `version:`，例 `version:usuyo>=1.3`（[§3.3](#33-信封与错误码)，[SPEC §0.3](SPEC.md#03-错误模型)）；插件给的时间（`publishedAt`、`actedAt`、`evidence.fetchedAt`）一律 RFC 3339 带偏移（[§3.7](#37-fetch-输出)、[§3.8](#38-list-与跟着收)，[SPEC §0.5](SPEC.md#05-时间)）。
+31. 评论放哪：[§2.3](#23-获取插件的字段) 的 `outputs` 词表加 `comments`；插件把评论写在输出目录根下的 `comments.json`，[§3.7](#37-fetch-输出) 加可选字段 `comments`，值固定是 `comments.json`；整个目录照 [§3.6](#36-fetch-与输出目录) 移进 `raw/<snapshotId>/`，宿主不改名（[SPEC §1.2.3](SPEC.md#123-contentmd-和各栏)）。了结第 27 项「放哪」那一半。
+32. 输出目录里的名字（[§3.6](#36-fetch-与输出目录)）：`usuyo.` 开头的文件名留给宿主（宿主在快照里存 `usuyo.fetch.json`），插件写了判 `invalid-output`；宿主移动前按 [SPEC §0.6](SPEC.md#06-文本和文件) 查名字（长度、保留名带扩展名也算、大小写折叠后重名、NFC），不合格判 `invalid-output`。
+33. 投递遇到不收的条目（[§5.1](#51-本机-http-接口)）：`/v1/deliver` 返回的 `state` 加 `skipped`，这时不回 `id`；`api` 令牌交来的链接是私密、删过或在回收站里的条目时这样回，三种不区分（[SPEC §1.7](SPEC.md#17-删掉)）。收不收等身份算出来再判；只有短链自己的 `web:` 身份时（[§3.1](#31-运行器与节奏)），照常建条目、回 `id`，并进平台 id 以后再查：`api` 令牌交来的，目标在回收站或私密时并进那一条（已回的 id 成了别名），只剩删除记录时 `web-` 条目随之移除，已回的 id 以后查回 `not-found`；`extension`、`mobile` 令牌照 [SPEC §1.7](SPEC.md#17-删掉)「扩展、手机」那一行收下（推断，[SPEC §0.4](SPEC.md#04-id)）。
+34. 导出和读回跟上资料库 v1（[§4.4](#44-导出的-run-与-readback)）：`topics[]` 和读回的 `topic` 用主题 id 不用 `slug`，参数 `{id, title, path}`，`path` 指宿主给的副本（[SPEC §1.3](SPEC.md#13-条目的四个维度)）；`run`、`readback` 加 `cards[]`、`drafts[]`（`{id, title, path}`），`field` 加 `card.body`、`draft.body`；`problems` 的 `reason` 加 `item-deleted`（[SPEC §1.7](SPEC.md#17-删掉)）；`field` 加 `highlights`：划线区按 `^块id` 认，少了的记 `remove-highlight`，认不出的行当笔记（[SPEC §1.4.2](SPEC.md#142-卡片成稿记一句和划线)）。
 
-调研 11 建议的其余几处还没编号：`owner` 的含义、同时带 `url` 和 `ref` 时先用哪个、`sites[].site` 引用设置项、`origin.subscription`、`feed:` 来源按主机算节奏，见[调研 11 §6.2](research/11-subscriptions-compat-and-wx-cli.md#62-要补的地方)。
+调研 11 建议的其余几处还没编号：`owner` 的含义、同时带 `url` 和 `ref` 时先用哪个、`sites[].site` 引用设置项、`feed:` 来源按主机算节奏（`origin.subscription` 已按 SPEC v1 写进 [§3.8](#38-list-与跟着收)），见[调研 11 §6.2](research/11-subscriptions-compat-and-wx-cli.md#62-要补的地方)。
 
 <a id="附录-a-声明模板"></a>
 ## 附录 A. 声明模板
