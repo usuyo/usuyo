@@ -198,7 +198,7 @@ SHA-256，小写十六进制，算存下来的字节。字段名叫 `sha256` 时
 
 | 在哪 | 放什么 |
 |---|---|
-| `libraries/<libraryId>/` | `device.json`（`deviceId`、库路径）、`index/`、`jobs.db`（任务状态、跟着收的翻页游标、还没展开的短链（重试））、`sync.db`（游标、底本、上次见过的路径）、`activity/`（Agent 搜过、读过什么，一行一次，不给 Agent、不同步；格式和留多久归第 2 层，推断）、`exports/<target>.json`、`imports/<importBatch>/`（导入文件副本）、`backups/` |
+| `libraries/<libraryId>/` | `device.json`（`deviceId`、库路径）、`index/`、`jobs.db`（任务状态、跟着收的翻页游标、还没展开的短链（重试）、上次写的 `content.md` 的哈希）、`sync.db`（游标、底本、上次见过的路径）、`activity/`（Agent 搜过、读过什么，一行一次，不给 Agent、不同步；格式和留多久归第 2 层，推断）、`exports/<target>.json`、`imports/<importBatch>/`（导入文件副本）、`backups/` |
 | 根目录 | `settings.json`（外观、模型端点、插件启用和设置）、`plugins/`、`profiles/`、`models/`、本机接口令牌的哈希、日志 |
 | 系统钥匙串 | 同步令牌和库钥匙、模型和插件密钥、平台登录态（[协议 §6](plugin-protocol.md#6-凭据)） |
 
@@ -233,7 +233,6 @@ items/douyin/douyin-4plrcxk343onmyxibmrr672kga/
 | `outputs` | 各快照 `outputs` 的并集，减去 `textOnly.removed` 涉及的 | 宿主 | 合并后重算 |
 | `missing`、`missingReason` | 各快照 `missing` 的并集 − 条目 `outputs`，`state: text-only` 时只算文字类；快照的 `missing` 由取它的那台在取的时候算好，之后不改：这次的 `--want` − 实际拿到的；`--want` 一般是命中插件声明的 `outputs` ∩ 设置，重试只要缺的、「取评论」和只留文字以后才更窄（评论默认不算；投递来的、文件就是实际拿到的）。只用同步的字段算，两台算出一样的；设置、插件后来变了只影响下一次取。`missingReason` 是给你看的原因 | 宿主 | 合并后重算 |
 | `completeness` | `link` `partial` `full`：没有快照是 `link`，否则由 `missing` 算；只升不降（[PRD §8](PRD.md#8-条目的状态)）：重算出的比现值低时留现值，条目页照 `missing` 说缺什么 | 宿主 | 两边和重算的取高的 |
-| `contentSha256` | 宿主上次写的 `content.md` 的哈希 | 宿主 | 跟 `content.md` |
 | `tags.platform`；`tags.engine` | 快照带的；`[{tag, by, at, confidence}]` | 宿主 | 并集；同一个 `tag` 取 `at` 新的，再比 `by` |
 | `tags.user`、`tags.dismissed` | 你的标签；忽略过、不再建议的 | 你 | 集合三方合并 |
 | `sameAs`、`notSameAs` | 机器认出的同一内容；你说「不是」的 | 宿主；你 | 集合三方合并 |
@@ -274,11 +273,11 @@ items/douyin/douyin-4plrcxk343onmyxibmrr672kga/
 <a id="123-contentmd-和各栏"></a>
 #### 1.2.3 content.md 和各栏
 
-**`content.md` 是宿主由主快照生成的副本**，给 Obsidian 和 grep 看。front matter 是 `usuyo_id`、`title`、`source`、`author`、`published`、`created`、`platform`、`kind`；正文是主快照的 `text`，没有就用 `derived/readable.md`。主快照或这些字段变了就重写，原样在 `raw/`，不违背 [PRD 原则 2](PRD.md#4-原则)（[K5 A](open-decisions.md#11-存储同步与联网)）；CLAUDE.md 的措辞见 [§1.10 第 10 条](#110-要你看一眼)。应用里的原文栏和 `text` 引用读主快照的 `text` 或 `derived/readable.md`（下表），不读 `content.md`。外面改过（哈希不等于 `contentSha256`）以后当你写的：不再自动重写，条目页写一行「Obsidian 里改过这份副本」，给「换成新的原文」，同步按你写的那层合并。这改了 v0「机器永不改写正文」，也偏离[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突) 把它归「原样」层，调研 14 跟着改（[TODO](TODO.md#2-文档和接口设计)）。
+**`content.md` 是宿主由主快照生成的副本**，给 Obsidian 和 grep 看。front matter 是 `usuyo_id`、`title`、`source`、`author`、`published`、`created`、`platform`、`kind`；正文是主快照的 `text`，没有就用 `derived/readable.md`。主快照或这些字段变了就重写，原样在 `raw/`，不违背 [PRD 原则 2](PRD.md#4-原则)（[K5 A](open-decisions.md#11-存储同步与联网)）；CLAUDE.md 的措辞见 [§1.10 第 10 条](#110-要你看一眼)。应用里的原文栏和 `text` 引用读主快照的 `text` 或 `derived/readable.md`（下表），不读 `content.md`。**能看不能改**（11-05 定，[open-decisions §1.8](open-decisions.md#18-grill-回答)）：宿主把它写成只读文件（系统支持时），总照主快照重写；重写前发现外面改过（和本机记下的上次写的哈希不一样），先把改过的那份放进回收站（`kind: content`），再换回原样（推断）。要写字写在 `notes.md`、主题页里，或者导出到你的 vault 再写（[协议 §4.4](plugin-protocol.md#44-导出的-run-与-readback)）。它不同步，各台照原样自己生成。这改了 v0「机器永不改写正文」，也偏离[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突) 把它归「原样」层，调研 14 跟着改（[TODO](TODO.md#2-文档和接口设计)）。
 
 | 栏 | 文件 | 来源 | 链接里的层 |
 |---|---|---|---|
-| 原文 | 主快照 `raw/<snapshotId>/usuyo.fetch.json` 的 `text`，或 `derived/readable.md`；`content.md` 是给 Obsidian 的副本 | 平台；机器 | `text` |
+| 原文 | 主快照 `raw/<snapshotId>/usuyo.fetch.json` 的 `text`，或 `derived/readable.md`；`content.md` 是只读副本 | 平台；机器 | `text` |
 | 图里的字 | `derived/ocr/<imageKey>.json` | 机器 | `ocr/<imageKey>`、`image/<imageKey>` |
 | 口播 | `derived/asr.vtt`；平台字幕在 `raw/…/media/*.vtt` | 机器；平台 | `asr`、`video`、`audio` |
 | 画面、AI 摘要 | `derived/vision.md`、`derived/summary.md` | 机器 | `vision`、`summary` |
@@ -321,6 +320,7 @@ items/douyin/douyin-4plrcxk343onmyxibmrr672kga/
 | `notes.md` 被复制进别的条目文件夹 | 按所在文件夹定归属，`usuyo_id` 改成那一条的 |
 | YAML 写坏了 | 不改写、不同步这个文件，沿用上次的值，界面写「属性写坏了」 |
 | 移出这三个文件夹或删掉了 | 当删掉：记 `move-to-trash`（`actor: external`，`via: file`），把上次的文本放进回收站，别的台照回收站同步；界面写一行，能恢复 |
+| `content.md` 被改了 | 照 [§1.2.3](#123-contentmd-和各栏)：重写前改过的那份进回收站（`kind: content`），换回原样 |
 | `notes.md` 删掉了 | 上次的文本进回收站（`kind: notes`），条目 `state` 不变，到期不写删除记录；别的台照 `edit-notes`（`actor: external`、`via: file`）同步，不按回收站；能恢复 |
 | 条目文件夹或 `manifest.json` 被删了 | 当 `move-to-trash`（`reason: delete`，`actor: external`，`via: file`），回收站里放能找回的（`sync.db` 底本里的 manifest、`notes.md`）；只少了 `content.md` 就重新生成；`raw/` 少了文件照 [§1.2.2](#122-raw-和-derived) 报「原样被改过」（推断） |
 
@@ -419,7 +419,6 @@ Agent（经 MCP）或宿主调的模型改已有内容，一个提议一个文�
 | `remove-highlight`（`id`）、`dismiss-suggestion`（`tag`）、`set-followed`、`set-private`（`value`）、`set-setting`（`key`、`value`） | 条目、主题、资料库 | 见括号 | 否 | 能 |
 | `move` | 主题、卡片、成稿 | `path` | 否 | 能 |
 | `set-not-same` | 条目 | `add`、`remove` | 否 | 能 |
-| `edit-content` | 条目 | `hunks`：外面改的 `content.md`、「换成新的原文」 | 否 | 能 |
 | `move-to-trash`（`reason`）、`keep-text` | 条目；`move-to-trash` 也管主题、卡片、成稿 | 见括号 | 否 | 还在回收站里才能 |
 | `restore` | 回收站里的 | — | 否 | 能 |
 | `merge-items` | 条目 | `into` | 否 | 能，照 `change` 反着挪 |
@@ -469,8 +468,8 @@ Agent（经 MCP）或宿主调的模型改已有内容，一个提议一个文�
 
 照 [K1 A、K3 A、K5 A](open-decisions.md#11-存储同步与联网)。
 
-- **回收站**：`.usuyo/trash/<trashId>/` 里一个 `entry.json` 加文件；`entry.json` 是 `{id, kind, target, path, files, reason, trashedAt}`，`kind` 取 `item` `topic` `card` `draft` `notes`，`path` 是原相对路径，`files` 是对象以内的相对路径，`reason` 为 `delete` `keep-text` `merge` `undo` `conflict`。各台各挪各的，同步的是条目的 `state` 和主题、卡片、成稿记录上的 `trashedAt`（推断，归同步引擎）。进回收站时取消 `jobs.db` 里它的任务，之后回来的结果丢掉，不在原路径重建文件夹。
-- **到期**：条目按 manifest 的 `stateAt`，主题、卡片、成稿按记录上的 `trashedAt`，加当前的 `trashDays` 现算（[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突)「到期照 A 写的算」），「一直」不到期；`entry.json` 的 `trashedAt` 照同步来的值写，不用本机挪进来的时间；`merge`、`conflict` 和 `kind: notes` 只在本机，按本机的。移除本机文件，记 `purge`（`actor: host`）；`keep-text`、`merge`、`conflict` 和 `kind: notes` 到期只做这一步。对象整个离开资料库的（条目 `reason: delete` 或 `undo`；主题、卡片、成稿，`conflict` 的除外）才脱敏改动记录、推墓碑：改动记录里提到这一条的各行（包括封口的段）`change` 换成 `{"redacted": true}`、留 `targets[].id`；`facts/` 里它的行留着，只有 id 和时间。别的台拉到墓碑后照同一规则移除自己的文件、改自己手上的段，段怎么再推同下面的彻底忘掉。开了同步的库启动后先拉完一轮再判，按服务器时间（[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突)），离线时不移除，推墓碑走 CAS，底本不是最新就放弃这次、重新判断。没开同步的按本机时间；本机时间比记下的最大时间晚了超过 `trashDays`（会把回收站整个移除），先不移除，你点「照时间移除」才移除（推断）。
+- **回收站**：`.usuyo/trash/<trashId>/` 里一个 `entry.json` 加文件；`entry.json` 是 `{id, kind, target, path, files, reason, trashedAt}`，`kind` 取 `item` `topic` `card` `draft` `notes` `content`，`path` 是原相对路径，`files` 是对象以内的相对路径，`reason` 为 `delete` `keep-text` `merge` `undo` `conflict`。各台各挪各的，同步的是条目的 `state` 和主题、卡片、成稿记录上的 `trashedAt`（推断，归同步引擎）。进回收站时取消 `jobs.db` 里它的任务，之后回来的结果丢掉，不在原路径重建文件夹。
+- **到期**：条目按 manifest 的 `stateAt`，主题、卡片、成稿按记录上的 `trashedAt`，加当前的 `trashDays` 现算（[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突)「到期照 A 写的算」），「一直」不到期；`entry.json` 的 `trashedAt` 照同步来的值写，不用本机挪进来的时间；`merge`、`conflict`、`kind: notes` 和 `kind: content` 只在本机，按本机的。移除本机文件，记 `purge`（`actor: host`）；`keep-text`、`merge`、`conflict`、`kind: notes` 和 `kind: content` 到期只做这一步。对象整个离开资料库的（条目 `reason: delete` 或 `undo`；主题、卡片、成稿，`conflict` 的除外）才脱敏改动记录、推墓碑：改动记录里提到这一条的各行（包括封口的段）`change` 换成 `{"redacted": true}`、留 `targets[].id`；`facts/` 里它的行留着，只有 id 和时间。别的台拉到墓碑后照同一规则移除自己的文件、改自己手上的段，段怎么再推同下面的彻底忘掉。开了同步的库启动后先拉完一轮再判，按服务器时间（[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突)），离线时不移除，推墓碑走 CAS，底本不是最新就放弃这次、重新判断。没开同步的按本机时间；本机时间比记下的最大时间晚了超过 `trashDays`（会把回收站整个移除），先不移除，你点「照时间移除」才移除（推断）。
 - **删除记录**只在条目（`kind: item`）`reason: delete` 的那项到期、或被你「立即清除」（[product-model §7.3](product-model.md#73-其他对象)）时写；别的原因的，到期、立即清除都不写，那些内容还在库里或你没删过。一条一个文件 `.usuyo/deleted/<itemId>.json`，只有 `itemId`、`identities`（并过的放在一起）、`title`、`deletedAt`。索引按 `identityKey` 查，再按 `identities[].url` 查。云端 id 是 `HMAC-SHA256(idKey, "deleted:" + itemId)`，偏离[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突)「一个身份一条」：查找本来走本机索引，一条一个文件，忘掉时只动一处。两台同时到期写出两份，取 `deletedAt` 早的。没有身份的不留记录：能对上的只有指纹，比身份加标题多。
 - **再遇到同一身份**：
 
@@ -500,7 +499,7 @@ Agent（经 MCP）或宿主调的模型改已有内容，一个提议一个文�
 |---|---|---|
 | `raw/` 的字；网页、图片、视频 | 原样 · S1；S2 放 R2 | 只增；同一路径内容不同只会是出错，两份都留；和 `usuyo.fetch.json` 对不上就不上传 |
 | `manifest.json` | 混合 · S1 | 按 [§1.2.1](#121-manifestjson-v1) 最后一列 |
-| `content.md` | 机器 · S1 | 不按文件比：manifest 合并后由主快照重写，两台写出一样的；哈希不等于 `contentSha256` 的（外面改过）按你写的那层 |
+| `content.md` | 机器 · 不同步 | 各台照主快照自己生成，见 [§1.2.3](#123-contentmd-和各栏) |
 | `derived/` 的字；`keyframes/`、`thumb.jpg` | 机器 · S1；S2 | 先推上服务器的留下，不出卡片 |
 | `derived/audio/`、`embeddings.bin` 和它们的 `.meta.json` | 机器 · 不同步 | 各台自己算 |
 | `notes.md`、`topics/`、`cards/`、`drafts/`、`canvas/` | 你写的 · S1 | 见下 |
@@ -531,7 +530,7 @@ Agent（经 MCP）或宿主调的模型改已有内容，一个提议一个文�
 schema 先定这几条：
 
 - `$id`：`urn:usuyo:schema:manifest:1`、`…:changeset:1`、`…:journal-entry:1`。
-- manifest：`author`、`publishedAt`、`publishedAtOriginal`、`lang`、`missingReason`、`contentSha256`、`stateAt`、`textOnly` 以外都必填；`id` 匹配 `^[a-z0-9][a-z0-9-]*-[a-z2-7]{26}$`；`primarySnapshot` 可为 `null`；`origins` 至少一项，每项必填 `id` `entry` `takenBy` `at` `device`；快照必填 `id` `plugin` `at` `access` `outputs` `missing` `completeness`。`completeness`、`state` 是封闭枚举，`kind`、`outputs` 写 `examples` 不写 `enum`。
+- manifest：`author`、`publishedAt`、`publishedAtOriginal`、`lang`、`missingReason`、`stateAt`、`textOnly` 以外都必填；`id` 匹配 `^[a-z0-9][a-z0-9-]*-[a-z2-7]{26}$`；`primarySnapshot` 可为 `null`；`origins` 至少一项，每项必填 `id` `entry` `takenBy` `at` `device`；快照必填 `id` `plugin` `at` `access` `outputs` `missing` `completeness`。`completeness`、`state` 是封闭枚举，`kind`、`outputs` 写 `examples` 不写 `enum`。
 - changeset：必填 `id` `createdAt` `proposer` `state` `ops`，op 必填 `id` `op` `target` `base` `state`；`proposer` 匹配 `^(agent|model):`；`base` 为 `null` 或 `^sha256:[0-9a-f]{64}$`。
 - journal-entry：必填 `id` `n`（从 1 起）`t` `device` `actor` `op` `targets` `batch`；`actor` 匹配 `^(user|external|sync|host|agent:[a-z0-9-]+|model:.+|plugin:.+|subscription:[0-9a-f-]{36})$`；脱敏后的 `targets[].id`、`targets[].path`、`change` 是 `{"redacted": true}`，所以允许对象。
 
@@ -547,9 +546,9 @@ schema 先定这几条：
 | 5 | [§1.4.2](#142-卡片成稿记一句和划线) 记一句是 `notes.md` 头部的 `usuyo_takeaway`，划线是末尾注释圈出的列表 | 照这个，Obsidian 里都能看能改 |
 | 6 | [§1.5.2](#152-提议文件) 改动提议 7 天没决定就作废，不提醒（[A2](open-decisions.md#9-agent) 没定，另一种是 24 小时） | 7 天，设置里能改 |
 | 7 | [§1.4.1](#141-主题和主题页) 跟着收的命中默认只按关键词，相似度你打开才用 | 照这个；相似度命中的标「机器挑的」 |
-| 8 | [§1.2.3](#123-contentmd-和各栏) `content.md` 由宿主生成；你在外面改过以后不再自动重写，条目页给「换成新的原文」；应用里的原文栏和引用照旧读主快照的 `text` 或 `derived/readable.md`，不读这份副本 | 照这个，写字写在 `notes.md` |
+| 8 | [§1.2.3](#123-contentmd-和各栏) `content.md` 是给「不开 usuyo 也能读」的正文副本，和导出到 vault 无关；它能不能改 | **已定（11-05）**：能看不能改，只读文件，总照原样重写；外面强行改过的那份先进回收站（[open-decisions §1.8](open-decisions.md#18-grill-回答)） |
 | 9 | [§1.6](#16-改动记录) 撤销 Agent 收下的一批时，你写过东西的条目跳过 | 照这个，跳过的列出来 |
-| 10 | [§1.2.3](#123-contentmd-和各栏) [CLAUDE.md](../CLAUDE.md) 原则 2 照 [PRD 原则 2](PRD.md#4-原则) 改成「机器永不改写或删除原样」，`content.md` 算宿主生成的副本；原则 3 的「删掉 `.usuyo/index/`」改成「删掉索引目录」；文档地图里 SPEC 那行改成 v1 草案 | 你点头再改，和[第 8 条](#110-要你看一眼)一起定 |
+| 10 | [§1.2.3](#123-contentmd-和各栏) [CLAUDE.md](../CLAUDE.md) 原则 2 照 [PRD 原则 2](PRD.md#4-原则) 改成「机器永不改写或删除原样」，`content.md` 算宿主生成的只读副本；原则 3 的「删掉 `.usuyo/index/`」改成「删掉索引目录」；文档地图里 SPEC 那行改成 v1 草案 | 你点头再改 |
 | 11 | [§1.7](#17-删掉) 删除记录多记一个删掉的时间 `deletedAt`（[K1 A](open-decisions.md#11-存储同步与联网) 说只记身份和标题） | 留着：「删掉过的」列表要按时间排（推断） |
 | 12 | [§1.7](#17-删掉) 扩展、手机收下一条以前删过的，没有窗口能问；命令行在终端里照窗口问，不在终端里（Agent Skill 走 `usuyo add`，[协议 §5.3](plugin-protocol.md#53-各种入口怎么接)）照本机接口令牌跳过 | 扩展、手机照收，条目页写一行「以前删过，这次又收下了」，在回收站里的直接恢复；命令行不在终端里回 `skipped`，代价是从 Raycast 再收下也跳过 |
 | 13 | [§1.3](#13-条目的四个维度) 成稿引用了私密条目，导出时怎么办 | 正文一字不改，只把那条脚注换成「私密条目」；导出前提示「这篇引用了 1 条私密条目」 |

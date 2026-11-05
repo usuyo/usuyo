@@ -729,7 +729,7 @@ SPEC v0 的适配器协议（[SPEC 附](SPEC.md#附v0-各节和-18-处的去向)
 | 其余字段 | | 不变：`kind`、`title`、`author`、`publishedAt`、`text`、`html`、`images`、`platformTags`、`completeness`、`missing`、`evidence.fetchedAt`（时间的格式要改，见 [§13](#13-待定) 第 30 项） |
 
 - `completeness`：`full` 是 `--want` 里的都拿到了；`partial` 是缺了一部分，缺什么写进 `missing`；`link` 是只认出了身份。宿主会按实际输出重算，比较完整度时比的是实际拿到的输出集合（[§3.1](#31-运行器与节奏)）。
-- `text` 是平台原文的文字，宿主据此生成 `content.md`：主快照变了就重写，用户在外面改过的不再重写；原样在 `raw/`（[SPEC §1.2.3](SPEC.md#123-contentmd-和各栏)）。
+- `text` 是平台原文的文字，宿主据此生成 `content.md`：只读副本，总照主快照重写；原样在 `raw/`（[SPEC §1.2.3](SPEC.md#123-contentmd-和各栏)）。
 - 数组字段总是出现，可以为空。
 
 <a id="38-list-与跟着收"></a>
