@@ -254,11 +254,11 @@
 <a id="79-导出与互通"></a>
 ### 7.9 导出与互通
 
-**已定**（10-20，[CLAUDE.md](../CLAUDE.md) 技术栈；10-28，[ADR-003](decisions/ADR-003-plugins.md#7-导出与读回)）：资料库就是普通文件（Markdown、媒体和 JSON），不开本产品也能读。导出插件写进 Obsidian 等笔记软件，按规则读回你在那边的改动。资料库的形状按本产品自己的需要定，不迁就笔记软件，它们要的样子由导出转换（11-05，[open-decisions §1.8](open-decisions.md#18-grill-回答)）。
+**已定**（10-20，[CLAUDE.md](../CLAUDE.md) 技术栈；10-28，[ADR-003](decisions/ADR-003-plugins.md#7-导出与读回)）：资料库就是普通文件（Markdown、媒体和 JSON），不开本产品也能读。导出插件写进 Obsidian 等笔记软件，按规则读回你在那边的改动。资料库的形状按本产品自己的需要定，不迁就笔记软件，它们要的样子由导出转换；主题页只导出副本再读回，资料库不当 vault（11-05，[open-decisions §1.8](open-decisions.md#18-grill-回答)，[E2](open-decisions.md#10-导出与互通)）。
 
 **方向已定**（11-04 「然后我希望兼容性和开创性都需要具备」，[open-decisions §1.7](open-decisions.md#17-11-04-回复记下的)）。各指什么（11-04、11-05，[第 17 条](discussion.md#17-兼容和开创各指什么)）：兼容靠标准，开创只说今天站得住的几件，见 [overview §7](overview.md#7-兼容和开创)；你另加了从素材到成稿的蒸馏链路（[7.7](#77-你写的那一层)）。资料库第一版不往外生成 feed，以后再看。
 
-**待讨论**（晚点）：迁出格式（[E1](open-decisions.md#10-导出与互通)）。主题页导出到哪已定：只导出副本再读回，资料库不当 vault（[E2](open-decisions.md#10-导出与互通)，11-05）。
+**待讨论**（晚点）：迁出格式（[E1](open-decisions.md#10-导出与互通)）。
 
 <a id="710-存储删除与联网"></a>
 ### 7.10 存储、删除与联网

@@ -193,7 +193,7 @@ usuyo 要接三种外部能力：从平台取回内容，把音视频和图片�
 
 1. **资料库不当 vault 用。** 去掉 [§7](#7-导出与读回)「主题页」那条里的「资料库即 vault」：资料库的形状按 usuyo 自己的需要定（[SPEC 第 1 层](../SPEC.md#1-资料库-v1第-1-层)），在 Obsidian 里改的是导出的那份，再读回 usuyo。
 2. **Web Clipper 的键只用在导出文件里。** [§7](#7-导出与读回) 的 frontmatter 键说的是导出文件；资料库里的 front matter 用 camelCase、不加前缀（[SPEC §0.1](../SPEC.md#01-命名)）。Obsidian 要的样子由导出插件转换（[plugin-protocol §4.4](../plugin-protocol.md#44-导出的-run-与-readback)）。
-3. **读回的用户层换了位置。** 记一句是 `notes.md` 头部的 `takeaway`，划线在 `highlights.md`（[SPEC §1.4.2](../SPEC.md#142-卡片成稿记一句和划线)）；读回的字段见 [plugin-protocol §13 第 34 项](../plugin-protocol.md#13-待定)。
+3. **读回的用户层加了几处。** 划线在 `highlights.md`，主题成员记在条目和卡片上，卡片、成稿的正文也读回；记一句照旧是 `notes.md` 头部的 `takeaway`（[SPEC §1.4.2](../SPEC.md#142-卡片成稿记一句和划线)）；读回的字段见 [plugin-protocol §13 第 34 项](../plugin-protocol.md#13-待定)。
 
 <a id="待核实"></a>
 ## 待核实
