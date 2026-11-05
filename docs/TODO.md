@@ -51,7 +51,7 @@
 - [ ] [ADR-002](decisions/ADR-002-frontend-stack.md#和内核的接口) 第 37 行：接受 SSE 就把 WebSocket 换掉 — 文档会话 · 一句 · 不挡
 - [ ] ADR-003 改 accepted：先定 O3、O9、G2 — 你定，文档会话改 · 小 · 不挡代码
 - [x] 全仓改名为 usuyo（11-05）：入口文档、CLAUDE.md、README、SPEC、插件协议、ADR、feature 001、product-model、致谢；调研和 open-decisions 留旧名作记录；代码见下一条
-- [ ] 代码改名：`go.mod` 模块 `github.com/usuyo/usuyo`、`cmd/xiecun` → `cmd/usuyo`、各包的 import、Makefile — 文档会话 · 小 · 挡第一行新代码
+- [x] 代码改名（11-05）：`go.mod` 模块 `github.com/usuyo/usuyo`、`cmd/usuyo`、import、Makefile；`make check` 通过
 
 - [ ] 插件协议 [§8.4](plugin-protocol.md#84-三种来源)、[§8.8](plugin-protocol.md#88-获取方式组织的仓库结构)：client-hook 插件放 `{fetch-org}-hook`，添加来源时能一次加两个（11-04） — 文档会话 · 小 · 挡获取插件组织的结构
 - [ ] [插件协议 §13](plugin-protocol.md#13-待定) 第 26–28 项：按关键词和创作者主页列、可选的评论、扫码登录（11-04） — 文档会话 · 中 · 挡首批插件
