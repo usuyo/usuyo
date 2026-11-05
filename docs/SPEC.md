@@ -254,7 +254,7 @@ items/douyin/douyin-4plrcxk343onmyxibmrr672kga/
 | `action` `actedAt` `actedAtOriginal` | 平台上的动作和时间（[协议 §3.8](plugin-protocol.md#38-list-与跟着收)） |
 | `at`、`device` | 时间、哪台；转换在 `at` 最早那一项（一样早比 `id`）的 `device` 做（[调研 14 §0](research/14-sync-like-hatoba.md#0-结论) 第 10 问），那台不在了怎么换归同步 feature |
 
-你在跟着收的预览里自己点收下的，`takenBy: user`、`machinePicked: null`。界面标「机器挑的」：每一项 `origins` 都带 `machinePicked`（你自己也收过一次就不标）；写过、放进主题、引用过都不去掉；地图上怎么分开等 [M4](open-decisions.md#6-地图与界面)。
+你在跟着收的预览里自己点收下的，`takenBy: user`、`machinePicked: null`。界面标「机器挑的」：每一项 `origins` 都带 `machinePicked`（你自己也收过一次就不标）；写过、放进主题、引用过都不去掉，它是来历（11-05 定，[§1.10 第 19 条](#110-要你看一眼)）；地图上怎么分开等 [M4](open-decisions.md#6-地图与界面)。
 
 **`snapshots[]`**（[协议 §3.5](plugin-protocol.md#35-canonicalize-与身份)–[§3.7](plugin-protocol.md#37-fetch-输出)）：`id`（UUIDv7）；`plugin`、`pluginVersion`（交来已取到的内容时：投递接口记 `deliver:<令牌名>`，收件文件夹记 `deliver:inbox`；链接和交给导入插件的文件，记去取它的那个插件）；`at`、`inputUrl`（你给的原链接）、`resolvedUrl`（`canonicalize` 展开的完整链接）；`access`（投递为 `deliver`）、`site`、`upstream`；`outputs`（实际拿到的，比完整度只比它）；`missing`、`missingReason`、`completeness`（宿主在取的时候算，`missing` 是这次的 `--want` − 实际拿到的，之后不改）；`textOrigin`（`platform` 或 `machine`，等[协议 §13](plugin-protocol.md#13-待定) 第 24 项）。
 
@@ -583,7 +583,7 @@ schema 先定这几条：
 | 16 | [§1.7](#17-删掉) 彻底忘掉以后，你主题页里引过它的原话和标题还留着 | 留着，那是你写的；链接换成 `usuyo://item/forgotten`，确认框列出还在引用它的页 |
 | 17 | [§1.6](#16-改动记录) 撤销 Agent 收下的一批时不留删除记录，以后跟着收还可能再收进来 | 不留：那一批你没删过；要挡住，就从回收站恢复后再删掉 |
 | 18 | [§1.6](#16-改动记录) Agent 经 MCP 能撤销哪些批：撤销新建、撤销恢复会把东西移进回收站，[原则 5](PRD.md#4-原则) 说 MCP 不给删除 | 只能撤销同一个 Agent 的批；会移进回收站的那几步跳过并列出，要在应用或命令行里撤。另一种：它自己直接收下、你没碰过的条目也能撤 |
-| 19 | [§1.2.1](#121-manifestjson-v1) 「机器挑的」是来历，还是「你还没碰过」 | 是来历，你碰过也留着：后一种近于「没整理」，[原则 4](PRD.md#4-原则) 不要 |
+| 19 | [§1.2.1](#121-manifestjson-v1) 「机器挑的」是来历，还是「你还没碰过」 | **已定（11-05）**：是来历，你碰过也一直留着（[open-decisions §1.8](open-decisions.md#18-grill-回答)） |
 
 <a id="2-留着的-v0第-2-层重写前保留"></a>
 ## 2. 留着的 v0（第 2 层重写前保留）
