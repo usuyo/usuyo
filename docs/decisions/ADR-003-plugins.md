@@ -186,6 +186,15 @@ usuyo 要接三种外部能力：从平台取回内容，把音视频和图片�
 
 以上改动带来的设置项变化列在 [plugin-protocol §0.4](../plugin-protocol.md#04-需要同步的文档)，[product-model §8.1](../product-model.md#81-设置清单) 照那张表改。
 
+<a id="修订-2026-11-05"></a>
+## 修订 2026-11-05
+
+按用户 2026-11-05 的决定修订 [§7](#7-导出与读回)（[open-decisions §1.8](../open-decisions.md#18-grill-回答)，E2）。上面的正文不改，有冲突的以本节为准。
+
+1. **资料库不当 vault 用。** 去掉 [§7](#7-导出与读回)「主题页」那条里的「资料库即 vault」：资料库的形状按 usuyo 自己的需要定（[SPEC 第 1 层](../SPEC.md#1-资料库-v1第-1-层)），在 Obsidian 里改的是导出的那份，再读回 usuyo。
+2. **Web Clipper 的键只用在导出文件里。** [§7](#7-导出与读回) 的 frontmatter 键说的是导出文件；资料库里的 front matter 用 camelCase、不加前缀（[SPEC §0.1](../SPEC.md#01-命名)）。Obsidian 要的样子由导出插件转换（[plugin-protocol §4.4](../plugin-protocol.md#44-导出的-run-与-readback)）。
+3. **读回的用户层换了位置。** 记一句是 `notes.md` 头部的 `takeaway`，划线在 `highlights.md`（[SPEC §1.4.2](../SPEC.md#142-卡片成稿记一句和划线)）；读回的字段见 [plugin-protocol §13 第 34 项](../plugin-protocol.md#13-待定)。
+
 <a id="待核实"></a>
 ## 待核实
 
@@ -197,7 +206,6 @@ usuyo 要接三种外部能力：从平台取回内容，把音视频和图片�
 - Windows AppContainer 对 GPU 与 Media Foundation 的影响；MXC 执行器能否用于生产。
 - wazero 有无按指令计数的配额。
 - 飞书、语雀是否保留 HTML 注释，决定它们以后能不能读回。
-- 「资料库即 vault」时，Obsidian 改属性会重写 YAML、重命名会改写链接，对真相文件的影响。
 - 思源对同一 `path` 重复调用 `createDocWithMd` 的实际结果。
 - 客户端不登录时能否读到公开仓库的 check run；check run 挂在 release tag 指向的提交上，客户端按 tag 查找是否可靠。
 - 组织成员审核的具体流程：谁能把仓库建进组织或转入组织，上架前要过哪些检查。

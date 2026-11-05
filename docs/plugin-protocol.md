@@ -941,6 +941,8 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip"
 <a id="44-导出的-run-与-readback"></a>
 ### 4.4 导出的 run 与 readback
 
+资料库的形状按 usuyo 自己的需要定（[SPEC 第 1 层](SPEC.md#1-资料库-v1第-1-层)）；导出插件把宿主给的副本转成目标软件的样子，读回把目标里的改动按 `usuyo_id`（主题、卡片、成稿按它们的 id）报成结构化改动。插件不读资料库文件，宿主不解析目标的语法。
+
 ```json
 {"jsonrpc":"2.0","id":2,"method":"run","params":{"items":[{"id":"douyin-4plrcxk343onmyxibmrr672kga","manifest":"/…/in/2/douyin-4plrcxk343onmyxibmrr672kga/manifest.json","content":"/…/content.md","notes":"/…/notes.md","derived":{"derived/summary.md":"/…/derived/summary.md","derived/asr.vtt":"/…/derived/asr.vtt","derived/keyframes/":["/…/derived/keyframes/0012.jpg","/…/derived/keyframes/0047.jpg"]},"files":[{"path":"/…/raw/<snapshotId>/images/001.jpg","kind":"image","mime":"image/jpeg"},{"path":"/…/raw/<snapshotId>/media/video.mp4","kind":"video","mime":"video/mp4"}]}],"topics":[{"slug":"手冲咖啡","path":"/…/in/2/topics/手冲咖啡.md"}],"options":{"folder":"usuyo"},"previous":{"douyin-4plrcxk343onmyxibmrr672kga":{"target":"usuyo/手冲咖啡：三段式注水.md","hash":"sha256:9b74c9897bac770ffc029102a200c5de2d76a1e9f1c0b6c2e8a4f3b7d9e1a5c0"}},"endpoints":{},"out":"/…/out/2"}}
 ```
@@ -953,7 +955,13 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip"
 - `writes: files`：插件把文件写进 `out`，结果里写明每个文件要放到目标的哪个相对路径；`out` 照 [§3.6](#36-fetch-与输出目录) 的输出目录规则检查。原图、视频这类不用改的文件，结果里写 `{from: "item:<相对条目目录的路径>", target, usuyoId}`（例如 `item:raw/<snapshotId>/images/001.jpg`），由宿主从资料库直接复制，不经过 `out`。宿主写进目标文件夹、记哈希，导出记录放按机器目录的 `libraries/<libraryId>/exports/<target>.json`，导出路径每台各管（[SPEC §1.1](SPEC.md#11-目录树)）。插件不碰目标文件夹（[ADR-003 §7](decisions/ADR-003-plugins.md#7-导出与读回)）。
 - `target` 必须是规范化后的相对路径，不含 `..`、不是绝对路径，解析后仍在目标文件夹内；宿主写入时不跟随目标侧已有的符号链接。目标路径上已经有文件、而文件里没有对得上的 `usuyo_id` 时，宿主不覆盖，记进这次导出的问题列表让用户处理。
 - `writes: api`：插件经 `endpoints` 调云端接口，结果里返回 `records: [{usuyoId, remoteId}]`。
-- 每个导出文件带 `usuyo_id`；用户区标记写 `%% usuyo:begin notes %%`、`%% usuyo:end notes %%`，通用 Markdown 用 HTML 注释。
+- 每个导出文件带 `usuyo_id`。**Obsidian 导出照这样转**（宿主给的字段照 [§13 第 34 项](#13-待定)，待定）：
+  - 条目一篇笔记。属性是 Web Clipper 的 `title` `source` `author` `published` `created` `description` `tags`（`tags` 取 `tags.user`），加 `usuyo_id` `platform` `kind` `usuyo_takeaway` `usuyo_topics`（指向主题笔记的 wikilink）；YAML 标量一律双引号。`published`、`created` 写 `YYYY-MM-DD`：`published` 有 `publishedAtOriginal` 就按它的偏移取日期，没有按导出这台的本地日期；`created` 取 `addedAt`（主题、卡片、成稿取 `createdAt`）的本地日期。正文是原文（宿主给的 `text`）、各层，加两个用户区：`%% usuyo:begin notes %%`…`%% usuyo:end notes %%` 放 `notes.md` 的正文，`%% usuyo:begin highlights %%`…`%% usuyo:end highlights %%` 照 [SPEC §1.4.2](SPEC.md#142-卡片成稿记一句和划线) 的写法写出划线各行（行末 ` ^<id>` 本来就是 Obsidian 的块 id）；区里的 `%%` 要转义。通用 Markdown 用 HTML 注释，`-->` 写 `--&gt;`。
+  - 主题、卡片、成稿各一篇：`usuyo_id`、`title`、`created`，卡片另加 `usuyo_topics`，正文照宿主给的副本。主题的成员列表要写，就写在不读回的区里。
+  - 文件名照 [SPEC §0.6](SPEC.md#06-文本和文件)，另把 Obsidian 链接、标题、块用的 `# ^ [ ] |` 换掉；目标文件夹里撞名的按 id 顺序加「 2」，记下目标路径；`folder` 变成子文件夹。在 vault 里改名不碍事，读回按 `usuyo_id` 认。
+  - 脚注、` ^<id>`、`usuyo://` 链接照原样过去（私密条目的脚注宿主给副本时已换掉，`usuyo://item/forgotten` 照留）；可以另加指向导出条目笔记的 wikilink，读回时照导出记录换回去。
+  - 属性只读回 `tags`、`usuyo_takeaway`、`usuyo_topics`；日期、标题和别的属性不读回。划线区里不合划线写法的行，读回时当笔记接在 `notes` 后面，不丢。
+  - 待核实：Obsidian 留不留带偏移的日期时间属性（要加一个带时刻的属性，照它认的写法）；属性栏改一项会不会重写整块 YAML（只影响 `tags`、`usuyo_takeaway`、`usuyo_topics`，读回按键比）。
 - `readback`：宿主把目标侧的当前文件复制一份只读交给插件，连同上次导出的记录；插件只解析用户区，返回结构化改动：
 
 ```json
@@ -965,7 +973,7 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip"
 ```
 
 - `readback` 的参数：`files[]` 是条目导出文件的只读副本，`topics[]` 是主题页的只读副本，各带上次导出的 `target` 和 `hash`。
-- `field` 只能是用户写的层：`notes`、`takeaway`、`tags.user`、`topic`、`topic.body`。`topic` 的值是主题页 slug 的 `add`、`remove`；主题页正文的改动用 `topic.body` 报，带 `topic`（slug）而不带 `usuyoId`（要改：`slug` 换成主题 id，另加卡片、成稿、划线区和 `item-deleted`，见 [§13](#13-待定) 第 34 项）。标记缺失、重复或嵌套时写进 `problems`，不猜。合并、冲突并列、写进改动记录都由宿主做（[05 §5.9](research/05-note-apps-and-plugins.md#59-读回双向的先例与歇存的做法)）。
+- `field` 只能是用户写的层：`notes`、`takeaway`、`tags.user`、`topic`、`topic.body`。`topic` 的值是主题页 slug 的 `add`、`remove`；主题页正文的改动用 `topic.body` 报，带 `topic`（slug）而不带 `usuyoId`（要改：`topic` 换成按主题 id 的 `topics`，另加卡片、成稿、划线和 `item-deleted`，见 [§13](#13-待定) 第 34 项）。标记缺失、重复或嵌套时写进 `problems`，不猜。合并、冲突并列、写进改动记录都由宿主做（[05 §5.9](research/05-note-apps-and-plugins.md#59-读回双向的先例与歇存的做法)）。
 
 <a id="5-投递接口"></a>
 ## 5. 投递接口
@@ -1676,7 +1684,11 @@ usuyo plugin pack --version 0.3.1 dist/*
 31. 评论放哪：[§2.3](#23-获取插件的字段) 的 `outputs` 词表加 `comments`；插件把评论写在输出目录根下的 `comments.json`，[§3.7](#37-fetch-输出) 加可选字段 `comments`，值固定是 `comments.json`；整个目录照 [§3.6](#36-fetch-与输出目录) 移进 `raw/<snapshotId>/`，宿主不改名（[SPEC §1.2.3](SPEC.md#123-contentmd-和各栏)）。了结第 27 项「放哪」那一半。
 32. 输出目录里的名字（[§3.6](#36-fetch-与输出目录)）：`usuyo.` 开头的文件名留给宿主（宿主在快照里存 `usuyo.fetch.json`），插件写了判 `invalid-output`；宿主移动前按 [SPEC §0.6](SPEC.md#06-文本和文件) 查名字（长度、保留名带扩展名也算、大小写折叠后重名、NFC），不合格判 `invalid-output`。
 33. 投递遇到不收的条目（[§5.1](#51-本机-http-接口)）：`/v1/deliver` 返回的 `state` 加 `skipped`，这时不回 `id`；`api` 令牌交来的链接是私密、删过或在回收站里的条目时这样回，三种不区分（[SPEC §1.7](SPEC.md#17-删掉)）。收不收等身份算出来再判；只有短链自己的 `web:` 身份时（[§3.1](#31-运行器与节奏)），照常建条目、回 `id`，并进平台 id 以后再查：`api` 令牌交来的，目标在回收站或私密时并进那一条（已回的 id 成了别名），只剩删除记录时 `web-` 条目随之移除，已回的 id 以后查回 `not-found`（你在上面写过、划过、放进主题或引用过的不移除，照下面的令牌一样收下）；`extension`、`mobile` 令牌照 [SPEC §1.7](SPEC.md#17-删掉)「扩展、手机」那一行收下（推断，[SPEC §0.4](SPEC.md#04-id)）。
-34. 导出和读回跟上资料库 v1（[§4.4](#44-导出的-run-与-readback)）：`topics[]` 和读回的 `topic` 用主题 id 不用 `slug`，参数 `{id, title, path}`，`path` 指宿主给的副本（[SPEC §1.3](SPEC.md#13-条目的四个维度)）；`run`、`readback` 加 `cards[]`、`drafts[]`（`{id, title, path}`），`field` 加 `card.body`、`draft.body`；`problems` 的 `reason` 加 `item-deleted`（[SPEC §1.7](SPEC.md#17-删掉)）；`field` 加 `highlights`：划线区按 `^块id` 认，少了的记 `remove-highlight`，认不出的行当笔记（[SPEC §1.4.2](SPEC.md#142-卡片成稿记一句和划线)）。
+34. 导出和读回跟上资料库 v1（[§4.4](#44-导出的-run-与-readback)；11-05 照 [SPEC 第 1 层](SPEC.md#1-资料库-v1第-1-层) 的新形状重写）：
+    - `run` 的 `items[]` 不再给 `manifest`、`content` 的路径，每项是 `{id, title, author, publishedAt, publishedAtOriginal, addedAt, platform, kind, url, tags: {user, platform}, topics: [{id, title}], takeaway, highlights: [{id, layer, snapshot, fragment, quote, label}], text, notes, derived, files}`：`text` 是主快照文字的路径，`notes` 是 `notes.md` 去掉 front matter 的正文。
+    - `topics[]`、`cards[]`、`drafts[]` 是 `{id, title, createdAt, folder, path}`，`path` 是只有正文的副本，私密条目的脚注已换掉（[SPEC §1.3](SPEC.md#13-条目的四个维度)）；主题另有 `members`（索引给的，私密的不列），卡片另有 `topics`，成稿另有 `kind`。
+    - `readback` 的文件带 id，不带 slug。`field` 取 `notes`、`takeaway`、`tags.user`、`topics`（条目或卡片，主题 id 的 `add`、`remove`，替掉按 slug 的 `topic`）、`highlights`（`remove: [id]`；划线区里不合写法的行报成 `notes`，接在后面）、`topic.body`、`card.body`、`draft.body`；`problems` 的 `reason` 加 `item-deleted`（[SPEC §1.7](SPEC.md#17-删掉)）。
+    - 宿主照这样落：`notes` → `edit-notes`，`takeaway` → `set-takeaway`，`tags.user` → `set-tags`，`topics` → `set-topics`，`highlights` → `remove-highlight`，三种正文 → `edit-topic-page`、`edit-card`、`edit-draft` 的 hunk（[SPEC §1.5.1](SPEC.md#151-op-词表)）；都记 `actor: external`、`via: readback:<插件 id>`。日期、标题和别的属性不读回。
 
 调研 11 建议的其余几处还没编号：`owner` 的含义、同时带 `url` 和 `ref` 时先用哪个、`sites[].site` 引用设置项、`feed:` 来源按主机算节奏（`origin.subscription` 已按 SPEC v1 写进 [§3.8](#38-list-与跟着收)），见[调研 11 §6.2](research/11-subscriptions-compat-and-wx-cli.md#62-要补的地方)。
 
