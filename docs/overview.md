@@ -3,7 +3,7 @@
 
 内部文档：写了平台名和首批计划，公开前按 [O2](open-decisions.md#13-开源与发布) 处理。
 
-v0.1 · 2026-11-04，2026-11-05 改名。产品名 **usuyo**，只用拉丁字母，命令、组织、标题都写小写；正文有时仍写「本产品」。`{fetch-org}` 是你自己的获取插件组织，名字待定；client-hook 插件放 `{fetch-org}-hook`。调研和 open-decisions 里的歇存、思鹭、`seelu`、`xiecun` 是旧暂名。
+v0.1 · 2026-11-04，2026-11-05 改名。产品名 **usuyo**，只用拉丁字母，命令、组织、标题都写小写；正文有时仍写「本产品」。组织：官方 `usuyo`，获取插件 `usuyo-fetch`，client-hook 插件 `usuyo-fetch-hook`（11-05 定，你自己注册）。调研和 open-decisions 里的歇存、思鹭、`seelu`、`xiecun` 是旧暂名。
 
 <a id="0-一屏读完"></a>
 ## 0. 一屏读完
@@ -13,7 +13,7 @@ v0.1 · 2026-11-04，2026-11-05 改名。产品名 **usuyo**，只用拉丁字�
 - **待讨论**：[discussion](discussion.md#1-什么东西进资料库) 的 17 条 11-04、11-05 都答了，记在 [open-decisions §1.8](open-decisions.md#18-grill-回答)；还剩获取插件组织的名字。
 - **接口**：设计了一半。插件协议是 v1 草案，其余多在 v0 或只有一句（[§5](#5-接口做到哪了)）。
 - **语言**：Go 内核加 MyGo 壳（11-04 定）；只做桌面，手机以后原生重写；MyGo 出问题换 Wails v3。
-- **wx-cli**：2026-07-15 起被 GitHub 屏蔽（腾讯方面的 DMCA），你这台微信 3.8.8.19 也用不了。建议 `{fetch-org}` 不收微信 client-hook 插件，导出文件照 official-export 导入，见 [9](discussion.md#9-自己的获取插件组织收什么)。
+- **wx-cli**：2026-07-15 起被 GitHub 屏蔽（腾讯方面的 DMCA），你这台微信 3.8.8.19 也用不了。建议 `usuyo-fetch` 不收微信 client-hook 插件，导出文件照 official-export 导入，见 [9](discussion.md#9-自己的获取插件组织收什么)。
 - **RSS、Horizon**：建议在现成阅读器里读，加星算收下；Horizon 当普通 feed，见 [1](discussion.md#1-什么东西进资料库)。
 
 <a id="1-先读这四份"></a>
@@ -37,10 +37,10 @@ v0.1 · 2026-11-04，2026-11-05 改名。产品名 **usuyo**，只用拉丁字�
 | 点阵雾加现代界面；终端风格否掉；变化走同一个时钟 | 10-28、10-29 | [§1.7](open-decisions.md#17-11-04-回复记下的) |
 | 定位和一句话，见 [§0](#0-一屏读完) | 10-30、11-01 | 「按建议」（[S3](open-decisions.md#14-11-01-第二次回复定下的)） |
 | `access` 七层加 `login` 是标签不是闸门；按你排的顺序换；后果由你担；client-hook 可以装 | 11-01 | [D-a 至 D-e](open-decisions.md#11-十条方向)；[§1.3](open-decisions.md#13-随之改写的文档) |
-| 获取插件放 `{fetch-org}`，一个插件一个仓库，客户端不预置插件来源；只预装通用网页获取和别的工具导出的导入 | 11-01 | [D-f](open-decisions.md#11-十条方向)；「同意」（[P1、P3](open-decisions.md#14-11-01-第二次回复定下的)） |
+| 获取插件放 `usuyo-fetch`，一个插件一个仓库，客户端不预置插件来源；只预装通用网页获取和别的工具导出的导入 | 11-01 | [D-f](open-decisions.md#11-十条方向)；「同意」（[P1、P3](open-decisions.md#14-11-01-第二次回复定下的)） |
 | 只做开源，不商业化；内核 AGPL-3.0，plugin-kit 用 MIT | 11-01 | [D-i](open-decisions.md#11-十条方向)；[ADR-003 修订](decisions/ADR-003-plugins.md#修订-2026-11-01) |
 | 不用 Seelu，只定英文名；倾向 Dokokara，没定 | 11-01、11-03 | 「然后Dokokara我感觉挺合适」（[§1.6](open-decisions.md#16-11-03-回复记下的)） |
-| 不要角色或动物（M14 关，M10–M13 不再问）；调研过的方案都能做成插件，`{fetch-org}` 收哪些见 [9](discussion.md#9-自己的获取插件组织收什么)；兼容和开创都要，以后支持 RSS、Horizon 一类，是方向，见 [17](discussion.md#17-兼容和开创各指什么) | 11-04 | 「不要角色或者动物」（[§1.7](open-decisions.md#17-11-04-回复记下的)） |
+| 不要角色或动物（M14 关，M10–M13 不再问）；调研过的方案都能做成插件，`usuyo-fetch` 收哪些见 [9](discussion.md#9-自己的获取插件组织收什么)；兼容和开创都要，以后支持 RSS、Horizon 一类，是方向，见 [17](discussion.md#17-兼容和开创各指什么) | 11-04 | 「不要角色或者动物」（[§1.7](open-decisions.md#17-11-04-回复记下的)） |
 
 **定了、11-04 重问后确认**：Go 加 MyGo（10-21，[ADR-001](decisions/ADR-001-stack.md)），只做桌面，退路 Wails v3（[6](discussion.md#6-桌面壳)、[7](discussion.md#7-内核语言)）；分发用 GitHub App（10-28，[ADR-003](decisions/ADR-003-plugins.md)），11-04 重问后照旧（[8](discussion.md#8-插件怎么校验)）。
 
@@ -176,7 +176,7 @@ flowchart LR
 | 卡片 | `card` | 你的一个观点，一段话，能引用条目（11-04 保留） |
 | 成稿 | `draft`（新） | 你想表达的成品：文章、帖子、脚本，由卡片和主题页攒成，每句带引用（11-04） |
 | 获取层级 | `access`、`login` | 插件靠哪一层拿内容、要不要登录；七层见 [§6](#6-插件能接哪些方案) |
-| 获取插件组织 | `{fetch-org}`、`{fetch-org}-hook` | 见文首；client-hook 插件单独放后一个（11-04） |
+| 获取插件组织 | `usuyo-fetch`、`usuyo-fetch-hook` | 见文首；client-hook 插件单独放后一个（11-04） |
 | 插件来源 | `pluginSource`（新） | 你添加的组织名或 `owner/repo` |
 | 列表 | `source` | 插件能列出的一个收藏夹或清单 |
 | 出处 | `origin` | 一条从哪个平台、链接、入口进来 |

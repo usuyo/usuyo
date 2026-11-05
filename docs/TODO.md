@@ -14,7 +14,7 @@
 - [x] [2. 地图上一直清楚的是什么](discussion.md#2-地图上一直清楚的是什么)：关注的是主题，命中可按关键词或相似度（11-04）；动作叫「关注」，雾的理解确认（11-05）
 - [x] [3. 知识的单位](discussion.md#3-知识的单位)：主题页，加卡片和成稿的链路（11-04）
 - [x] [4. 删掉以后留下什么](discussion.md#4-删掉以后留下什么)：回收站加删除记录（11-04）
-- [x] [5. 名字](discussion.md#5-名字)：usuyo（11-05）；扩展复查进行中，组织你自己注册
+- [x] [5. 名字](discussion.md#5-名字)：usuyo（11-05），两轮复查没有同类软件；组织 `usuyo`、`usuyo-fetch`、`usuyo-fetch-hook`（11-05）
 - [x] [6. 桌面壳](discussion.md#6-桌面壳)、[7. 内核语言](discussion.md#7-内核语言)：Go 加 MyGo（11-04）
 - [x] [8. 插件怎么校验](discussion.md#8-插件怎么校验)：照 10-28 做 GitHub App，无服务器中转加 Actions 跑校验（11-04）
 - [ ] 把 App 的部署（无服务器中转接 webhook，官方组织的 Actions 跑契约测试、写回 check run）写进 [ADR-003 §6](decisions/ADR-003-plugins.md#6-分发与校验) 和[插件协议 §8.3](plugin-protocol.md#83-校验与来源证明) — 文档会话 · 小 · 挡发版流程
@@ -53,7 +53,7 @@
 - [x] 全仓改名为 usuyo（11-05）：入口文档、CLAUDE.md、README、SPEC、插件协议、ADR、feature 001、product-model、致谢；调研和 open-decisions 留旧名作记录；代码见下一条
 - [x] 代码改名（11-05）：`go.mod` 模块 `github.com/usuyo/usuyo`、`cmd/usuyo`、import、Makefile；`make check` 通过
 
-- [ ] 插件协议 [§8.4](plugin-protocol.md#84-三种来源)、[§8.8](plugin-protocol.md#88-获取方式组织的仓库结构)：client-hook 插件放 `{fetch-org}-hook`，添加来源时能一次加两个（11-04） — 文档会话 · 小 · 挡获取插件组织的结构
+- [ ] 插件协议 [§8.4](plugin-protocol.md#84-三种来源)、[§8.8](plugin-protocol.md#88-获取方式组织的仓库结构)：client-hook 插件放 `usuyo-fetch-hook`，添加来源时能一次加两个（11-04） — 文档会话 · 小 · 挡获取插件组织的结构
 - [ ] [插件协议 §13](plugin-protocol.md#13-待定) 第 26–28 项：按关键词和创作者主页列、可选的评论、扫码登录（11-04） — 文档会话 · 中 · 挡首批插件
 - [x] [调研 14](research/14-sync-like-hatoba.md#0-结论)：学 Hatoba 的同步（11-04）
 - [ ] 资料库 v1 加「成稿」对象（素材 → 卡片 → 主题页 → 成稿，每句带引用，11-04） — 文档会话 · 小 · 挡资料库 v1
@@ -84,4 +84,4 @@
 - [ ] [O4、O6、O7](open-decisions.md#13-开源与发布)：要不要付费签名、开不开捐赠、致谢列哪些 — 你 · 各一句 · 挡发布
 - [ ] [G1](open-decisions.md#14-法律意见) 找不找法律意见 — 你 · 一句 · 挡 GPL 工具随包
 - [ ] [N6](open-decisions.md#2-命名与组织) 用哪个域名 — 你 · 一句 · 挡 bundle id
-- [ ] 注册组织：定名后查国内商标和同名，你本人注册两个组织，占 npm、PyPI、crates；文档会话当天只读复查 — 你 · 半小时 · 挡远端仓库
+- [ ] 注册：GitHub 组织 `usuyo`、`usuyo-fetch`、`usuyo-fetch-hook`，账号 @usuyoapp，占 npm、PyPI、crates 的 `usuyo`（11-05 都空着，404 不保证能注册，尽早）；公开前查商标第 9、42 类（J-PlatPat、USPTO、中国商标网） — 你 · 半小时 · 挡远端仓库和公开

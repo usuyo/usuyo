@@ -59,7 +59,7 @@
 <a id="4-原则"></a>
 ## 4. 原则
 
-1. **内核和官方组织里没有平台获取逻辑。** 自己维护的获取插件放在 `{fetch-org}`。随安装包预装的只有通用网页获取和别的工具导出文件的导入，都不含平台知识。已定（11-01，D-f、P1、P3，[open-decisions §1.1](open-decisions.md#11-十条方向)、[§1.4](open-decisions.md#14-11-01-第二次回复定下的)）。
+1. **内核和官方组织里没有平台获取逻辑。** 自己维护的获取插件放在 `usuyo-fetch`。随安装包预装的只有通用网页获取和别的工具导出文件的导入，都不含平台知识。已定（11-01，D-f、P1、P3，[open-decisions §1.1](open-decisions.md#11-十条方向)、[§1.4](open-decisions.md#14-11-01-第二次回复定下的)）。
 2. **机器永不改写或删除原样。** 取回来的原样只增不改；转写、识别、AI 产物另放，可以重算。只在你选「只留文字」或「删掉」时移走，先进回收站。已定（10-20，[CLAUDE.md](../CLAUDE.md) 原则 2；11-04 改措辞，K5 A，[open-decisions §1.8](open-decisions.md#18-grill-回答)）。
 3. **文件是真相，索引可丢、可重建。** 同步跑在你自己的 Cloudflare 账号里，离开本机前加密，本机的资料库照旧是明文文件。已定（10-20，[CLAUDE.md](../CLAUDE.md) 原则 3；同步 11-04、11-05，[7.10](#710-存储删除与联网)）。
 4. **不制造压力。** 没有未读数、待办队列、打卡；整理是可选的，没有「没整理」这种状态；不说清空、进度、处理完。已定（10-20，[CLAUDE.md](../CLAUDE.md) 原则 4；后半句 11-05，雾的理解确认）。文案细则见 [product-model](product-model.md#4-文案规则)。
@@ -133,7 +133,7 @@
 
 **已定**（11-03，[插件协议](plugin-protocol.md#39-从文件导入)）：别的工具导出的文件按 official-export 导入，文件怎么来的写进说明，读本机客户端数据的工具导出的也一样。
 
-**已定**（11-04，[open-decisions §1.8](open-decisions.md#18-grill-回答)）：你自己的获取插件七层都收，含 client-hook（R5 A，[第 9 条](discussion.md#9-自己的获取插件组织收什么)）。client-hook 插件单独放一个组织（暂记 `{fetch-org}-hook`），几份 DMCA 通知最多打掉那一组；添加来源时可以一次加两个。插件校验照 10-28 做 GitHub App，用无服务器中转接 webhook，校验在 GitHub Actions 里跑（O3 A，[第 8 条](discussion.md#8-插件怎么校验)）。
+**已定**（11-04，[open-decisions §1.8](open-decisions.md#18-grill-回答)）：你自己的获取插件七层都收，含 client-hook（R5 A，[第 9 条](discussion.md#9-自己的获取插件组织收什么)）。client-hook 插件单独放一个组织（暂记 `usuyo-fetch-hook`），几份 DMCA 通知最多打掉那一组；添加来源时可以一次加两个。插件校验照 10-28 做 GitHub App，用无服务器中转接 webhook，校验在 GitHub Actions 里跑（O3 A，[第 8 条](discussion.md#8-插件怎么校验)）。
 
 **待讨论**：
 

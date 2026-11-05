@@ -30,7 +30,7 @@
 
 产品名 usuyo，命令 `usuyo`（2026-11-05 定，[open-decisions §1.8](open-decisions.md#18-grill-回答)）。本文的标识符：清单 `usuyo-plugin.yaml`、环境变量前缀 `USUYO_`、资料库隐藏目录 `.usuyo/`、GitHub topic `usuyo-plugin`、导出文件里的 `usuyo_id`、URL scheme `usuyo://`。2026-11-05 之前本文用过暂名 `seelu`（思鹭），调研和 open-decisions 里还留着它和更早的 `xiecun`（歇存），作为记录不改。
 
-两个 GitHub 组织还没注册，本文写占位：官方组织 `{official-org}`（建议就叫 `usuyo`），获取方式组织 `{fetch-org}`（名字待定）；client-hook 插件放另一个组织 `{fetch-org}-hook`（11-04）。权利人联系地址写 `{contact}`，两个组织用不用同一个地址见 [§13](#13-待定) 第 1 项。
+GitHub 组织（2026-11-05 定，用户自己注册）：官方组织 `usuyo`，获取方式组织 `usuyo-fetch`，client-hook 插件放 `usuyo-fetch-hook`。权利人联系地址写 `{contact}`，两个组织用不用同一个地址见 [§13](#13-待定) 第 1 项。
 
 <a id="04-需要同步的文档"></a>
 ### 0.4 需要同步的文档
@@ -930,7 +930,7 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip"
 
 - 插件按 OpenAI 兼容接口请求 `baseUrl`（`/chat/completions`、`/audio/transcriptions`），带 `Authorization: Bearer <token>`。这个 token 是至少 128 位的随机值，只对这一次调用、这个插件、宿主的本机端点有效，调用结束即作废；宿主比对时用常数时间比较，因为本机任何进程都能连这个端口；宿主换上真正的密钥转发给用户配的 provider，记下这次请求是否离开本机。宿主自动把这个端点加进插件的网络许可。
 - **获取插件也可以用。** 能力声明了 `provider`（[§2.3](#23-获取插件的字段)）、用户配了模型时，一次一进程的调用经 `USUYO_PROVIDER` 拿到同样的 `{baseUrl, token, model}`，常驻进程在请求的 `context.provider` 里拿到；token 的规则不变：一次调用、一个插件、宿主的本机端点。视觉层插件用看图模型找控件时走这里，界面照样标「离开本机」（[§9.5](#95-视觉层流程)）。
-- 包装自带模型的第三方 Agent（Mika 的 MCP 或 HTTP 接口一类）不在这一条之内：它的模型调用在手机上、由它自己发，宿主标不了「离开本机」，节奏也管不到。这类插件 `{fetch-org}` 收不收是待定项（[§13](#13-待定) 第 20 项）。
+- 包装自带模型的第三方 Agent（Mika 的 MCP 或 HTTP 接口一类）不在这一条之内：它的模型调用在手机上、由它自己发，宿主标不了「离开本机」，节奏也管不到。这类插件 `usuyo-fetch` 收不收是待定项（[§13](#13-待定) 第 20 项）。
 - 带 `inject` 的密钥设置（导出到 Notion 这类云端目标）用同一个办法：宿主在 `run` 参数的 `endpoints` 里给一个本机地址，例如 `{"notion": "http://127.0.0.1:47823/"}`，转发时按 `inject` 填请求头。插件始终拿不到密钥明文。
 
 <a id="44-导出的-run-与-readback"></a>
@@ -1137,8 +1137,8 @@ Seatbelt 的 profile、bubblewrap 的 bind 和 Landlock 的规则都在进程启
 
 | 来源 | 仓库名 | 例子 |
 |---|---|---|
-| 官方组织 `{official-org}` | 应用 `usuyo`、`plugin-kit`、转换与导出插件 `<kind>-<name>`，不加 `usuyo-` 前缀 | `{official-org}/transform-asr-sherpa`、`{official-org}/export-obsidian` |
-| 获取方式组织 `{fetch-org}` | 只放获取插件，`<platform>` 或 `<platform>-<取法>`，不加前缀 | `{fetch-org}/douyin`、`{fetch-org}/xiaohongshu-share`、`{fetch-org}/takeout` |
+| 官方组织 `usuyo` | 应用 `usuyo`、`plugin-kit`、转换与导出插件 `<kind>-<name>`，不加 `usuyo-` 前缀 | `usuyo/transform-asr-sherpa`、`usuyo/export-obsidian` |
+| 获取方式组织 `usuyo-fetch` | 只放获取插件，`<platform>` 或 `<platform>-<取法>`，不加前缀 | `usuyo-fetch/douyin`、`usuyo-fetch/xiaohongshu-share`、`usuyo-fetch/takeout` |
 | 个人仓库 | `usuyo-fetch-<name>`、`usuyo-transform-<name>`、`usuyo-export-<name>` | `someone/usuyo-fetch-douyin` |
 
 所有插件仓库都加 GitHub topic `usuyo-plugin`。插件的 `id` 就是仓库的 `owner/repo`。
@@ -1152,7 +1152,7 @@ Seatbelt 的 profile、bubblewrap 的 bind 和 Landlock 的规则都在进程启
 |---|---|
 | `usuyo-plugin.yaml` | 补好 `install` 的清单 |
 | 插件本体，名字以清单里的 `install.assets[].name` 为准；建议写成 `<repo>_<version>_<os>-<arch>.tar.gz`（Windows 用 `.zip`）或 `<repo>_<version>_any.tar.gz` | 插件本体 |
-| `provenance.sigstore.json` | 构建来源证明，覆盖上面所有资产；官方组织必须有，`{fetch-org}` 自己约定都有，个人仓库建议有 |
+| `provenance.sigstore.json` | 构建来源证明，覆盖上面所有资产；官方组织必须有，`usuyo-fetch` 自己约定都有，个人仓库建议有 |
 
 - tag 写 `v<version>`；仓库开 GitHub immutable releases：发布后资产不能改、tag 不能移（2025-10-28 起正式可用，组织级可以统一打开）。所以要先建草稿、传齐资产、再发布。
 - 用 plugin-kit 的可复用发版工作流：校验源清单、核对 tag 与 `version`、算 sha256 写进 `install`、生成来源证明、建草稿、上传、发布。插件仓库只写构建这一段：
@@ -1178,10 +1178,10 @@ jobs:
       contents: write
       id-token: write
       attestations: write
-    uses: "{official-org}/plugin-kit/.github/workflows/release.yml@<完整 commit SHA>"
+    uses: "usuyo/plugin-kit/.github/workflows/release.yml@<完整 commit SHA>"
 ```
 
-所有 action 和可复用工作流都按完整 commit SHA 引用，由 Dependabot 升级。`{fetch-org}` 是引用这个工作流，还是复制一份放进自己组织，见 [§8.8](#88-获取方式组织的仓库结构) 和 [§13](#13-待定) 第 13 项。
+所有 action 和可复用工作流都按完整 commit SHA 引用，由 Dependabot 升级。`usuyo-fetch` 是引用这个工作流，还是复制一份放进自己组织，见 [§8.8](#88-获取方式组织的仓库结构) 和 [§13](#13-待定) 第 13 项。
 
 不用这个工作流的（GoReleaser 或手工发版），用 `usuyo plugin pack --version 0.3.1 dist/*`：校验源清单、算 sha256，写出补好 `install` 的 `usuyo-plugin.yaml`，由作者自己连同资产上传。
 
@@ -1195,8 +1195,8 @@ jobs:
 2. 下载 release 资产 `usuyo-plugin.yaml`，按 schema 校验；`id` 等于仓库、`version` 等于 tag，否则拒装。
 3. 下载本机平台的资产，sha256 和清单不一致就拒装（[ADR-003 §6](decisions/ADR-003-plugins.md#6-分发与校验)）。
 4. 有 `provenance.sigstore.json` 时，用 sigstore-go 验证，不经 GitHub API（Sigstore 的信任根由客户端按 TUF 定期更新）：签名有效、证书里的源仓库是这个仓库、源 ref 是这个 tag。签发者（构建它的工作流，按仓库和路径，不含 ref）的要求分两种：
-   - **官方组织**：客户端内置，签发者必须是 `{official-org}/plugin-kit` 的发版工作流；没有来源证明或验证失败就拒装。
-   - **用户添加的来源**（包括 `{fetch-org}`）：添加时固定签发者。[附录 A.4](#a4-添加第三方来源时的确认) 的确认框显示这个来源现有插件的签发工作流，例如「由 `{official-org}/plugin-kit` 的 `release.yml` 构建」，或「没有来源证明」；用户添加后客户端记下。以后这个来源里的新版本，签发工作流和记下的不同，或者原来有来源证明现在没有，就不更新并标出来。添加时记下的是「没有来源证明」的，不做这项比对，只逐个版本显示有没有。验证失败一律拒装。这和 Mihon 的做法同一个思路：信任来自用户添加 store 时接受的签名指纹（[02 §15.7](research/02-adapter-ecosystems.md#157-适配器源信任与治理)），客户端不用认识 `{fetch-org}`。
+   - **官方组织**：客户端内置，签发者必须是 `usuyo/plugin-kit` 的发版工作流；没有来源证明或验证失败就拒装。
+   - **用户添加的来源**（包括 `usuyo-fetch`）：添加时固定签发者。[附录 A.4](#a4-添加第三方来源时的确认) 的确认框显示这个来源现有插件的签发工作流，例如「由 `usuyo/plugin-kit` 的 `release.yml` 构建」，或「没有来源证明」；用户添加后客户端记下。以后这个来源里的新版本，签发工作流和记下的不同，或者原来有来源证明现在没有，就不更新并标出来。添加时记下的是「没有来源证明」的，不做这项比对，只逐个版本显示有没有。验证失败一律拒装。这和 Mihon 的做法同一个思路：信任来自用户添加 store 时接受的签名指纹（[02 §15.7](research/02-adapter-ecosystems.md#157-适配器源信任与治理)），客户端不用认识 `usuyo-fetch`。
 5. 读 GitHub App 写在 tag 提交上的 check run，显示「校验通过 / 没通过 / 没有校验」（[ADR-003 §6](decisions/ADR-003-plugins.md#6-分发与校验)）。只认 `app.id` 等于 usuyo GitHub App 的 check run，客户端内置这个 id：任何人都能用 Actions 的 `GITHUB_TOKEN` 或自己的 App 写一个同名、结论为 success 的 check run。官方组织的插件没通过就拒装；读不到 check run 时（App 还没跑完、被限额挡住）推迟这次更新，下次检查时再读，不安装。第三方插件读不到时显示「没有校验」；没通过时拦下还是只标出，见 [§13](#13-待定) 第 7 项。
 6. 展示权限，用户同意后安装（[§8.5](#85-添加来源更新与权限扩大)）。权限页列出每个站点的 `site`、`credential` 和 `domains`，以及每个密钥设置会被注入到哪个 `inject.host`。
 
@@ -1209,12 +1209,12 @@ GitHub App 的检查加三条：`env` 里有凭据类变量判失败；`access` 
 
 | 来源 | 客户端里怎么来 | 标签 |
 |---|---|---|
-| 官方组织 `{official-org}` | 客户端内置，列出组织里带 topic `usuyo-plugin` 的仓库；认 `kind: transform`、`export`，`kind: fetch` 只认下面说的两类预装插件，别的不列 | 官方 |
-| 用户添加的组织，包括 `{fetch-org}` | 用户在设置里输入组织名；列出组织里带 topic 的仓库 | 第三方来源 · 组织名 |
+| 官方组织 `usuyo` | 客户端内置，列出组织里带 topic `usuyo-plugin` 的仓库；认 `kind: transform`、`export`，`kind: fetch` 只认下面说的两类预装插件，别的不列 | 官方 |
+| 用户添加的组织，包括 `usuyo-fetch` | 用户在设置里输入组织名；列出组织里带 topic 的仓库 | 第三方来源 · 组织名 |
 | 用户添加的单个仓库 | 用户输入 `owner/repo` | 第三方 · 未经 usuyo 审核 |
 
-- 随安装包预装两类不含任何平台知识的获取插件（2026-11-01 用户同意，[open-decisions P1、P3](open-decisions.md#7-获取与插件)）：通用网页获取（只做 `public-web`、不登录、没有站点专用规则，`network.hosts` 写 `"*"`，宿主代理照样挡住内网和云元数据地址），和读别的工具导出文件的导入（Netscape HTML 书签、Pocket、Omnivore、Readwise、Instapaper、Wallabag、Obsidian Web Clipper、flomo 一类，`network: none`）。它们的源码在官方组织，`id` 用 `builtin/` 前缀，跟着客户端一起发版和更新。平台官方导出包（抖音个人信息下载、Google Takeout、X 归档一类）的导入插件仍放 `{fetch-org}`。
-- 除了这两类，客户端不预置任何获取来源，`{fetch-org}` 也要用户手动添加，代码里不对它特殊处理；对它的要求和别的用户来源一样，靠添加时固定的签发者（[§8.3](#83-校验与来源证明) 第 4 步）。
+- 随安装包预装两类不含任何平台知识的获取插件（2026-11-01 用户同意，[open-decisions P1、P3](open-decisions.md#7-获取与插件)）：通用网页获取（只做 `public-web`、不登录、没有站点专用规则，`network.hosts` 写 `"*"`，宿主代理照样挡住内网和云元数据地址），和读别的工具导出文件的导入（Netscape HTML 书签、Pocket、Omnivore、Readwise、Instapaper、Wallabag、Obsidian Web Clipper、flomo 一类，`network: none`）。它们的源码在官方组织，`id` 用 `builtin/` 前缀，跟着客户端一起发版和更新。平台官方导出包（抖音个人信息下载、Google Takeout、X 归档一类）的导入插件仍放 `usuyo-fetch`。
+- 除了这两类，客户端不预置任何获取来源，`usuyo-fetch` 也要用户手动添加，代码里不对它特殊处理；对它的要求和别的用户来源一样，靠添加时固定的签发者（[§8.3](#83-校验与来源证明) 第 4 步）。
 - 浏览第三方插件靠 GitHub 搜索 topic `usuyo-plugin`，客户端里给一个打开搜索结果的链接，不做商店。
 - 每个平台的插件列表显示：名字、`access`、会用到哪个账号（`sites[].name`，没有就写「不用账号」）、来源标签、校验结果、来源证明、最近一次失败的原因。
 
@@ -1232,7 +1232,7 @@ GitHub App 的检查加三条：`env` 里有凭据类变量判失败；`access` 
 ### 8.6 屏蔽清单与下架
 
 - 屏蔽清单 `security/plugin-blocklist.json` 放在主仓库，只列恶意的仓库和版本（[ADR-003 §6](decisions/ADR-003-plugins.md#6-分发与校验)）。客户端在启动、安装、更新前读取并缓存；命中的拒装，已装的停用。
-- 地址 `https://raw.githubusercontent.com/{official-org}/usuyo/main/security/plugin-blocklist.json`，带 ETag 缓存，最多每 24 小时刷新一次。读不到时（离线、GitHub 不可达）用缓存；连缓存也没有时照常启动，安装前提示「屏蔽清单读不到」。
+- 地址 `https://raw.githubusercontent.com/usuyo/usuyo/main/security/plugin-blocklist.json`，带 ETag 缓存，最多每 24 小时刷新一次。读不到时（离线、GitHub 不可达）用缓存；连缓存也没有时照常启动，安装前提示「屏蔽清单读不到」。
 - `versions` 用 semver 范围语法（同 npm 的 node-semver），省略表示所有版本。条目带 `repoId`，按数字仓库 id 匹配，`repo` 只供人看（[§8.3](#83-校验与来源证明) 第 0 步）。
 - 命中已装版本时，宿主结束它的常驻进程，取消它排队中的调用，再停用。
 
@@ -1281,20 +1281,20 @@ GitHub App 的检查加三条：`env` 里有凭据类变量判失败；`access` 
 
 改造上游项目时，新建仓库再推送它的历史（保留许可证和版权声明），不用 GitHub 的 fork 按钮：fork 会进上游的派生网络。派生超过 100 个、且通知方主张派生同样侵权时，GitHub 按整个派生网络处理，被屏蔽的仓库返回 451（[06 §16.3](research/06-platform-access-and-account-risk.md#163-下架停更与法律风险)）；派生不到 100 个时怎么处理，待核实。
 
-**和 Keiyoushi 的不同。** Keiyoushi 用自己的 CI 和自己的签名密钥构建、发布，Mihon 不拥有、也不关联任何扩展仓库（[02 §1](research/02-adapter-ecosystems.md#1-tachiyomi-与-mihon-扩展生态)）。本文现在的写法里，`{fetch-org}` 的发版引用官方组织 `{official-org}/plugin-kit` 的可复用工作流，来源证明里的签发者因此是官方组织的工作流，官方组织进了获取插件的发版链；usuyo 的 GitHub App 装在 `{fetch-org}` 上只做读和校验，和任何第三方作者装它一样，不参与发版。另一种做法是把工作流复制进 `{fetch-org}/.github`，签发者变成 `{fetch-org}` 自己的工作流，代价是 plugin-kit 改了工作流要再同步一次。选哪种见 [§13](#13-待定) 第 13 项。两个组织的 owner 目前是同一个人，这一点两种做法都改变不了（[§8.9](#89-组织设置清单)）。
+**和 Keiyoushi 的不同。** Keiyoushi 用自己的 CI 和自己的签名密钥构建、发布，Mihon 不拥有、也不关联任何扩展仓库（[02 §1](research/02-adapter-ecosystems.md#1-tachiyomi-与-mihon-扩展生态)）。本文现在的写法里，`usuyo-fetch` 的发版引用官方组织 `usuyo/plugin-kit` 的可复用工作流，来源证明里的签发者因此是官方组织的工作流，官方组织进了获取插件的发版链；usuyo 的 GitHub App 装在 `usuyo-fetch` 上只做读和校验，和任何第三方作者装它一样，不参与发版。另一种做法是把工作流复制进 `usuyo-fetch/.github`，签发者变成 `usuyo-fetch` 自己的工作流，代价是 plugin-kit 改了工作流要再同步一次。选哪种见 [§13](#13-待定) 第 13 项。两个组织的 owner 目前是同一个人，这一点两种做法都改变不了（[§8.9](#89-组织设置清单)）。
 
 <a id="89-组织设置清单"></a>
 ### 8.9 组织设置清单
 
-两个组织都要设，标「获取」的只在 `{fetch-org}`：
+两个组织都要设，标「获取」的只在 `usuyo-fetch`：
 
-- [ ] `.github` 仓库的 `profile/README.md`：组织主页。`{fetch-org}` 用 [附录 A.2](#a2-获取方式组织主页)。
+- [ ] `.github` 仓库的 `profile/README.md`：组织主页。`usuyo-fetch` 用 [附录 A.2](#a2-获取方式组织主页)。
 - [ ] `.github` 仓库放默认的社区文件：`SECURITY.md`（漏洞走 GitHub 私密漏洞报告）、`CONTRIBUTING.md`（清单写法、`maintainers` 要本人同意、不收写操作和推广内容）、issue 模板（插件坏了、请求新平台；获取：权利人通知）、PR 模板。
 - [ ] 获取：置顶 issue「已下架的获取方式」。
 - [ ] 成员必须开双重验证；基础权限只读；只有 owner 能建仓库、转入仓库、改可见性。
 - [ ] 组织级规则：`main` 禁止强推和删除、合并要走 PR；`v*` tag 只有发版的人能建，不能删也不能移。
 - [ ] 组织级打开 immutable releases。
-- [ ] Actions：只允许 GitHub 官方的 action 和发版用的可复用工作流（`{official-org}/plugin-kit` 的，或按 [§13](#13-待定) 第 13 项复制进 `{fetch-org}/.github` 的），按完整 SHA 引用；`GITHUB_TOKEN` 默认只读；只有发版工作流拿 `contents: write`、`id-token: write`、`attestations: write`。
+- [ ] Actions：只允许 GitHub 官方的 action 和发版用的可复用工作流（`usuyo/plugin-kit` 的，或按 [§13](#13-待定) 第 13 项复制进 `usuyo-fetch/.github` 的），按完整 SHA 引用；`GITHUB_TOKEN` 默认只读；只有发版工作流拿 `contents: write`、`id-token: write`、`attestations: write`。
 - [ ] 谁能发版：每个仓库一个 team，名单和清单的 `maintainers` 一致；能推 `v*` tag 的就是这个 team 加 owner。维护者多于一人后，发版用的 environment 要求另一人批准。
 - [ ] 装上 usuyo 的 GitHub App（公开的 App，只读和写 check run，不执行插件）。
 - [ ] 打开 secret scanning、push protection 和 Dependabot。
@@ -1567,7 +1567,7 @@ usuyo plugin pack --version 0.3.1 dist/*
 | 常驻进程按站点集合分开；资料目录按站点共用，交接前先关掉持有它的进程 | 凭据按能力发而沙箱按进程生效，分开进程才守得住 `login: none`；用户每个站点只登录一次 | 同一个插件可能开两个常驻进程；换插件时要等上一个进程退出 |
 | 运行时由宿主按名字解析，放进 `PATH` 最前 | launchd 启动的进程看不到 Homebrew 的目录；插件不用各自找程序 | plugin-kit 要维护一张运行时表 |
 | 输出目录整体检查，只收普通文件和目录 | 符号链接、硬链接能让宿主替插件读到沙箱外的文件 | 插件不能用链接省空间 |
-| 用户添加的来源在添加时固定签发者；按数字仓库 id 认仓库 | 和 Mihon 认 store 签名指纹同一个思路，客户端不用认识 `{fetch-org}`；改名、转移、旧名被重新注册都能发现 | 来源换了发版方式或仓库转移后，要用户重新添加 |
+| 用户添加的来源在添加时固定签发者；按数字仓库 id 认仓库 | 和 Mihon 认 store 签名指纹同一个思路，客户端不用认识 `usuyo-fetch`；改名、转移、旧名被重新注册都能发现 | 来源换了发版方式或仓库转移后，要用户重新添加 |
 | 投递来的身份由宿主重新算；`api` 令牌只交链接 | 投递方自报的身份是不可信输入；Agent 交内容等于绕开改动提议 | Agent 不能直接交它已经取好的内容 |
 | 获取方式组织每个插件一个仓库 | 下架只影响一个仓库；不要索引文件 | 共享代码和统一改动不如大仓库方便（[§8.8](#88-获取方式组织的仓库结构)） |
 | 来源证明用 immutable releases 加构建来源证明，作为 release 资产发 | 不自己管签名密钥；不靠 API 就能下载、离线验证 | 依赖 GitHub 和 Sigstore 的公共服务；个人仓库只能建议，不能要求 |
@@ -1628,7 +1628,7 @@ usuyo plugin pack --version 0.3.1 dist/*
 | 自己维护的获取方式放单独组织，客户端不预置 | [§17.4](research/06-platform-access-and-account-risk.md#174-fork-与许可证) | 采纳 | D-f；通用网页获取和别的工具的导入例外，随安装包预装（[§8.4](#84-三种来源)） |
 | fork 时要做的事：保留许可证、去掉写操作和推广、锁定外部二进制 | [§17.4](research/06-platform-access-and-account-risk.md#174-fork-与许可证) | 采纳 | 另加：不用 fork 按钮（[§8.8](#88-获取方式组织的仓库结构)） |
 | 官方组织收转换和导出 | [§17.4](research/06-platform-access-and-account-risk.md#174-fork-与许可证) | 采纳 | 平台中立的共用代码进 plugin-kit |
-| 只读导出文件的导入插件放哪个组织 | [§17.4](research/06-platform-access-and-account-risk.md#174-fork-与许可证) | 已定 | 11-01 用户选 B：别的工具的导出进官方组织并预装，平台官方导出包放 `{fetch-org}`（[open-decisions P3](open-decisions.md#7-获取与插件)、[§8.4](#84-三种来源)） |
+| 只读导出文件的导入插件放哪个组织 | [§17.4](research/06-platform-access-and-account-risk.md#174-fork-与许可证) | 已定 | 11-01 用户选 B：别的工具的导出进官方组织并预装，平台官方导出包放 `usuyo-fetch`（[open-decisions P3](open-decisions.md#7-获取与插件)、[§8.4](#84-三种来源)） |
 | 法律意见 | [§17.4](research/06-platform-access-and-account-risk.md#174-fork-与许可证) | 保留 | 仍待核实 |
 
 <a id="13-待定"></a>
@@ -1637,7 +1637,7 @@ usuyo plugin pack --version 0.3.1 dist/*
 需要用户在产品层面拍板的问题都在 [open-decisions](open-decisions.md)，选项、建议和影响以那里为准。本文其他地方引用本节时写的「第 N 项」就是下面的编号；open-decisions 的表格行没有单独的锚点，链接指向条目所在的节，条目编号写在链接文字里。
 
 1. 两个组织的名字和权利人联系地址：[N1、N2](open-decisions.md#2-命名与组织)，[R4](open-decisions.md#12-声明与责任)。
-2. 只读导出文件的导入插件放哪个组织、要不要预装：[P3](open-decisions.md#7-获取与插件)。11-01 已定：别的工具的导出进官方组织并预装，平台官方导出包放 `{fetch-org}`（[§8.4](#84-三种来源)）。
+2. 只读导出文件的导入插件放哪个组织、要不要预装：[P3](open-decisions.md#7-获取与插件)。11-01 已定：别的工具的导出进官方组织并预装，平台官方导出包放 `usuyo-fetch`（[§8.4](#84-三种来源)）。
 3. 运行器的默认顺序，新装的插件排在哪：[P4](open-decisions.md#7-获取与插件)。
 4. 第一次用到要登录的获取方式时，登录态默认从哪来：[P8](open-decisions.md#7-获取与插件)。
 5. 通用网页获取放哪里（内核内置、官方组织出插件随安装包预装、只放获取方式组织），`builtin/` 前缀用不用：[P1](open-decisions.md#7-获取与插件)。11-01 已定：官方组织出插件，随安装包预装，用 `builtin/` 前缀（[§8.4](#84-三种来源)）。
@@ -1648,14 +1648,14 @@ usuyo plugin pack --version 0.3.1 dist/*
 10. 声明文案（[附录 A](#附录-a-声明模板)）怎么定稿、公开前请不请人看：[R1](open-decisions.md#12-声明与责任)。
 11. `login: optional` 的插件，用户登录过之后默认带不带账号：[P16](open-decisions.md#7-获取与插件)。
 12. 浏览器扩展要不要也能当获取方式（[§5.3](#53-各种入口怎么接) 最后一行）：[P17](open-decisions.md#7-获取与插件)。
-13. `{fetch-org}` 的发版用谁的工作流（[§8.8](#88-获取方式组织的仓库结构)）：[O9](open-decisions.md#13-开源与发布)。
+13. `usuyo-fetch` 的发版用谁的工作流（[§8.8](#88-获取方式组织的仓库结构)）：[O9](open-decisions.md#13-开源与发布)。
 14. 主仓库公开前，`docs/research` 里按平台写取法的部分放在哪，附录 A 的风险证据链接指向哪：[O2](open-decisions.md#13-开源与发布)。
 15. 收件文件夹里的导入文件直接收下，还是进导入预览：[C7](open-decisions.md#5-收下与入口)。
 16. 第一个获取方式只拿到一部分时，要不要自动用下一个补全：[P5](open-decisions.md#7-获取与插件)。
 17. 电脑端视觉层先做什么，微信收藏读不到界面时退不退到截图加 OCR（[§9.5](#95-视觉层流程) 例子一）：[P10](open-decisions.md#7-获取与插件)。
 18. 安卓要不要做、做到哪（[§7](#7-权限与隔离) 的 adb 管理、[§9.5](#95-视觉层流程) 例子二）：[P18](open-decisions.md#7-获取与插件)。
 19. ~~视觉层调用能不能自己跑~~：2026-11-04 已定，见 [§3.1](#31-运行器与节奏)（[P19](open-decisions.md#7-获取与插件)）。
-20. `{fetch-org}` 收不收包装自带模型的第三方手机 Agent 的获取插件（[§4.3](#43-模型与密钥由宿主代发)）：[R11](open-decisions.md#12-声明与责任)。
+20. `usuyo-fetch` 收不收包装自带模型的第三方手机 Agent 的获取插件（[§4.3](#43-模型与密钥由宿主代发)）：[R11](open-decisions.md#12-声明与责任)。
 21. 用户自己填的来源参数：`sources` 只能列插件自己知道的来源，填不进一个 feed 地址或一个账号（[§3.8](#38-list-与跟着收)）。提议加子命令 `resolve-source <输入>`，返回 `{match, source, title, order, owner}`；先例是 RSSHub 路由的 `:param`：[调研 11 §6](research/11-subscriptions-compat-and-wx-cli.md#6-对插件协议的影响)。
 22. feed 条目的身份和第一次拉：`guid`、`atom:id` 是任意字符串，套不进 plugin-kit 要求的 `contentId` 正则；别人的来源第一次拉只记下已有条目、不收，以后只收新出现的（[§3.8](#38-list-与跟着收)）：[调研 11 §6](research/11-subscriptions-compat-and-wx-cli.md#6-对插件协议的影响)。
 23. OPML 导进来的是订阅，不是条目：[§3.9](#39-从文件导入) 的导入插件只会列出条目，要有地方建一批跟着收的订阅。只在 [discussion 第 1 条](discussion.md#1-什么东西进资料库)选 B 时需要：[调研 11 §6](research/11-subscriptions-compat-and-wx-cli.md#6-对插件协议的影响)。
@@ -1670,7 +1670,7 @@ usuyo plugin pack --version 0.3.1 dist/*
 <a id="附录-a-声明模板"></a>
 ## 附录 A. 声明模板
 
-以下都是草稿，未经法律意见。`{official-org}`、`{fetch-org}`、`{contact}` 换成实际值；A.2、A.3 里的 `{contact}` 是获取方式组织用的地址，和 A.1 是不是同一个见 [§13](#13-待定) 第 1 项。链接写成完整 URL，复制到别处也能打开。
+以下都是草稿，未经法律意见。`usuyo`、`usuyo-fetch`、`{contact}` 换成实际值；A.2、A.3 里的 `{contact}` 是获取方式组织用的地址，和 A.1 是不是同一个见 [§13](#13-待定) 第 1 项。链接写成完整 URL，复制到别处也能打开。
 
 <a id="a1-主仓库-readme"></a>
 ### A.1 主仓库 README
@@ -1681,7 +1681,7 @@ usuyo plugin pack --version 0.3.1 dist/*
 usuyo 是在你自己电脑上运行的开源软件，用来做个人备份、离线阅读和注意力整理：把你在各平台存下的内容收回到本机的资料库里，变成能搜、能整理的文字。
 
 - usuyo 本身不含任何平台的获取代码，也不托管、不转发任何平台内容。从平台取内容的是获取插件。它们是独立的程序，放在单独的仓库和组织里，不随 usuyo 分发，要你自己添加。随 usuyo 一起装好的只有两类不含任何平台知识的插件：通用网页获取，和读别的工具导出文件（书签、Pocket、Readwise 一类）的导入。
-- 用不用某个获取插件、用哪个账号，由你决定。平台可能因此限制或封禁你的账号；这些后果和相关的法律责任由你自己承担。各种获取方式的已知情况见 [调研 06 第 16 节](https://github.com/{official-org}/usuyo/blob/main/docs/research/06-platform-access-and-account-risk.md#16-账号风险的证据)。
+- 用不用某个获取插件、用哪个账号，由你决定。平台可能因此限制或封禁你的账号；这些后果和相关的法律责任由你自己承担。各种获取方式的已知情况见 [调研 06 第 16 节](https://github.com/usuyo/usuyo/blob/main/docs/research/06-platform-access-and-account-risk.md#16-账号风险的证据)。
 - 请遵守各平台的用户协议，尊重内容作者和版权人。收回来的内容只供你自己查看，不要再发布或分发。
 - usuyo 不提供默认开启的平台写操作。插件声明的「在平台上取消收藏」默认关闭，每次执行前要你确认。
 - 权利人如认为本仓库或官方组织里的内容侵犯了权利，请写信到 {contact}，写明仓库、文件和理由。我们核实后处理，并回复处理结果。
@@ -1693,12 +1693,12 @@ usuyo 是在你自己电脑上运行的开源软件，用来做个人备份、�
 ### A.2 获取方式组织主页
 
 ```markdown
-**{fetch-org}：usuyo 的获取插件**
+**usuyo-fetch：usuyo 的获取插件**
 
 这里每个仓库是一个平台上的一种取法，用来把你自己存下的内容做个人备份、离线阅读和注意力整理。
 
-- 本组织和 usuyo 官方组织 {official-org} 是两个独立的组织，仓库、发版和下架各自处理。usuyo 客户端不预置这里的任何插件；要用的话，在 usuyo 的设置里手动添加组织名 `{fetch-org}`。
-- 每个插件的清单写明获取层级（access）、要不要登录（login），以及会用到哪个站点的账号。挑哪个、用哪个账号由你决定；平台对账号的限制和相关的法律后果由你自己承担。已知情况见 [调研 06 第 16 节](https://github.com/{official-org}/usuyo/blob/main/docs/research/06-platform-access-and-account-risk.md#16-账号风险的证据)。
+- 本组织和 usuyo 官方组织 usuyo 是两个独立的组织，仓库、发版和下架各自处理。usuyo 客户端不预置这里的任何插件；要用的话，在 usuyo 的设置里手动添加组织名 `usuyo-fetch`。
+- 每个插件的清单写明获取层级（access）、要不要登录（login），以及会用到哪个站点的账号。挑哪个、用哪个账号由你决定；平台对账号的限制和相关的法律后果由你自己承担。已知情况见 [调研 06 第 16 节](https://github.com/usuyo/usuyo/blob/main/docs/research/06-platform-access-and-account-risk.md#16-账号风险的证据)。
 - 插件只读取你自己有权查看的内容。没有默认开启的写操作；包装别的工具时去掉了发帖、点赞、私信一类命令。
 - 本组织不托管任何平台内容，release 里只有插件程序和清单。
 - 请遵守各平台的用户协议，尊重内容作者和版权人。
@@ -1718,7 +1718,7 @@ usuyo 是在你自己电脑上运行的开源软件，用来做个人备份、�
 - 获取层级：`{access}`；登录：`{login}`；会用到：{站点名}账号（`{site}`）。没有登录时写「不用账号」。
 - 上游：{上游项目}（{许可证}）。本仓库的改动见 CHANGES.md。
 - 用途：个人备份、离线阅读、注意力整理。只取你自己有权查看的内容，不发帖、不点赞、不私信。
-- 账号与责任：平台可能限制或封禁账号。用不用、用哪个账号由你决定，后果由你自己承担。已知情况见 [调研 06 第 16 节](https://github.com/{official-org}/usuyo/blob/main/docs/research/06-platform-access-and-account-risk.md#16-账号风险的证据)。
+- 账号与责任：平台可能限制或封禁账号。用不用、用哪个账号由你决定，后果由你自己承担。已知情况见 [调研 06 第 16 节](https://github.com/usuyo/usuyo/blob/main/docs/research/06-platform-access-and-account-risk.md#16-账号风险的证据)。
 - 平台写操作：{没有 / 「在平台上取消收藏」，默认关闭，每次执行前确认}。
 - 不托管任何平台内容。请遵守平台协议，尊重作者和版权人。权利人通知：{contact}。
 
