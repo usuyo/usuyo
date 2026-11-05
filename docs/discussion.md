@@ -385,7 +385,7 @@ A（Go + MyGo，即现在的 ADR-001）随[第 6 条](#6-桌面壳)出局；D（
 
 **为什么现在问**：接口设计了一半。插件协议有 25 个待定；SPEC 和插件协议、product-model 有 [18 处对不上](SPEC.md#附和别的文档对不上的-18-处)；其余见 [overview §5](overview.md#5-接口做到哪了)。
 
-**17a 兼容和开创照这样写对不对**：推荐靠标准，不自己做阅读器。兼容靠 RSS、Atom、JSON Feed、OPML（交给阅读器）、Google Reader API、MCP、带 front matter 的 Markdown、Obsidian vault 进出；开创只说今天站得住的五件，迷雾地图暂时不当新东西讲。清单全文在 [overview §7](overview.md#7-兼容和开创)。另一条路是自己做阅读器（[第 1 条](#1-什么东西进资料库)的 A2）：一个应用里全有，但和 Folo、Miniflux 正面重叠，重心移到新来了什么。
+**17a 兼容和开创照这样写对不对**（**11-04**：你没选，另提了蒸馏链路：素材 → 卡片 → 主题页 → 成稿，每句带引用，产品里做、Agent 也能接；记在 [open-decisions §1.8](open-decisions.md#18-grill-回答)。）推荐靠标准，不自己做阅读器。兼容靠 RSS、Atom、JSON Feed、OPML（交给阅读器）、Google Reader API、MCP、带 front matter 的 Markdown、Obsidian vault 进出；开创只说今天站得住的五件，迷雾地图暂时不当新东西讲。清单全文在 [overview §7](overview.md#7-兼容和开创)。另一条路是自己做阅读器（[第 1 条](#1-什么东西进资料库)的 A2）：一个应用里全有，但和 Folo、Miniflux 正面重叠，重心移到新来了什么。
 
 **17b 接口先写哪个**（**已答（11-04）**：分五层依次写，D。）
 
