@@ -1,7 +1,7 @@
 <a id="调研-13--第四轮像-yohaku-的名字"></a>
 # 调研 13 — 第四轮：像 Yohaku 的名字
 
-状态：草案 · 2026-11-04
+状态：草案 · 2026-11-04 · 2026-11-04 补 [§6](#6-11-04-复查-usuyo)
 
 回答你 11-04 的一句：「dokokara备选，然后我想再找个yohaku这种的」（记在 [open-decisions §1.8](../open-decisions.md#18-grill-回答)，对应 [discussion 第 5 条](../discussion.md#5-名字)）。推荐和要你回答的一问在 [§0](#0-结论)；挑名字的尺子在 [§1](#1-这一轮按什么挑)；查过的 101 个名字在 [§2](#2-候选和可用性)；前三名和 Dokokara 的细查在 [§3](#3-入围细查)；怀疑者改了什么在 [§4](#4-怀疑者复核)；定名前还要查的在 [§5](#5-待核实清单)。本篇不改别的文档。
 
@@ -206,3 +206,66 @@ clean 和 usable 的 28 个没有细查词义、误读和同名产品，不算�
 9. **没复查的**：mabara 和其余 21 个的分只有终评一人打过。
 10. **tenbyo**：GitHub 裸名 2026-10-07 刚被建，用途不明；要改选它先看账号是谁的。
 11. **域名信号**：三个名字的 `.app`、`.dev` 没有 NS 记录，只说明多半没注册，没查注册局。
+
+<a id="6-11-04-复查-usuyo"></a>
+## 6. 11-04 复查 usuyo
+
+你 11-04 的原话（逐字）：
+
+> 「usuyo感觉很合适看看是否有重名或者什么，然后就不用中文，就纯英文这个，然后我觉得也符合这个软件，你觉得呢」
+
+查了三步：撞名、词义和误读、一位怀疑者复核前两步。事实都是 2026-11-04 查的，方法照 [约定](#约定)，另用了 RDAP、whois、Bing、DuckDuckGo 和各平台的公开接口。下面已按怀疑者改过。
+
+**占用**
+
+| 面 | 结果 |
+|---|---|
+| GitHub | `usuyo`、`usuyou`、`usuyo-app`、`usuyohq`、`getusuyo` 等 13 个登录名，`users/` 和 `orgs/` 都 404；同名仓库 0；最近的是 nonQualities/usyuo（拼法不同，待办工具，5 星，README 说名字借了 薄様） |
+| 注册表和扩展 | npm（含作用域）、PyPI、crates、pkg.go.dev、Homebrew 两种、Docker Hub、VS Code、Open VSX、Obsidian 插件和主题、Raycast 全空 |
+| 其他托管和商店 | GitLab、Codeberg、Hugging Face、SourceForge、Snap、Flathub、AUR、F-Droid、winget 0；App Store 15 区 iPhone 和 Mac，usuyo、usuyou 整词 0；Google Play 包名 404（只查美区）；Steam 0 |
+| 社交裸名 | X @usuyo 是 2011 年的休眠号（0 帖）；TikTok @usuyo 是在运营的西语游戏主播，33.87 万粉丝，Twitch usuyo 是同一人；YouTube @usuyo 是个人频道；B站 usuyo（1,554 粉丝）、微博 usuyo（二手，搜索摘要）有人。空着：X @usuyoapp、@getusuyo、@usuyohq，YouTube @usuyoapp，Bluesky usuyo.bsky.social |
+| 同名非软件 | 東洋佐々木ガラス 在售的 USUYO 玻璃杯线（薄葉 うすよう），英文官网写「named after Japanese paper」（[官网](https://www.toyo.sasaki.co.jp/e/)），美国有零售，英、瑞典、挪威、韩国也有（二手，搜索摘要）；TALAS、Hiromi Paper 的 Usuyo 雁皮纸；高田みどり 2022 年的曲「Usuyo (Futa-Aya-Asobi)」；杜鹃品种 Usuyo |
+| 域名 | usuyo.com 是在运营的立陶宛语软件推荐站，2025-12-16 注册，一年期（[RDAP](https://rdap.verisign.com/com/v1/domain/usuyo.com)）；.net、.org、.io、.app、.dev 未注册 |
+| 搜裸词第一页 | Bing 美区、日区和 DuckDuckGo：主播和玻璃杯，usuyo.com 不在。Google 没测，百度停在验证页 |
+| 商标 | 没查成：USPTO 接口 405，TMview 被 WAF 拦，WIPO 要令牌。第三方聚合站只见近似的 USYO、YUSUUO，都不在第 9、42 类 |
+
+**判定：crowded，不是 taken**（怀疑者）。crowded 是裸词搜索首页和多数裸名社交账号被几个在运营、有真实受众的非同类主体占着；taken 要有同类产品或拦路的商标。你想按 usable 算，改这条规则就行，数据不变。
+
+**词义和误读**
+
+- **薄様**：大辞泉 3 义、日国 4 义（[kotobank 薄様](https://kotobank.jp/word/%E8%96%84%E6%A7%98-439972)）。日国第一义写它也用来包东西；语誌说平安中期起用于情书和亲密的赠答。几部辞典里只有世界大百科明说叠起来下面的颜色「透けて」。
+- **罗马字**：令和7年内閣告示第4号（2025-12-22）的规范写法是 usuyō 或 usuyou；去长音的 usuyo 和 Tokyo 同类，告示允许团体沿用惯用写法（[文化庁 Q&A](https://www.bunka.go.jp/seisaku/kokugo_nihongo/kokugo_shisaku/pdf/94340701_01.pdf)）。高田みどり、TALAS、東洋佐々木 都写 Usuyo。
+- **负面义**：没找到。Urban Dictionary 没有词条，Wiktionary 22 个语言版没有词条。
+- **弱的误读**：土耳其语 üşüyo「在发冷」，不打变音符就写成 usuyo(r)；日本读者可能先读 うすよ，想到 薄汚れる、嘘よ（推断）；《龍が如く 極3》（2026-02-12 发售）有同伴角色 サチ・ウスヨ（[game8](https://game8.jp/ryu-ga-gotoku-kiwami3/761849)）；中文念「乌苏哟」，可能被开「大乌苏」的玩笑（推断）；英文念 oo-SOO-yoh 或 YOO-soo-yoh，字形近 usury（推断）。
+- **中文名**：薄样 汉典、萌典都没有，品牌又不露汉字，不会长出中文名，和你说的「纯英文」对得上。
+- **合不合这个软件**（你问的「你觉得呢」）：合，但要讲两步，先讲薄纸叠起来下面透上来，再讲最里两件是白；适合放在 README 一屏以下讲开，不当口号。文案不写「fades to white」「clears」，会读成雾在退（推断）。
+
+**怀疑者改了什么**
+
+1. 撞名一步说「网页上没有叫 usuyo 的产品或和纸品牌」，不成立：東洋佐々木 的 USUYO 线和你同词源、讲同一句故事，2026-09 还在推（日期只来自搜索摘要）。
+2. 「只有 X 和 usuyo.com 两处轻度占用」不成立：TikTok、Twitch 的主播是这个裸词在网上最大的使用者。
+3. 「搜 usuyo 可能先出 usuyo.com」测了，不成立，见上表。
+4. 词义一步说「没找到叫 Usuyo 的角色」，部分不成立：サチ・ウスヨ。
+5. 判定从 usable 改成 crowded。仍成立的：同类软件 0，开发者命名空间全空，没有负面义。
+
+本节更正 [§0](#0-结论) 让步里「搜「usuyo」可能先出那个立陶宛软件站」一句和 [§3.1](#31-usuyo薄様) 的占用一段：第一页是主播和玻璃杯；App Store 这次查了 15 区。[§5](#5-待核实清单) 里 usuyo.com 那一条已测完，国内平台那一条只查了 B站、微博。
+
+**结论：可以定 usuyo。** 同类软件、GitHub、注册表、应用商店全空，没有负面义；代价是社交账号要带后缀，短期内搜裸词找不到你，「名字来自薄和纸」这句 東洋佐々木 已经用英文讲过。
+
+**还挡着或要注意的**
+
+1. **商标没查成**，现在只有这一项可能推翻结论：你本人在 J-PlatPat 查 USUYO、薄葉、うすよう（東洋佐々木 可能注册了第 21 类，推断；第 21 类不拦软件，推断），再在 USPTO、TMview、WIPO、CNIPA 查第 9、42 类。
+2. **组织名尽快注册**：GitHub 不提供预留，404 也不保证能注册。`users/` 404 也不等于空着：这次 `tesuki` 的 `users/` 和网页都 404，`orgs/` 却是 2024-06-08 建的组织，所以下面的名字都加查了 `orgs/`。
+3. **没测成的**：首批平台里的小红书、抖音、快手、知乎、视频号、贴吧要登录；Google、Product Hunt、Chrome 网上应用店、Instagram @usuyo 也没测成。
+4. **两种拼法**：README 写一句「usuyo (oo-soo-yoh), from the Japanese usuyō」，不露汉字（推断）。
+5. **没找真人试读**，念法都是推断。
+
+**组织名**（`users/`、`orgs/`、网页都 404）：
+
+| 用途 | 名字 |
+|---|---|
+| 官方组织 `{official-org}` | `usuyo`，Go 路径 `github.com/usuyo/usuyo` |
+| 获取插件 `{fetch-org}` | `usuyo-sources` |
+| client-hook `{fetch-org}-hook` | `usuyo-sources-hook` |
+
+这一组是 [N2](../open-decisions.md#2-命名与组织) 的 A（带产品名）。N2 的建议是 B：和产品名没有字面关系，像 Keiyoushi 不带 Mihon 的名字，你还没回。选 B 时有一个候选 `kamiire`（紙入れ，Jisho 释作 wallet、billfold）加 `kamiire-hook`，也都 404；只查了一部词典，「把收下的装进纸里」是推断，起名留到下一轮。
