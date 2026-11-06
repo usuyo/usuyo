@@ -95,11 +95,11 @@ itemId      = <platform> "-" base32(sha256(identityKey) 前 16 字节)
 - base32 用 RFC 4648 字母表，小写，不补 `=`，26 位；128 位不用写碰撞分支。例：`douyin:7431234567890123456` → `douyin-4plrcxk343onmyxibmrr672kga`。
 - `contentId` 照 plugin-kit 的平台列表（抖音十进制，B站 `BV…:p2`），JSON 里是字符串（19 位超过 2^53）。`identityKey` 按第一个 `:` 拆，`itemId` 按最后一个 `-` 拆（平台可以是 `wechat-mp`）。
 - **web 身份**：插件规范化后，宿主再按 [RFC 3986 §6.2.2](https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2) 做一遍：scheme、主机小写，去默认端口和 `#` 片段，查询串不动。没有插件命中的 http(s) 链接，和命中了插件、`canonicalize` 却因 `network`、`timeout` 失败的短链（下一条），宿主自己这样算，没装 web 插件也一样。
-- **短链要联网展开**：`canonicalize` 因 `network` 或 `timeout` 失败时，宿主先拿短链本身照上一条算 `web:` 身份，马上建文件夹（`completeness: link`，之后的快照照记 `inputUrl`），只把重试放本机 `jobs.db`。联网后拿到平台身份，照下面「拿到更好的身份时」并过去，`web-` id 进 `aliases`；平台身份的 id 还没有条目时，这一步就是改名。并过去时撞上回收站、删除记录或私密的，见下一条。两台离线收下同一条短链得到同一个 id；同一视频的两条不同短链先是两条，联网后并成一条。
-- **展开后撞上回收站、删除记录或私密**（推断）：`jobs.db` 里的重试记下当初是哪个入口。主动收的照 [§1.7](#17-删掉)：在回收站里的拿回来，推掉删除记录，进「以前删过的」提醒；推掉删除记录这件事记在这次并过去（或改名）的那条里，撤销那批时照 [§1.7](#17-删掉)「收下时推掉了删除记录的」那条用 `reason: delete`。目标私密、当初是 Agent、`api` 令牌或终端外的命令行收的：`web-` 条目并进它，`origins` 不并过去（同直接收下时跳过），撤销那批不动这一条（`web-` id 成了别名，私密的对 Agent 照 [§1.3](#13-条目的四个维度) 回 `not-found`）。跟着收遇到 `canonicalize` 因 `network`、`timeout` 失败的不建短链条目，这一次不算跑完，联网后整次重跑。
-- **没有身份的**（文件、聊天记录；fetch 输出省略 `identity` 或写 `{"platform": "file"}`，[协议 §3.7](plugin-protocol.md#37-fetch-输出)）：平台记 `file`，`file-` 加 26 位随机 base32（同样形状），放 `items/file/`，只靠内容层去重。`{platform: file}` 不算身份，不进 `identityKey`、自动合并和删除记录。不带 `contentId` 的身份只有 `web`，必带 `url`；`web`、`file` 以外的平台缺 `contentId` 照[协议 §3.1](plugin-protocol.md#31-运行器与节奏) 按 `invalid-output` 处理（feed 条目等[协议 §13 第 22 项](plugin-protocol.md#13-待定)）。
+- **短链要联网展开**：`canonicalize` 因 `network` 或 `timeout` 失败时，宿主先拿短链本身照上一条算 `web:` 身份，马上建文件夹（`completeness: link`，之后的快照照记 `inputUrl`），只把重试放本机 `jobs.db`。联网后拿到平台身份，照下面「拿到更好的身份时」并过去，`web-` id 进 `aliases`；平台身份的 id 还没有条目时，这一步就是改名。并过去时撞上回收站或私密的，见下一条。两台离线收下同一条短链得到同一个 id；同一视频的两条不同短链先是两条，联网后并成一条。
+- **展开后撞上回收站或私密**（推断）：`jobs.db` 里的重试记下当初是哪个入口。主动收的照 [§1.7](#17-删掉)：在回收站里的拿回来，`restore` 和这次并过去（或改名）记在同一批，撤销那批时照 [§1.7](#17-删掉) 原样放回回收站。目标私密、当初是 Agent、`api` 令牌或终端外的命令行收的：`web-` 条目并进它，`origins` 不并过去（同直接收下时跳过），撤销那批不动这一条（`web-` id 成了别名，私密的对 Agent 照 [§1.3](#13-条目的四个维度) 回 `not-found`）。跟着收遇到 `canonicalize` 因 `network`、`timeout` 失败的不建短链条目，这一次不算跑完，联网后整次重跑。
+- **没有身份的**（文件、聊天记录；fetch 输出省略 `identity` 或写 `{"platform": "file"}`，[协议 §3.7](plugin-protocol.md#37-fetch-输出)）：平台记 `file`，`file-` 加 26 位随机 base32（同样形状），放 `items/file/`，只靠内容层去重。`{platform: file}` 不算身份，不进 `identityKey` 和自动合并。不带 `contentId` 的身份只有 `web`，必带 `url`；`web`、`file` 以外的平台缺 `contentId` 照[协议 §3.1](plugin-protocol.md#31-运行器与节奏) 按 `invalid-output` 处理（feed 条目等[协议 §13 第 22 项](plugin-protocol.md#13-待定)）。
 - **id 不改**，只能经合并换，被并掉的进 `aliases`。宿主自动合并两处（推断）：拿到更好的身份时（平台 > web > 随机），并进那个身份算出的 id；同步时两个 `itemId` 对上同一个 `identityKey`，并进由身份算出的那个。同一个 id 对上不同的 `identityKey` 不合并，报告。
-- **算法冻住**：平台列表里 `contentId` 格式的改动（`BV…` 和 `BV…:p1` 算不算一个）算资料库的 major。web 身份尽力而为，对不上靠 `sameAs`；`inputUrl`、`resolvedUrl` 也进索引，查库里和回收站里的条目时再按它们查（推断）；删除记录里没有它们，按 `identityKey`、再按 `identities[].url` 查。
+- **算法冻住**：平台列表里 `contentId` 格式的改动（`BV…` 和 `BV…:p1` 算不算一个）算资料库的 major。web 身份尽力而为，对不上靠 `sameAs`；`inputUrl`、`resolvedUrl` 也进索引，查库里和回收站里的条目时再按它们查（推断）。
 - **文件夹名就是 `itemId`**，引用只用 id，不用路径。
 - **本机不带钥匙**：两台要在有钥匙之前就算出同一个名字。云端记录 id 是 `HMAC-SHA256(idKey, "item:" + itemId)`，服务器试不出你存着哪个公开视频（[调研 14 §4](research/14-sync-like-hatoba.md#4-加密)）。
 
@@ -177,28 +177,27 @@ SHA-256，小写十六进制，算存下来的字节。字段名叫 `sha256` 时
     library.json                  formatVersion、extensions、libraryId、sync
     settings.json                 跟着资料库走的设置
     devices/<deviceId>.json       名字、revokedAt、lastSeenAt
-    deleted/<itemId>.json         删除记录
     journal/<deviceId>/<段>.jsonl 改动记录
     facts/<deviceId>/<段>.jsonl   发生过的事
     changes/<id>.json             改动提议
-    subscriptions/<id>.json       跟着收：fetchDevice、take、上次到哪；其余归第 4 层
+    subscriptions/<id>.json       跟着收：fetchDevice、take；其余归第 4 层
     imports/<importBatch>.json    导入记录，归第 4 层
     trash/<trashId>/              回收站
     tmp/  lock                    本机用，不同步
 ```
 
-- 各项的格式：条目文件夹见 [§1.2](#12-条目文件夹)；主题、卡片、成稿见 [§1.4](#14-你写的那一层)；发生过的事见 [§1.4.4](#144-发生过的事)；改动提议见 [§1.5](#15-改动提议)；改动记录见 [§1.6](#16-改动记录)；删除记录和回收站见 [§1.7](#17-删掉)。
+- 各项的格式：条目文件夹见 [§1.2](#12-条目文件夹)；主题、卡片、成稿见 [§1.4](#14-你写的那一层)；发生过的事见 [§1.4.4](#144-发生过的事)；改动提议见 [§1.5](#15-改动提议)；改动记录见 [§1.6](#16-改动记录)；回收站见 [§1.7](#17-删掉)。
 - 按平台分一层，文件夹名是 `itemId`（[§0.4](#04-id)），两台离线算出同一路径；年月不进路径。回收站放 `.usuyo/trash/`：它是库的状态，各台各挪各的、只同步状态（[§1.7](#17-删掉)）；`items/`、`topics/`、`cards/`、`drafts/` 在 Finder 里只剩还在的。
 - `library.json`：`{"formatVersion": 1, "extensions": {}, "libraryId": "<UUIDv7>", "createdAt": "…", "sync": null}`；开了内置同步，`sync` 是 `{"backend": "cloudflare", "remoteId": "…"}`，不含密钥。它在库里，库在 iCloud 里时另一台一打开就能提示二选一。
 - `settings.json` 这里只定 `trashDays`（30，可选 90 或「一直」）；其余（转换哪几层、取不取评论、Agent 能看的范围、私密条目上不上云）归第 2 层。
 - 跟着收的 `fetchDevice` 是哪台去取。`take` 只给订阅来的（RSS、简报、别人的公开账号）：`picked` 只收你挑的，`picked-or-matched` 也收命中你关注的，默认 `picked`（[PRD 7.3](PRD.md#73-导入和跟着收) 的建议）；你自己在平台上的收藏夹和列表不带 `take`，新条目都收下。
-- 跟着收上次成功到哪（第一次拉记下的已有条目、`--since`）记在 `subscriptions/<id>.json`，跟着资料库走，换了 `fetchDevice` 接着用；格式归第 4 层。
+- 跟着收列过哪些身份（只存身份的哈希，不存标题）记在本机 `jobs.db`，和翻页游标、上次成功跑完的时间（`--since`）放在一起，不跟着资料库走（推断）；它只收自己没列过的，见 [§1.7](#17-删掉)。这一次跑完才把列出来的记成列过；还没跑完过一次的订阅，下一次仍照第一次跑（推断）。每台第一次跑只记下已有的，不收（[PRD 7.3](PRD.md#73-导入和跟着收) 对个人来源这样建议，这里所有订阅、每台都照它，推断）；换了 `fetchDevice`，换上的那台也照第一次跑，上一台最后一次跑完到这台第一次跑之间新出现的会漏掉（推断，这是代价）。
 
 **留在每台机器上的**放 [§0.1](#01-命名) 的按机器目录；缓存放系统缓存目录（`~/Library/Caches/usuyo/`、`%LOCALAPPDATA%\usuyo\cache\`、`$XDG_CACHE_HOME/usuyo/`），删了不丢东西。
 
 | 在哪 | 放什么 |
 |---|---|
-| `libraries/<libraryId>/` | `device.json`（`deviceId`、库路径）、`index/`、`jobs.db`（任务状态、跟着收的翻页游标、还没展开的短链（重试）、上次写的 `content.md` 的哈希）、`sync.db`（游标、底本（你写的那层和 manifest 上次见过的那份，没开同步也存，[§1.4](#14-你写的那一层) 外面改了靠它合并）、上次见过的路径）、`activity/`（Agent 搜过、读过什么，一行一次，不给 Agent、不同步；格式和留多久归第 2 层，推断）、`exports/<target>.json`、`imports/<importBatch>/`（导入文件副本）、`backups/` |
+| `libraries/<libraryId>/` | `device.json`（`deviceId`、库路径）、`index/`、`jobs.db`（任务状态、跟着收列过的身份、翻页游标和 `--since`、还没展开的短链（重试）、上次写的 `content.md` 的哈希）、`sync.db`（游标、底本（你写的那层和 manifest 上次见过的那份，没开同步也存，[§1.4](#14-你写的那一层) 外面改了靠它合并）、上次见过的路径）、`activity/`（Agent 搜过、读过什么，一行一次，不给 Agent、不同步；格式和留多久归第 2 层，推断）、`exports/<target>.json`、`imports/<importBatch>/`（导入文件副本）、`backups/` |
 | 根目录 | `settings.json`（外观、模型端点、插件启用和设置）、`plugins/`、`profiles/`、`models/`、本机接口令牌的哈希、日志 |
 | 系统钥匙串 | 同步令牌和库钥匙、模型和插件密钥、平台登录态（[协议 §6](plugin-protocol.md#6-凭据)） |
 
@@ -312,7 +311,7 @@ items/douyin/douyin-4plrcxk343onmyxibmrr672kga/
 |---|---|---|
 | 存下了多少 | `outputs`、`completeness`、`missing` | 宿主算；`completeness` 只升不降 |
 | 后台任务到哪一步 | 本机 `jobs.db`；做好的看 `derived/` | 不进资料库，两台不会来回改 |
-| 存在 | `state`；移除后只剩删除记录 | 你触发；Agent 或 `api` 令牌收下时把回收站里的拿回来、Agent 经 MCP 撤它自己那批时放回回收站也改它（[§1.6](#16-改动记录)、[§1.7](#17-删掉)）；到期移除除外 |
+| 存在 | `state`；移除后就没了 | 你触发；Agent 或 `api` 令牌收下时把回收站里的拿回来、Agent 经 MCP 撤它自己那批时放回回收站也改它（[§1.6](#16-改动记录)、[§1.7](#17-删掉)）；到期移除除外 |
 | 私密 | `private` | 你。不给 Agent（回 `not-found`，不带 `reason`），不进导出，同步默认照样加密上云，可选不上（开关归第 2 层，[§1.1](#11-目录树)） |
 
 不记看没看过，也没有「没整理」（[§1.4.4](#144-发生过的事)）。
@@ -337,7 +336,7 @@ items/douyin/douyin-4plrcxk343onmyxibmrr672kga/
    - 主题、卡片、成稿挪到自己文件夹里的另一个子文件夹：记 `move`。
    - 主题、卡片、成稿改了文件名：去掉本机后缀后不等于 `sanitize(title)`，且 `title` 和底本一样，就当改标题，`title` 取新文件名；`title` 也变了以 `title` 为准，文件名照 `title` 改。front matter 没跟着变的改名先等一会儿再判，云盘常先送到改名（多久归第 2 层）。文件名对得上 front matter 的 `title` 就照收，另一台改了标题、经云盘过来的就是这样。
    - 删掉了，或移出 `topics/`、`cards/`、`drafts/`：记 `move-to-trash`，底本里的文本进回收站，能恢复；回收站里已经有它（库在云盘里，另一台已经挪进去）就不再记。
-   - `notes.md` 或 `highlights.md` 删掉了：上次那份进回收站（`kind: notes`），条目 `state` 不变，到期不写删除记录；别的台照 `edit-notes`、`set-takeaway` 或 `remove-highlight` 同步，不按回收站。
+   - `notes.md` 或 `highlights.md` 删掉了：上次那份进回收站（`kind: notes`），条目 `state` 不变；别的台照 `edit-notes`、`set-takeaway` 或 `remove-highlight` 同步，不按回收站。
    - 条目文件夹或 `manifest.json` 删掉了：当 `move-to-trash`（`reason: delete`），回收站里放能找回的（`sync.db` 底本里的 manifest、`notes.md`、`highlights.md`）；回收站里已经有这一条（库在云盘里，另一台已经挪进去，manifest 是 `trashed`），或它的 id 在别的条目的 `aliases` 里（并进了别的条目或改了名），就不再记。
    - 解析不了的（front matter 不合 [§0.6](#06-文本和文件) 的写法、`highlights.md` 有一行不合 [§1.4.2](#142-卡片成稿记一句和划线) 的写法、JSON 坏了、`manifest.json` 的 `id` 和文件夹名不一样）：不改写、不同步，沿用上次的值，界面一行「这个文件在 usuyo 外改坏了」；你下次在应用里改这个对象时，坏的那份先进回收站（`reason: conflict`）。
 2. **换回原样**（usuyo 算出来的字节）：
@@ -448,11 +447,11 @@ Agent（经 MCP）或宿主调的模型改已有内容，一个提议一个文�
 | `move-to-trash`（`reason`）、`keep-text` | 条目；`move-to-trash` 也管主题、卡片、成稿 | 见括号 | 否 | 还在回收站里才能 |
 | `restore` | 回收站里的 | — | 否 | 能 |
 | `merge-items` | 条目 | `into` | 否 | 能，照 `change` 反着挪 |
-| `purge`、`forget` | 回收站里的；删除记录 | — | 否 | 不能 |
+| `purge`、`forget` | 回收站里的；`forget` 只管条目 | — | 否 | 不能 |
 
 - **要看得到笔记**：这几个改的是 `notes.md`、`highlights.md`，设置里没把「我的笔记」给 Agent 时回 `not-found`。
 - **`hunks`** 是 `[{id, before, after, anchor?}]`，按段（空行分开）：原文是 `before` 的那几段换成 `after`；`before` 为空时插在原文等于 `anchor` 的那段后面，`anchor` 为 `null` 插在末尾。
-- **`merge-items`**（A 并进 B）：A 的 `raw/<snapshotId>/` 整个移进 B 的 `raw/`；`snapshots`、`identities`、`origins` 并过去，`topics` 取并集，B 的 `aliases` 加上 A 的 id 和 A 的 `aliases`。A 的笔记正文按段接在 B 后面，记一句不一样时问你留哪句（同步自动并时出卡片）；划线：A 的 `highlights.md` 各行接在 B 后面，块 id 在 B 的文件里撞了就换一个。A 的 `manifest.json`、`content.md`、`derived/` 和一份 `notes.md`、`highlights.md` 进回收站（`reason: merge`），`derived/` 能重算；`raw/` 不进回收站，到期也不写删除记录：[K5 A](open-decisions.md#11-存储同步与联网) 只许「只留文字」和「删掉」把 `raw/` 移出资料库。
+- **`merge-items`**（A 并进 B）：A 的 `raw/<snapshotId>/` 整个移进 B 的 `raw/`；`snapshots`、`identities`、`origins` 并过去，`topics` 取并集，B 的 `aliases` 加上 A 的 id 和 A 的 `aliases`。A 的笔记正文按段接在 B 后面，记一句不一样时问你留哪句（同步自动并时出卡片）；划线：A 的 `highlights.md` 各行接在 B 后面，块 id 在 B 的文件里撞了就换一个。A 的 `manifest.json`、`content.md`、`derived/` 和一份 `notes.md`、`highlights.md` 进回收站（`reason: merge`），`derived/` 能重算；`raw/` 不进回收站：[K5 A](open-decisions.md#11-存储同步与联网) 只许「只留文字」和「删掉」把 `raw/` 移出资料库。
 - 主题「合并进另一个」（[product-model §7.3](product-model.md#73-其他对象)）的 op 等主题 feature 再加。
 
 <a id="152-提议文件"></a>
@@ -484,35 +483,34 @@ Agent（经 MCP）或宿主调的模型改已有内容，一个提议一个文�
 
 - **整批撤销**：从新到旧反着做，写成新的一批，每条带 `undoes`，旧记录不删；撤销的撤销就是重做。现哈希等于 `after` 就原样反做，不等就照 [§1.5.2](#152-提议文件) 逐项来，做不了的列出「这 2 处之后改过，没撤」。撤销批量导入那批，新建的同样进回收站（`reason: undo`），你之后写过的照 Agent 那批撤之前问你一次（推断）。已有 `undoes` 指向的不再反做；同一批两台同时撤销，同步后只认 `id` 小的那批，另一批在索引里算 `superseded`（推断）。
 - **撤不了的**：`forget`、`purge`、回收站已到期的；已导出到别的软件的；平台上做过的动作；Agent 已读走的内容。
-- **Agent 直接收下**（[A3 A](open-decisions.md#9-agent)）：`add-item`，`actor: agent:<name>`、`via: mcp`，一次调用一批。已在库里、能给它看的只多一项 `origins`（`created: false`），撤销只去掉这一项；私密的不收，回 `skipped`；在回收站、有删除记录的照收，进「以前删过的」提醒（[§1.7](#17-删掉)；离线短链展开后的见 [§0.4](#04-id)）。撤销新建的进回收站（`reason: undo`），到期不留删除记录；之后你写过、划过、放进主题或引用过的，在应用里和终端里的命令行撤之前问你一次也撤不撤（11-05 定，[§1.10 第 9 条](#110-要你看一眼)）；问不了时跳过并列出：命令行不在终端里这半是推断，Agent 经 MCP 见下一条。
-- **Agent 经 MCP 能撤销哪些批**（11-05 定，[§1.10 第 18 条](#110-要你看一眼)）：只能撤同一个 Agent 的批。它这一批收进来或从回收站拿回来的条目，你没写过东西的放进回收站：新建的用 `reason: undo`，收下时推掉了删除记录的、从回收站拿回来的照 [§1.7](#17-删掉) 放回原来的 `reason`。写过的照上面跳过并列出；你之后设成私密的也跳过，列给 Agent 时不列它（[§1.3](#13-条目的四个维度)）。你接受过的提议那批（带 `changeSet`）里新建的主题、卡片、成稿，经 MCP 撤时跳过并列出，要在应用里撤（推断）。不进回收站的步骤照常撤。撤掉它自己收进来的不算删除（[原则 5](PRD.md#4-原则)）。
+- **Agent 直接收下**（[A3 A](open-decisions.md#9-agent)）：`add-item`，`actor: agent:<name>`、`via: mcp`，一次调用一批。已在库里、能给它看的只多一项 `origins`（`created: false`），撤销只去掉这一项；私密的不收，回 `skipped`；在回收站里的拿回来（[§1.7](#17-删掉)；离线短链展开后的见 [§0.4](#04-id)）。撤销新建的进回收站（`reason: undo`）；之后你写过、划过、放进主题或引用过的，在应用里和终端里的命令行撤之前问你一次也撤不撤（11-05 定，[§1.10 第 9 条](#110-要你看一眼)）；问不了时跳过并列出：命令行不在终端里这半是推断，Agent 经 MCP 见下一条。
+- **Agent 经 MCP 能撤销哪些批**（11-05 定，[§1.10 第 18 条](#110-要你看一眼)）：只能撤同一个 Agent 的批。它这一批收进来或从回收站拿回来的条目，你没写过东西的放进回收站：新建的用 `reason: undo`，从回收站拿回来的照 [§1.7](#17-删掉) 原样放回。写过的照上面跳过并列出；你之后设成私密的也跳过，列给 Agent 时不列它（[§1.3](#13-条目的四个维度)）。你接受过的提议那批（带 `changeSet`）里新建的主题、卡片、成稿，经 MCP 撤时跳过并列出，要在应用里撤（推断）。不进回收站的步骤照常撤。撤掉它自己收进来的不算删除（[原则 5](PRD.md#4-原则)）。
 - **外面改的**：导出读回的（`via: readback:<插件 id>`）和 usuyo 外改了、照 [§1.4](#14-你写的那一层) 读进来合并的（`via: file`）不走提议（[ADR-003 §7](decisions/ADR-003-plugins.md#7-导出与读回)），一样能撤销。`actor` 记 `external`，不断言是你：直接改文件的 Agent（Claude Code 一类）分不出来。第 2 层的 MCP 工具说明写明：改已有内容走提议，不要直接改文件。
 - **活动记录**（[PRD 7.8](PRD.md#78-agent)）：由 `activity/`（在按机器的目录，搜过、读过，[§1.1](#11-目录树)）、`journal/`（写过）、`changes/`（提议过）拼出。
 
 <a id="17-删掉"></a>
 ### 1.7 删掉
 
-照 [K1 A、K3 A、K5 A](open-decisions.md#11-存储同步与联网)。
+照 [K1 A、K3 A、K5 A](open-decisions.md#11-存储同步与联网)；K1 A 里的删除记录 11-06 去掉了：删除就是删除，移除以后不留记录（[§1.10 第 12 条](#110-要你看一眼)）。
 
 - **回收站**：`.usuyo/trash/<trashId>/` 里一个 `entry.json` 加文件；`entry.json` 是 `{id, kind, target, path, files, reason, trashedAt}`，`kind` 取 `item` `topic` `card` `draft` `notes` `content`，`path` 是原相对路径，`files` 是对象以内的相对路径，`reason` 为 `delete` `keep-text` `merge` `undo` `conflict`。各台各挪各的，同步的是条目的 `state` 和主题、卡片、成稿记录上的 `trashedAt`（推断，归同步引擎）。进回收站时取消 `jobs.db` 里它的任务，之后回来的结果丢掉，不在原路径重建文件夹。
-- **到期**：条目按 manifest 的 `stateAt`，主题、卡片、成稿按记录上的 `trashedAt`，加当前的 `trashDays` 现算（[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突)「到期照 A 写的算」），「一直」不到期；`entry.json` 的 `trashedAt` 照同步来的值写，不用本机挪进来的时间；`merge`、`conflict`、`kind: notes` 和 `kind: content` 只在本机，按本机的。移除本机文件，记 `purge`（`actor: host`）；`keep-text`、`merge`、`conflict`、`kind: notes` 和 `kind: content` 到期只做这一步。对象整个离开资料库的（条目 `reason: delete` 或 `undo`；主题、卡片、成稿，`conflict` 的除外）才脱敏改动记录、推墓碑：改动记录里提到这一条的各行（包括封口的段）`change` 换成 `{"redacted": true}`、留 `targets[].id`；`facts/` 里它的行留着，只有 id 和时间。别的台拉到墓碑后照同一规则移除自己的文件、改自己手上的段，段怎么再推同下面的彻底忘掉。开了同步的库启动后先拉完一轮再判，按服务器时间（[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突)），离线时不移除，推墓碑走 CAS，底本不是最新就放弃这次、重新判断。没开同步的按本机时间；本机时间比记下的最大时间晚了超过 `trashDays`（会把回收站整个移除），先不移除，你点「照时间移除」才移除（推断）。
-- **删除记录**只在条目（`kind: item`）`reason: delete` 的那项到期、或被你「立即清除」（[product-model §7.3](product-model.md#73-其他对象)）时写；别的原因的，到期、立即清除都不写，那些内容还在库里或你没删过。一条一个文件 `.usuyo/deleted/<itemId>.json`，只有 `itemId`、`identities`（并过的放在一起）、`title`、`deletedAt`。索引按 `identityKey` 查，再按 `identities[].url` 查。云端 id 是 `HMAC-SHA256(idKey, "deleted:" + itemId)`，偏离[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突)「一个身份一条」：查找本来走本机索引，一条一个文件，忘掉时只动一处。两台同时到期写出两份，取 `deletedAt` 早的。没有身份的不留记录：能对上的只有指纹，比身份加标题多。
-- **再遇到同一身份**（11-05 定，[§1.10 第 12 条](#110-要你看一眼)：删过的不是彻底屏蔽）：
+- **到期**：条目按 manifest 的 `stateAt`，主题、卡片、成稿按记录上的 `trashedAt`，加当前的 `trashDays` 现算（[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突)「到期照 A 写的算」），「一直」不到期；`entry.json` 的 `trashedAt` 照同步来的值写，不用本机挪进来的时间；`merge`、`conflict`、`kind: notes` 和 `kind: content` 只在本机，按本机的。移除本机文件，记 `purge`（`actor: host`）；`keep-text`、`merge`、`conflict`、`kind: notes` 和 `kind: content` 到期只做这一步。对象整个离开资料库的（条目 `reason: delete` 或 `undo`；主题、卡片、成稿，`conflict` 的除外）才脱敏改动记录、推墓碑：改动记录里提到这一条的各行（包括封口的段）`change` 换成 `{"redacted": true}`、留 `targets[].id`；`facts/` 里它的行留着，只有 id 和时间。别的台拉到墓碑后照同一规则移除自己的文件、改自己手上的段，段怎么再推同下面的彻底忘掉。开了同步的库启动后先拉完一轮再判，按服务器时间（[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突)），离线时不移除，推墓碑走 CAS，底本不是最新就放弃这次、重新判断。没开同步的按本机时间；本机时间比记下的最大时间晚了超过 `trashDays`（会把回收站整个移除），先不移除，你点「照时间移除」才移除（推断）。你在回收站里「立即清除」（[product-model §7.3](product-model.md#73-其他对象)）照到期办，不等 `trashDays`（推断）。
+- **再遇到同一身份**（11-06 改，[§1.10 第 12 条](#110-要你看一眼)：不记删过的，移除以后再收下就是普通收下）：
 
-| 入口 | 在回收站里 | 有删除记录 | 私密 |
-|---|---|---|---|
-| 你或 Agent 主动收的：窗口（粘贴、拖入、快捷键、`usuyo://add`）、命令行、扩展、手机、Agent（`mcp`）、本机接口令牌（`api`）、批量导入 | 拿回来，记 `restore`，能撤销 | 照收，推删除记录的墓碑 | 窗口、终端里的命令行、扩展、手机、批量导入照常，多一项 `origins`；Agent、`api`、终端外的命令行跳过 |
-| 跟着收 | 跳过 | 跳过 | 照常 |
+| 入口 | 在回收站里 | 私密 |
+|---|---|---|
+| 你或 Agent 主动收的：窗口（粘贴、拖入、快捷键、`usuyo://add`）、命令行、扩展、手机、Agent（`mcp`）、本机接口令牌（`api`）、批量导入 | 拿回来，记 `restore`，能撤销；不提醒 | 窗口、终端里的命令行、扩展、手机、批量导入照常，多一项 `origins`；Agent、`api`、终端外的命令行跳过 |
+| 跟着收（这个订阅没列过的） | 跳过 | 照常 |
 
-- **「以前删过的」提醒**：主动收下撞上回收站（`reason: delete` 的）或删除记录的，不弹窗问；收下以后单独列在一行提醒里（先收后提醒是推断，你说界面等 UX 设计），默认折着，展开能一条条选留下或不要，不展开就用「全部保留」「全部不要」一次定，不点也不催（[原则 4](PRD.md#4-原则)）。「不要」是放回回收站（`reason: delete`）；没点过就是留下（推断）。回收站里 `reason: undo` 的（撤掉的那批，你没删过）照收、拿回来，不进这个提醒（推断）。批量导入的预览里怎么放这几条也等 UX 设计（推断：单独折成一组）。
-- 跳过的回 `skipped`，不加 `origins`；主动收的只有 Agent、`api`、终端外的命令行遇到私密条目这一种。又私密又在回收站里的，照私密那一列（推断）。代价：`skipped` 现在只在私密时出现，Agent 和 `api` 令牌能据此知道这条在库里、是私密的（11-05 以前和删过的、在回收站的不区分）；11-06 定照这样（[§1.10 第 20 条](#110-要你看一眼)），内容、标题都不给。
-- 收下时推掉了删除记录的，`add-item` 的 `change` 记下这件事；撤销这条时条目进回收站用 `reason: delete`（不是 `undo`），到期照常写删除记录。收下时从回收站拿回来的，`restore` 的 `change` 记下原来的 `reason`，撤销时照它放回（应用里、命令行、MCP 都一样）。
-- **撤销那批的例外**：原因是 `undo` 的条目，同步带来你写的改动（`actor` 是 `user` 或 `external` 的记一句、改笔记、划线、放进主题、引用）时恢复它，记 `restore`（`actor: sync`），出一行「撤销时跳过了这条，你在另一台写过」。
-- **彻底忘掉**：只在「删掉过的」列表里（K3 A），确认框列出还在引用它的页。删除记录去掉、推墓碑；改动记录里提到它的行，`targets[].id`、`targets[].path`、`change` 换成 `{"redacted": true}`，其余字段不动；`facts/` 里它的行、所有提议里它的 op 删掉；别的条目 manifest 的 `sameAs`、`notSameAs`、`aliases` 去掉它；你的主题页、卡片、成稿、笔记里原话和标题留着，链接里的 id 换成 `usuyo://item/forgotten`（`actor: host`）；本机 `sync.db` 底本、`backups/`、`exports/`、`imports/`、索引里它的部分去掉；云端推墓碑，多久后云端也没有了照[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突)（D1 时间回溯、R2 桶锁），界面写明。
-- 忘掉的改写是确定的：每台先改自己手上全部段的副本（包括别的台写的）；各段的主人再把改过的段推一次，记录换成新的 blob id，旧 blob 照[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突) 的清理规则清掉，以后加入的设备拉到的就是改过的。主人已被撤销（`devices/<deviceId>.json` 有 `revokedAt`）时由发起忘掉的那台推，这是「每段只有一台写」唯一的例外。忘掉推的删除记录墓碑带 `forgotten: true`（重新收下推的不带），忘掉时不在线的那台据此改自己的段再推（推断）。同一条一台重新收下、一台忘掉：拉到对方的版本后条目还在的，那台不做忘掉的改写，界面一行「另一台又收下了，没忘掉」（推断）。
-- **导出到 Obsidian 的那份**：读回遇到库里没有、在回收站、只剩删除记录或已忘掉的 `usuyo_id`，一律不应用，写进 `problems`（`reason: item-deleted`），不重建文件夹。删掉或忘掉时，导出记录里有这条的，界面写「Obsidian 里还有一份：<路径>」，给「一起移到系统回收站」，只列导出后没改过的文件（现哈希等于导出记录里的 `hash`）。
+- **跟着收**只收这个订阅没列过的（[§1.1](#11-目录树)）：列过的一律跳过，它列过、你删掉的，到期移除以后也不会被它收回来；它没列过的（比如你自己粘贴过、删掉、已经到期移除的），以后它第一次列出来就照新的收（这是代价）。库里已有、它没列过的不新建，只多一项 `origins`（推断）。`newest-first` 的来源翻到一整页都是这个订阅列过的就停（[协议 §3.8](plugin-protocol.md#38-list-与跟着收)）。
+- 跳过的回 `skipped`，不加 `origins`；主动收的只有 Agent、`api`、终端外的命令行遇到私密条目这一种。又私密又在回收站里的：Agent、`api`、终端外的命令行照私密那一列跳过；别的入口拿回来（记 `restore`），多一项 `origins`，`private` 不变（推断）。代价：`skipped` 现在只在私密时出现，Agent 和 `api` 令牌能据此知道这条在库里、是私密的（11-05 以前和删过的、在回收站的不区分）；11-06 定照这样（[§1.10 第 20 条](#110-要你看一眼)），内容、标题都不给。
+- **撤销收下**：新建的进回收站（`reason: undo`）；从回收站拿回来的原样放回：同一个回收站项（`trashId`），`trashedAt`、`stateAt` 照拿回来之前的，到期照原来的算（应用里、命令行、MCP 都一样）。原来的到期时间已经过了的，`trashedAt`、`stateAt` 记放回的时间，再留 `trashDays`（推断：不然一撤销就被移除，Agent 经 MCP 撤就成了删除，[原则 5](PRD.md#4-原则)）。
+- **撤销那批的例外**：原因是 `undo` 的条目，和撤销收下时原样放回回收站的条目，同步带来你写的改动（`actor` 是 `user` 或 `external` 的记一句、改笔记、划线、放进主题、引用）时恢复它，记 `restore`（`actor: sync`），出一行「撤销时跳过了这条，你在另一台写过」。
+- **彻底忘掉**：只对回收站里的条目（推断：K3 A 的「删掉过的」列表跟着删除记录去掉了），确认框列出还在引用它的页。马上移除，不等到期，推墓碑；改动记录里提到它的行，`targets[].id`、`targets[].path`、`change` 换成 `{"redacted": true}`，其余字段不动；`facts/` 里它的行、所有提议里它的 op 删掉；别的条目 manifest 的 `sameAs`、`notSameAs`、`aliases` 去掉它；你的主题页、卡片、成稿、笔记里原话和标题留着，链接里的 id 换成 `usuyo://item/forgotten`（`actor: host`）；本机 `sync.db` 底本、`backups/`、`exports/`、`imports/`、索引里它的部分去掉；`jobs.db` 里跟着收列过的只有身份的哈希，不去掉（推断：去掉了，跟着收会把它再收回来）；云端推墓碑，多久后云端也没有了照[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突)（D1 时间回溯、R2 桶锁），界面写明。
+- 忘掉的改写是确定的：每台先改自己手上全部段的副本（包括别的台写的）；各段的主人再把改过的段推一次，记录换成新的 blob id，旧 blob 照[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突) 的清理规则清掉，以后加入的设备拉到的就是改过的。主人已被撤销（`devices/<deviceId>.json` 有 `revokedAt`）时由发起忘掉的那台推，这是「每段只有一台写」唯一的例外。忘掉推的条目墓碑带 `forgotten: true`，忘掉时不在线的那台据此改自己的段再推（推断）。同一条一台重新收下、一台忘掉：拉到对方的版本后条目还在的，那台不做忘掉的改写，界面一行「另一台又收下了，没忘掉」（推断）。
+- **导出到 Obsidian 的那份**：读回遇到库里没有、在回收站或已忘掉的 `usuyo_id`，一律不应用，写进 `problems`（`reason: item-deleted`），不重建文件夹。删掉或忘掉时，导出记录里有这条的，界面写「Obsidian 里还有一份：<路径>」，给「一起移到系统回收站」，只列导出后没改过的文件（现哈希等于导出记录里的 `hash`）。
 - **只留文字**：先生成 `derived/thumb.jpg`，再把 `raw/` 里的图片、视频、音频和 `derived/keyframes/`、`derived/audio/` 移进回收站（`reason: keep-text`），字都留着；`state: text-only`，以后只 `--want` 文字类。回收站里还在时能恢复，之后点「重新取视频」存新快照。
-- **和同步**：一台删、另一台同时改了笔记，回收站赢（撤销那批例外），改动并进回收站那份，出「两边都改过的」卡片。已移除、离线的那台回来时改过它：推的时候撞上墓碑，就放进它自己的回收站再留 `trashDays`，不悄悄复活。离线那台主动收下、从回收站拿回来的不算这种：照 [§1.8](#18-同步) 以墓碑的 `revision` 为底写新版本，再照「有删除记录」那一列推掉删除记录、进「以前删过的」提醒（推断）。
+- **和同步**：一台删、另一台同时改了笔记，回收站赢（撤销那批例外），改动并进回收站那份，出「两边都改过的」卡片。已移除、离线的那台回来时改过它：推的时候撞上墓碑，就放进它自己的回收站再留 `trashDays`，不悄悄复活。离线那台主动收下、从回收站拿回来的不算这种：照 [§1.8](#18-同步) 以墓碑的 `revision` 为底写新版本（推断）。
 
 <a id="18-同步"></a>
 ### 1.8 同步
@@ -529,7 +527,7 @@ Agent（经 MCP）或宿主调的模型改已有内容，一个提议一个文�
 | `notes.md`、`highlights.md`、`topics/`、`cards/`、`drafts/`、`canvas/` | 你写的 · S1 | 见下 |
 | `library.json` | 元数据 · S1 | `formatVersion` 要一样，远端新就不同步 |
 | `settings.json`、`subscriptions/`、`devices/` | 元数据 · S1 | 按字段，同一项两边改出卡片 |
-| `deleted/`、`changes/` | 元数据 · S1 | 并集；任何去掉都推墓碑；提议状态只往前走 |
+| `changes/` | 元数据 · S1 | 并集；任何去掉都推墓碑；提议状态只往前走 |
 | `journal/`、`facts/`、`imports/` | 元数据 · S1 | 每段只有一台写；忘掉、到期移除的脱敏见 [§1.7](#17-删掉) |
 | `trash/` | 只同步状态 | 各台各挪各的 |
 
@@ -537,7 +535,7 @@ Agent（经 MCP）或宿主调的模型改已有内容，一个提议一个文�
 - **你写的那层**：front matter 按字段三方合并，列表（`keywords`、`match`、`topics`、`from`）按集合，标量只有同一字段两边都改了才出卡片；front matter 只有 usuyo 写、写法固定（[§0.6](#06-文本和文件)），两台写出一样的字节。`notes.md`、`highlights.md`、主题页、卡片和成稿的正文按行三方合并；两边在同一处都只是插入（各加一处引用、脚注追加在末尾、各加一条划线）时两段都留，按 `deviceId` 排先后。合不上的：先推上服务器的当现在这份，CAS 失败的那台负责合并，不比时钟；输掉的那份进回收站（`reason: conflict`），「两边都改过的」卡片指向它。
 - **墓碑**是记录的一个版本，带 `revision`；再收下或恢复时按 CAS 以墓碑的 `revision` 为底写新版本，推墓碑也走 CAS。Worker 支不支持，同步引擎实现时核实（推断：Hatoba 的 `UPDATE … WHERE revision = ?` 对墓碑行一样适用）。
 - **自动合并**：拉下来的或本机新建的条目，id 在别的条目的 `aliases` 里、或身份对上，就照 `merge-items` 并过去（`actor: sync`），不出卡片；按身份查找时先查 `aliases`。
-- **记录 id** 是 `HMAC-SHA256(idKey, "<种类>:" + id)`，种类 `item` `topic` `card` `draft` `canvas` `library` `deleted` `changeset` `journal` `facts` `setting` `subscription` `device` `import`；种类字符串进了云端 id，改它算 major。
+- **记录 id** 是 `HMAC-SHA256(idKey, "<种类>:" + id)`，种类 `item` `topic` `card` `draft` `canvas` `library` `changeset` `journal` `facts` `setting` `subscription` `device` `import`；种类字符串进了云端 id，改它算 major。
 - **放法**：改动记录的段、发生过的事的段、提议文件按内容寻址进 D1 的 `blobs`（超过 16 KiB 切成几行，[调研 14 §3](research/14-sync-like-hatoba.md#3-存在哪和花多少)），记录里只放 blob id：信封上限 64 KB，一段 256 KiB 放不下。
 - 别的设备的改动在那台已确认过，这台直接生效，记录带着它的 `device`。
 - **库放在 iCloud、Dropbox 里时**（不开内置同步）：`devices/<deviceId>.json` 定时写 `lastSeenAt`（间隔归第 2 层），打开库时看到别的台最近写过，提示「另一台也开着」。另一台经云盘写来的改动它自己的改动记录里也有，这台怎么不重复记，归同步 feature。
@@ -575,13 +573,13 @@ schema 先定这几条：
 | 8 | [§1.2.3](#123-contentmd-和各栏) `content.md` 是给「不开 usuyo 也能读」的正文副本，和导出到 vault 无关；它能不能改 | **已定（11-05）**：能看不能改，只读文件，总照原样重写；外面强行改过的那份先进回收站（[open-decisions §1.8](open-decisions.md#18-grill-回答)） |
 | 9 | [§1.6](#16-改动记录) 撤销 Agent 收下的一批时，你写过东西的条目怎么办 | **已定（11-05）**：撤之前问一次也撤不撤；问不了时跳过并列出（推断）（[open-decisions §1.8](open-decisions.md#18-grill-回答)） |
 | 10 | [§1.2.3](#123-contentmd-和各栏) [CLAUDE.md](../CLAUDE.md) 原则 2 照 [PRD 原则 2](PRD.md#4-原则) 改成「机器永不改写或删除原样」，`content.md` 算宿主生成的只读副本；原则 3 的「删掉 `.usuyo/index/`」改成「删掉索引目录」；文档地图里 SPEC 那行改成 v1 草案 | **已定（11-05）**：三处都照这样改了（[open-decisions §1.8](open-decisions.md#18-grill-回答)） |
-| 11 | [§1.7](#17-删掉) 删除记录多记一个删掉的时间 `deletedAt`（[K1 A](open-decisions.md#11-存储同步与联网) 说只记身份和标题） | 留着：「删掉过的」列表要按时间排（推断） |
-| 12 | [§1.7](#17-删掉) 主动收下一条以前删过的（在回收站里，或只剩删除记录）怎么办 | **已定（11-05）**：删过的不是彻底屏蔽，主动收的都照收；收下后单独一行提醒（先收后提醒是推断），折着，展开能一条条选，不展开就全部保留或全部不要；跟着收照旧跳过；界面细节等 UX 设计（[open-decisions §1.8](open-decisions.md#18-grill-回答)） |
+| 11 | [§1.7](#17-删掉) 删除记录多记一个删掉的时间 `deletedAt`（[K1 A](open-decisions.md#11-存储同步与联网) 说只记身份和标题） | **不再问（11-06 不留删除记录）**：删除记录去掉了，`deletedAt` 和「删掉过的」列表跟着没了；[open-decisions §1.8](open-decisions.md#18-grill-回答) |
+| 12 | [§1.7](#17-删掉) 主动收下一条以前删过的怎么办 | **已定（11-06 改）**：不记删过的，在回收站里的直接拿回来，不提醒（[open-decisions §1.8](open-decisions.md#18-grill-回答)） |
 | 13 | [§1.3](#13-条目的四个维度) 成稿引用了私密条目，导出时怎么办 | 正文一字不改，只把那条脚注换成「私密条目」；导出前提示「这篇引用了 1 条私密条目」 |
 | 14 | [§1.2.1](#121-manifestjson-v1) Agent 自己挑着收下的算不算「机器挑的」 | 默认算；MCP 收下工具带 `pickedBy: user`（你点名要的链接）时不标 |
 | 15 | [§1.7](#17-删掉) 删掉或忘掉以后，导出到 Obsidian 的那份还在 vault 里 | 默认留着；界面写「Obsidian 里还有一份」，给「一起移到系统回收站」，只对导出后没改过的文件 |
 | 16 | [§1.7](#17-删掉) 彻底忘掉以后，你主题页里引过它的原话和标题还留着 | 留着，那是你写的；链接换成 `usuyo://item/forgotten`，确认框列出还在引用它的页 |
-| 17 | [§1.6](#16-改动记录) 撤销 Agent 收下的一批时不留删除记录，以后跟着收还可能再收进来 | 不留：新建的你没删过；收下时推掉了删除记录、从回收站拿回来的照 [§1.7](#17-删掉) 放回原来的 `reason`；要挡住，就从回收站恢复后再删掉 |
+| 17 | [§1.6](#16-改动记录) 撤销 Agent 收下的一批时不留删除记录，以后跟着收还可能再收进来 | **不再问（11-06 不留删除记录）**：撤销和删掉都不留记录；跟着收跳过这个订阅列过的和回收站里的，到期移除以后它没列过的照收（[§1.7](#17-删掉)）；[open-decisions §1.8](open-decisions.md#18-grill-回答) |
 | 18 | [§1.6](#16-改动记录) Agent 经 MCP 能撤销哪些批：撤销新建、撤销恢复会把东西移进回收站，[原则 5](PRD.md#4-原则) 说 MCP 不给删除 | **已定（11-05）**：能撤同一个 Agent 自己收进来、你没写过东西的，放进回收站；写过的跳过并列出；原则 5 写明这不算删除（[open-decisions §1.8](open-decisions.md#18-grill-回答)） |
 | 19 | [§1.2.1](#121-manifestjson-v1) 「机器挑的」是来历，还是「你还没碰过」 | **已定（11-05）**：是来历，你碰过也一直留着（[open-decisions §1.8](open-decisions.md#18-grill-回答)） |
 | 20 | [§1.7](#17-删掉) 删过的照收以后，`skipped` 只在私密时出现：Agent 和 `api` 令牌拿一条链接来试，就知道它在你库里、是私密的 | **已定（11-06）**：照这样，写明代价：只露「在库里、私密」这一点，内容、标题都不给（[open-decisions §1.8](open-decisions.md#18-grill-回答)） |
