@@ -995,7 +995,7 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip"
      - 合不上的：库里那份留下，vault 那份进回收站（`reason: conflict`，`kind` 用已有的 `notes` `topic` `card` `draft`），出「两边都改过的」卡片，vault 里这篇照库里的重写。
      - 差异照 [SPEC §1.4](SPEC.md#14-你写的那一层)「读进来」记成已有的 op（`set-tags` `set-topics` `set-takeaway` `edit-notes` `edit-topic-page` `edit-card` `edit-draft`，[SPEC §1.5.1](SPEC.md#151-op-词表)），记 `actor: external`、`via: readback:<插件 id>`。一次导出算一批，能整批撤销。
      - 没有底本的（导出记录丢了，或另一台第一次导出到同一个 vault）：照 [SPEC §1.8](SPEC.md#18-同步)「云盘的冲突副本」那条：集合取并集，标量和正文两边不一样就算合不上，库里那份留下，vault 那份进回收站、出卡片。两台轮流导出到同一个 vault 时，底本按机器存，一台写出去的在另一台看来就是在 Obsidian 里改的：之后在库里去掉的会被加回来，改到同一段会出卡片（都记进改动记录，能整批撤销）。一个 vault 建议只由一台导出（推断）。
-  3. 按合并后的库调 `run`，写到读回找到的路径。写之前再比一次文件哈希：和读回时的 `hash` 不一样（比如你正在 Obsidian 里打字），这一份这次不写，下次导出再读；它的 `base` 换成这次读回的值（推断：换成交给 `run` 的那份，下次会把没写过去的库里改动当成 vault 那边删掉的）。 这次没交给 `run` 的（比如导出后设成私密的）同样，`base` 换成这次读回的值（推断）。
+  3. 按合并后的库调 `run`，写到读回找到的路径。写之前再比一次文件哈希：和读回时的 `hash` 不一样（比如你正在 Obsidian 里打字），这一份这次不写，下次导出再读；它的 `base` 换成这次读回的值（推断：换成交给 `run` 的那份，下次会把没写过去的库里改动当成 vault 那边删掉的）。这次没交给 `run` 的（比如导出后设成私密的）同样，`base` 换成这次读回的值（推断）。
   4. 写出去的那些，`base` 换成这次交给 `run` 的那份用户层；没写出去的（`problems`、`item-deleted`）`base` 不动。
 - 出了问题的文件（`problems`、`item-deleted`）不读也不写，列进这次导出的问题列表。在 vault 里删掉的笔记不算删掉，下次导出重新生成。
 
