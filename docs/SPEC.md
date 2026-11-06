@@ -247,13 +247,13 @@ items/douyin/douyin-4plrcxk343onmyxibmrr672kga/
 | `id` | UUIDv7，同步时按它认 |
 | `entry` | `paste` `drop` `extension` `mobile` `import` `subscription` `mcp` `cli` `api`；v0 的 `sync` 改名，「同步」现在指设备之间 |
 | `takenBy` | 谁决定收的：`user`、`agent:<连接名>`（kebab-case，来源归第 2 层）、`subscription:<id>` |
-| `machinePicked` | `null`、`{"by": "similarity"}`、`{"by": "upstream", "name": "horizon"}`、`{"by": "agent", "name": "<连接名>"}`；Agent 收下时说明是你点名要的为 `null`（参数名归第 2 层） |
+| `machinePicked` | `null`、`{"by": "keywords"}`、`{"by": "similarity"}`、`{"by": "upstream", "name": "horizon"}`、`{"by": "agent", "name": "<连接名>"}`；只有你给的具体链接（Agent 收下时说明是你点名的链接，参数名归第 2 层）和你自己平台上的收藏、列表为 `null`；你给关键词让 Agent 去找的也算机器挑的（11-06 定，[§1.10 第 14 条](#110-要你看一眼)） |
 | `matched` | 命中关注时 `[{topic, by: "keywords" \| "similarity"}]`，可以命中几个 |
 | `subscription`、`importBatch` | 从哪个跟着收、哪一批来 |
 | `action` `actedAt` `actedAtOriginal` | 平台上的动作和时间（[协议 §3.8](plugin-protocol.md#38-list-与跟着收)） |
 | `at`、`device` | 时间、哪台；转换在 `at` 最早那一项（一样早比 `id`）的 `device` 做（[调研 14 §0](research/14-sync-like-hatoba.md#0-结论) 第 10 问），那台不在了怎么换归同步 feature |
 
-你在跟着收的预览里自己点收下的，`takenBy: user`、`machinePicked: null`。界面标「机器挑的」：每一项 `origins` 都带 `machinePicked`（你自己也收过一次就不标）；写过、放进主题、引用过都不去掉，它是来历（11-05 定，[§1.10 第 19 条](#110-要你看一眼)）；地图上怎么分开等 [M4](open-decisions.md#6-地图与界面)。
+你在跟着收的预览里自己点收下的，`takenBy: user`、`machinePicked: null`（推断：你一条条挑过）。跟着收按关键词或相似度命中收下的都标「机器挑的」。界面标「机器挑的」：每一项 `origins` 都带 `machinePicked`（你自己也收过一次就不标）；写过、放进主题、引用过都不去掉，它是来历（11-05 定，[§1.10 第 19 条](#110-要你看一眼)）；地图上怎么分开等 [M4](open-decisions.md#6-地图与界面)。
 
 **`snapshots[]`**（[协议 §3.5](plugin-protocol.md#35-canonicalize-与身份)–[§3.7](plugin-protocol.md#37-fetch-输出)）：`id`（UUIDv7）；`plugin`、`pluginVersion`（交来已取到的内容时：投递接口记 `deliver:<令牌名>`，收件文件夹记 `deliver:inbox`；链接和交给导入插件的文件，记去取它的那个插件）；`at`、`inputUrl`（你给的原链接）、`resolvedUrl`（`canonicalize` 展开的完整链接）；`access`（投递为 `deliver`）、`site`、`upstream`；`outputs`（实际拿到的，比完整度只比它）；`missing`、`missingReason`、`completeness`（宿主在取的时候算，`missing` 是这次的 `--want` − 实际拿到的，之后不改）；`textOrigin`（`platform` 或 `machine`，等[协议 §13](plugin-protocol.md#13-待定) 第 24 项）。
 
@@ -569,14 +569,14 @@ schema 先定这几条：
 | 4 | [§1.4.3](#143-引用) 引用怎么写 | **不再问（11-05 方向）**：脚注照旧，理由是通用 Markdown、来源删了也完整，见 [§1.4.3](#143-引用)；[open-decisions §1.8](open-decisions.md#18-grill-回答) |
 | 5 | [§1.4.2](#142-卡片成稿记一句和划线) 记一句和划线放哪 | **不再问（11-05 方向）**：记一句是 `notes.md` 头部的 `takeaway`，划线放 `highlights.md`，见 [§1.4.2](#142-卡片成稿记一句和划线)；[open-decisions §1.8](open-decisions.md#18-grill-回答) |
 | 6 | [§1.5.2](#152-提议文件) 改动提议多久没决定就作废（[A2](open-decisions.md#9-agent)） | **已定（11-06）**：不作废，一直留着，不计数、不提醒（[open-decisions §1.8](open-decisions.md#18-grill-回答)） |
-| 7 | [§1.4.1](#141-主题和主题页) 跟着收的命中怎么判、看哪几层字 | **已定（11-06）**：默认按关键词，相似度你打开才用，相似度命中的标「机器挑的」；看标题层和内容层，画面层默认不算（[open-decisions §1.8](open-decisions.md#18-grill-回答)） |
+| 7 | [§1.4.1](#141-主题和主题页) 跟着收的命中怎么判、看哪几层字 | **已定（11-06）**：默认按关键词，相似度你打开才用，命中收下的都标「机器挑的」（[第 14 条](#110-要你看一眼)）；看标题层和内容层，画面层默认不算（[open-decisions §1.8](open-decisions.md#18-grill-回答)） |
 | 8 | [§1.2.3](#123-contentmd-和各栏) `content.md` 是给「不开 usuyo 也能读」的正文副本，和导出到 vault 无关；它能不能改 | **已定（11-05）**：能看不能改，只读文件，总照原样重写；外面强行改过的那份先进回收站（[open-decisions §1.8](open-decisions.md#18-grill-回答)） |
 | 9 | [§1.6](#16-改动记录) 撤销 Agent 收下的一批时，你写过东西的条目怎么办 | **已定（11-05）**：撤之前问一次也撤不撤；问不了时跳过并列出（推断）（[open-decisions §1.8](open-decisions.md#18-grill-回答)） |
 | 10 | [§1.2.3](#123-contentmd-和各栏) [CLAUDE.md](../CLAUDE.md) 原则 2 照 [PRD 原则 2](PRD.md#4-原则) 改成「机器永不改写或删除原样」，`content.md` 算宿主生成的只读副本；原则 3 的「删掉 `.usuyo/index/`」改成「删掉索引目录」；文档地图里 SPEC 那行改成 v1 草案 | **已定（11-05）**：三处都照这样改了（[open-decisions §1.8](open-decisions.md#18-grill-回答)） |
 | 11 | [§1.7](#17-删掉) 删除记录多记一个删掉的时间 `deletedAt`（[K1 A](open-decisions.md#11-存储同步与联网) 说只记身份和标题） | **不再问（11-06 不留删除记录）**：删除记录去掉了，`deletedAt` 和「删掉过的」列表跟着没了；[open-decisions §1.8](open-decisions.md#18-grill-回答) |
 | 12 | [§1.7](#17-删掉) 主动收下一条以前删过的怎么办 | **已定（11-06 改）**：不记删过的，在回收站里的直接拿回来，不提醒（[open-decisions §1.8](open-decisions.md#18-grill-回答)） |
-| 13 | [§1.3](#13-条目的四个维度) 成稿引用了私密条目，导出时怎么办 | 正文一字不改，只把那条脚注换成「私密条目」；导出前提示「这篇引用了 1 条私密条目」 |
-| 14 | [§1.2.1](#121-manifestjson-v1) Agent 自己挑着收下的算不算「机器挑的」 | 默认算；MCP 收下工具带 `pickedBy: user`（你点名要的链接）时不标 |
+| 13 | [§1.3](#13-条目的四个维度) 成稿引用了私密条目，导出时怎么办 | **先放着（11-06）**：导出到 Obsidian 和给 Agent 分开定，等有界面和具体例子再定；[§1.3](#13-条目的四个维度) 现在的写法（只换那条脚注）是暂定（[open-decisions §1.8](open-decisions.md#18-grill-回答)） |
+| 14 | [§1.2.1](#121-manifestjson-v1) Agent 自己挑着收下的算不算「机器挑的」 | **已定（11-06）**：机器找的、机器挑的都算，包括按关键词找的、跟着收按关键词命中的；只有你给的具体链接和你自己平台上的收藏、列表不算（[open-decisions §1.8](open-decisions.md#18-grill-回答)） |
 | 15 | [§1.7](#17-删掉) 删掉或忘掉以后，导出到 Obsidian 的那份还在 vault 里 | 默认留着；界面写「Obsidian 里还有一份」，给「一起移到系统回收站」，只对导出后没改过的文件 |
 | 16 | [§1.7](#17-删掉) 彻底忘掉以后，你主题页里引过它的原话和标题还留着 | 留着，那是你写的；链接换成 `usuyo://item/forgotten`，确认框列出还在引用它的页 |
 | 17 | [§1.6](#16-改动记录) 撤销 Agent 收下的一批时不留删除记录，以后跟着收还可能再收进来 | **不再问（11-06 不留删除记录）**：撤销和删掉都不留记录；跟着收跳过这个订阅列过的和回收站里的，到期移除以后它没列过的照收（[§1.7](#17-删掉)）；[open-decisions §1.8](open-decisions.md#18-grill-回答) |
