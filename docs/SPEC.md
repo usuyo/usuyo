@@ -121,7 +121,7 @@ itemId      = <platform> "-" base32(sha256(identityKey) 前 16 字节)
 - 平台给的时间存 UTC，偏移不是 `Z` 时另存原样：`"actedAt": "2026-10-31T14:14:00.000Z", "actedAtOriginal": "2026-10-31T22:14:00+08:00"`；拿不到就不写。
 - **front matter 里的时间**和 JSON 一样（第一条）：UTC、3 位毫秒，写成双引号字符串，例 `createdAt: "2026-11-05T03:00:01.123Z"`；读照 RFC 3339，别的写法算这个文件写坏了（[§1.4](#14-你写的那一层)）。front matter 里只有 `createdAt` 一个时间。
 - **写进 Markdown 给人看的日期**（引用脚注的发布日期、`content.md` 头部）取 `publishedAtOriginal` 的日期部分，没有就取 UTC 日期，不按本机时区：两台写出一样的字节。
-- 时长：JSON 里是秒、字段名以 `Sec` 结尾，YAML 写 `8s`、`10m`。按天的设置用整数天、名字以 `Days` 结尾（`trashDays`、`proposalExpiryDays`），「一直」写 `null`；错误对象的 `retryAfter` 是秒，照 HTTP `Retry-After` 不带 `Sec`，是例外。大小：JSON 里是字节，YAML 写 `512MiB`。媒体位置是秒数，最多 3 位小数；显示向下取整，`102.5` 写 `01:42`，过一小时写 `1:01:42`。
+- 时长：JSON 里是秒、字段名以 `Sec` 结尾，YAML 写 `8s`、`10m`。按天的设置用整数天、名字以 `Days` 结尾（如 `trashDays`），「一直」写 `null`；错误对象的 `retryAfter` 是秒，照 HTTP `Retry-After` 不带 `Sec`，是例外。大小：JSON 里是字节，YAML 写 `512MiB`。媒体位置是秒数，最多 3 位小数；显示向下取整，`102.5` 写 `01:42`，过一小时写 `1:01:42`。
 
 <a id="06-文本和文件"></a>
 ### 0.6 文本和文件
@@ -190,7 +190,7 @@ SHA-256，小写十六进制，算存下来的字节。字段名叫 `sha256` 时
 - 各项的格式：条目文件夹见 [§1.2](#12-条目文件夹)；主题、卡片、成稿见 [§1.4](#14-你写的那一层)；发生过的事见 [§1.4.4](#144-发生过的事)；改动提议见 [§1.5](#15-改动提议)；改动记录见 [§1.6](#16-改动记录)；删除记录和回收站见 [§1.7](#17-删掉)。
 - 按平台分一层，文件夹名是 `itemId`（[§0.4](#04-id)），两台离线算出同一路径；年月不进路径。回收站放 `.usuyo/trash/`：它是库的状态，各台各挪各的、只同步状态（[§1.7](#17-删掉)）；`items/`、`topics/`、`cards/`、`drafts/` 在 Finder 里只剩还在的。
 - `library.json`：`{"formatVersion": 1, "extensions": {}, "libraryId": "<UUIDv7>", "createdAt": "…", "sync": null}`；开了内置同步，`sync` 是 `{"backend": "cloudflare", "remoteId": "…"}`，不含密钥。它在库里，库在 iCloud 里时另一台一打开就能提示二选一。
-- `settings.json` 这里只定 `trashDays`（30，可选 90 或「一直」）和 `proposalExpiryDays`（7）；其余（转换哪几层、取不取评论、Agent 能看的范围、私密条目上不上云）归第 2 层。
+- `settings.json` 这里只定 `trashDays`（30，可选 90 或「一直」）；其余（转换哪几层、取不取评论、Agent 能看的范围、私密条目上不上云）归第 2 层。
 - 跟着收的 `fetchDevice` 是哪台去取。`take` 只给订阅来的（RSS、简报、别人的公开账号）：`picked` 只收你挑的，`picked-or-matched` 也收命中你关注的，默认 `picked`（[PRD 7.3](PRD.md#73-导入和跟着收) 的建议）；你自己在平台上的收藏夹和列表不带 `take`，新条目都收下。
 - 跟着收上次成功到哪（第一次拉记下的已有条目、`--since`）记在 `subscriptions/<id>.json`，跟着资料库走，换了 `fetchDevice` 接着用；格式归第 4 层。
 
@@ -367,7 +367,7 @@ match:
 [^k3f7q]: 「第一段 40 克闷蒸 30 秒」[手冲咖啡：三段式注水 · 口播 00:42](usuyo://item/douyin-4plrcxk343onmyxibmrr672kga/asr@0193f2b0-1d2e-7f3a-8b4c-5d6e7f8a9b0c#t=42,48) · 咖啡日常 · 2026-10-01
 ```
 
-- `followed` 是「关注」，取消叫「不再关注」（[S11](open-decisions.md#3-叙事与介绍)）；只有关注着的主题参与命中。`match` 给跟着收判断命中（[M1 B](open-decisions.md#6-地图与界面)）：`keywords` 按 `keywords` 里的词字面命中，`similarity` 按和成员的相似度，可以都写。卡片放进主题写在卡片自己的 `topics`；条目放进主题写在 manifest 的 `topics`（[§1.2.1](#121-manifestjson-v1)）。`create-topic` 的 `match` 默认 `[keywords]`。
+- `followed` 是「关注」，取消叫「不再关注」（[S11](open-decisions.md#3-叙事与介绍)）；只有关注着的主题参与命中。`match` 给跟着收判断命中（[M1 B](open-decisions.md#6-地图与界面)）：`keywords` 按 `keywords` 里的词字面命中，`similarity` 按和成员的相似度，可以都写。两种都看标题层（标题、简介、标签）和内容层（正文、口播转的文字、字幕、图里的字），画面描述默认不算，主题里能打开（11-06 定，[§1.10 第 7 条](#110-要你看一眼)；开关的字段归 feature）。看内容层要先把新条目取下来转成文字；没命中的不进资料库，取下来的临时文件删掉（推断）。卡片放进主题写在卡片自己的 `topics`；条目放进主题写在 manifest 的 `topics`（[§1.2.1](#121-manifestjson-v1)）。`create-topic` 的 `match` 默认 `[keywords]`。
 - 列表一行一项；空列表不写，没有这个键就是空的。
 - 成员记在成员上，加减成员不碰主题文件，主题页只因你改它而变（[PRD 7.7](PRD.md#77-你写的那一层)）；命中关注只记在 `origins[].matched`，不自动加成员。主题彻底移除以后，`topics` 里指向它的 id 读的时候跳过，不去改写。
 
@@ -460,10 +460,10 @@ Agent（经 MCP）或宿主调的模型改已有内容，一个提议一个文�
 
 顶层 `id`、`createdAt`、`proposer`、`model?`、`via`、`summary`（Agent 写的一句）、`state`、`decidedAt`、`ops`；每个 op 是 `{id, op, target: {kind, id}, base, args 或 hunks, state}`。`proposer` 是 `agent:<name>`，或宿主调模型时的 `model:<provider 名>`（另记 `model`）。`base` 是提出时目标文件的 `sha256:<hex>`，新建对象为 `null`。
 
-- **状态**：提议 `proposed` → `accepted` / `partly-accepted` / `rejected` / `expired`；op 和 hunk `proposed` → `accepted` / `rejected` / `conflict` / `expired`，逐个决定。改了再接受记 `edited: true`，实际写进去的字在改动记录里。
-- **作废**：`createdAt` 加当前的 `proposalExpiryDays` 还没决定的算 `expired`，不提醒；现算，不存 `expiresAt`。决定完 30 天后（作废的从作废那天起），每台按同一规则从 `changes/` 移走，先移的推墓碑。
+- **状态**：提议 `proposed` → `accepted` / `partly-accepted` / `rejected`；op 和 hunk `proposed` → `accepted` / `rejected` / `conflict`，逐个决定。改了再接受记 `edited: true`，实际写进去的字在改动记录里。
+- **不作废**（11-06 定，[§1.10 第 6 条](#110-要你看一眼)）：没决定的一直留着，不计数、不提醒（[原则 4](PRD.md#4-原则)）；接受时内容已经变了的照下面逐项对，对不上的标 `conflict`。决定完 30 天后，每台按同一规则从 `changes/` 移走，先移的推墓碑。
 - **撞上后来的改动**：目标哈希还等于 `base` 就照原样应用。不等时，集合类（标签、成员）照样应用；hunk 在现文件里找得到唯一一处 `before` 就应用，否则 `conflict`，两份并排给你看；记一句改过也是 `conflict`。
-- **两台**：状态只往前走；同一项两台给了不同终态，按 `accepted` > `rejected` > `expired`（你还能撤销）。
+- **两台**：状态只往前走；同一项两台给了不同终态，按 `accepted` > `rejected`（你还能撤销）。
 - 目标是私密条目回 `not-found`。op 数和大小的上限归第 2 层，超了回 `too-large`。
 
 <a id="16-改动记录"></a>
@@ -570,8 +570,8 @@ schema 先定这几条：
 | 3 | [§1.4.1](#141-主题和主题页) 主题成员放哪 | **不再问（11-05 方向）**：成员记在成员上：条目 manifest 和卡片的 `topics`，见 [§1.4.1](#141-主题和主题页)；[open-decisions §1.8](open-decisions.md#18-grill-回答) |
 | 4 | [§1.4.3](#143-引用) 引用怎么写 | **不再问（11-05 方向）**：脚注照旧，理由是通用 Markdown、来源删了也完整，见 [§1.4.3](#143-引用)；[open-decisions §1.8](open-decisions.md#18-grill-回答) |
 | 5 | [§1.4.2](#142-卡片成稿记一句和划线) 记一句和划线放哪 | **不再问（11-05 方向）**：记一句是 `notes.md` 头部的 `takeaway`，划线放 `highlights.md`，见 [§1.4.2](#142-卡片成稿记一句和划线)；[open-decisions §1.8](open-decisions.md#18-grill-回答) |
-| 6 | [§1.5.2](#152-提议文件) 改动提议 7 天没决定就作废，不提醒（[A2](open-decisions.md#9-agent) 没定，另一种是 24 小时） | 7 天，设置里能改 |
-| 7 | [§1.4.1](#141-主题和主题页) 跟着收的命中默认只按关键词，相似度你打开才用 | 照这个；相似度命中的标「机器挑的」 |
+| 6 | [§1.5.2](#152-提议文件) 改动提议多久没决定就作废（[A2](open-decisions.md#9-agent)） | **已定（11-06）**：不作废，一直留着，不计数、不提醒（[open-decisions §1.8](open-decisions.md#18-grill-回答)） |
+| 7 | [§1.4.1](#141-主题和主题页) 跟着收的命中怎么判、看哪几层字 | **已定（11-06）**：默认按关键词，相似度你打开才用，相似度命中的标「机器挑的」；看标题层和内容层，画面层默认不算（[open-decisions §1.8](open-decisions.md#18-grill-回答)） |
 | 8 | [§1.2.3](#123-contentmd-和各栏) `content.md` 是给「不开 usuyo 也能读」的正文副本，和导出到 vault 无关；它能不能改 | **已定（11-05）**：能看不能改，只读文件，总照原样重写；外面强行改过的那份先进回收站（[open-decisions §1.8](open-decisions.md#18-grill-回答)） |
 | 9 | [§1.6](#16-改动记录) 撤销 Agent 收下的一批时，你写过东西的条目怎么办 | **已定（11-05）**：撤之前问一次也撤不撤；问不了时跳过并列出（推断）（[open-decisions §1.8](open-decisions.md#18-grill-回答)） |
 | 10 | [§1.2.3](#123-contentmd-和各栏) [CLAUDE.md](../CLAUDE.md) 原则 2 照 [PRD 原则 2](PRD.md#4-原则) 改成「机器永不改写或删除原样」，`content.md` 算宿主生成的只读副本；原则 3 的「删掉 `.usuyo/index/`」改成「删掉索引目录」；文档地图里 SPEC 那行改成 v1 草案 | **已定（11-05）**：三处都照这样改了（[open-decisions §1.8](open-decisions.md#18-grill-回答)） |
@@ -708,5 +708,5 @@ v0 附录记的 18 处对不上：
 | 14 | 导出身份键和导出记录 | 这里了结 | `usuyo_id` 一致；导出记录搬到按机器目录，[协议 §4.4](plugin-protocol.md#44-导出的-run-与-readback) 已跟着改 |
 | 15 | 插件来源怎么显示 | 插件协议 | [协议 §8.4](plugin-protocol.md#84-三种来源) |
 | 16 | GitHub App | 插件协议 | [O3](open-decisions.md#13-开源与发布) 已定 A；部署写进 ADR-003 和协议，见 [TODO §1](TODO.md#1-等你回答) |
-| 17 | 改动提议多久作废 | 这里先定 | 7 天、可改（[§1.10 第 6 条](#110-要你看一眼)） |
+| 17 | 改动提议多久作废 | 这里了结 | 不作废（[§1.10 第 6 条](#110-要你看一眼)） |
 | 18 | 插件清单是 v0 还是 v1 | 第 3 层 | `pkg/contract` 只留资料库类型，插件的 schema 迁到 plugin-kit |
