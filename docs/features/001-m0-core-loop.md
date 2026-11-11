@@ -51,7 +51,7 @@
 - 不用 `unsafe`，不压警告；`just check` 要过。
 - 每个 crate 只编自己的：`cargo test -p <crate>`。
 - 依赖用最新的稳定版。
-- 文档和代码对不上时，以 SPEC 为准；SPEC 有缺口就照 [open-decisions §1.8](../open-decisions.md#18-grill-回答) 里用户说过的方向补，并把补的地方写回 SPEC。
+- 文档和代码对不上时，以 SPEC 为准；SPEC 有缺口就照 [回答表](../answers.md) 里用户说过的方向补，并把补的地方写回 SPEC。
 
 ## 验收
 

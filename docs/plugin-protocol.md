@@ -28,7 +28,7 @@
 <a id="03-名字"></a>
 ### 0.3 名字
 
-产品名 usuyo，命令 `usuyo`（2026-11-05 定，[open-decisions §1.8](open-decisions.md#18-grill-回答)）。本文的标识符：清单 `usuyo-plugin.yaml`、环境变量前缀 `USUYO_`、资料库隐藏目录 `.usuyo/`、GitHub topic `usuyo-plugin`、导出文件里的 `usuyo_id`、URL scheme `usuyo://`。2026-11-05 之前本文用过暂名 `seelu`（思鹭），调研和 open-decisions 里还留着它和更早的 `xiecun`（歇存），作为记录不改。
+产品名 usuyo，命令 `usuyo`（2026-11-05 定，[回答表](answers.md)）。本文的标识符：清单 `usuyo-plugin.yaml`、环境变量前缀 `USUYO_`、资料库隐藏目录 `.usuyo/`、GitHub topic `usuyo-plugin`、导出文件里的 `usuyo_id`、URL scheme `usuyo://`。2026-11-05 之前本文用过暂名 `seelu`（思鹭），调研和 open-decisions 里还留着它和更早的 `xiecun`（歇存），作为记录不改。
 
 本文说的「本机配置目录」「按机器目录」都是 [SPEC §0.1](SPEC.md#01-命名) 的按机器的目录。
 
@@ -519,7 +519,7 @@ SPEC v0 的适配器协议（[SPEC 附](SPEC.md#附v0-各节和-18-处的去向)
 - **不计入节奏的**：`canonicalize` 不占单调用锁，不计 `interval` 和 `daily`，展开短链另有每平台每分钟上限（默认 30 次），所以正在下大视频时，新贴的链接照样几秒内拿到身份；`health` 不计（`--probe` 只在用户点「检查登录」时发一次）；`access: official-export` 且 `network.mode: none` 的能力只读本机文件，不受节奏限制，可以并行。
 - **队列顺序**：用户手动收下 > 跟着收 > 批量导入。
 - **整机锁和设备锁。** 平台锁之外，宿主再加三把锁，不分平台、不分插件：声明了 `interaction: foreground` 的调用，全机同一时间只跑一个；声明了 `devices: [clipboard]` 的调用，全机同一时间只跑一个；同一台安卓设备同一时间只跑一个调用。原因：「复制链接」一类流程就算全走无障碍接口，也会弹菜单、改剪贴板，两个视觉层插件同时跑会互相弄坏（[§9.5](#95-视觉层流程)）。
-- **视觉层调用什么时候跑。** `interaction: foreground` 的调用和用到安卓设备的调用，能不能在跟着收、批量导入里自己跑：2026-11-04 定为每个插件单独设置，三种模式 `anytime`、`idle`（用户没在用时跑，一动键鼠就停）、`manual`（只在用户点开始时跑）。默认按 `interaction` 定：`background` 为 `anytime`，`foreground` 为 `idle`，用到安卓设备的为 `manual`；声明了 `devices: [clipboard]` 的调用，宿主在调用前存下剪贴板、结束后放回（[open-decisions §1.8](open-decisions.md#18-grill-回答)；字段名在实现运行器时定稿）。插件在 `foreground` 的步骤之间发现用户在动键鼠，就发 `waiting`（`user-active`），等用户停手，等不到就回 `blocked`；分辨是不是用户的输入由 plugin-kit 的视觉层 SDK 做，插件自己合成的事件会不会被算进去，待核实。安卓设备没连、没解锁、没授权时，插件回 `dependency-missing`，跟着收跳过这一轮，不算失败；宿主不存手机的解锁密码，不替用户解锁。
+- **视觉层调用什么时候跑。** `interaction: foreground` 的调用和用到安卓设备的调用，能不能在跟着收、批量导入里自己跑：2026-11-04 定为每个插件单独设置，三种模式 `anytime`、`idle`（用户没在用时跑，一动键鼠就停）、`manual`（只在用户点开始时跑）。默认按 `interaction` 定：`background` 为 `anytime`，`foreground` 为 `idle`，用到安卓设备的为 `manual`；声明了 `devices: [clipboard]` 的调用，宿主在调用前存下剪贴板、结束后放回（[回答表](answers.md)；字段名在实现运行器时定稿）。插件在 `foreground` 的步骤之间发现用户在动键鼠，就发 `waiting`（`user-active`），等用户停手，等不到就回 `blocked`；分辨是不是用户的输入由 plugin-kit 的视觉层 SDK 做，插件自己合成的事件会不会被算进去，待核实。安卓设备没连、没解锁、没授权时，插件回 `dependency-missing`，跟着收跳过这一轮，不算失败；宿主不存手机的解锁密码，不替用户解锁。
 - **默认值**取已装插件 `pacing` 里最严的一组，用户在设置里可以改。用户改过的值不会被新装插件的建议覆盖，设置里只提示「有插件建议更慢」。
 
 **几种情况运行器怎么做：**
@@ -1060,7 +1060,7 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip"
   - `unknown-topic`：`usuyo_topics` 里有链接指不到带 `usuyo_id` 的笔记。指到的不是库里的主题（成稿、卡片、条目），由宿主照 `unknown-topic` 办，那份不读也不写（推断）。
 - `readback(run(V))` 按值等于 V 的用户层：字符串逐字节相同，集合相等。readback 就按这条定义，`usuyo plugin check` 跑这条往返测试（[§10](#10-契约测试与-plugin-kit)）。这里说的用户层只有 `takeaway`、`notes`、`tags.user`、`topics`，主题、卡片、成稿再加 `body`；划线、标题不算。`base`、往返测试、「和 `base` 一样」都只比这几项。
 - 导出记录每个对象存 `{path, hash, base}`。`base` 是上次和 vault 对上的那份用户层：写出去了就是交给 `run` 的那份，没写出去就是那次读回的值（下面第 3、4 步）；私密条目的脚注已换成占位（[SPEC §1.3](SPEC.md#13-条目的四个维度)）；占位行在底本和 vault 里一模一样，三方合并自然留下库里的真值。不另调一次 `readback` 读写出去的文件来取底本：每次导出只读回一次，转回去再转回来不变由往返测试保证。
-- 导出只在你点「现在导出」时跑，先不做自动、定时导出（11-06 定，[open-decisions §1.8](open-decisions.md#18-grill-回答)）。`readback: true` 的导出插件，宿主每次导出做四步：
+- 导出只在你点「现在导出」时跑，先不做自动、定时导出（11-06 定，[回答表](answers.md)）。`readback: true` 的导出插件，宿主每次导出做四步：
   1. 调 `readback`。
   2. 逐个对象处理：
      - 库里没有，或在回收站里：列成 `item-deleted`（[SPEC §1.7](SPEC.md#17-删掉)）。
@@ -1792,7 +1792,7 @@ usuyo plugin pack --version 0.3.1 dist/*
 23. OPML 导进来的是订阅，不是条目：[§3.9](#39-从文件导入) 的导入插件只会列出条目，要有地方建一批跟着收的订阅。只在 [discussion 第 1 条](discussion.md#1-什么东西进资料库)选 B 时需要：[调研 11 §6](research/11-subscriptions-compat-and-wx-cli.md#6-对插件协议的影响)。
 24. 上游 AI 产物放哪：fetch 输出加一个可选的 `derived` 字段，放 Horizon 这类上游已经算好的摘要、打分和标签，宿主照转换插件的规矩移进 `derived/`；另加一个原文来源标记（例如 `textOrigin: platform | machine`），界面据此标出原文是机器写的。`derived` 那半要不要做，随 [discussion 第 1 条](discussion.md#1-什么东西进资料库)一起答：[调研 11 §6](research/11-subscriptions-compat-and-wx-cli.md#6-对插件协议的影响)。
 25. 连本机 Unix socket 的权限：包装常驻进程类的工具（例如 wx-cli 的 `daemon.sock`）时，`fs.read`、`network.hosts` 都表达不了「连本机某个 socket」，要么加一个权限项，要么要求这类插件走本机 HTTP（[§2.7](#27-权限-permissions)）。只在第三方写包装常驻进程的插件时用得到：[调研 11 §6](research/11-subscriptions-compat-and-wx-cli.md#6-对插件协议的影响)。
-26. 按关键词搜、按创作者主页列：现有 `list` 只列用户自己的收藏夹和列表，没有带查询词的搜索，也没有「某个创作者的主页」这种来源；结果只列出、不进库，用户挑了才 `fetch`（2026-11-04 用户要，[open-decisions §1.8](open-decisions.md#18-grill-回答)）。
+26. 按关键词搜、按创作者主页列：现有 `list` 只列用户自己的收藏夹和列表，没有带查询词的搜索，也没有「某个创作者的主页」这种来源；结果只列出、不进库，用户挑了才 `fetch`（2026-11-04 用户要，[回答表](answers.md)）。
 27. 评论：`fetch` 输出没有评论这一类；要可选、默认不取，按平台或按条打开，能设上限（同上）。评论 JSON 的形状、上限怎么交给插件（`fetch` 现在只有 `--want`）还没定。11-11：放哪照第 31 项做了，形状和上限还没定。
 28. 扫码登录：要账号的平台在内置浏览器里打开登录页、用户扫码，登录态按站点存本机；和 [§6](#6-凭据) 的凭据怎么接、过期后怎么提示重扫（同上）。
 29. web 身份的插件侧：`platform: web` 的 `identity` 不带 `contentId`，`identity.url` 必填（[§3.5](#35-canonicalize-与身份)）；宿主再照 [SPEC §0.4](SPEC.md#04-id) 规范化一遍，算出条目 id（2026-11-05 资料库 v1 草案带来的，下同）。**11-11 已答**：照这样做了，正文 [§3.5](#35-canonicalize-与身份) 已改。

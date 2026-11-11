@@ -3,7 +3,7 @@
 
 状态：草案 · 2026-11-04
 
-回答你 11-04 的一句：「然后就是关于数据备份或者什么的可以学习一下https://github.com/scarletkc/Hatoba 这个项目的云同步的这个东西，直接用cf的那个，我觉得很符合我胃口，后续也支持一下web那个或者其他的就行」。方向记在 [open-decisions §1.8](../open-decisions.md#18-grill-回答)；要你回答的在 [§0](#0-结论) 末尾，对应 [discussion 第 14 条](../discussion.md#14-资料库能不能放进同步盘) 和 [K6](../open-decisions.md#11-存储同步与联网)。
+回答你 11-04 的一句：「然后就是关于数据备份或者什么的可以学习一下https://github.com/scarletkc/Hatoba 这个项目的云同步的这个东西，直接用cf的那个，我觉得很符合我胃口，后续也支持一下web那个或者其他的就行」。方向记在 [open-decisions §1.8](../answers.md)；要你回答的在 [§0](#0-结论) 末尾，对应 [discussion 第 14 条](../discussion.md#14-资料库能不能放进同步盘) 和 [K6](../open-decisions.md#11-存储同步与联网)。
 
 <a id="约定"></a>
 ## 约定

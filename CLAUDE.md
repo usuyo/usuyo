@@ -19,7 +19,8 @@
 
 - `docs/plugin-protocol.md` — 插件协议 v1 草案（宿主和插件之间）
 - `docs/SPEC.md` — 技术规格 v1 草案：第 0 层约定、第 1 层资料库 v1；第 2 层起还留着 v0
-- `docs/open-decisions.md` — 全部问题的登记表；§1.8 记着用户逐条的回答
+- `docs/answers.md` — 用户逐条的回答，一张表
+- `docs/open-decisions.md` — 全部问题的登记表
 - `docs/features/` — 每个功能一份 feature doc（见下方开发流程）
 - `docs/decisions/` — 架构决策记录（ADR），一个决定一个文件
 - `docs/research/` — 调研 01–16，索引在 `docs/research/README.md`；`docs/research/notes/` 是各平台层级判定的旧笔记

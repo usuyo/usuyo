@@ -171,7 +171,7 @@ usuyo 要接三种外部能力：从平台取回内容，把音视频和图片�
 
 按用户 2026-11-01 的方向修订插件范围的几处决定。上面的正文不改，有冲突的以本节为准；字段和调用细节见 [usuyo 插件协议 v1（草案）](../plugin-protocol.md)。
 
-1. **名字跟着改名走。** 产品名 2026-11-05 定为 usuyo，命令 `usuyo`（[open-decisions §1.8](../open-decisions.md#18-grill-回答)）。官方组织是 `usuyo`，获取插件组织是 `usuyo-fetch`，client-hook 插件组织是 `usuyo-fetch-hook`（11-05）；topic 是 `usuyo-plugin`；第三方仓库前缀是 `usuyo-fetch-`、`usuyo-transform-`、`usuyo-export-`，两个组织内的仓库不加前缀；导出文件里的身份键是 `usuyo_id`，记录目录是 `.usuyo/`。之前用过的暂名 `xiecun`（歇存）、`seelu`（思鹭）只留在调研和 open-decisions 里。
+1. **名字跟着改名走。** 产品名 2026-11-05 定为 usuyo，命令 `usuyo`（[回答表](../answers.md)）。官方组织是 `usuyo`，获取插件组织是 `usuyo-fetch`，client-hook 插件组织是 `usuyo-fetch-hook`（11-05）；topic 是 `usuyo-plugin`；第三方仓库前缀是 `usuyo-fetch-`、`usuyo-transform-`、`usuyo-export-`，两个组织内的仓库不加前缀；导出文件里的身份键是 `usuyo_id`，记录目录是 `.usuyo/`。之前用过的暂名 `xiecun`（歇存）、`seelu`（思鹭）只留在调研和 open-decisions 里。
 2. **获取方式组织单独设**（改 [§5](#5-仓库拆分)、[§6](#6-分发与校验)）。自己维护的获取插件放进单独的 GitHub 组织 `usuyo-fetch`：照 Tachiyomi 拆成 Mihon（应用）与 Keiyoushi（扩展）的分法，应用和获取插件分属两个组织；和 Keiyoushi 的单一大仓库 extensions-source 不同，`usuyo-fetch` 里每个插件一个仓库。官方组织放应用、plugin-kit、转换和导出插件，外加两类不含平台知识、随安装包预装的获取插件（见第 5 条）；除此之外客户端不预置任何获取来源，用户手动添加组织名或 `owner/repo`。来源分三种显示：官方、第三方来源 · 组织名、第三方 · 未经 usuyo 审核。理由和仓库结构的取舍见 [plugin-protocol §8.8](../plugin-protocol.md#88-获取方式组织的仓库结构)。
 3. **风险的处理方式。**
    - 获取插件的清单加两个描述性的必填字段：`access`（七层之一，含义照 [调研 06 §1.1](../research/06-platform-access-and-account-risk.md#11-七个层级)）和 `login`（`none`、`optional`、`required`）；能力之间不同时按能力分别声明，顶层取最高一档。另用 `sites` 写明会用到哪个站点的账号。这些是给用户挑选用的标签，不是闸门。
@@ -189,7 +189,7 @@ usuyo 要接三种外部能力：从平台取回内容，把音视频和图片�
 <a id="修订-2026-11-05"></a>
 ## 修订 2026-11-05
 
-按用户 2026-11-05 的决定修订 [§7](#7-导出与读回)（[open-decisions §1.8](../open-decisions.md#18-grill-回答)，E2）。上面的正文不改，有冲突的以本节为准。
+按用户 2026-11-05 的决定修订 [§7](#7-导出与读回)（[回答表](../answers.md)，E2）。上面的正文不改，有冲突的以本节为准。
 
 1. **资料库不当 vault 用。** 去掉 [§7](#7-导出与读回)「主题页」那条里的「资料库即 vault」：资料库的形状按 usuyo 自己的需要定（[SPEC 第 1 层](../SPEC.md#1-资料库-v1第-1-层)），在 Obsidian 里改的是导出的那份，再读回 usuyo。
 2. **Web Clipper 的键只用在导出文件里。** [§7](#7-导出与读回) 的 frontmatter 键说的是导出文件；资料库里的 front matter 用 camelCase、不加前缀（[SPEC §0.1](../SPEC.md#01-命名)）。Obsidian 要的样子由导出插件转换（[plugin-protocol §4.4](../plugin-protocol.md#44-导出的-run-与-readback)）。
@@ -198,7 +198,7 @@ usuyo 要接三种外部能力：从平台取回内容，把音视频和图片�
 <a id="修订-2026-11-06"></a>
 ## 修订 2026-11-06
 
-按用户 2026-11-06 的决定修订 [§7](#7-导出与读回)：读回留着，用同步那套合并（[open-decisions §1.8](../open-decisions.md#18-grill-回答)）。上面的正文不改，有冲突的以本节为准；字段和调用见 [plugin-protocol §4.4](../plugin-protocol.md#44-导出的-run-与-readback)。
+按用户 2026-11-06 的决定修订 [§7](#7-导出与读回)：读回留着，用同步那套合并（[回答表](../answers.md)）。上面的正文不改，有冲突的以本节为准；字段和调用见 [plugin-protocol §4.4](../plugin-protocol.md#44-导出的-run-与-readback)。
 
 1. **读回交回值。** [§2](#2-进程与协议) 表里导出那一行的「宿主给出目标侧当前内容与上次导出记录，插件只返回用户区的结构化改动」改成：插件只读目标文件夹，把目标文件转回用户层的值；宿主不给导出记录，底本留在宿主。[§1](#1-插件分三类) 表里的「读回时返回结构化改动」同样改（推断）。
 2. **用户区改成一条分隔线。** [§7](#7-导出与读回) 的正文标记不用了：条目笔记里只有一行分隔线，上面是你的笔记，下面每次导出重写；主题、卡片、成稿不加标记，属性之后的整篇是正文。通用 Markdown 用同一条线，写成 HTML 注释。
