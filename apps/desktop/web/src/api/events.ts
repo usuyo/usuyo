@@ -39,6 +39,7 @@ export function applyEvent(queryClient: QueryClient, e: DaemonEvent): void {
       refresh(queryKeys.map);
       refresh(["search"]);
       refresh(queryKeys.item(e.id));
+      refresh(queryKeys.trash);
   }
 }
 

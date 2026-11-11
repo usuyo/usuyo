@@ -63,18 +63,25 @@ const importRoute = createRoute({
   component: lazyRouteComponent(() => import("./imports/ImportPage"), "ImportPage"),
 });
 
+const trashRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/trash",
+  component: lazyRouteComponent(() => import("./trash/TrashPage"), "TrashPage"),
+});
+
 const laterRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/later/$page",
-  // 做好了的两页有自己的路由。
+  // 做好了的几页有自己的路由。
   beforeLoad: ({ params }) => {
     if (params.page === "import") throw redirect({ to: "/import" });
     if (params.page === "plugins") throw redirect({ to: "/plugins" });
+    if (params.page === "trash") throw redirect({ to: "/trash" });
   },
   component: LaterPage,
 });
 
-const routeTree = rootRoute.addChildren([homeRoute, searchRoute, itemRoute, takeRoute, pluginsRoute, importRoute, laterRoute]);
+const routeTree = rootRoute.addChildren([homeRoute, searchRoute, itemRoute, takeRoute, pluginsRoute, importRoute, trashRoute, laterRoute]);
 
 export function createAppRouter(history?: Parameters<typeof createRouter>[0]["history"]) {
   return createRouter({ routeTree, history });

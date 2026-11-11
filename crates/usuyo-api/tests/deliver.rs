@@ -146,6 +146,7 @@ async fn a_deliver_token_hands_in_links_and_reads_nothing() {
         "/deliver-tokens",
         "/search?q=x",
         "/health",
+        "/trash",
     ] {
         let res = send(&f.app, req("GET", path, Some(&token), None)).await;
         assert_eq!(res.status(), StatusCode::UNAUTHORIZED, "{path}");

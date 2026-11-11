@@ -23,7 +23,7 @@ use tower_http::services::ServeFile;
 use tower_http::set_header::SetResponseHeaderLayer;
 use usuyo_core::view::{
     ImportEntryView, ImportView, ItemView, MapView, PluginView, PluginsView, SearchHit, SiteView,
-    TakeResponse, Topic, VisitorView,
+    TakeResponse, Topic, TrashView, VisitorView,
 };
 use usuyo_core::{DeliveredLink, Engine, ImportChoice, Links, Via};
 use usuyo_plugin::protocol::{SourceInfo, StorageState};
@@ -89,6 +89,7 @@ pub(crate) fn build(engine: Engine, gate: Arc<Gate>, origins: &[String]) -> Rout
         .route("/items/{id}/trash", post(trash))
         .route("/items/{id}/restore", post(restore))
         .route("/items/{id}/restore-media", post(restore_media))
+        .route("/trash", get(trash_list))
         .route("/trash/{id}/purge", post(purge_now))
         .route("/items/{id}/text-only", post(text_only))
         .route("/items/{id}/refetch", post(refetch))
@@ -354,6 +355,10 @@ async fn restore_media(State(s): State<AppState>, Path(id): Path<String>) -> Api
     Ok(Json(
         blocking(move || s.engine.restore_media(&id, Via::App, &links)).await?,
     ))
+}
+
+async fn trash_list(State(s): State<AppState>) -> ApiResult<TrashView> {
+    Ok(Json(blocking(move || s.engine.trash_list()).await?))
 }
 
 /// 回收站里「立即清除」一项，不等 `trashDays`。

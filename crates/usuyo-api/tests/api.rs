@@ -602,6 +602,14 @@ async fn purge_now_removes_a_trash_entry() {
         .file_name()
         .into_string()
         .unwrap();
+    let listed = json_of(send(&f.app, authed("/trash")).await).await;
+    assert_eq!(listed["trashDays"], 30);
+    let row = &listed["entries"][0];
+    assert_eq!(
+        (&row["id"], &row["reason"], &row["itemId"]),
+        (&json!(tid), &json!("delete"), &json!(taken.id))
+    );
+    assert!(row["trashedAt"].is_string() && row["expiresAt"].is_string());
 
     let path = format!("/trash/{tid}/purge");
     assert_eq!(
@@ -609,6 +617,8 @@ async fn purge_now_removes_a_trash_entry() {
         StatusCode::NO_CONTENT
     );
     assert!(!trash.join(&tid).exists());
+    let listed = json_of(send(&f.app, authed("/trash")).await).await;
+    assert_eq!(listed["entries"], json!([]));
     problem(
         send(&f.app, authed(&format!("/items/{}", taken.id))).await,
         StatusCode::NOT_FOUND,

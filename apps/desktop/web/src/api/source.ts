@@ -19,6 +19,7 @@ import {
   type TakeRequest,
   type TakeResponse,
   type Topic,
+  type TrashView,
   type VisitorIdentity,
 } from "./endpoints";
 
@@ -40,6 +41,10 @@ export interface Library {
   restoreMedia(id: string): Promise<Item>;
   textOnly(id: string): Promise<Item>;
   refetch(id: string): Promise<Item>;
+  /** 回收站里现在有的。 */
+  trashList(): Promise<TrashView>;
+  /** 立即清除回收站里的一项（回收站项的 id）。 */
+  purge(trashId: string): Promise<void>;
 }
 
 /**
@@ -90,6 +95,8 @@ const daemon: Source = {
   restoreMedia: (id) => request<Item>(paths.itemRestoreMedia(id), { method: "POST" }),
   textOnly: (id) => request<Item>(paths.itemTextOnly(id), { method: "POST" }),
   refetch: (id) => request<Item>(paths.itemRefetch(id), { method: "POST" }),
+  trashList: () => request<TrashView>(paths.trash),
+  purge: (trashId) => request<void>(paths.trashPurge(trashId), { method: "POST" }),
 
   plugins: () => request<PluginsView>(paths.plugins),
   sources: (id) => request<PluginSource[]>(paths.pluginSources(id), { timeoutMs: SOURCES_TIMEOUT_MS }),

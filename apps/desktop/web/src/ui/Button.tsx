@@ -1,13 +1,15 @@
 import type { ReactNode } from "react";
 import { Button as AriaButton, type ButtonProps as AriaButtonProps } from "react-aria-components";
 
-type Variant = "outline" | "soft" | "ghost" | "quiet" | "bare";
+type Variant = "outline" | "strong" | "soft" | "ghost" | "quiet" | "bare";
 /** "none" 不带尺寸，尺寸全由 className 给。 */
 type Size = "xs" | "tight" | "sm" | "md" | "none";
 
 const variants: Record<Variant, string> = {
   // 边框按钮：打开原帖、改一下
   outline: "border border-border2 bg-transparent text-label data-[hovered]:bg-chip/60",
+  // 深一档的边框按钮：确认撤不了的那一下（清除，不能恢复）
+  strong: "border border-text bg-transparent text-text font-semibold data-[hovered]:bg-chip/60",
   // 底色按钮：记下、收下、恢复
   soft: "border border-border2 bg-chip text-text font-medium data-[hovered]:border-label/60",
   // 无边框：关闭、返回

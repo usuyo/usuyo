@@ -13,6 +13,8 @@ import type {
   TakeRequest,
   TakeResponse,
   Topic,
+  TrashEntry,
+  TrashView,
 } from "../api/endpoints";
 import type { Library } from "../api/source";
 import { r01 } from "../fog/noise";
@@ -29,7 +31,22 @@ interface Entry {
   /** 页面坐标（1440×900），返回时换成 0–1。 */
   x: number;
   y: number;
+  /** 只留文字时移进回收站的媒体：回收站项的 id 和移进去的时间。 */
+  media?: { id: string; at: string };
+  /** 整条在回收站里时，回收站项的 id（时间是 `item.trashedAt`）。 */
+  trashId?: string;
 }
+
+const TRASH_DAYS = 30;
+const DAY_MS = 86_400_000;
+
+/** 样例里先放进回收站的：几天前删掉的整条、只留文字移出来的媒体。 */
+const SEED_TRASH: { id: string; daysAgo: number; media?: true }[] = [
+  { id: "k2", daysAgo: 2 },
+  { id: "f3", daysAgo: 6, media: true },
+  { id: "e4", daysAgo: 13 },
+  { id: "w3", daysAgo: 27, media: true },
+];
 
 function snapshotOf(id: string): string {
   return `0193f2b0-${id.padEnd(4, "0").slice(0, 4)}-7f3a-8b4c-5d6e7f8a9b0c`;
@@ -228,6 +245,30 @@ export function createMockLibrary(empty: boolean): Library {
     const p = places.get(raw.id) ?? { x: 700, y: 450 };
     entries.set(raw.id, { item: toItem(raw), x: p.x, y: p.y });
   }
+  let trashSeq = 0;
+  const trashId = () => `0193f2b0-0000-7000-8000-${String(++trashSeq).padStart(12, "0")}`;
+  for (const seed of empty ? [] : SEED_TRASH) {
+    const entry = entries.get(seed.id);
+    if (!entry) continue;
+    const at = new Date(Date.now() - seed.daysAgo * DAY_MS).toISOString();
+    if (seed.media) {
+      entry.item = { ...entry.item, stored: "text-only" };
+      entry.media = { id: trashId(), at };
+    } else {
+      entry.item = { ...entry.item, trashedAt: at };
+      entry.trashId = trashId();
+    }
+  }
+  const trashRow = (e: Entry, id: string, reason: TrashEntry["reason"], at: string): TrashEntry => ({
+    id,
+    reason,
+    itemId: e.item.id,
+    title: e.item.title,
+    platform: e.item.platform,
+    ...(e.item.author ? { author: e.item.author } : {}),
+    trashedAt: at,
+    expiresAt: new Date(new Date(at).getTime() + TRASH_DAYS * DAY_MS).toISOString(),
+  });
   const topics: Topic[] = TOPICS.map((t) => ({ id: t.id, name: t.name, followed: t.id === "film" }));
   let landed = 0;
 
@@ -336,15 +377,53 @@ export function createMockLibrary(empty: boolean): Library {
         ...item,
         topicIds: member ? [...new Set([...item.topicIds, topicId])] : item.topicIds.filter((t) => t !== topicId),
       })),
-    trash: (id) => update(id, (item) => ({ ...item, trashedAt: new Date().toISOString() })),
-    restore: (id) =>
-      update(id, (item) => {
+    trash: (id) => {
+      get(id).trashId = trashId();
+      return update(id, (item) => ({ ...item, trashedAt: new Date().toISOString() }));
+    },
+    restore: (id) => {
+      delete get(id).trashId;
+      return update(id, (item) => {
         const { trashedAt: _t, ...rest } = item;
         return rest;
-      }),
-    restoreMedia: (id) => update(id, (item) => ({ ...item, stored: "complete" })),
-    textOnly: (id) => update(id, (item) => ({ ...item, stored: "text-only" })),
+      });
+    },
+    restoreMedia: (id) => {
+      if (!get(id).media) throw new Error(`样例库里 ${id} 没有媒体在回收站`);
+      delete get(id).media;
+      return update(id, (item) => ({ ...item, stored: "complete" }));
+    },
+    textOnly: (id) => {
+      get(id).media = { id: trashId(), at: new Date().toISOString() };
+      return update(id, (item) => ({ ...item, stored: "text-only" }));
+    },
     // 和内核一样：只是排上再取一次，存着的不动。
     refetch: (id) => update(id, (item) => item),
+    // 和内核一样：条目自己在回收站里时，只留文字移出来的媒体不单列。
+    async trashList(): Promise<TrashView> {
+      await wait(40);
+      const rows: TrashEntry[] = [];
+      for (const e of entries.values()) {
+        if (e.trashId && e.item.trashedAt) rows.push(trashRow(e, e.trashId, "delete", e.item.trashedAt));
+        else if (e.media) rows.push(trashRow(e, e.media.id, "keep-text", e.media.at));
+      }
+      rows.sort((a, b) => b.trashedAt.localeCompare(a.trashedAt));
+      return { trashDays: TRASH_DAYS, entries: rows };
+    },
+    async purge(id) {
+      await wait(60);
+      for (const [key, e] of entries) {
+        if (e.trashId === id) {
+          entries.delete(key);
+          return;
+        }
+        // 媒体清掉了，条目还是只留文字。
+        if (e.media?.id === id) {
+          delete e.media;
+          return;
+        }
+      }
+      throw new Error(`样例库的回收站里没有 ${id}`);
+    },
   };
 }

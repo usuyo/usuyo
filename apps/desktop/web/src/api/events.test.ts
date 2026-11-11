@@ -21,14 +21,14 @@ describe("daemon events", () => {
     expect(keys).toEqual([queryKeys.plugins, queryKeys.sites, queryKeys.visitors, queryKeys.imports, queryKeys.import("x"), queryKeys.importEntries("x")]);
   });
 
-  it("follows an item removed from the trash: the map, search results and that item refresh", () => {
+  it("follows an item removed from the trash: the map, search results, that item and the trash page refresh", () => {
     expect(isDaemonEvent({ type: "item-removed", id: "a" })).toBe(true);
     expect(isDaemonEvent({ type: "item-removed" })).toBe(false);
     const qc = new QueryClient();
     const spy = vi.spyOn(qc, "invalidateQueries");
     applyEvent(qc, { type: "item-removed", id: "a" });
     const keys = spy.mock.calls.map((c) => c[0]?.queryKey);
-    expect(keys).toEqual([queryKeys.map, ["search"], queryKeys.item("a")]);
+    expect(keys).toEqual([queryKeys.map, ["search"], queryKeys.item("a"), queryKeys.trash]);
   });
 
   it("treats a 404 on an item as gone, other errors as errors", () => {

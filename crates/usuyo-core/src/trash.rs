@@ -4,10 +4,11 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use jiff::{SignedDuration, Timestamp};
-use usuyo_library::{Batch, expires_at, time};
+use usuyo_contract::Manifest;
+use usuyo_library::{Batch, ItemId, expires_at, time};
 
 use crate::engine::{Engine, Via};
-use crate::view::{Event, Unreadable};
+use crate::view::{Event, TrashEntryView, TrashReason, TrashView, Unreadable};
 use crate::{Error, Result};
 
 /// 到期检查的间隔：回收站按天算，不用勤看。
@@ -76,6 +77,58 @@ impl Engine {
         Ok(report)
     }
 
+    /// 回收站页：整条删掉的条目和只留文字移出来的媒体，新的在前。
+    /// 主题、卡片、成稿，并掉的（`merge`）和改冲突替下来的（`conflict`）现在没有拿回来的接口，不列；
+    /// 只留文字的条目自己也在回收站里时，媒体随那一条，等它拿回来再列。读不了的一项记进 `unreadable`。
+    pub fn trash_list(&self) -> Result<TrashView> {
+        let lib = self.lib();
+        let days = lib.settings().trash_days;
+        let mut entries = Vec::new();
+        let mut unreadable = Vec::new();
+        for e in lib.trash_entries()?.into_iter().rev() {
+            let reason = match (e.kind.as_str(), e.reason.as_str()) {
+                ("item", "delete") => TrashReason::Delete,
+                ("item", "undo") => TrashReason::Undo,
+                ("item", "keep-text") => TrashReason::KeepText,
+                _ => continue,
+            };
+            let read = || -> Result<Option<(Manifest, Option<String>)>> {
+                let manifest = if reason == TrashReason::KeepText {
+                    match lib.item(&ItemId::parse(&e.target)?) {
+                        Ok(item) => item.manifest,
+                        Err(usuyo_library::Error::NotFound(_)) => return Ok(None),
+                        Err(err) => return Err(err.into()),
+                    }
+                } else {
+                    lib.trashed_manifest(&e)?
+                };
+                Ok(Some((manifest, expires_at(&e.trashed_at, days)?)))
+            };
+            match read() {
+                Ok(Some((m, expires_at))) => {
+                    let s = self.summary(&m);
+                    entries.push(TrashEntryView {
+                        id: e.id,
+                        reason,
+                        item_id: s.id,
+                        title: s.title,
+                        platform: s.platform,
+                        author: s.author,
+                        trashed_at: e.trashed_at,
+                        expires_at,
+                    });
+                }
+                Ok(None) => {}
+                Err(err) => unreadable.push(skipped(&e.id, &err)),
+            }
+        }
+        Ok(TrashView {
+            trash_days: days,
+            entries,
+            unreadable,
+        })
+    }
+
     /// 你在回收站里「立即清除」一项：照到期办，不等 `trashDays`。
     pub fn purge_now(&self, trash_id: &str, via: Via) -> Result<()> {
         self.purge_entry(trash_id, &via.batch()?)?;
@@ -94,6 +147,10 @@ impl Engine {
             self.inner.index.delete(id)?;
         }
         if report.forgotten.is_empty() {
+            // 只留文字移出来的媒体清掉了：条目还在，回收站页跟着这个事件重拉。
+            if entry.kind == "item" && entry.reason == "keep-text" {
+                self.emit(Event::ItemUpdated { id: entry.target });
+            }
             return Ok(false);
         }
         self.inner.index.commit()?;
@@ -435,6 +492,97 @@ mod tests {
         assert!(r.skipped.iter().all(|s| !s.reason.contains(&id)));
         assert!(!f.trash_dir(T3).exists());
         assert!(f.trash_dir(T1).exists() && f.trash_dir(T2).exists());
+    }
+
+    #[tokio::test]
+    async fn the_list_has_whole_items_and_moved_media_newest_first() {
+        let f = Fixture::new(Some(30));
+        let a = f.item("a", "咖啡").await;
+        let b = f.item("b", "茶").await;
+        f.craft(T1, &b, "keep-text", OLD, &["raw/s/images/001.jpg"]);
+        f.craft(T2, &b, "merge", OLD, &["manifest.json"]);
+        let e = f.trash(&a);
+        let v = f.engine.trash_list().unwrap();
+        assert_eq!(v.trash_days, Some(30));
+        assert!(v.unreadable.is_empty());
+        let rows: Vec<(&str, TrashReason, &str)> = v
+            .entries
+            .iter()
+            .map(|r| (r.id.as_str(), r.reason, r.item_id.as_str()))
+            .collect();
+        assert_eq!(
+            rows,
+            [
+                (e.id.as_str(), TrashReason::Delete, a.as_str()),
+                (T1, TrashReason::KeepText, b.as_str()),
+            ]
+        );
+        assert_eq!(v.entries[0].trashed_at, e.trashed_at);
+        assert_eq!(v.entries[0].expires_at, Some(after(&e, 30)));
+        assert_eq!(v.entries[0].title, "https://example.test/a");
+        assert_eq!(v.entries[0].platform.id, "web");
+
+        // 条目自己也进了回收站：媒体随那一条，不单列。
+        f.trash(&b);
+        let v = f.engine.trash_list().unwrap();
+        let reasons: Vec<TrashReason> = v.entries.iter().map(|r| r.reason).collect();
+        assert_eq!(reasons, [TrashReason::Delete, TrashReason::Delete]);
+    }
+
+    #[tokio::test]
+    async fn the_list_has_no_clearing_time_when_kept_forever_and_skips_a_bad_entry() {
+        let f = Fixture::new(None);
+        let id = f.item("a", "咖啡").await;
+        f.trash(&id);
+        // 条目 id 写坏了的一项。
+        f.craft(T1, "not-an-item", "keep-text", OLD, &[]);
+        let v = f.engine.trash_list().unwrap();
+        assert_eq!(v.trash_days, None);
+        assert_eq!(v.entries.len(), 1);
+        assert_eq!(v.entries[0].expires_at, None);
+        let bad: Vec<&str> = v.unreadable.iter().map(|u| u.id.as_str()).collect();
+        assert_eq!(bad, [T1]);
+        assert!(
+            v.unreadable
+                .iter()
+                .all(|u| !u.reason.contains("not-an-item"))
+        );
+    }
+
+    #[tokio::test]
+    async fn clearing_a_whole_item_also_clears_its_moved_media() {
+        let f = Fixture::new(None);
+        let id = f.item("a", "咖啡").await;
+        f.craft(T1, &id, "keep-text", OLD, &["raw/s/images/001.jpg"]);
+        f.trash(&id);
+        let whole = f
+            .lib_entries()
+            .into_iter()
+            .find(|e| e.reason == "delete")
+            .unwrap();
+        assert!(f.trash_dir(T1).is_dir());
+        f.engine.purge_now(&whole.id, Via::App).unwrap();
+        assert!(
+            !f.trash_dir(T1).exists(),
+            "只留文字移出来的媒体随条目一起清掉"
+        );
+        assert!(f.lib_entries().is_empty());
+    }
+
+    #[tokio::test]
+    async fn clearing_moved_media_says_the_item_changed() {
+        let f = Fixture::new(Some(30));
+        let id = f.item("a", "咖啡").await;
+        f.craft(T1, &id, "keep-text", OLD, &["raw/s/images/001.jpg"]);
+        let mut rx = f.engine.subscribe();
+        f.engine.purge_now(T1, Via::App).unwrap();
+        let mut updated = Vec::new();
+        while let Ok(e) = rx.try_recv() {
+            if let Event::ItemUpdated { id } = e {
+                updated.push(id);
+            }
+        }
+        assert_eq!(updated, [id]);
     }
 
     #[tokio::test]

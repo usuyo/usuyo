@@ -157,6 +157,47 @@ pub struct Reindexed {
     pub unreadable: Vec<Unreadable>,
 }
 
+/// 回收站页上的一项为什么在回收站里。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TrashReason {
+    /// 你删掉的整条。
+    Delete,
+    /// 撤销收下时移进来的整条。
+    Undo,
+    /// 只留文字时移出来的图、视频、音频；条目和文字还在。
+    KeepText,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrashEntryView {
+    /// 回收站项的 id（`trashId`），「立即清除」用它；拿回来用 `item_id`。
+    pub id: String,
+    pub reason: TrashReason,
+    pub item_id: String,
+    pub title: String,
+    pub platform: Platform,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
+    pub trashed_at: String,
+    /// 到这个时间就清除；`trashDays` 是「一直」时没有。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<String>,
+}
+
+/// 回收站页：现在在回收站里的条目和媒体，新的在前。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrashView {
+    /// 放多少天；`null` 是「一直」。
+    pub trash_days: Option<u32>,
+    pub entries: Vec<TrashEntryView>,
+    /// 读不了、没列出来的回收站项（id 是 `trashId`）。
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub unreadable: Vec<Unreadable>,
+}
+
 /// 命中的那一层；标题、作者、记一句另算。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]

@@ -9,6 +9,7 @@ export const queryKeys = {
   topics: ["topics"] as const,
   item: (id: string) => ["items", id] as const,
   search: (q: string) => ["search", q] as const,
+  trash: ["trash"] as const,
   plugins: ["plugins"] as const,
   sites: ["sites"] as const,
   visitors: ["visitors"] as const,
@@ -118,7 +119,28 @@ export function useItemChange(id: string) {
     onSuccess: (item, change) => {
       queryClient.setQueryData(queryKeys.item(id), item);
       if (change.kind !== "note") void queryClient.invalidateQueries({ queryKey: queryKeys.map });
+      if (["trash", "restore", "restore-media", "text-only"].includes(change.kind)) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.trash });
+      }
       if (change.kind === "new-topic") void queryClient.invalidateQueries({ queryKey: queryKeys.topics });
+    },
+  });
+}
+
+// —— 回收站 ——
+
+export function useTrash() {
+  return useQuery({ queryKey: queryKeys.trash, queryFn: () => call((l) => l.trashList()) });
+}
+
+/** 立即清除一项。只留文字移出来的媒体清掉时条目还在，整条清掉时条目没了：两种都重拉回收站和地图。 */
+export function usePurge() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (trashId: string) => call((l) => l.purge(trashId)),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.trash });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.map });
     },
   });
 }

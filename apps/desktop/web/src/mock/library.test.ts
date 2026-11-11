@@ -41,6 +41,24 @@ describe("mock library", () => {
     expect(item.topicIds).toContain(a.id);
   });
 
+  it("lists the trash newest first and clears or brings back an entry", async () => {
+    const lib = createMockLibrary(false);
+    const before = await lib.trashList();
+    expect(before.entries.map((e) => [e.itemId, e.reason])).toEqual([
+      ["k2", "delete"],
+      ["f3", "keep-text"],
+      ["e4", "delete"],
+      ["w3", "keep-text"],
+    ]);
+    expect((await lib.map()).points.some((p) => p.itemId === "k2")).toBe(false);
+    await lib.restore("k2");
+    await lib.restoreMedia("f3");
+    const [e4] = (await lib.trashList()).entries;
+    await lib.purge(e4?.id ?? "");
+    expect((await lib.trashList()).entries.map((e) => e.itemId)).toEqual(["w3"]);
+    expect((await lib.map()).points.some((p) => p.itemId === "e4")).toBe(false);
+  });
+
   it("starts empty when asked", async () => {
     expect((await createMockLibrary(true).map()).points).toHaveLength(0);
   });

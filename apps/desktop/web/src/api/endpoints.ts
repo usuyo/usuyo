@@ -24,6 +24,10 @@ export const paths = {
   /** 只留文字以后，把移进回收站的视频和图拿回来。 */
   itemRestoreMedia: (id: string) => `/items/${encodeURIComponent(id)}/restore-media`,
   itemTextOnly: (id: string) => `/items/${encodeURIComponent(id)}/text-only`,
+  /** GET `TrashView`：现在在回收站里的整条和只留文字移出来的媒体，新的在前。 */
+  trash: "/trash",
+  /** POST：立即清除回收站里的一项（`TrashEntry.id`，不是条目 id），204，撤不了。 */
+  trashPurge: (trashId: string) => `/trash/${encodeURIComponent(trashId)}/purge`,
   itemRefetch: (id: string) => `/items/${encodeURIComponent(id)}/refetch`,
   search: "/search",
   take: "/items",
@@ -177,6 +181,30 @@ export type Facet =
   | { layer: "comments"; comments: Comment[]; remark?: string };
 
 export type FacetLayer = Facet["layer"];
+
+/** 回收站里的一项。`delete` 是你删掉的整条，`undo` 是撤销收下时移进来的整条，拿回来用 `paths.itemRestore`；
+ * `keep-text` 是只留文字时移出来的图和视频，条目和文字还在，拿回来用 `paths.itemRestoreMedia`。 */
+export interface TrashEntry {
+  /** 回收站项的 id，「立即清除」用它。 */
+  id: string;
+  reason: "delete" | "undo" | "keep-text";
+  itemId: string;
+  title: string;
+  platform: Platform;
+  author?: string;
+  /** RFC 3339，UTC。 */
+  trashedAt: string;
+  /** 到这个时间就清除；`trashDays` 是「一直」时没有。到期检查几个小时一次，过了一会儿还在是正常的。 */
+  expiresAt?: string;
+}
+
+export interface TrashView {
+  /** 放多少天；`null` 是「一直」。 */
+  trashDays: number | null;
+  entries: TrashEntry[];
+  /** 读不了、没列出来的回收站项（`id` 是回收站项的）。 */
+  unreadable?: { id: string; reason: string }[];
+}
 
 /** 存下了多少：都存好了、存下了一部分（缺的写在 `missing`）、只有链接、只留文字（媒体在回收站）。 */
 export type Stored = "complete" | "partial" | "link" | "text-only";
