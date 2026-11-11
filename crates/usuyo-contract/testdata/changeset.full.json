@@ -1,0 +1,46 @@
+{
+  "id": "0193f2e0-0000-7000-8000-000000000001",
+  "createdAt": "2026-11-05T03:00:01.123Z",
+  "proposer": "agent:claude-desktop",
+  "via": "mcp",
+  "summary": "给三条咖啡的条目加标签",
+  "state": "proposed",
+  "ops": [
+    {
+      "id": "0193f2e0-0000-7000-8000-000000000002",
+      "op": "set-tags",
+      "target": {
+        "kind": "item",
+        "id": "douyin-4plrcxk343onmyxibmrr672kga"
+      },
+      "base": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "args": {
+        "add": [
+          "咖啡"
+        ],
+        "remove": []
+      },
+      "state": "proposed"
+    },
+    {
+      "id": "0193f2e0-0000-7000-8000-000000000003",
+      "op": "edit-notes",
+      "target": {
+        "kind": "item",
+        "id": "douyin-4plrcxk343onmyxibmrr672kga"
+      },
+      "base": null,
+      "args": {
+        "hunks": [
+          {
+            "id": "0193f2e0-0000-7000-8000-000000000004",
+            "before": "",
+            "after": "闷蒸要 30 秒。",
+            "anchor": null
+          }
+        ]
+      },
+      "state": "proposed"
+    }
+  ]
+}

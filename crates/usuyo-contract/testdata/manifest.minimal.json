@@ -1,16 +1,40 @@
 {
-  "schema": 1,
-  "id": "web-3b9c2f1a-q7m4",
-  "identities": [{ "platform": "web", "url": "https://example.com/post/42" }],
-  "kind": "article",
-  "title": "",
-  "capturedAt": "2026-10-20T03:00:00+08:00",
-  "origin": { "entry": "cli", "action": "unknown", "importBatch": "batch-2026-10-20" },
-  "completeness": "link",
-  "missing": ["text", "html"],
+  "id": "web-bw4o2ajgw2apo2ikx3m6p2flxi",
+  "aliases": [],
+  "identities": [
+    {
+      "platform": "web",
+      "url": "https://example.com/post/1"
+    }
+  ],
+  "kind": "unknown",
+  "title": "https://example.com/post/1",
+  "addedAt": "2026-11-05T03:00:01.123Z",
+  "origins": [
+    {
+      "id": "0193f2b0-0000-7000-8000-0000000000a1",
+      "entry": "cli",
+      "takenBy": "user",
+      "machinePicked": null,
+      "matched": [],
+      "at": "2026-11-05T03:00:01.123Z",
+      "device": "0193f2a0-0000-7000-8000-000000000001"
+    }
+  ],
   "snapshots": [],
-  "tags": { "platform": [], "engine": [], "user": [] },
+  "primarySnapshot": null,
+  "outputs": [],
+  "missing": [],
+  "completeness": "link",
+  "tags": {
+    "platform": [],
+    "engine": [],
+    "user": [],
+    "dismissed": []
+  },
+  "topics": [],
   "sameAs": [],
-  "state": "normal",
-  "jobs": {}
+  "notSameAs": [],
+  "private": false,
+  "state": "normal"
 }

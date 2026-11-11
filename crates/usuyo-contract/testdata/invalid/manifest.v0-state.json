@@ -1,0 +1,40 @@
+{
+  "id": "web-6yx4gnyrp2e6tkz7wbccpuqnbe",
+  "aliases": [],
+  "identities": [
+    {
+      "platform": "web",
+      "url": "https://example.com/post/1"
+    }
+  ],
+  "kind": "unknown",
+  "title": "https://example.com/post/1",
+  "addedAt": "2026-11-05T03:00:01.123Z",
+  "origins": [
+    {
+      "id": "0193f2b0-0000-7000-8000-0000000000a1",
+      "entry": "cli",
+      "takenBy": "user",
+      "machinePicked": null,
+      "matched": [],
+      "at": "2026-11-05T03:00:01.123Z",
+      "device": "0193f2a0-0000-7000-8000-000000000001"
+    }
+  ],
+  "snapshots": [],
+  "primarySnapshot": null,
+  "outputs": [],
+  "missing": [],
+  "completeness": "link",
+  "tags": {
+    "platform": [],
+    "engine": [],
+    "user": [],
+    "dismissed": []
+  },
+  "topics": [],
+  "sameAs": [],
+  "notSameAs": [],
+  "private": false,
+  "state": "slimmed"
+}

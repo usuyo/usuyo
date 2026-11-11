@@ -1,111 +1,93 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "usuyo manifest.json",
-  "description": "Index card of a content package. Normative source: docs/SPEC.md §3. Arrays are always present and may be empty.",
+  "$id": "urn:usuyo:schema:manifest:1",
+  "title": "usuyo manifest.json v1",
+  "description": "Index card of one item folder. Normative source: docs/SPEC.md §1.2.1. Arrays are always present and may be empty. Unknown fields are tolerated at runtime (§0.2).",
   "type": "object",
-  "additionalProperties": false,
   "required": [
-    "schema",
     "id",
+    "aliases",
     "identities",
     "kind",
     "title",
-    "capturedAt",
-    "origin",
-    "completeness",
-    "missing",
+    "addedAt",
+    "origins",
     "snapshots",
+    "primarySnapshot",
+    "outputs",
+    "missing",
+    "completeness",
     "tags",
+    "topics",
     "sameAs",
-    "state",
-    "jobs"
+    "notSameAs",
+    "private",
+    "state"
   ],
   "properties": {
-    "schema": { "const": 1, "description": "Manifest schema version." },
-    "id": {
-      "type": "string",
-      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
-      "description": "Directory name <platform>-<id8>-<rand4>; never changes after creation."
-    },
+    "id": { "$ref": "#/$defs/itemId" },
+    "aliases": { "type": "array", "items": { "$ref": "#/$defs/itemId" } },
     "identities": { "type": "array", "items": { "$ref": "#/$defs/identity" } },
-    "kind": { "$ref": "#/$defs/kind" },
+    "kind": { "type": "string", "examples": ["article", "post", "image", "video", "file", "unknown"] },
     "title": { "type": "string" },
     "author": { "$ref": "#/$defs/author" },
-    "publishedAt": { "type": "string", "format": "date-time" },
-    "capturedAt": { "type": "string", "format": "date-time" },
-    "origin": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["entry", "action", "importBatch"],
-      "properties": {
-        "entry": { "enum": ["paste", "extension", "mobile", "import", "sync", "mcp", "cli", "api"] },
-        "action": { "enum": ["favorite", "like", "share", "view", "unknown"] },
-        "importBatch": { "type": ["string", "null"] }
-      }
-    },
-    "completeness": { "$ref": "#/$defs/completeness" },
-    "missing": { "type": "array", "items": { "type": "string" } },
+    "publishedAt": { "$ref": "#/$defs/time" },
+    "publishedAtOriginal": { "type": "string", "format": "date-time" },
+    "lang": { "type": "string" },
+    "addedAt": { "$ref": "#/$defs/time" },
+    "origins": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/origin" } },
+    "snapshots": { "type": "array", "items": { "$ref": "#/$defs/snapshot" } },
+    "primarySnapshot": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/uuid7" }] },
+    "outputs": { "$ref": "#/$defs/outputs" },
+    "missing": { "$ref": "#/$defs/outputs" },
     "missingReason": { "type": "string" },
-    "snapshots": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["id", "adapter", "adapterVersion", "at", "completeness", "rawDir"],
-        "properties": {
-          "id": { "type": "string" },
-          "adapter": { "type": "string", "description": "Adapter id as declared in adapter.yaml." },
-          "adapterVersion": { "type": "string" },
-          "at": { "type": "string", "format": "date-time" },
-          "completeness": { "$ref": "#/$defs/completeness" },
-          "rawDir": { "type": "string", "description": "Relative to the item directory, e.g. raw/s1." }
-        }
-      }
-    },
+    "completeness": { "$ref": "#/$defs/completeness" },
     "tags": {
       "type": "object",
-      "additionalProperties": false,
-      "required": ["platform", "engine", "user"],
+      "required": ["platform", "engine", "user", "dismissed"],
       "properties": {
-        "platform": { "type": "array", "items": { "type": "string" } },
-        "engine": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["tag", "by", "at", "confidence"],
-            "properties": {
-              "tag": { "type": "string" },
-              "by": { "type": "string" },
-              "at": { "type": "string", "format": "date-time" },
-              "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
-            }
-          }
-        },
-        "user": { "type": "array", "items": { "type": "string" } }
+        "platform": { "type": "array", "items": { "$ref": "#/$defs/tagMark" } },
+        "engine": { "type": "array", "items": { "$ref": "#/$defs/tagMark" } },
+        "user": { "type": "array", "items": { "type": "string" } },
+        "dismissed": { "type": "array", "items": { "type": "string" } }
       }
     },
-    "fingerprints": {
+    "topics": { "type": "array", "items": { "$ref": "#/$defs/uuid7" } },
+    "sameAs": { "type": "array", "items": { "$ref": "#/$defs/itemId" } },
+    "notSameAs": { "type": "array", "items": { "$ref": "#/$defs/itemId" } },
+    "private": { "type": "boolean" },
+    "state": { "enum": ["normal", "text-only", "trashed"] },
+    "stateAt": { "$ref": "#/$defs/time" },
+    "textOnly": {
       "type": "object",
-      "additionalProperties": false,
-      "required": ["images"],
+      "required": ["at", "removed"],
       "properties": {
-        "text": { "type": "string" },
-        "images": { "type": "array", "items": { "type": "string" } },
-        "video": { "type": "string" }
+        "at": { "$ref": "#/$defs/time" },
+        "removed": { "type": "array", "items": { "type": "string" } }
       }
-    },
-    "sameAs": { "type": "array", "items": { "type": "string" }, "description": "Ids of other items in the same-source group." },
-    "state": { "enum": ["normal", "slimmed", "trashed"] },
-    "jobs": {
-      "type": "object",
-      "additionalProperties": { "enum": ["pending", "done", "failed"] }
     }
   },
   "$defs": {
+    "itemId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*-[a-z2-7]{26}$" },
+    "uuid7": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "time": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "outputs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "examples": ["text", "html", "images", "media:video", "media:audio", "subtitle", "meta", "comments"]
+      }
+    },
+    "completeness": { "enum": ["link", "partial", "full"] },
     "identity": {
       "type": "object",
-      "additionalProperties": false,
       "required": ["platform"],
       "properties": {
         "platform": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
@@ -115,7 +97,6 @@
     },
     "author": {
       "type": "object",
-      "additionalProperties": false,
       "required": ["name"],
       "properties": {
         "name": { "type": "string" },
@@ -123,7 +104,78 @@
         "url": { "type": "string", "format": "uri" }
       }
     },
-    "kind": { "enum": ["article", "post", "image", "video", "file"] },
-    "completeness": { "enum": ["link", "partial", "full"] }
+    "origin": {
+      "type": "object",
+      "required": ["id", "entry", "takenBy", "at", "device"],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid7" },
+        "entry": {
+          "type": "string",
+          "examples": ["paste", "drop", "extension", "mobile", "import", "subscription", "mcp", "cli", "api"]
+        },
+        "takenBy": { "type": "string", "pattern": "^(user|agent:[a-z0-9-]+|subscription:.+)$" },
+        "machinePicked": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "required": ["by"],
+              "properties": {
+                "by": { "type": "string", "examples": ["keywords", "similarity", "upstream", "agent"] },
+                "name": { "type": "string" }
+              }
+            }
+          ]
+        },
+        "matched": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["topic", "by"],
+            "properties": {
+              "topic": { "$ref": "#/$defs/uuid7" },
+              "by": { "type": "string", "examples": ["keywords", "similarity"] }
+            }
+          }
+        },
+        "subscription": { "type": "string" },
+        "importBatch": { "type": "string" },
+        "action": { "type": "string" },
+        "actedAt": { "$ref": "#/$defs/time" },
+        "actedAtOriginal": { "type": "string", "format": "date-time" },
+        "at": { "$ref": "#/$defs/time" },
+        "device": { "$ref": "#/$defs/uuid7" }
+      }
+    },
+    "snapshot": {
+      "type": "object",
+      "required": ["id", "plugin", "at", "access", "outputs", "missing", "completeness"],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid7" },
+        "plugin": { "type": "string" },
+        "pluginVersion": { "type": "string" },
+        "at": { "$ref": "#/$defs/time" },
+        "inputUrl": { "type": "string" },
+        "resolvedUrl": { "type": "string" },
+        "access": { "type": "string" },
+        "site": { "type": "string" },
+        "upstream": { "type": "object" },
+        "outputs": { "$ref": "#/$defs/outputs" },
+        "missing": { "$ref": "#/$defs/outputs" },
+        "missingReason": { "type": "string" },
+        "completeness": { "$ref": "#/$defs/completeness" },
+        "textOrigin": { "type": "string", "examples": ["platform", "machine"] }
+      }
+    },
+    "tagMark": {
+      "type": "object",
+      "required": ["tag", "by", "at", "confidence"],
+      "properties": {
+        "tag": { "type": "string" },
+        "by": { "type": "string" },
+        "at": { "$ref": "#/$defs/time" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    }
   }
 }

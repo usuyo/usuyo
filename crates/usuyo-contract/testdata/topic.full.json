@@ -1,0 +1,13 @@
+{
+  "id": "0193f2a4-7c1e-7a3b-9d2e-5f0a1b2c3d4e",
+  "title": "手冲咖啡",
+  "createdAt": "2026-11-05T03:00:01.123Z",
+  "followed": true,
+  "keywords": [
+    "手冲",
+    "闷蒸"
+  ],
+  "match": [
+    "keywords"
+  ]
+}

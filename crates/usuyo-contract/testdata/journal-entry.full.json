@@ -1,0 +1,25 @@
+{
+  "id": "0193f2d0-0000-7000-8000-000000000001",
+  "n": 1,
+  "t": "2026-11-05T03:00:01.123Z",
+  "device": "0193f2a0-0000-7000-8000-000000000001",
+  "actor": "user",
+  "via": "app",
+  "op": "set-tags",
+  "targets": [
+    {
+      "kind": "item",
+      "id": "douyin-4plrcxk343onmyxibmrr672kga",
+      "path": "items/douyin/douyin-4plrcxk343onmyxibmrr672kga/manifest.json",
+      "before": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "after": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  ],
+  "change": {
+    "add": [
+      "咖啡"
+    ],
+    "remove": []
+  },
+  "batch": "0193f2d0-0000-7000-8000-0000000000b1"
+}

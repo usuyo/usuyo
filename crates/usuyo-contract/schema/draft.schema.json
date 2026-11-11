@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:usuyo:schema:draft:1",
+  "title": "usuyo draft front matter v1",
+  "description": "Parsed front matter object (docs/SPEC.md §1.4). The on-disk form is the fixed YAML subset of §0.6; false and empty lists are omitted there.",
+  "type": "object",
+  "required": [
+    "id",
+    "title",
+    "createdAt",
+    "kind"
+  ],
+  "properties": {
+    "id": {
+      "$ref": "#/$defs/uuid7"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "createdAt": {
+      "$ref": "#/$defs/time"
+    },
+    "kind": {
+      "type": "string",
+      "examples": [
+        "article",
+        "post",
+        "script",
+        "other"
+      ]
+    },
+    "from": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/uuid7"
+      }
+    }
+  },
+  "$defs": {
+    "uuid7": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "time": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    }
+  }
+}

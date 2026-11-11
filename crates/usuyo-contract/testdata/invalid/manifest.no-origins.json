@@ -1,0 +1,30 @@
+{
+  "id": "web-6yx4gnyrp2e6tkz7wbccpuqnbe",
+  "aliases": [],
+  "identities": [
+    {
+      "platform": "web",
+      "url": "https://example.com/post/1"
+    }
+  ],
+  "kind": "unknown",
+  "title": "https://example.com/post/1",
+  "addedAt": "2026-11-05T03:00:01.123Z",
+  "origins": [],
+  "snapshots": [],
+  "primarySnapshot": null,
+  "outputs": [],
+  "missing": [],
+  "completeness": "link",
+  "tags": {
+    "platform": [],
+    "engine": [],
+    "user": [],
+    "dismissed": []
+  },
+  "topics": [],
+  "sameAs": [],
+  "notSameAs": [],
+  "private": false,
+  "state": "normal"
+}
