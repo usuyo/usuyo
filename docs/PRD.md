@@ -310,7 +310,8 @@
 | 进 | 链接、扩展投递；书签 HTML，Pocket、Readwise 等导出 | 收下和导入 |
 | 进 | RSS 2.0、Atom、JSON Feed 1.1 | 跟着收（[7.3](#73-导入和跟着收)） |
 | 进 | Horizon 的 Atom、Markdown 输出 | 当普通 feed，条目标成机器挑的 |
-| 进 | Google Reader API、OPML 2.0 | 不做，留给阅读器 |
+| 进 | Google Reader API | 跟着收阅读器的星标时可能要，没定（[7.3](#73-导入和跟着收)） |
+| 进 | OPML 2.0 | 不做整包订阅，留给阅读器 |
 | Agent | MCP；包装别的命令行、HTTP、MCP 工具 | MCP 服务；包装走插件 |
 | 存 | Markdown 加 front matter、JSON、WebVTT | 资料库的文件 |
 | 出 | Obsidian vault 导出并读回；书签 HTML、CSV | 导出插件 |
@@ -406,4 +407,4 @@
 <a id="13-和别的文档的关系"></a>
 ## 13. 和别的文档的关系
 
-文档地图见 [CLAUDE.md](../CLAUDE.md)。你答了一条，先在 open-decisions 的已定日志里记一行，再改这里对应的句子。
+文档地图见 [CLAUDE.md](../CLAUDE.md)。你答了一条，先在[回答表](answers.md)里记一行，再改这里对应的句子。

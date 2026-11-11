@@ -67,7 +67,7 @@ flowchart LR
 
 | 接口 | 状态 | 缺什么 |
 |---|---|---|
-| [插件协议](plugin-protocol.md#01-读者与状态) | v1 草案；宿主和 plugin-kit 有了第一版（[§3.13](plugin-protocol.md#313-宿主和-plugin-kit-现在做到的11-11)、[§10.1](plugin-protocol.md#101-plugin-kit-的-http-客户端11-11)） | [待定](plugin-protocol.md#13-待定) ；凭据、沙箱、本机代理、`serve`、schema 文件 |
+| [插件协议](plugin-protocol.md#01-读者与状态) | v1 草案；宿主和 plugin-kit 有了第一版（[§3.13](plugin-protocol.md#313-宿主和-plugin-kit-现在做到的11-11)、[§10.1](plugin-protocol.md#101-plugin-kit-的-http-客户端11-11)） | [待定](plugin-protocol.md#13-待定)里还有没答的；沙箱、本机代理、`serve`、schema 文件 |
 | 资料库格式（[SPEC §1](SPEC.md#1-资料库-v1第-1-层)） | v1 草案，`crates/usuyo-contract`、`crates/usuyo-library` 照它实现 | 联网后并身份；同步（[008](#008-文字同步)） |
 | 改动提议、改动记录（[SPEC §1.5](SPEC.md#15-改动提议)、[§1.6](SPEC.md#16-改动记录)） | v1 草案，资料库层能写能撤 | 接受提议的流程、界面（[006](#006-agent)） |
 | 宿主 ↔ 界面（[SPEC 本机接口](SPEC.md#本机接口第-2-层11-11-照代码)） | 照代码写了；契约文件是 `apps/desktop/web/src/api/endpoints.ts` | 窗口用的路径还不带 `/v1/`、分页、OpenAPI 描述 |
@@ -289,6 +289,7 @@ flowchart LR
 - 回收站的「时钟跳了就先不清」留不留？拦下以后要不要在某种情况下自己放行（时钟回到合理范围，或拦了几天以后提醒）？（先留着，只在用户点了以后放行）
 - 成稿引用了私密条目，导出到 Obsidian 和给 Agent 时各怎么办？用户说等有界面和具体例子再定（照 [SPEC 要你看一眼第 13 条](SPEC.md#110-要你看一眼)现在的写法）。
 - 手机上视频号的分享菜单里有没有「复制链接」？
+- 订阅来的默认只收挑的，还是也收命中关注的？平时用哪个阅读器（决定先接 Google Reader API，还是 Readwise、Folo）？（默认只收挑的；阅读器先不接哪一家）
 
 **还没问的**（括号里是问之前照着做的）：
 
@@ -316,9 +317,9 @@ flowchart LR
 | 放哪 | 写什么 | 从哪并过来 |
 |---|---|---|
 | `CLAUDE.md` | 给模型的规则：原则、技术栈、约定、命令 | — |
-| `docs/BUILD.md` | 这份：做到哪、界面清单、每条线的决定、依赖顺序、规矩、要用户答的验的办的 | `TODO.md`、`overview.md` 里「做到哪」的部分、`discussion.md` 剩下的问题 |
-| `docs/PRD.md` | 产品：为什么做、是什么、原则、用到的词、功能 | `product-model.md`、`overview.md` 里讲产品的部分 |
-| `docs/answers.md` | 用户逐条说过的话，一张表 | `open-decisions.md` 的回答表；那份里别的登记项，定了的并进产品、规格、协议，没定的进这份的[只有用户能答的](#7-只有用户能答的和能验的) |
+| `docs/BUILD.md` | 这份：做到哪、界面清单、每条线的决定、依赖顺序、规矩、要用户答的验的办的 | 已并完（原来的 `TODO.md`、`overview.md`、`discussion.md`） |
+| `docs/PRD.md` | 产品：为什么做、是什么、原则、用到的词、功能 | `product-model.md`（`overview.md` 讲产品的部分已并进来） |
+| `docs/answers.md` | 用户逐条说过的话，一张表 | 回答表已从 `open-decisions.md` 搬来；那份里别的登记项，定了的并进产品、规格、协议，没定的进这份的[只有用户能答的](#7-只有用户能答的和能验的) |
 | `docs/spec/` | 内核的规格，按约定、资料库、本机接口、按机器的目录分开 | `SPEC.md`，去掉 v0 各层和旧对照表 |
 | `docs/protocol/` | 插件协议，按清单、获取、转换和导出、投递、凭据、隔离、分发、包装现有工具分开 | `plugin-protocol.md`，去掉采纳情况和改名对照这类历史 |
 | `docs/platforms/` | 获取方案：层级怎么定、要账号和不要账号怎么分、各平台的总表、怎么相对安全地试；每个平台一份 | 调研 15、`research/notes/`、调研 06 里定下来的部分 |
