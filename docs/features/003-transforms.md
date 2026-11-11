@@ -2,7 +2,7 @@
 # 003 — 变成文字：口播、图里的字、画面
 
 状态：in-progress（2026-11-11。这份写给实现的模型和以后查，不等用户批，见 [CLAUDE.md](../../CLAUDE.md) 开发流程）
-关联：[PRD 原则](../PRD.md#4-原则) · [SPEC §1.2.2](../SPEC.md#122-raw-和-derived)、[§1.2.3](../SPEC.md#123-contentmd-和各栏) · [插件协议 §2.9](../plugin-protocol.md#29-转换插件的字段)、[§4](../plugin-protocol.md#4-转换与导出插件协议) · [调研 04](../research/04-tech-options.md) · [调研 16](../research/16-piecing-engine.md) · [feature 001](001-m0-core-loop.md) · [feature 002](002-platforms.md)
+关联：[PRD 原则](../PRD.md#4-原则) · [SPEC §1.2.2](../SPEC.md#122-raw-和-derived)、[§1.2.3](../SPEC.md#123-contentmd-和各栏) · [插件协议 §2.9](../plugin-protocol.md#29-转换插件的字段)、[§4](../plugin-protocol.md#4-转换与导出插件协议) · [调研 04](../research/04-tech-options.md) · [调研 16](../research/16-piecing-engine.md) · [feature 001](../BUILD.md#3-现在做到哪) · [feature 002](../BUILD.md#3-现在做到哪)
 
 <a id="目标"></a>
 ## 目标

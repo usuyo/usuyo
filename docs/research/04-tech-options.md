@@ -5,7 +5,7 @@
 
 > 里程碑口径已废弃：项目改为按完整功能一次性开发。文中的 M0–M3 只指写作时 SPEC 的分段，请按功能面阅读。
 
-关联：[PRD](../PRD.md) · [SPEC §7 去重](../SPEC.md#7-去重) · [SPEC §11 索引](../SPEC.md#11-索引) · [ADR-001](../decisions/ADR-004-rust-tauri.md) · [feature 001](../features/001-m0-core-loop.md)
+关联：[PRD](../PRD.md) · [SPEC §7 去重](../SPEC.md#7-去重) · [SPEC §11 索引](../SPEC.md#11-索引) · [ADR-001](../decisions/ADR-004-rust-tauri.md) · [feature 001](../BUILD.md#3-现在做到哪)
 
 <a id="约定"></a>
 ## 约定

@@ -4,7 +4,7 @@
 状态：草案 · 2026-10-21 · 2026-11-03 审过：MCP 2026-07-28 仍是最新正式版，go-sdk 仍是 v1.8.0，[§1](#1-mcp-规范现状)–[§6](#6-mcp-之外的本地接口惯例) 的结论成立；[§7](#7-对歇存-mcp-与-acp-设计的启示) 的确认策略、信封和截断还没写进 [SPEC §10](../SPEC.md#10-mcp-工具m0)，本机接口的令牌已进 [插件协议 §5.1](../plugin-protocol.md#51-本机-http-接口)，改动提议的期限见 [open-decisions A2](../PRD.md#78-agent)；文中的 M0–M2 和 `xiecun` 标识照旧名读。
 
 > 里程碑口径已废弃：项目改为按完整功能一次性开发。文中的 M0–M3 只指写作时 SPEC 的分段，请按功能面阅读。
-关联：[PRD §4 原则 6、§5 Agent](../PRD.md) · [SPEC §10 MCP 工具（M0）](../SPEC.md#10-mcp-工具m0) · [ADR-001 技术栈](../decisions/ADR-004-rust-tauri.md) · [feature 001](../features/001-m0-core-loop.md)
+关联：[PRD §4 原则 6、§5 Agent](../PRD.md) · [SPEC §10 MCP 工具（M0）](../SPEC.md#10-mcp-工具m0) · [ADR-001 技术栈](../decisions/ADR-004-rust-tauri.md) · [feature 001](../BUILD.md#3-现在做到哪)
 
 本文回答一个问题：歇存的 MCP 服务与 ACP 客户端应该按哪一版规范、用哪个 SDK、给哪些客户端做，以及 [SPEC §10](../SPEC.md#10-mcp-工具m0) 里悬而未决的几处（确认策略、`changesetId` 句柄、`private` 条目、`untrusted` 信封形状、是否用 resources 暴露内容包）该怎么定。所有网页均于 2026-10-21 抓取；条目后括号里的日期是该来源自身的发布或发版日期。凭记忆、未在来源中确认的地方标「待核实」，汇总在 [§8](#8-待核实清单)。
 

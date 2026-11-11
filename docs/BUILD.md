@@ -32,7 +32,7 @@
 - **凭据。** cookie、令牌的值只在钥匙串和单次调用的 0600 临时文件里，不进日志、报错、前端、资料库；宿主自己造的报错只写字段名。不读 `~/.ssh`、`~/.aws`、`~/.npmrc` 这类目录和文件。
 - **删东西用 `trash`**，不用 `rm`。
 - **提交和推送。** 开发期直接在 `main` 上写，一个提交一件事，信息写 `<scope>: <summary>` 加 `-` 开头的几行；不加任何 AI 署名。推送攒成批，推之前确认 `gh api user --jq .login` 是仓库的主人。
-- **文档。** 改了行为就把 [SPEC](SPEC.md)、[插件协议](plugin-protocol.md) 写到和代码一样。文档里的交叉引用都要能点，标题前放显式的 `<a id>`；改完跑 `just docs <改过的文件>`（`tools/check_md.py` 查这几份的锚点和引用，`tools/resolve_links.py` 查全仓库的相对链接）。
+- **文档。** 改了行为就把 [SPEC](SPEC.md)、[插件协议](plugin-protocol.md) 写到和代码一样。文档里的交叉引用都要能点，标题前放显式的 `<a id>`；改完跑 `just docs <改过的文件>`（`tools/check_md.py` 查这几份的锚点和引用，`tools/resolve_links.py` 查全仓库的相对链接）。文档和代码对不上时，以 SPEC 为准；SPEC 有缺口就照[回答表](answers.md)里用户说过的方向补，并把补的地方写回 SPEC。
 - **界面。** 照画布（仓库旁边的 `usuyo-canvas/`，README 里有页面清单和设计值）搬，但布局要能伸缩：画布是 1440 宽的定宽稿，窗口默认 1280×800、最小 720×480，定宽会叠在一起。图标用 lucide-react，不用表情符号。
 - **平台名不进应用。** `apps/` 和 `crates/` 里，测试和样例库以外不出现任何平台的名字、网址、cookie 名；要用到就让插件清单声明。
 
@@ -63,6 +63,21 @@ flowchart LR
 - **内核守护进程**：资料库唯一的写方；索引删了能重建。
 - **界面壳**：webview 里跑前端，只经本机 HTTP 和事件找内核（[ADR-002](decisions/ADR-002-frontend-stack.md#和内核的接口)）。
 
+仓库怎么分：
+
+| 位置 | 管什么 | 依赖 |
+|---|---|---|
+| `crates/usuyo-contract` | 资料库的类型和 JSON Schema（MIT） | 无 |
+| `crates/usuyo-library` | 文件就是真相的那一层：id、路径、读写、改动记录、回收站、op | contract |
+| `crates/usuyo-plugin` | 插件协议的类型和宿主（MIT 的协议类型放这里的 `protocol` 模块） | 无 |
+| `crates/usuyo-index` | 能重建的索引和搜索 | contract、library |
+| `crates/usuyo-core` | 把上面几样串起来：收下、任务、转换的调度 | 上面全部 |
+| `crates/usuyo-api` | 本机 HTTP 和事件 | core |
+| `crates/usuyo-cli` | `usuyo` 这个可执行文件 | core、api |
+| `plugins/web` | 预装的通用网页获取插件 | plugin 的协议类型 |
+| `apps/desktop/src-tauri` | 壳 | 无（只启动 daemon） |
+| `apps/desktop/web` | 前端，照 [ADR-002](decisions/ADR-002-frontend-stack.md) | 本机接口 |
+
 接口做到哪（都还不算定稿）：
 
 | 接口 | 状态 | 缺什么 |
@@ -75,12 +90,12 @@ flowchart LR
 | [MCP 工具](SPEC.md#10-mcp-工具m0) | v0 草案，没实现 | 全部 |
 | [命令行](SPEC.md#9-clim0) | `init`、`add`、`get`、`search`、`reindex`、`daemon` | 不再加命令 |
 | [搜索语法](SPEC.md#11-索引) | tantivy 索引能搜；语法没写 | 查询串、筛选、分页 |
-| [投递接口](plugin-protocol.md#5-投递接口) | `/v1/ping`、`/v1/deliver`（只收链接）、`/v1/batches` 和按投递端发的令牌做了（[feature 002](features/002-platforms.md)），和窗口用的路由同一个监听口 | 已取到的内容（multipart）、批次查询 |
+| [投递接口](plugin-protocol.md#5-投递接口) | `/v1/ping`、`/v1/deliver`（只收链接）、`/v1/batches` 和按投递端发的令牌做了，和窗口用的路由同一个监听口 | 已取到的内容（multipart）、批次查询 |
 | [导出与读回](plugin-protocol.md#44-导出的-run-与-readback) | 草案 | 笔记库里的文件形状（[007](#007-导出读回和别的工具的导出)） |
 | 配置、版本策略（[SPEC §0.2](SPEC.md#02-版本与兼容)、[§1.1](SPEC.md#11-目录树)） | v1 草案 | 设置的完整清单（[010](#010-设置第一次打开收下浮层)） |
 | 订阅源 | 没有 | 你填的地址、订阅对象（[009](#009-跟着收)） |
 
-已经做完的两条线：[001 收下一条](features/001-m0-core-loop.md)、[002 平台](features/002-platforms.md)。它们剩下的、不归哪条线的：
+已经做完的两条线：001 收下一条（收下、存好、搜到、在窗口里看到），002 平台（登录、列出、导入、交进来的清单）；它们的做法已经写进 [SPEC](SPEC.md)、[插件协议](plugin-protocol.md) 和 [apps/desktop/README.md](../apps/desktop/README.md)。它们剩下的、不归哪条线的：
 
 - 壳起的内核，在壳没了（被信号杀掉、崩溃）以后该自己退出；现在留着接着跑，下次启动的壳找到它接着用（[apps/desktop/README.md](../apps/desktop/README.md#打开以后)）。
 - Safari 的 Userscripts 没有网站访问权限时先发 CORS 预检，投递接口（`/v1/…`）现在不答，请求就失败；这几条路径要答预检，只放扩展的来源。
