@@ -6,7 +6,8 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use usuyo_contract::{
-    CardMeta, Changeset, DraftMeta, JournalEntry, Manifest, NotesMeta, SCHEMAS, TopicMeta,
+    CardMeta, Changeset, DraftMeta, JournalEntry, Keyframes, Manifest, NotesMeta, Ocr, RunRecord,
+    SCHEMAS, TopicMeta,
 };
 
 fn read(path: &Path) -> Value {
@@ -66,6 +67,35 @@ fn samples_are_valid() {
     check_valid::<CardMeta>("card", |t| t.extra.len());
     check_valid::<DraftMeta>("draft", |t| t.extra.len());
     check_valid::<NotesMeta>("notes", |t| t.extra.len());
+    check_valid::<RunRecord>("run", run_extras);
+    check_valid::<Keyframes>("keyframes", |k| {
+        k.extra.len() + k.frames.iter().map(|f| f.extra.len()).sum::<usize>()
+    });
+    check_valid::<Ocr>("ocr", |o| {
+        o.extra.len()
+            + o.images
+                .iter()
+                .map(|i| i.extra.len() + i.lines.iter().map(|l| l.extra.len()).sum::<usize>())
+                .sum::<usize>()
+    });
+}
+
+fn run_extras(r: &RunRecord) -> usize {
+    r.extra.len()
+        + r.tool.as_ref().map_or(0, |t| t.extra.len())
+        + r.model.as_ref().map_or(0, |m| m.extra.len())
+        + r.inputs
+            .iter()
+            .map(|i| {
+                i.extra.len()
+                    + i.via
+                        .iter()
+                        .map(|v| v.extra.len() + v.tool.as_ref().map_or(0, |t| t.extra.len()))
+                        .sum::<usize>()
+            })
+            .sum::<usize>()
+        + r.outputs.iter().map(|o| o.extra.len()).sum::<usize>()
+        + r.marks.iter().map(|m| m.extra.len()).sum::<usize>()
 }
 
 #[test]
@@ -94,6 +124,43 @@ fn unknown_fields_survive_round_trip() {
     value["origins"][0]["x-note"] = Value::String("留着".into());
     let typed: Manifest = serde_json::from_value(value.clone()).unwrap();
     assert_eq!(serde_json::to_value(&typed).unwrap(), value);
+}
+
+#[test]
+fn run_unknown_fields_survive_round_trip() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("testdata");
+    let mut value = read(&dir.join("run.asr.json"));
+    value["x-other"] = serde_json::json!({"keep": [1, 2]});
+    value["inputs"][0]["via"][0]["futureField"] = Value::Bool(true);
+    value["outputs"][0]["x-note"] = Value::String("留着".into());
+    value["job"] = Value::String("summary".into());
+    value["marks"] = serde_json::json!([{"code": "future-mark", "level": 2}]);
+    let typed: RunRecord = serde_json::from_value(value.clone()).unwrap();
+    assert_eq!(serde_json::to_value(&typed).unwrap(), value);
+
+    let mut frames = read(&dir.join("ocr.frames.json"));
+    frames["images"][1]["lines"][0]["angle"] = serde_json::json!(3.5);
+    let typed: Ocr = serde_json::from_value(frames.clone()).unwrap();
+    assert_eq!(serde_json::to_value(&typed).unwrap(), frames);
+}
+
+#[test]
+fn record_paths_must_stay_inside() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("testdata");
+    let run: RunRecord = serde_json::from_value(read(&dir.join("run.frames.json"))).unwrap();
+    assert_eq!(run.bad_path(), None);
+    for bad in ["/etc/passwd", "../manifest.json", "raw/../../x", ""] {
+        let mut r = run.clone();
+        r.inputs[1].path = bad.into();
+        assert_eq!(r.bad_path(), Some(bad));
+        let mut r = run.clone();
+        r.outputs[0].path = bad.into();
+        assert_eq!(r.bad_path(), Some(bad));
+    }
+    let mut kf: Keyframes = serde_json::from_value(read(&dir.join("keyframes.full.json"))).unwrap();
+    assert_eq!(kf.bad_path(), None);
+    kf.frames[0].path = "../../raw/x.jpg".into();
+    assert_eq!(kf.bad_path(), Some("../../raw/x.jpg"));
 }
 
 #[test]

@@ -134,13 +134,13 @@ pub enum NotFoundReason {
     LinkExpired,
 }
 
-/// `needs` 的一项，「前缀:值」（协议 §3.3，`version:` 照 §13 第 30 项）。
+/// `needs` 的一项，「前缀:值」（协议 §3.3，`version:` 照 §13 第 30 项；`model:` 是转换插件缺的模型）。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub struct Need(String);
 
 impl Need {
-    const PREFIXES: [&'static str; 9] = [
+    const PREFIXES: [&'static str; 10] = [
         "runtime",
         "setting",
         "device",
@@ -150,6 +150,7 @@ impl Need {
         "state",
         "file",
         "version",
+        "model",
     ];
 
     pub fn as_str(&self) -> &str {
@@ -185,7 +186,7 @@ impl JsonSchema for Need {
     fn json_schema(_: &mut SchemaGenerator) -> Schema {
         json_schema!({
             "type": "string",
-            "pattern": "^(runtime|setting|device|permission|service|app|state|file|version):.+$"
+            "pattern": "^(runtime|setting|device|permission|service|app|state|file|version|model):.+$"
         })
     }
 }

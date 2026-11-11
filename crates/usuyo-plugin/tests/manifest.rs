@@ -2,7 +2,8 @@
 
 use usuyo_plugin::PluginError;
 use usuyo_plugin::protocol::{
-    Access, FetchInputKind, Login, OutputKind, PluginKind, PluginManifest,
+    Access, ConsumeKind, FetchInputKind, Login, ModelFormat, OutputKind, PluginKind,
+    PluginManifest, Produce,
 };
 
 fn testdata(name: &str) -> String {
@@ -325,5 +326,121 @@ fn visitors_are_declared_apart_from_sites_and_work_without_login() {
     rejects(
         &format!("{}visitors: []\n", testdata("manifest.transform.yaml")),
         "visitors",
+    );
+}
+
+fn asr() -> String {
+    testdata("manifest.transform.yaml")
+}
+
+#[test]
+fn transform_manifest_names_products_not_paths() {
+    let m = parse(&asr()).unwrap();
+    let PluginKind::Transform(spec) = m.kind else {
+        panic!("not a transform plugin");
+    };
+    assert_eq!(spec.produces, [Produce::Asr]);
+    assert_eq!(spec.consumes[0].kind, ConsumeKind::AudioPcm16k);
+    let model = &spec.models[0];
+    assert_eq!(model.format, ModelFormat::TarBz2);
+    assert_eq!(model.mirrors.len(), 1);
+    assert!(model.license.starts_with("FunASR"));
+
+    let media = replace(
+        &replace(
+            &asr(),
+            "consumes: [audio:pcm16k]",
+            "consumes: [media:video, media:audio]",
+        ),
+        "produces: [asr]",
+        "produces: [play, audio:pcm16k, probe, keyframes]",
+    );
+    let PluginKind::Transform(spec) = parse(&media).unwrap().kind else {
+        panic!("not a transform plugin");
+    };
+    assert_eq!(spec.produces.len(), 4);
+    for format in ["file", "tar.gz", "zip"] {
+        parse(&replace(
+            &asr(),
+            "format: tar.bz2",
+            &format!("format: {format}"),
+        ))
+        .unwrap();
+    }
+
+    // 旧的路径式写法不再认
+    for old in [
+        "derived/asr.vtt",
+        "derived/ocr/*.json",
+        "derived/keyframes/",
+        "derived/audio/",
+    ] {
+        rejects(
+            &replace(&asr(), "produces: [asr]", &format!("produces: [\"{old}\"]")),
+            "produces[0]",
+        );
+    }
+    rejects(
+        &replace(&asr(), "produces: [asr]", "produces: [asr, asr]"),
+        "produces",
+    );
+}
+
+#[test]
+fn transform_models_are_checked() {
+    let a = asr();
+    for format in ["tar.xz", "7z", "dir"] {
+        rejects(
+            &replace(&a, "format: tar.bz2", &format!("format: {format}")),
+            "models[0].format",
+        );
+    }
+    rejects(&replace(&a, "    format: tar.bz2\n", ""), "models[0]");
+    rejects(
+        &replace(
+            &a,
+            "    license: FunASR Model Open Source License（可商用，署名并写明模型名）\n",
+            "",
+        ),
+        "models[0]",
+    );
+    rejects(&replace(&a, "    size: 165783878\n", ""), "models[0]");
+    rejects(&replace(&a, "size: 165783878", "size: 0"), "models[0].size");
+    rejects(
+        &replace(
+            &a,
+            "license: FunASR Model Open Source License（可商用，署名并写明模型名）",
+            "license: \"  \"",
+        ),
+        "models[0].license",
+    );
+    for name in ["../escape", ".hidden", "Upper", "a/b", ""] {
+        rejects(
+            &replace(
+                &a,
+                "name: sense-voice-int8-2025-09-09",
+                &format!("name: \"{name}\""),
+            ),
+            "models[0].name",
+        );
+    }
+    rejects(
+        &replace(
+            &a,
+            "mirrors: [https://example.com/mirror/",
+            "mirrors: [file:///etc/",
+        ),
+        "models[0].mirrors[0]",
+    );
+    let twice = replace(
+        &a,
+        "mirrors: [https://example.com/mirror/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2025-09-09.tar.bz2]",
+        "mirrors: [https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2025-09-09.tar.bz2]",
+    );
+    rejects(&twice, "models[0].mirrors[0]");
+    let model = &a[a.find("  - name:").unwrap()..a.find("permissions:").unwrap()];
+    rejects(
+        &replace(&a, "permissions:", &format!("{model}permissions:")),
+        "models[1].name",
     );
 }

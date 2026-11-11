@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Health",
+  "description": "`health` 的结果（协议 §3.10 的 `ready`、`checks`）。",
+  "type": "object",
+  "properties": {
+    "checks": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/HealthCheck"
+      }
+    },
+    "ready": {
+      "description": "所有必要检查都通过、能接 `run`。",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "ready"
+  ],
+  "$defs": {
+    "HealthCheck": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "ok": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "ok"
+      ]
+    }
+  }
+}

@@ -1,0 +1,219 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RunParams",
+  "description": "`run` 的参数（协议 §4.2）。",
+  "type": "object",
+  "properties": {
+    "inputs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/RunInput"
+      }
+    },
+    "item": {
+      "$ref": "#/$defs/RunItem"
+    },
+    "options": {
+      "description": "这个插件的非密钥设置。",
+      "type": "object",
+      "additionalProperties": true,
+      "default": {}
+    },
+    "out": {
+      "description": "这次调用的输出目录，绝对路径，进程可写；插件只写这里。",
+      "type": "string"
+    },
+    "provider": {
+      "description": "清单的 `provider` 不是 `none`、你配了模型时才有（协议 §4.3）。",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ProviderGrant"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "want": {
+      "description": "这次要哪几种产出；取清单 `produces` 的子集，不为空。",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Produce"
+      }
+    }
+  },
+  "required": [
+    "item",
+    "want",
+    "inputs",
+    "out"
+  ],
+  "$defs": {
+    "ConsumeKind": {
+      "description": "转换插件吃的东西（协议 §2.9）。",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "media:video",
+            "media:audio",
+            "image",
+            "html",
+            "text",
+            "subtitle",
+            "derived:asr",
+            "derived:ocr",
+            "derived:vision",
+            "derived:keyframes"
+          ]
+        },
+        {
+          "description": "16 kHz 单声道 WAV，抽音轨插件的中间产物（`produces: audio:pcm16k`），不进资料库。",
+          "type": "string",
+          "const": "audio:pcm16k"
+        }
+      ]
+    },
+    "InputRole": {
+      "type": "string",
+      "enum": [
+        "video",
+        "audio"
+      ]
+    },
+    "Produce": {
+      "description": "转换插件产出的东西（协议 §2.9）：产物种类，不是路径。路径由宿主定在 `derived/runs/<runId>/` 下。\n同一个词表也是 `run` 的 `want` 和结果里每个输出的 `kind`（协议 §4.2）。",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "asr",
+            "keyframes",
+            "ocr",
+            "readable",
+            "vision",
+            "summary",
+            "embeddings"
+          ]
+        },
+        {
+          "description": "分开的画面和音轨合起来能播的文件。",
+          "type": "string",
+          "const": "play"
+        },
+        {
+          "description": "给转写用的 16 kHz 单声道 WAV；中间产物，不进资料库。",
+          "type": "string",
+          "const": "audio:pcm16k"
+        },
+        {
+          "description": "只回流的信息（结果里的 `probe`），不出文件。",
+          "type": "string",
+          "const": "probe"
+        }
+      ]
+    },
+    "ProviderGrant": {
+      "description": "宿主代发的模型参数（协议 §4.3）。`token` 只对这一次调用有效，`Debug` 不打印它。",
+      "type": "object",
+      "properties": {
+        "baseUrl": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "token": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "baseUrl",
+        "token",
+        "model"
+      ]
+    },
+    "RunInput": {
+      "description": "一个输入：放进进程暂存目录后的绝对路径，只读。",
+      "type": "object",
+      "properties": {
+        "frameSec": {
+          "description": "关键帧：在视频的第几秒。",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "imageKey": {
+          "description": "图文的图、封面：`imageKey`（SPEC §1.2.2）。",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "$ref": "#/$defs/ConsumeKind"
+        },
+        "mime": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "role": {
+          "description": "合起来能播（`play`）时，哪个是画面、哪个是音轨。",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InputRole"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "snapshot": {
+          "description": "所在的快照。",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "path"
+      ]
+    },
+    "RunItem": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "description": "条目的 `kind`（`video`、`post`、`article`…）。",
+          "type": "string"
+        },
+        "lang": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "title"
+      ]
+    }
+  }
+}

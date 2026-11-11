@@ -1,9 +1,10 @@
 # usuyo-plugin-kit
 
-写 usuyo 获取插件时依赖它：
+写 usuyo 插件时依赖它：
 
 - `protocol`：插件协议 v1 的类型，原样转自 `usuyo-plugin`。
-- `http`：发请求用的客户端。
+- `http`：获取插件发请求用的客户端。
+- `transform`：转换插件的 JSON-RPC 循环（见文末）。
 
 ```toml
 [dependencies]
@@ -85,3 +86,43 @@ fn local_policy() -> Policy {
 ```
 
 `Client::new` 和 `Policy::strict()` 总是严格的；没有环境变量、命令行参数或 feature 能把正式运行的检查放松。测试只连本机和固定的查域名表，不连真的网站。
+
+<a id="转换插件只写-run"></a>
+## 转换插件：只写 `run`
+
+转换插件是常驻进程，在 stdin、stdout 上一行一条 JSON-RPC 2.0（[协议 §4.1](../../docs/plugin-protocol.md#41-分帧与生命周期)、[§4.2](../../docs/plugin-protocol.md#42-转换的-run)）。`transform::serve` 管整个循环：读行、`describe`、`health`、`cancel`、`progress`、错误码。你交一份 `Describe` 和一个处理函数：
+
+```rust
+use usuyo_plugin_kit::protocol::{CallFailure, Describe, RunParams, RunResult};
+use usuyo_plugin_kit::transform::{self, RunContext};
+
+fn run(params: RunParams, ctx: &RunContext) -> Result<RunResult, CallFailure> {
+    for (i, input) in params.inputs.iter().enumerate() {
+        ctx.check_cancelled()?;
+        ctx.progress(i as f64, params.inputs.len() as f64, "file");
+        // 读 input.path，把产物写进 params.out
+    }
+    todo!("填 outputs、tool、options（实际用的参数，含默认值）、marks")
+}
+
+fn main() -> std::process::ExitCode {
+    let version = env!("CARGO_PKG_VERSION").parse().expect("Cargo version is semver");
+    match transform::serve(Describe::new(version, vec!["sense-voice".into()]), run) {
+        Ok(()) => std::process::ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::ExitCode::FAILURE
+        }
+    }
+}
+```
+
+- 要自己的 `health`（模型在不在、GPU 能不能用）就实现 `Transform` trait，覆盖 `health`；闭包只管 `run`。
+- 一次只跑一个 `run`，在单独的线程里；跑着的时候 `describe`、`health`、`cancel` 照样回。宿主同时发第二个 `run` 时回 `invalid-args`。
+- 收到 `cancel` 以后，处理函数不管返回什么，回给宿主的都是 `cancelled`。长的活隔一阵调 `ctx.check_cancelled()?`。
+- 处理函数返回的 `CallFailure` 原样交给宿主（`-32000`，`data` 是错误对象）；宿主才用的码（`timeout` 一类）、不带 `needs` 的 `dependency-missing`、panic、和 `want` 对不上的结果（`RunResult::problem`）都改成 `internal`，`message` 写原因。缺模型写 `dependency-missing` 加 `needs: ["model:<名字>"]`。
+- 一行最长 1 MiB，更长的回 `-32600` 并丢掉这一行；不是 JSON、不是对象、`jsonrpc` 不是 `"2.0"`、不认识的方法各回标准码，循环接着读，不会因为宿主发错了退出。
+- stdin 关了就结束：跑着的 `run` 收到取消，最多等 4 秒（宿主关 stdin 后等 5 秒才发 SIGTERM）；不肯停的，`serve` 返回 `RunDidNotStop`。
+- 日志写 stderr，不要往 stdout 打任何东西。
+
+测试不用起进程：`transform::serve_on` 读写给定的流，用 `std::io::pipe()` 一端当宿主写请求、一端读回答。

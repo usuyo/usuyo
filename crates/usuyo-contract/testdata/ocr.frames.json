@@ -1,0 +1,29 @@
+{
+  "images": [
+    {
+      "input": 0,
+      "frameSec": 0.5,
+      "width": 960,
+      "height": 540,
+      "lines": []
+    },
+    {
+      "input": 1,
+      "frameSec": 12.04,
+      "width": 960,
+      "height": 540,
+      "lines": [
+        {
+          "text": "Pour over in 3 stages",
+          "bbox": [
+            0.1,
+            0.8,
+            0.6,
+            0.07
+          ],
+          "confidence": 1.0
+        }
+      ]
+    }
+  ]
+}

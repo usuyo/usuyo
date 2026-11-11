@@ -1,0 +1,23 @@
+{
+  "snapshot": "019a6f2b-4a10-7c3e-8b21-0d9e8f7a6b5c",
+  "durationSec": 63.2,
+  "frames": [
+    {
+      "sec": 0.5,
+      "path": "keyframes/00000500.jpg",
+      "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "width": 960,
+      "height": 540,
+      "scene": null
+    },
+    {
+      "sec": 12.04,
+      "path": "keyframes/00012040.jpg",
+      "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "width": 960,
+      "height": 540,
+      "scene": 14.2
+    }
+  ],
+  "frozenSec": 58.1
+}

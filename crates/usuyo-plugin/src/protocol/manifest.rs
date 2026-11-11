@@ -127,6 +127,9 @@ pub enum ConsumeKind {
     Video,
     #[serde(rename = "media:audio")]
     Audio,
+    /// 16 kHz 单声道 WAV，抽音轨插件的中间产物（`produces: audio:pcm16k`），不进资料库。
+    #[serde(rename = "audio:pcm16k")]
+    AudioPcm16k,
     #[serde(rename = "image")]
     Image,
     #[serde(rename = "html")]
@@ -145,25 +148,63 @@ pub enum ConsumeKind {
     Keyframes,
 }
 
-/// 转换插件产出的文件（协议 §2.9、SPEC §1.2.2）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+/// 转换插件产出的东西（协议 §2.9）：产物种类，不是路径。路径由宿主定在 `derived/runs/<runId>/` 下。
+/// 同一个词表也是 `run` 的 `want` 和结果里每个输出的 `kind`（协议 §4.2）。
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
 pub enum Produce {
-    #[serde(rename = "derived/readable.md")]
-    Readable,
-    #[serde(rename = "derived/asr.vtt")]
+    /// 分开的画面和音轨合起来能播的文件。
+    #[serde(rename = "play")]
+    Play,
+    /// 给转写用的 16 kHz 单声道 WAV；中间产物，不进资料库。
+    #[serde(rename = "audio:pcm16k")]
+    AudioPcm16k,
+    /// 只回流的信息（结果里的 `probe`），不出文件。
+    #[serde(rename = "probe")]
+    Probe,
+    #[serde(rename = "asr")]
     Asr,
-    #[serde(rename = "derived/ocr/*.json")]
-    Ocr,
-    #[serde(rename = "derived/vision.md")]
-    Vision,
-    #[serde(rename = "derived/summary.md")]
-    Summary,
-    #[serde(rename = "derived/embeddings.bin")]
-    Embeddings,
-    #[serde(rename = "derived/keyframes/")]
+    #[serde(rename = "keyframes")]
     Keyframes,
-    #[serde(rename = "derived/audio/")]
-    Audio,
+    #[serde(rename = "ocr")]
+    Ocr,
+    #[serde(rename = "readable")]
+    Readable,
+    #[serde(rename = "vision")]
+    Vision,
+    #[serde(rename = "summary")]
+    Summary,
+    #[serde(rename = "embeddings")]
+    Embeddings,
+}
+
+impl Produce {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Produce::Play => "play",
+            Produce::AudioPcm16k => "audio:pcm16k",
+            Produce::Probe => "probe",
+            Produce::Asr => "asr",
+            Produce::Keyframes => "keyframes",
+            Produce::Ocr => "ocr",
+            Produce::Readable => "readable",
+            Produce::Vision => "vision",
+            Produce::Summary => "summary",
+            Produce::Embeddings => "embeddings",
+        }
+    }
+
+    /// 出不出文件：`probe` 只回信息。
+    pub fn writes_files(self) -> bool {
+        self != Produce::Probe
+    }
+}
+
+impl std::fmt::Display for Produce {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -352,16 +393,39 @@ pub struct Pacing {
     pub daily: Option<u32>,
 }
 
+/// 要宿主下载的模型（协议 §2.9）。宿主下，插件不联网；放进 `${MODELS}/<name>/`。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ModelSpec {
+    /// 目录名：小写字母、数字、`.`、`_`、`-`，不以 `.` 开头，一个清单里不重名。
     pub name: String,
     pub url: String,
+    /// 同一个 sha256 的别的地址，`url` 不行时按顺序试。
+    #[serde(default)]
+    pub mirrors: Vec<String>,
+    /// 整个下载文件的 sha256。
     pub sha256: String,
+    /// 整个下载文件的字节数，下载前给你看。
     pub size: u64,
+    pub format: ModelFormat,
+    /// 模型权重的许可，下载前给你看。
+    pub license: String,
     #[serde(default)]
     pub setting: Option<String>,
     #[serde(default)]
     pub value: Option<String>,
+}
+
+/// 下载下来的是什么：单个文件，或宿主解到 `${MODELS}/<name>/` 的压缩包。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub enum ModelFormat {
+    #[serde(rename = "file")]
+    File,
+    #[serde(rename = "tar.bz2")]
+    TarBz2,
+    #[serde(rename = "tar.gz")]
+    TarGz,
+    #[serde(rename = "zip")]
+    Zip,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -607,7 +671,7 @@ pub struct ListCapability {
     pub files: Vec<String>,
 }
 
-/// 转换插件的字段（协议 §2.9）。宿主还不跑转换插件，只读清单。
+/// 转换插件的字段（协议 §2.9）。宿主还不跑转换插件，只读清单。消息见 [`super::transform`]。
 #[derive(Debug, Clone, PartialEq)]
 pub struct TransformSpec {
     pub consumes: Vec<Consume>,
@@ -1537,11 +1601,42 @@ fn transform_spec(w: &WireManifest) -> Check<TransformSpec> {
     if produces.is_empty() {
         return Err(invalid("produces", "list at least one product"));
     }
+    if produces.iter().collect::<BTreeSet<_>>().len() != produces.len() {
+        return Err(invalid("produces", "a product is listed twice"));
+    }
     let provider = *required("provider", &w.provider)?;
     let models = w.models.clone().unwrap_or_default();
+    let mut names = BTreeSet::new();
     for (i, m) in models.iter().enumerate() {
-        check_http_url(&m.url).map_err(|e| invalid(format!("models[{i}].url"), e))?;
-        check_sha256(&format!("models[{i}].sha256"), &m.sha256)?;
+        let f = |name: &str| format!("models[{i}].{name}");
+        if !is_model_name(&m.name) {
+            return Err(invalid(
+                f("name"),
+                "use lowercase letters, digits, `.`, `_` and `-`, not starting with `.`, at most 100 bytes",
+            ));
+        }
+        if !names.insert(m.name.as_str()) {
+            return Err(invalid(
+                f("name"),
+                format!("model `{}` is listed twice", m.name),
+            ));
+        }
+        check_http_url(&m.url).map_err(|e| invalid(f("url"), e))?;
+        let mut urls = BTreeSet::from([m.url.as_str()]);
+        for (j, mirror) in m.mirrors.iter().enumerate() {
+            check_http_url(mirror).map_err(|e| invalid(format!("models[{i}].mirrors[{j}]"), e))?;
+            if !urls.insert(mirror.as_str()) {
+                return Err(invalid(
+                    format!("models[{i}].mirrors[{j}]"),
+                    "repeats `url` or another mirror",
+                ));
+            }
+        }
+        check_sha256(&f("sha256"), &m.sha256)?;
+        if m.size == 0 {
+            return Err(invalid(f("size"), "must be the download size in bytes"));
+        }
+        non_empty(&f("license"), &m.license)?;
         if let Some(key) = &m.setting
             && !w.settings.iter().any(|s| &s.key == key)
         {
@@ -1557,6 +1652,16 @@ fn transform_spec(w: &WireManifest) -> Check<TransformSpec> {
         provider,
         models,
     })
+}
+
+/// 模型名会成为 `${MODELS}` 下的一个目录名。
+fn is_model_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 100
+        && !name.starts_with('.')
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b"._-".contains(&b))
 }
 
 fn export_spec(w: &WireManifest) -> Check<ExportSpec> {

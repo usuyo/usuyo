@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RpcError",
+  "description": "JSON-RPC 的 `error`。协议错误用标准码；插件自己的失败用 [`RpcError::PLUGIN_FAILURE`]，\n`data` 是错误对象（协议 §3.3）。",
+  "type": "object",
+  "properties": {
+    "code": {
+      "type": "integer",
+      "format": "int64"
+    },
+    "data": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CallFailure"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "message": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "code",
+    "message"
+  ],
+  "$defs": {
+    "CallFailure": {
+      "description": "错误对象（协议 §3.3）。宿主自己记的失败也用它。",
+      "type": "object",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/ErrorCode"
+        },
+        "hint": {
+          "description": "给用户看的一句话，按 `USUYO_LOCALE` 写。",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "message": {
+          "description": "给日志看的原因。",
+          "type": "string"
+        },
+        "needs": {
+          "description": "`dependency-missing` 必填，缺的一次列全。",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Need"
+          }
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NotFoundReason"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "retryAfter": {
+          "description": "`rate-limited` 时多少秒后再试。",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "site": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ]
+    },
+    "ErrorCode": {
+      "description": "错误码。前 12 个由插件报，后 4 个只由宿主记（协议 §3.3）。",
+      "type": "string",
+      "enum": [
+        "unsupported-input",
+        "not-found",
+        "login-required",
+        "visitor-required",
+        "rate-limited",
+        "blocked",
+        "upstream-changed",
+        "network",
+        "dependency-missing",
+        "invalid-args",
+        "cancelled",
+        "internal",
+        "timeout",
+        "crashed",
+        "invalid-output",
+        "profile-busy"
+      ]
+    },
+    "Need": {
+      "type": "string",
+      "pattern": "^(runtime|setting|device|permission|service|app|state|file|version|model):.+$"
+    },
+    "NotFoundReason": {
+      "description": "`not-found` 的细分。",
+      "type": "string",
+      "enum": [
+        "deleted",
+        "private",
+        "paid",
+        "region",
+        "link-expired"
+      ]
+    }
+  }
+}

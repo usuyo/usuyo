@@ -1,4 +1,5 @@
 //! 从类型生成 JSON Schema（draft 2020-12），给别的语言的插件作者和 plugin-kit 用。
+//! 转换插件的 JSON-RPC 消息各一份：`describe`、`health`、`run` 的结果，`run`、`progress`、`cancel` 的参数，`error`。
 //! 提交在 `crates/usuyo-plugin/schema/`，测试核对和类型一致。
 
 use schemars::{JsonSchema, Schema, schema_for};
@@ -7,6 +8,7 @@ use serde_json::{Value, json};
 use super::envelope::{CallFailure, PluginEvent};
 use super::fetch::{Canonicalized, FetchOutput, ListPage, SourcesOutput};
 use super::manifest::WireManifest;
+use super::transform::{Cancel, Describe, Health, Progress, RpcError, RunParams, RunResult};
 
 /// 成功的信封：子命令的字段加 `ok: true`。
 fn success<T: JsonSchema>(title: &str) -> Schema {
@@ -69,5 +71,18 @@ pub fn schemas() -> Vec<(&'static str, Schema)> {
         ("list-output.schema.json", success::<ListPage>("ListOutput")),
         ("error-output.schema.json", failure()),
         ("event.schema.json", schema_for!(PluginEvent)),
+        (
+            "transform-describe-result.schema.json",
+            schema_for!(Describe),
+        ),
+        ("transform-health-result.schema.json", schema_for!(Health)),
+        ("transform-run-params.schema.json", schema_for!(RunParams)),
+        ("transform-run-result.schema.json", schema_for!(RunResult)),
+        (
+            "transform-progress-params.schema.json",
+            schema_for!(Progress),
+        ),
+        ("transform-cancel-params.schema.json", schema_for!(Cancel)),
+        ("transform-error.schema.json", schema_for!(RpcError)),
     ]
 }

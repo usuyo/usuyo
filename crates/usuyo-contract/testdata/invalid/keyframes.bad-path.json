@@ -1,0 +1,15 @@
+{
+  "snapshot": "019a6f2b-4a10-7c3e-8b21-0d9e8f7a6b5c",
+  "durationSec": 1.0,
+  "frames": [
+    {
+      "sec": 0.5,
+      "path": "../x.jpg",
+      "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "width": 1,
+      "height": 1,
+      "scene": null
+    }
+  ],
+  "frozenSec": 0.0
+}

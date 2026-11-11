@@ -1,0 +1,277 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RunResult",
+  "description": "`run` 的结果。宿主照它写 `run.json`（SPEC §1.2.2）。",
+  "type": "object",
+  "properties": {
+    "empty": {
+      "description": "这条没有可产出的东西；宿主不再往下游编排。",
+      "type": "boolean",
+      "default": false
+    },
+    "marks": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Mark"
+      }
+    },
+    "model": {
+      "description": "用了模型时是哪一个；sha256 由宿主自己核。",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ModelUsed"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "options": {
+      "description": "这次实际用的参数，含插件补上的默认值；宿主原样记下，重做时原样交回。",
+      "type": "object",
+      "additionalProperties": true,
+      "default": {}
+    },
+    "outputs": {
+      "description": "`out` 里的产物，每种一项；`empty: true` 时为空。",
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/RunProduct"
+      }
+    },
+    "probe": {
+      "description": "`want` 有 `probe` 时：每个输入的流。",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Probe"
+      }
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EmptyReason"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "tool": {
+      "description": "插件里干活的程序和版本，例如 `{name: sherpa-onnx, version: 2.0.1}`。",
+      "$ref": "#/$defs/UpstreamVersion"
+    }
+  },
+  "required": [
+    "tool"
+  ],
+  "$defs": {
+    "EmptyReason": {
+      "description": "`empty: true` 的原因。",
+      "type": "string",
+      "enum": [
+        "no-speech",
+        "no-audio-track",
+        "no-text"
+      ]
+    },
+    "Mark": {
+      "description": "很明显的标记，量出来的，只提示（feature 003 §6）。`duplicate-images` 由宿主算，不在这里。",
+      "type": "object",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/MarkCode"
+        },
+        "durationSec": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Seconds"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "frozenSec": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Seconds"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "speechSec": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Seconds"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "code"
+      ]
+    },
+    "MarkCode": {
+      "type": "string",
+      "enum": [
+        "no-audio-track",
+        "no-speech",
+        "static-picture",
+        "no-text"
+      ]
+    },
+    "MediaKind": {
+      "type": "string",
+      "enum": [
+        "video",
+        "audio",
+        "subtitle",
+        "other"
+      ]
+    },
+    "ModelUsed": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "Probe": {
+      "description": "一个输入里有哪些流、多长（`want: [probe]`）。宿主用它配对画面和音轨、判没有声音轨。",
+      "type": "object",
+      "properties": {
+        "durationSec": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Seconds"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "input": {
+          "description": "`inputs` 的下标。",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "streams": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProbeStream"
+          }
+        }
+      },
+      "required": [
+        "input",
+        "streams"
+      ]
+    },
+    "ProbeStream": {
+      "type": "object",
+      "properties": {
+        "codec": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "$ref": "#/$defs/MediaKind"
+        }
+      },
+      "required": [
+        "kind"
+      ]
+    },
+    "Produce": {
+      "description": "转换插件产出的东西（协议 §2.9）：产物种类，不是路径。路径由宿主定在 `derived/runs/<runId>/` 下。\n同一个词表也是 `run` 的 `want` 和结果里每个输出的 `kind`（协议 §4.2）。",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "asr",
+            "keyframes",
+            "ocr",
+            "readable",
+            "vision",
+            "summary",
+            "embeddings"
+          ]
+        },
+        {
+          "description": "分开的画面和音轨合起来能播的文件。",
+          "type": "string",
+          "const": "play"
+        },
+        {
+          "description": "给转写用的 16 kHz 单声道 WAV；中间产物，不进资料库。",
+          "type": "string",
+          "const": "audio:pcm16k"
+        },
+        {
+          "description": "只回流的信息（结果里的 `probe`），不出文件。",
+          "type": "string",
+          "const": "probe"
+        }
+      ]
+    },
+    "RelPath": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*(^|/)\\.{1,2}(/|$))(?!.*//)[^\\\\]+$"
+    },
+    "RunProduct": {
+      "description": "一个产物；`path` 相对 `out`。`keyframes` 的 `path` 是 `keyframes.json`，图片在它旁边的 `keyframes/` 里。",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/Produce"
+        },
+        "lang": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "$ref": "#/$defs/RelPath"
+        }
+      },
+      "required": [
+        "kind",
+        "path"
+      ]
+    },
+    "Seconds": {
+      "type": "number",
+      "minimum": 0
+    },
+    "UpstreamVersion": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ]
+    }
+  }
+}

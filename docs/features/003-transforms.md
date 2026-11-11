@@ -88,7 +88,7 @@
 | Apple SFSpeechRecognizer（旧接口） | 这台查到 `zh-CN` 可用、支持本机识别 | 没测成：从命令行程序请求语音识别授权，8 秒内没有回结果（推断：系统要 App 带用途说明，插件这种子进程拿不到） | 无 | 系统 API | 只有 Apple |
 | whisper.cpp 1.9.5 | 中文不是最好，社区常说有幻觉和标点问题（调研 04） | 未实测 | tiny 75 MiB 到 large 2.9 GiB（调研 04）；large-v3-turbo 的大小没查 | MIT | 都有 |
 | sherpa-onnx + Paraformer-zh int8（2025-10-07） | 中文专用，官方说带时间点（调研 04）；不出英文 | 未实测 | 228,262,632 字节；small 版（2024-03-09）77,920,048 字节 | 权重是 FunASR 模型许可（调研 04） | 都有 |
-| **sherpa-onnx 2.0.1 + SenseVoice-Small int8** | 中文、粤语占优（SenseVoice 仓库的对比，数字在图里没读到）；ITN 出标点和数字 | 未实测；仓库自称比 Whisper-Small 快 5 倍以上、比 Whisper-Large 快 15 倍 | 165,783,878 字节（压缩包） | 运行时 Apache-2.0；SenseVoice 代码 MIT，权重是 FunASR 模型许可（可商用，要署名、写模型名） | 都有 |
+| **sherpa-onnx 2.0.1 + SenseVoice-Small int8** | 中文、粤语占优（SenseVoice 仓库的对比，数字在图里没读到）；ITN 出标点和数字 | 实测（11-11，合成的 `say` 语音，机器上同时有别的编译）：11 分 23 秒的样例，普通优先级、crate 默认线程（实际 1 线程）实时率 0.13–0.15，2 线程 0.073–0.081；`taskpolicy -b` 下 0.36–1.2，是上限不是干净的数；加载模型约 1 秒，内存峰值 450–525 MB。CER 约 13%（2024-07-17 那份；合成语音偏向模型，真人口播会更差）。**2025-09-09 那份是 WSYue 粤语微调版**（解包后 README 写明来自 `ASLP-lab/WSYue-ASR`），普通话不出标点、不做 ITN，`speech.m4a` 转成「咖F」，CER 约 18%；原版是 `sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17.tar.bz2`（163,002,883 字节，sha256 `7d1efa2138a65b0b488df37f8b89e3d91a60676e416f515b952358d83dfd347e`，解包后 `model.int8.onnx` 239 MB），它转出「咖啡」「注水」、标点和数字 | 165,783,878 字节（压缩包，sha256 和 §4.3 一致；解包后约 247 MB） | 运行时 Apache-2.0；SenseVoice 代码 MIT，权重是 FunASR 模型许可（可商用，要署名、写模型名） | 都有 |
 | sherpa-onnx + FireRedASR2-AED int8 | 自报普通话 CER 2.89%，覆盖方言和中英混说（10-30 的调研笔记，这次没重查） | 未实测 | 838,589,068 字节 | Apache-2.0 | 都有 |
 | sherpa-onnx + Qwen3-ASR-0.6B int8 | 调研 04 记的 1.7B 自报分数都好过 Whisper-large-v3；0.6B 的没查 | 未实测 | 878,702,423 字节 | Apache-2.0 | 都有 |
 
@@ -466,26 +466,26 @@ export interface Pending {
 <a id="82-要写回-spec--协议的"></a>
 ### 8.2 要写回 SPEC / 协议的
 
-这份不改那两个文件；实现时一起改，改完在这里打勾。
+这份不改那两个文件；实现时一起改，改完在这里打勾。13 条都在 11-11 随 WP1、WP2 写回了。顺手多写的几处：协议 [§3.3](../plugin-protocol.md#33-信封与错误码) 的 `needs` 加前缀 `model:`（[§4.4](#44-什么时候转) 要它）；[§4.2](../plugin-protocol.md#42-转换的-run) 的结果加 `probe[]`（`want: [probe]` 回的流信息放这里，原来没有字段）；SPEC [§1.8](../SPEC.md#18-同步) 的同步表、[§1.4.2](../SPEC.md#142-卡片成稿记一句和划线) 里指向旧 meta 的一句跟着改；`keyframes.json`、`ocr.json` 也各有 schema（`urn:usuyo:schema:keyframes:1`、`…:ocr:1`）。
 
 **SPEC**
 
-1. [§1.2](../SPEC.md#12-条目文件夹) 的目录例子：`derived/` 下换成 `runs/<runId>/…`，`asr.vtt`、`ocr/`、`keyframes/`、`audio/`、`<文件>.meta.json` 从 `derived/` 根下去掉；`thumb.jpg`、`fingerprints.json` 不变。
-2. [§1.2.2](../SPEC.md#122-raw-和-derived)：写进 [§5](#5-存在哪怎么重做) 的规矩（一次一个文件夹、写了不改、谁在前按时间、做好没有怎么判、中间产物在按机器缓存、哪些同步）和 `run.json`（[§5.2](#52-转录记录-runjson)）；`ocr.json`、`keyframes.json`、`asr.vtt` 的格式（`frames` 也写 `ocr.json`）（[§5.3](#53-各样东西的格式)）；框是 0–1、原点左上。
-3. [§1.2.3](../SPEC.md#123-contentmd-和各栏) 的表：口播 = 平台字幕 + `asr` 转录；图里的字 = `ocr` 转录；加一行「画面里的字」（`frames`，链接里的层是 `video`，带 `#t=` 和 `xywh`）；画面 = `play` 或原样画面，加关键帧。
-4. [§0.4](../SPEC.md#04-id) 的引用：关键帧上的字写 `usuyo://item/<id>/video@<s>#t=12.04&xywh=percent:7.4,25.4,55,5.4`（Media Fragments 的时间和空间合用 `&`）。
-5. [§1.1](../SPEC.md#11-目录树)：按机器目录的 `models/<owner>/<repo>/<名字>/`（含 `model.json`）、缓存的 `cache/transform/`；`jobs.db` 多 `transform_jobs`；按机器的 `settings.json` 多 `transforms.auto`（默认 `true`）。
-6. [§1.7](../SPEC.md#17-删掉) 和只留文字：转录里的 `play.mp4`、`keyframes/` 跟着媒体走。
-7. [§1.9](../SPEC.md#19-schema-和-usuyo-contract)：加 schema `urn:usuyo:schema:run:1`。
+1. [x] [§1.2](../SPEC.md#12-条目文件夹) 的目录例子：`derived/` 下换成 `runs/<runId>/…`，`asr.vtt`、`ocr/`、`keyframes/`、`audio/`、`<文件>.meta.json` 从 `derived/` 根下去掉；`thumb.jpg`、`fingerprints.json` 不变。
+2. [x] [§1.2.2](../SPEC.md#122-raw-和-derived)：写进 [§5](#5-存在哪怎么重做) 的规矩（一次一个文件夹、写了不改、谁在前按时间、做好没有怎么判、中间产物在按机器缓存、哪些同步）和 `run.json`（[§5.2](#52-转录记录-runjson)）；`ocr.json`、`keyframes.json`、`asr.vtt` 的格式（`frames` 也写 `ocr.json`）（[§5.3](#53-各样东西的格式)）；框是 0–1、原点左上。
+3. [x] [§1.2.3](../SPEC.md#123-contentmd-和各栏) 的表：口播 = 平台字幕 + `asr` 转录；图里的字 = `ocr` 转录；加一行「画面里的字」（`frames`，链接里的层是 `video`，带 `#t=` 和 `xywh`）；画面 = `play` 或原样画面，加关键帧。
+4. [x] [§0.4](../SPEC.md#04-id) 的引用：关键帧上的字写 `usuyo://item/<id>/video@<s>#t=12.04&xywh=percent:7.4,25.4,55,5.4`（Media Fragments 的时间和空间合用 `&`）。
+5. [x] [§1.1](../SPEC.md#11-目录树)：按机器目录的 `models/<owner>/<repo>/<名字>/`（含 `model.json`）、缓存的 `cache/transform/`；`jobs.db` 多 `transform_jobs`；按机器的 `settings.json` 多 `transforms.auto`（默认 `true`）。
+6. [x] [§1.7](../SPEC.md#17-删掉) 和只留文字：转录里的 `play.mp4`、`keyframes/` 跟着媒体走。
+7. [x] [§1.9](../SPEC.md#19-schema-和-usuyo-contract)：加 schema `urn:usuyo:schema:run:1`。
 
 **插件协议**
 
-1. [§2.9](../plugin-protocol.md#29-转换插件的字段) `produces` 不再写路径，写产物种类：`play`、`audio:pcm16k`（中间产物）、`probe`（只回信息、不出文件）、`asr`、`keyframes`、`ocr`，以后 `readable`、`vision`、`summary`、`embeddings`；路径由宿主定在 `derived/runs/<runId>/` 下。`consumes` 加 `audio:pcm16k`。
-2. [§2.9](../plugin-protocol.md#29-转换插件的字段) `models[]` 加 `format`（`file`、`tar.bz2`、`tar.gz`、`zip`，压缩包由宿主解到 `${MODELS}/<名字>/`）、`mirrors`（同一个 sha256 的别的地址）、`license`（下载前给你看）；`size` 改必填。
-3. [§4.2](../plugin-protocol.md#42-转换的-run) `run` 的参数加 `want`（这次要哪几种产出，一个插件能做几种时用）；`inputs[]` 加 `snapshot`、`imageKey`、`frameSec`、`role`（`video`、`audio`）；结果加 `tool {name, version}`、`options`（实际用的参数，含默认值）、`marks[]`、每个输出的 `kind`；宿主照它写 `run.json`，不再写 `<文件>.meta.json`。`empty` 的 `reason` 词表：`no-speech`、`no-audio-track`、`no-text`。
-4. [§4.1](../plugin-protocol.md#41-分帧与生命周期)：宿主可以用后台优先级起转换进程；闲了可以关掉；`progress` 只用来判断卡住，不往界面报。
-5. [§13 第 38 项](../plugin-protocol.md#13-待定) 的答案：fetch 输出的 `media[]` 加可选 `group`，同一个字符串表示同一段时间线拆开的几个文件；没有 `group` 时宿主照 [§4.1](#41-四个转换插件) 的内容规则配。B 站插件交 `video.m4s`、`audio.m4s` 时写同一个 `group`。
-6. [§7.1](../plugin-protocol.md#71-常驻进程的路径)：没有沙箱时硬链接进 `in/` 挡不住插件改原文件，原样靠 `usuyo.fetch.json` 的哈希查出来（同步前和「检查与修复」时）；有沙箱以后照原文。
+1. [x] [§2.9](../plugin-protocol.md#29-转换插件的字段) `produces` 不再写路径，写产物种类：`play`、`audio:pcm16k`（中间产物）、`probe`（只回信息、不出文件）、`asr`、`keyframes`、`ocr`，以后 `readable`、`vision`、`summary`、`embeddings`；路径由宿主定在 `derived/runs/<runId>/` 下。`consumes` 加 `audio:pcm16k`。
+2. [x] [§2.9](../plugin-protocol.md#29-转换插件的字段) `models[]` 加 `format`（`file`、`tar.bz2`、`tar.gz`、`zip`，压缩包由宿主解到 `${MODELS}/<名字>/`）、`mirrors`（同一个 sha256 的别的地址）、`license`（下载前给你看）；`size` 改必填。
+3. [x] [§4.2](../plugin-protocol.md#42-转换的-run) `run` 的参数加 `want`（这次要哪几种产出，一个插件能做几种时用）；`inputs[]` 加 `snapshot`、`imageKey`、`frameSec`、`role`（`video`、`audio`）；结果加 `tool {name, version}`、`options`（实际用的参数，含默认值）、`marks[]`、每个输出的 `kind`；宿主照它写 `run.json`，不再写 `<文件>.meta.json`。`empty` 的 `reason` 词表：`no-speech`、`no-audio-track`、`no-text`。
+4. [x] [§4.1](../plugin-protocol.md#41-分帧与生命周期)：宿主可以用后台优先级起转换进程；闲了可以关掉；`progress` 只用来判断卡住，不往界面报。
+5. [x] [§13 第 38 项](../plugin-protocol.md#13-待定) 的答案：fetch 输出的 `media[]` 加可选 `group`，同一个字符串表示同一段时间线拆开的几个文件；没有 `group` 时宿主照 [§4.1](#41-四个转换插件) 的内容规则配。B 站插件交 `video.m4s`、`audio.m4s` 时写同一个 `group`。
+6. [x] [§7.1](../plugin-protocol.md#71-常驻进程的路径)：没有沙箱时硬链接进 `in/` 挡不住插件改原文件，原样靠 `usuyo.fetch.json` 的哈希查出来（同步前和「检查与修复」时）；有沙箱以后照原文。
 
 <a id="9-给-004-的"></a>
 ## 9. 给 004 的
@@ -506,7 +506,7 @@ export interface Pending {
 
 | # | 做什么 | 碰哪里 | 难度 | 挡住 |
 |---|---|---|---|---|
-| WP0 | 在这台量：sherpa-onnx + SenseVoice int8 转 [§12](#12-测试方案) 的口播样例和一段用户自己的 10 分钟口播（只在本机，不提交），记实时率、内存峰值；Vision 认 20 张小红书式的图（用户自己的，不提交）记每张耗时。先确认 `sherpa-onnx` crate 在这台编得过：它的 build script 第一次要联网下原生库，而 `just dev-plugins` 用 `--offline`，要么先联网编一次留在缓存里，要么改用 `shared` 特性指向本地的库。量完写进本文 [§3.1](#31-说的转成文字)。实时率比 0.2 慢（10 分钟要两分钟以上），回头换模型或改成只点名时转 | `plugins/asr-sherpa/bench/`（脚本进 git，数据不进） | 低 | WP10 的默认 |
+| WP0 | 在这台量：sherpa-onnx + SenseVoice int8 转 [§12](#12-测试方案) 的口播样例和一段用户自己的 10 分钟口播（只在本机，不提交），记实时率、内存峰值；Vision 认 20 张小红书式的图（用户自己的，不提交）记每张耗时。先确认 `sherpa-onnx` crate 在这台编得过：它的 build script 第一次要联网下原生库，而 `just dev-plugins` 用 `--offline`，要么先联网编一次留在缓存里，要么改用 `shared` 特性指向本地的库。量完写进本文 [§3.1](#31-说的转成文字)。实时率比 0.2 慢（10 分钟要两分钟以上），回头换模型或改成只点名时转。**11-11 做了一部分**：合成样例和 11 分钟合成口播量了速度、内存、CER（[§3.1](#31-说的转成文字)）；crate 默认静态链接，第一次编译从 GitHub release 下 `sherpa-onnx-v2.0.1-osx-arm64-static-lib.tar.bz2`（约 21 MB，不校验哈希），缓存在 `target/sherpa-onnx-prebuilt/`，同一个 target 目录再编 `--offline` 能过，换 target 目录或 `cargo clean` 后要联网或设 `SHERPA_ONNX_ARCHIVE_DIR`。还没量：用户自己的真人口播、Vision 认 20 张图、干净机器上的后台优先级 | `plugins/asr-sherpa/bench/`（脚本进 git，数据不进） | 低 | WP10 的默认 |
 | WP1 | `run.json` 类型、schema、样例；把 [§8.2](#82-要写回-spec--协议的) 的 SPEC 各条写回 | `crates/usuyo-contract`、`docs/SPEC.md` | 低 | WP5 |
 | WP2 | 转换的协议类型、清单词表、`models[]` 新字段；plugin-kit 的 JSON-RPC 循环；把 [§8.2](#82-要写回-spec--协议的) 的协议各条写回 | `crates/usuyo-plugin/src/protocol`、`crates/usuyo-plugin-kit`、`docs/plugin-protocol.md` | 中 | WP3、WP9、WP10 |
 | WP3 | 常驻转换进程：启动、核对、`run`、取消、卡住、闲了关、暂存目录、优先级 | `crates/usuyo-plugin/src/host/transform.rs` | 高 | WP6 |
@@ -596,8 +596,8 @@ usuyo daemon --port 47699 &
 
 **没核实的**
 
-- SenseVoice、FireRedASR2、Qwen3-ASR 在这台的速度、内存和中文效果，都没跑（没下载模型）；表里只有厂商的数和调研 04 的数。WP0 补。
-- SenseVoice 解包后多大；PP-OCRv6 各档模型多大（ModelScope 不给）；精简 ffmpeg 静态构建多大。
+- SenseVoice 在这台只用合成语音量过（[§3.1](#31-说的转成文字)）；真人口播的效果、干净机器上后台优先级的速度没量。FireRedASR2、Qwen3-ASR 都没跑（没下载模型）；表里只有厂商的数和调研 04 的数。
+- PP-OCRv6 各档模型多大（ModelScope 不给）；精简 ffmpeg 静态构建多大。
 - SFSpeechRecognizer 从 Tauri 的 App 里（而不是命令行子进程）能不能拿到授权：没试，也不打算用它当默认。
 - 中英混说一句里切换时 SenseVoice 的效果；小红书的手写、艺术字在 Vision 上的效果。
 - Media Fragments 里 `#t=` 和 `xywh=` 用 `&` 合写，系统 webview 播放器不认空间部分，只是我们自己解析：要在前端自己处理。

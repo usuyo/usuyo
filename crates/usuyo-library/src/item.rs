@@ -125,21 +125,11 @@ impl AddOutcome {
     }
 }
 
-/// `usuyo.fetch.json` 里的路径来自插件，文件也可能在 usuyo 外被改过：
-/// 只许快照文件夹以内的相对路径。回第一个不合的。
-fn bad_fetch_path(rec: &FetchRecord) -> Option<&str> {
-    rec.images
-        .iter()
-        .map(String::as_str)
-        .chain(rec.media.iter().map(|m| m.path.as_str()))
-        .chain(rec.files.iter().map(|f| f.path.as_str()))
-        .find(|p| !fsx::is_plain_relative(p))
-}
-
-/// 读一份 `usuyo.fetch.json` 并查过里面的路径。
+/// 读一份 `usuyo.fetch.json` 并查过里面的路径：路径来自插件，文件也可能在 usuyo 外被改过，
+/// 只许快照文件夹以内的相对路径。
 pub(crate) fn parse_fetch_record(path: &Path, bytes: &[u8]) -> Result<FetchRecord> {
     let rec: FetchRecord = fsx::parse_json(path, bytes)?;
-    match bad_fetch_path(&rec) {
+    match rec.bad_path() {
         Some(bad) => Err(Error::Malformed {
             path: path.to_owned(),
             reason: format!("path `{bad}` leaves the snapshot folder"),
@@ -565,7 +555,7 @@ impl Library {
     ) -> Result<Option<String>> {
         self.check_staged(&s.staged)?;
         fsx::reject_symlinks(&s.staged)?;
-        if let Some(bad) = bad_fetch_path(&s.fetch) {
+        if let Some(bad) = s.fetch.bad_path() {
             return Err(Error::InvalidArgs(format!(
                 "fetch output path `{bad}` leaves the output folder"
             )));

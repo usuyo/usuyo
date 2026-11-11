@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Cancel",
+  "description": "通知 `cancel` 的参数；插件仍要回那个 `run`，错误码 `cancelled`。",
+  "type": "object",
+  "properties": {
+    "id": {
+      "$ref": "#/$defs/RpcId"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "$defs": {
+    "RpcId": {
+      "description": "JSON-RPC 请求的 `id`：数字或字符串，原样回。",
+      "anyOf": [
+        {
+          "type": "integer",
+          "format": "int64"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    }
+  }
+}

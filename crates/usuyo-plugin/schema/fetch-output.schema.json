@@ -269,6 +269,17 @@
           ],
           "format": "double"
         },
+        "group": {
+          "description": "同一个值表示同一段时间线拆开的几个文件，例如分开存的画面和音轨（协议 §13 第 38 项）。",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MediaGroup"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "kind": {
           "$ref": "#/$defs/MediaKind"
         },
@@ -292,6 +303,10 @@
         "path",
         "kind"
       ]
+    },
+    "MediaGroup": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._:-]{1,64}$"
     },
     "MediaKind": {
       "type": "string",

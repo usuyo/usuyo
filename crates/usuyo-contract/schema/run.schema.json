@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:usuyo:schema:run:1",
+  "title": "usuyo run.json v1",
+  "description": "Record of one transform run, derived/runs/<runId>/run.json. Written once by the host, never changed. Normative source: docs/SPEC.md §1.2.2. Arrays are always present and may be empty; empty values are null. Unknown fields are tolerated at runtime (§0.2).",
+  "type": "object",
+  "required": [
+    "id",
+    "job",
+    "by",
+    "version",
+    "tool",
+    "model",
+    "options",
+    "at",
+    "device",
+    "trigger",
+    "redoOf",
+    "inputs",
+    "outputs",
+    "empty",
+    "reason",
+    "marks"
+  ],
+  "properties": {
+    "id": { "$ref": "#/$defs/uuid7" },
+    "job": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "examples": ["play", "asr", "keyframes", "ocr", "frames"]
+    },
+    "by": {
+      "type": "string",
+      "pattern": "^(host|[a-z0-9][a-z0-9-]*/[a-z0-9][a-z0-9._-]*)$"
+    },
+    "version": { "type": "string", "minLength": 1 },
+    "tool": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/tool" }] },
+    "model": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["name", "sha256"],
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "sha256": { "$ref": "#/$defs/sha256" }
+          }
+        }
+      ]
+    },
+    "options": { "type": "object" },
+    "at": { "$ref": "#/$defs/time" },
+    "device": { "$ref": "#/$defs/uuid7" },
+    "trigger": { "enum": ["auto", "open", "redo"] },
+    "redoOf": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/uuid7" }] },
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "sha256", "snapshot", "via"],
+        "properties": {
+          "path": { "$ref": "#/$defs/relPath" },
+          "sha256": { "$ref": "#/$defs/sha256" },
+          "snapshot": { "$ref": "#/$defs/uuid7" },
+          "via": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["by", "version", "op"],
+              "properties": {
+                "by": { "type": "string", "minLength": 1 },
+                "version": { "type": "string", "minLength": 1 },
+                "op": { "type": "string", "examples": ["audio:pcm16k", "probe"] },
+                "tool": { "$ref": "#/$defs/tool" },
+                "sha256": { "$ref": "#/$defs/sha256" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "outputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "kind", "size", "sha256"],
+        "properties": {
+          "path": { "$ref": "#/$defs/relPath" },
+          "kind": { "type": "string", "examples": ["play", "asr", "keyframes", "ocr"] },
+          "size": { "type": "integer", "minimum": 0 },
+          "sha256": { "$ref": "#/$defs/sha256" },
+          "lang": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "empty": { "type": "boolean" },
+    "reason": {
+      "oneOf": [{ "type": "null" }, { "enum": ["no-speech", "no-audio-track", "no-text"] }]
+    },
+    "marks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code"],
+        "properties": {
+          "code": { "enum": ["no-audio-track", "no-speech", "static-picture", "no-text"] },
+          "speechSec": { "$ref": "#/$defs/seconds" },
+          "durationSec": { "$ref": "#/$defs/seconds" },
+          "frozenSec": { "$ref": "#/$defs/seconds" }
+        }
+      }
+    }
+  },
+  "if": { "properties": { "empty": { "const": true } } },
+  "then": {
+    "properties": { "outputs": { "maxItems": 0 }, "reason": { "type": "string" } }
+  },
+  "else": { "properties": { "reason": { "type": "null" } } },
+  "$defs": {
+    "uuid7": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "time": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "relPath": {
+      "description": "Plain relative path: no leading /, no empty, . or .. segment, no backslash.",
+      "type": "string",
+      "pattern": "^(?!/)(?!.*(^|/)\\.{1,2}(/|$))(?!.*//)[^\\\\]+$"
+    },
+    "seconds": { "type": "number", "minimum": 0 },
+    "tool": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

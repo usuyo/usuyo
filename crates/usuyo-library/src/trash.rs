@@ -4,7 +4,9 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use serde_json::{Value, json};
-use usuyo_contract::{Changeset, Extra, ItemState, JournalEntry, Manifest, Redactable, TrashEntry};
+use usuyo_contract::{
+    Changeset, Extra, ItemState, JournalEntry, Manifest, Redactable, TrashEntry, is_plain_relative,
+};
 
 use crate::fsx::{self, list_files, read_opt, write_json};
 use crate::hash::hash_tag;
@@ -37,7 +39,7 @@ fn parse_entry(path: &std::path::Path, bytes: &[u8]) -> Result<TrashEntry> {
     let e: TrashEntry = fsx::parse_json(path, bytes)?;
     match std::iter::once(&e.path)
         .chain(&e.files)
-        .find(|p| !fsx::is_plain_relative(p))
+        .find(|p| !is_plain_relative(p))
     {
         Some(bad) => Err(Error::malformed(
             path,
@@ -104,7 +106,7 @@ impl Library {
         }
     }
 
-    pub(crate) fn trashed_manifest(&self, e: &TrashEntry) -> Result<Manifest> {
+    pub fn trashed_manifest(&self, e: &TrashEntry) -> Result<Manifest> {
         fsx::read_json(&self.trash_path(&e.id)?.join("manifest.json"))
     }
 
@@ -498,8 +500,11 @@ impl Library {
         self.drop_from_proposals(&ids)?;
         if e.kind == "item" {
             self.drop_facts(&ids)?;
+            // 并进它的、只留文字时从它移出来的，随它一起移除。
             for other in self.trash_entries()? {
-                if other.reason == "merge" && ids.contains(&other.target) {
+                if matches!(other.reason.as_str(), "merge" | "keep-text")
+                    && ids.contains(&other.target)
+                {
                     fsx::remove_dir(&self.trash_path(&other.id)?)?;
                 }
             }

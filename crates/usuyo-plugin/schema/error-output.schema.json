@@ -93,7 +93,7 @@
     },
     "Need": {
       "type": "string",
-      "pattern": "^(runtime|setting|device|permission|service|app|state|file|version):.+$"
+      "pattern": "^(runtime|setting|device|permission|service|app|state|file|version|model):.+$"
     },
     "NotFoundReason": {
       "description": "`not-found` 的细分。",

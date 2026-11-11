@@ -110,7 +110,7 @@ itemId      = <platform> "-" base32(sha256(identityKey) 前 16 字节)
 **引用**是普通链接，例 `[口播 01:42](usuyo://item/douyin-4plrcxk343onmyxibmrr672kga/asr@<snapshotId>#t=102.5)`。
 
 - **`@<snapshotId>`**：秒数只对某一份媒体成立。时间类的层（`asr`、`video`、`audio`）必带，是那份媒体所在的快照；`text` 带引用时的主快照；`comments` 必带所在的快照；`vision` 带它的媒体所在的快照；`ocr/<imageKey>`、`image/<imageKey>`、`summary` 和 `notes` 不带。
-- **片段**：时间 `#t=102.5`、`#t=102.5,110`（Media Fragments 1.0）；图片区域 `#xywh=percent:10,20,30,40`；原文 `#:~:text=[前缀-,]原话[,-后缀]`（URL Fragment Text Directives），太长写 `开头,结尾`；段落 `#^<块 id>`。
+- **片段**：时间 `#t=102.5`、`#t=102.5,110`（Media Fragments 1.0）；图片区域 `#xywh=percent:10,20,30,40`；画面上某一秒的一块（关键帧上的字）把时间和空间用 `&` 合写，例 `usuyo://item/<id>/video@<s>#t=12.04&xywh=percent:7.4,25.4,55,5.4`（系统的播放器不认空间部分，由 usuyo 自己解析）；原文 `#:~:text=[前缀-,]原话[,-后缀]`（URL Fragment Text Directives），太长写 `开头,结尾`；段落 `#^<块 id>`。
 - **编码**：只编码原话部分里 ASCII 字母数字以外的字符，连同 `-`、`,`、`&`；语法字符和 `t=`、`xywh=` 后的数字照原样。例：「40 克」后面的「闷蒸 30 秒」写 `#:~:text=40%20%E5%85%8B-,%E9%97%B7%E8%92%B8%2030%20%E7%A7%92`。
 - `asr@<s>#t=42` 和 `video@<s>#t=42` 指同一处：层名只决定打开哪一栏，去重、找回按条目、快照、时间比。
 
@@ -198,8 +198,8 @@ SHA-256，小写十六进制，算存下来的字节。字段名叫 `sha256` 时
 
 | 在哪 | 放什么 |
 |---|---|
-| `libraries/<libraryId>/` | `device.json`（`deviceId`、库路径）、`index/`、`clock-mark`（回收站到期用的时钟记录，见 [§1.7](#17-删掉)）、`jobs.db`（任务状态、跟着收列过的身份、翻页游标和 `--since`、还没展开的短链（重试）、上次写的 `content.md` 的哈希）、`sync.db`（游标、底本（你写的那层和 manifest 上次见过的那份，没开同步也存，[§1.4](#14-你写的那一层) 外面改了靠它合并）、上次见过的路径）、`activity/`（Agent 搜过、读过什么，一行一次，不给 Agent、不同步；格式和留多久归第 2 层，推断）、`exports/<target>.json`（每个对象 `{path, hash, base}`，`base` 是上次和 vault 对上的那份用户层：写出去了就是交给导出插件的那份，没写出去就是那次读回的值，私密脚注已换成占位；[§1.4](#14-你写的那一层) 导出读回靠它合并）、`imports/<importBatch>/`（导入文件副本）、`backups/` |
-| 根目录 | `settings.json`（外观、模型端点、插件启用和设置；11-11 代码只用 `library` 和 `plugins.<插件 id>.settings`）、`plugins/`、`profiles/`、`models/`、`cache/plugins/<owner>/<repo>/`、本机接口令牌 `api-token`、投递令牌 `deliver-tokens.json`、`daemon.json`、登录索引 `logins.json`、`run/`、`inbox/`、日志 `logs/daemon.log`（各项见下面「11-11 代码」） |
+| `libraries/<libraryId>/` | `device.json`（`deviceId`、库路径）、`index/`、`clock-mark`（回收站到期用的时钟记录，见 [§1.7](#17-删掉)）、`jobs.db`（任务状态、转换任务 `transform_jobs`（feature 003，还没做）、跟着收列过的身份、翻页游标和 `--since`、还没展开的短链（重试）、上次写的 `content.md` 的哈希）、`sync.db`（游标、底本（你写的那层和 manifest 上次见过的那份，没开同步也存，[§1.4](#14-你写的那一层) 外面改了靠它合并）、上次见过的路径）、`activity/`（Agent 搜过、读过什么，一行一次，不给 Agent、不同步；格式和留多久归第 2 层，推断）、`exports/<target>.json`（每个对象 `{path, hash, base}`，`base` 是上次和 vault 对上的那份用户层：写出去了就是交给导出插件的那份，没写出去就是那次读回的值，私密脚注已换成占位；[§1.4](#14-你写的那一层) 导出读回靠它合并）、`imports/<importBatch>/`（导入文件副本）、`backups/` |
+| 根目录 | `settings.json`（外观、模型端点、插件启用和设置，`transforms.auto`（自动转换，默认 `true`）；11-11 代码只用 `library` 和 `plugins.<插件 id>.settings`）、`plugins/`、`profiles/`、`models/<owner>/<repo>/<名字>/`（转换插件的模型，宿主下载、校验后放这里，旁边写 `model.json`：`{name, sha256, size, license, files: [{path, size, sha256}]}`）、`cache/plugins/<owner>/<repo>/`、`cache/transform/<itemId>/<runId>/`（一条转换链的中间产物，例如给转写用的 16 kHz WAV，链跑完就删）、本机接口令牌 `api-token`、投递令牌 `deliver-tokens.json`、`daemon.json`、登录索引 `logins.json`、`run/`、`inbox/`、日志 `logs/daemon.log`（各项见下面「11-11 代码」） |
 | 系统钥匙串 | 同步令牌和库钥匙、模型和插件密钥、平台登录态（[协议 §6](plugin-protocol.md#6-凭据)） |
 
 11-11 代码：
@@ -226,8 +226,12 @@ SHA-256，小写十六进制，算存下来的字节。字段名叫 `sha256` 时
 items/douyin/douyin-4plrcxk343onmyxibmrr672kga/
   manifest.json  content.md  notes.md  highlights.md
   raw/<snapshotId>/   usuyo.fetch.json  page.html  images/001.jpg  media/video.mp4  comments.json …
-  derived/            readable.md  asr.vtt  vision.md  summary.md  ocr/<imageKey>.json
-                      keyframes/  thumb.jpg  fingerprints.json  audio/  embeddings.bin  <文件>.meta.json
+  derived/
+    runs/<runId>/     run.json  play.mp4                          一次转换一个文件夹（§1.2.2）
+    runs/<runId>/     run.json  asr.vtt
+    runs/<runId>/     run.json  keyframes.json  keyframes/00012040.jpg …
+    runs/<runId>/     run.json  ocr.json
+    readable.md  vision.md  summary.md  embeddings.bin  thumb.jpg  fingerprints.json
 ```
 
 <a id="3-manifestjson"></a>
@@ -284,10 +288,38 @@ items/douyin/douyin-4plrcxk343onmyxibmrr672kga/
 - **`raw/<snapshotId>/`** 是插件的输出目录整个移进来（[协议 §3.6](plugin-protocol.md#36-fetch-与输出目录)），之后不改。宿主只加 `usuyo.fetch.json`：fetch 输出去掉 `credentialsUpdate`，加 `files: [{path, size, sha256}]`。同步前和「检查与修复」时按它比对，对不上就报「原样被改过」、不上传。只有你选「只留文字」或「删掉」，里面的文件才移去回收站。
 - **放进 `raw/` 之前**（11-11 代码）：插件的输出先在 `.usuyo/tmp/` 下暂存，不在那里的不收。暂存的文件夹里不能有符号链接（`invalid-args`）；`raw/<snapshotId>/<路径>` 不超过 140 个 UTF-16 单位（`too-large`）。宿主在拿资料库的锁之前按 1 MiB 一块算好各文件的哈希，拿到锁以后再比一次文件名和大小，变了就拒（「hash 之后改过」）。逐个哈希和已有快照一样时不新建快照。
 - **`usuyo.fetch.json` 里的路径**（`images`、`media[].path`、`files[].path`）只能是快照文件夹里的相对路径：不空、没有 `.`、`..`、绝对路径和盘符。加快照时不合的回 `invalid-args`，读到不合的当这个文件写坏了。
-- **`derived/`** 每个产物旁一个 `<文件>.meta.json`（目录产物是 `<目录>.meta.json`），宿主代写（[协议 §4.2](plugin-protocol.md#42-转换的-run)）：`{by, version, at, inputs: [{path, sha256}], model?, empty?, reason?}`；`by` 是插件 id 或 `host`，`empty: true` 时只写 meta。
-- **某层做好没有**看 meta 在不在、`inputs` 的哈希对不对得上；输入不在本机（媒体没下到这台、已只留文字）就只看 meta；不同步的产物（`audio/`、`embeddings.bin`）看本机产物和 meta 都在。失败、在等的只在本机 `jobs.db`。
-- `imageKey` 是图片字节 SHA-256 的前 16 位十六进制，两份快照里同一张图只认一次。关键帧在 `derived/keyframes/`；`readable.md`（网页抽出的正文）由转换插件产出；`thumb.jpg`、`fingerprints.json` 由宿主产出；`audio/` 是中间产物，宿主可以删；`embeddings.bin` 的格式归 plugin-kit。`audio/`、`embeddings.bin` 不同步。
-- 各文件的内容格式归 plugin-kit 的 `derived/` schema，第 3 层定（[协议 §10](plugin-protocol.md#10-契约测试与-plugin-kit)）；v0 写过的先照用：`ocr/<imageKey>.json` 是 `[{text, bbox: [x, y, w, h], confidence}]`，`asr.vtt` 是分段带时间戳的 WebVTT，`vision.md` 每段注明帧时间。
+- **`derived/runs/<runId>/`：一次转换一个文件夹**（feature 003 [§5](features/003-transforms.md#5-存在哪怎么重做)）。`runId` 是 UUIDv7。宿主先在 `.usuyo/tmp/` 拼好整个文件夹（插件的产出、宿主算的哈希、`run.json`），再改名进来；写进去以后不改，要改就是再转一次，新的一次和旧的并排。哪一次排在前面按 `runId`（就是时间）算，不另存「现在是哪份」；引用按秒、按 `imageKey` 找回，不认 `runId`，换了一次转录，写过的引用不断。11-11 代码：只有 `crates/usuyo-contract` 里的类型和 schema，写入、列出还没做。
+- **做好没有**：一个任务（`job`）算做好，要有一次这个 `job` 的转录，它 `inputs` 的 sha256 盖住了现在要的那些输入；哪个插件、哪个版本做的都算，插件升级不自动重转。`empty: true` 的也算做好。失败、在等的只在本机 `jobs.db`。
+- **中间产物不进资料库**：给转写用的 16 kHz WAV 一类放按机器缓存 `cache/transform/<itemId>/<runId>/`（[§1.1](#11-目录树)），链跑完就删；来历记在用它的那次转录的 `inputs[].via` 里。
+- **同步**：`run.json` 和文字产物（`asr.vtt`、`ocr.json`、`keyframes.json`）跟着文字同步；二进制产物（`play.mp4`、`keyframes/*.jpg`）跟着媒体，现在不同步。另一台看得到关键帧上的字和秒数，看不到那张帧。
+- **`run.json`**（`urn:usuyo:schema:run:1`）由宿主写，插件不写；照它写的插件、工具、模型、参数和输入能再跑出同样的东西，或换掉其中一样再跑一次。数组总是出现，没有值的写 `null`：
+
+| 字段 | 取值 |
+|---|---|
+| `id` | UUIDv7，等于文件夹名 |
+| `job` | `play` `asr` `keyframes` `ocr`（图文的图、封面）`frames`（关键帧上的字）；以后 `readable` `vision` `summary` `embeddings` 照这个形状加 |
+| `by`、`version` | 插件 id 和版本；宿主自己判出来的写 `host` 和内核版本 |
+| `tool` | 插件里干活的程序 `{name, version}`，插件在 `run` 的结果里报（[协议 §4.2](plugin-protocol.md#42-转换的-run)）；`by: host` 为 `null` |
+| `model` | `{name, sha256}`，sha256 是宿主核过的；没用模型为 `null` |
+| `options` | 这次实际用的参数，含插件补上的默认值；重做时原样交回 |
+| `at`、`device` | 什么时候、哪台转的 |
+| `trigger` | `auto`、`open`（你打开了这条）、`redo`（你点的） |
+| `redoOf` | 点「再转一次」「换一个转」时当时眼前那一份的 `id`，不然 `null`；只是来历，不改谁在前 |
+| `inputs[]` | `{path, sha256, snapshot, via}`：相对条目文件夹的路径（`raw/<snapshotId>/…`；`frames` 的是 `derived/runs/<runId>/keyframes/<文件>`）、所在快照；`via` 是中间转换的每一步 `{by, version, op, tool?, sha256?}`，不出文件的（`probe`）没有 `sha256` |
+| `outputs[]` | `{path, kind, size, sha256, lang?}`：文件夹里的产物，路径相对这个文件夹；`asr` 带 `lang`；关键帧图片算在 `keyframes.json` 那一项里 |
+| `empty`、`reason` | 没有可产出的东西时 `true`，`reason` 是 `no-speech`、`no-audio-track` 或 `no-text`，这时 `outputs` 为空；`false` 时 `reason` 为 `null` |
+| `marks[]` | 很明显的标记 `{code, speechSec?, durationSec?, frozenSec?}`，`code` 是 `no-audio-track` `no-speech` `static-picture` `no-text`（feature 003 [§6](features/003-transforms.md#6-很明显的标记)）；只提示，不藏任何东西 |
+
+- 词表（`job`、`trigger`、`kind`、`reason`、`code`）在类型里是字符串：别的设备上新版本写的转录，旧版本照样读得进来、照样写回。`inputs[].path`、`outputs[].path` 只能是普通相对路径，规则同 `usuyo.fetch.json`，读到不合的当这个文件写坏了。
+- **`no-audio-track`** 不经转写插件：宿主让抽音轨的插件做一次 `probe`（[协议 §4.2](plugin-protocol.md#42-转换的-run)），看不到音频流就自己写一次 `job: asr` 的转录：`by: host`，`inputs` 是那个画面文件，`via` 记那次 `probe`，`empty: true`，`reason: no-audio-track`。
+- `imageKey` 是图片字节 SHA-256 的前 16 位十六进制，两份快照里同一张图只认一次。`readable.md`（网页抽出的正文）由转换插件产出，现在没有插件产出它，做的时候照转录的规矩；`thumb.jpg`、`fingerprints.json` 由宿主产出；`embeddings.bin` 的格式归 plugin-kit，不同步。
+
+**产物的格式**（schema 在 `crates/usuyo-contract/schema/`，[§1.9](#19-schema-和-usuyo-contract)）。时间是秒，最多 3 位小数（[§0.5](#05-时间)）；**图上的框**是 `[x, y, w, h]`，0–1，按图的宽高算，**原点在左上角**，引用链接里换成百分数（[§0.4](#04-id)）。
+
+- **`asr.vtt`**：WebVTT，UTF-8；一条 cue 一段人声，长于 `maxCueSec`（默认 15 秒）的在标点处切开；cue 里是纯文字，不带模型的标签；开头一行 `NOTE` 写语言。一段人声都没有时不写文件，`empty: true`。平台给的字幕（`raw/<snapshotId>/` 里 `kind: subtitle` 的 `.vtt`）原样读、不转，语言取那一项的 `lang`，没有就从文件名 `subtitle.<lang>.vtt` 取。
+- **`play.mp4`**：分开存的画面和音轨不重编码地合成一个能播的文件（`-c copy`，`+faststart`），原样不动。
+- **`keyframes.json`**（`urn:usuyo:schema:keyframes:1`）和 `keyframes/<毫秒，8 位补零>.jpg`：`{snapshot, durationSec, frames: [{sec, path, sha256, width, height, scene}], frozenSec}`；`scene` 是镜头变化的分，不是镜头变化处取的帧为 `null`；`path` 相对转录文件夹。
+- **`ocr.json`**（`urn:usuyo:schema:ocr:1`），`ocr` 和 `frames` 都写它：`{images: [{input, imageKey | frameSec, width, height, lines: [{text, bbox, confidence}]}]}`。`input` 是 `run.json` 里 `inputs` 的下标；图文的图和封面带 `imageKey`，关键帧带 `frameSec`，两个只带一个。`confidence` 是引擎自己的分（0–1），不跨引擎比。一次 `ocr` 转录可以盖几张图；快照新来了图，只为没盖到的再排一次。
 
 <a id="4-contentmd"></a>
 <a id="123-contentmd-和各栏"></a>
@@ -317,9 +349,11 @@ items/douyin/douyin-4plrcxk343onmyxibmrr672kga/
 | 栏 | 文件 | 来源 | 链接里的层 |
 |---|---|---|---|
 | 原文 | 主快照 `raw/<snapshotId>/usuyo.fetch.json` 的 `text`，或 `derived/readable.md`；`content.md` 是只读副本 | 平台；机器 | `text` |
-| 图里的字 | `derived/ocr/<imageKey>.json` | 机器 | `ocr/<imageKey>`、`image/<imageKey>` |
-| 口播 | `derived/asr.vtt`；平台字幕在 `raw/…/media/*.vtt` | 机器；平台 | `asr`、`video`、`audio` |
-| 画面、AI 摘要 | `derived/vision.md`、`derived/summary.md` | 机器 | `vision`、`summary` |
+| 图里的字 | `ocr` 转录的 `derived/runs/<runId>/ocr.json` | 机器 | `ocr/<imageKey>`、`image/<imageKey>` |
+| 口播 | 平台字幕 `raw/…/media/*.vtt`，加各次 `asr` 转录的 `derived/runs/<runId>/asr.vtt`，几份并排 | 平台；机器 | `asr`、`video`、`audio` |
+| 画面 | `play` 转录的 `play.mp4`，没有就是原样的画面；加最新一次 `keyframes` 转录的关键帧 | 原样；机器 | `video` |
+| 画面里的字 | `frames` 转录的 `derived/runs/<runId>/ocr.json` | 机器 | `video`，带 `#t=` 和 `xywh`（[§0.4](#04-id)） |
+| 画面描述、AI 摘要 | `derived/vision.md`、`derived/summary.md` | 机器 | `vision`、`summary` |
 | 你的笔记 | `notes.md` | 你 | `notes` |
 | 评论（可选） | `raw/<snapshotId>/comments.json` | 平台 | `comments` |
 
@@ -428,7 +462,7 @@ takeaway: "闷蒸 30 秒比水温要紧"
 - 发布日期照 [§0.5](#05-时间)：取 `publishedAtOriginal` 的日期部分，没有就取 UTC 日期。
 - 标题、作者、日期在插入引用时抄下，之后不跟着刷新：那是你这一页的字。
 - MCP 读主题、卡片、成稿时，宿主把脚注解析成 `{label, item, layer, snapshot, fragment, quote, title, author, date, resolved}` 一并给；`add-citation` 收其中的 `item`、`layer`、`snapshot`、`fragment`、`quote`，加 `anchor`（[§1.5.1](#151-op-词表)），标签宿主随机起，标题、作者、日期宿主插入时抄；Agent 不读写脚注语法（工具形状归第 2 层）。
-- 时间类的 `@<snapshotId>` 是 `asr.vtt.meta.json` 的 `inputs` 里那份媒体所在的快照（[§0.4](#04-id)）。链接里 `#:~:text=` 的原话超过 32 个字写 `开头,结尾`；「」里的原话照全文存，不截。
+- 时间类的 `@<snapshotId>` 是那次转录 `run.json` 的 `inputs[].snapshot`，即那份媒体所在的快照（[§0.4](#04-id)）。链接里 `#:~:text=` 的原话超过 32 个字写 `开头,结尾`；「」里的原话照全文存，不截。
 - **找回**：时间类按「那份媒体还在、这一秒在时长内」判有效，原话只作提示；那一秒的文字变了（新引擎把「40 克」写成「四十克」），把现在的文字并排显示，不标「找不到」。文字类按 `#:~:text=` 模糊匹配（去标点、数字归一，推断），还找不到才显示存下的原话并标出来。
 
 <a id="144-发生过的事"></a>
@@ -524,7 +558,7 @@ Agent（经 MCP）或宿主调的模型改已有内容，一个提议一个文�
 | 整条条目 | 条目文件夹原样改名进来，加 `entry.json` | 里面全部文件 |
 | 主题、卡片、成稿 | `body.md` | `["body.md"]` |
 | `notes`、`content` | 原文件名的那个文件（`reason: conflict`） | 那一个 |
-| 只留文字 | 照条目里的相对路径放，例 `raw/<snapshotId>/images/001.jpg` | 这些路径 |
+| 只留文字 | 照条目里的相对路径放，例 `raw/<snapshotId>/images/001.jpg`、`derived/runs/<runId>/play.mp4` | 这些路径 |
 - **到期**：照回收站项 `entry.json` 的 `trashedAt`（条目、主题、卡片、成稿都一样；2026-11-11 定，原先写的是条目按 manifest 的 `stateAt`），加当前的 `trashDays` 现算（[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突)「到期照 A 写的算」），「一直」不到期；`entry.json` 的 `trashedAt` 照同步来的值写，不用本机挪进来的时间；`merge`、`conflict`、`kind: notes` 和 `kind: content` 只在本机，按本机的。移除本机文件，记 `purge`（`actor: host`）；`keep-text`、`merge`、`conflict`、`kind: notes` 和 `kind: content` 到期只做这一步。对象整个离开资料库的（条目 `reason: delete` 或 `undo`；主题、卡片、成稿，`conflict` 的除外）还要清干净、推墓碑，见下面的「清干净」。开了同步的库启动后先拉完一轮再判，按服务器时间（[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突)），离线时不移除，推墓碑走 CAS，底本不是最新就放弃这次、重新判断。没开同步的按本机时间；本机时间比记下的最大时间晚了超过 `trashDays`（会把回收站整个移除），先不移除，你点「照时间移除」才移除（推断；这个放行还没做，[TODO](TODO.md#4-开始写代码)）。你在回收站里「立即清除」（[product-model §7.3](product-model.md#73-其他对象)）照到期办，不等 `trashDays`（11-06 定，[§1.10 第 16 条](#110-要你看一眼)）；确认框列出还在引用它的页（推断）。11-11 代码：守护进程启动时查一遍，之后每 6 小时一遍（每遍都是整个回收站），到期的照下面移除。到期时间照回收站项 `entry.json` 的 `trashedAt` 加 `trashDays` 现算；`trashDays` 是「一直」时不到期。一项读不了的跳过、只记回收站 id 和错误码（日志里没有标题），不拦别的。时钟守卫：记下的最大时间放在 `libraries/<libraryId>/clock-mark`（还没有就取改动记录里最晚的一行）；这一遍有到期的、而现在比它晚了超过 `trashDays` 整天时，一项也不移除，只记下有几项因此留着（日志里的 `held`），`clock-mark` 也不更新。没有这种情况的话，这一遍结束把 `clock-mark` 更新成它和现在中较晚的。代码里有「照时间移除」这条路（跳过守卫），但还没有接口和界面能触发（还没做，[TODO](TODO.md#4-开始写代码)）；每 6 小时的那一遍永远只用 `Check`，守卫拦下以后会不会自己放行是个开放的问题，也记在 TODO。回收站里一项也可以「立即清除」：`POST /trash/{trashId}/purge`，`trashId` 是回收站项的 id，不是条目 id；成功回 204，一项照到期办，整个离开资料库的条目发 `item-removed`。现在没有列出回收站的接口，也没有回收站页。
 - **再遇到同一身份**（11-06 改，[§1.10 第 12 条](#110-要你看一眼)：不记删过的，移除以后再收下就是普通收下）：
 
@@ -541,7 +575,7 @@ Agent（经 MCP）或宿主调的模型改已有内容，一个提议一个文�
 - **移除时写什么**（11-11 代码）：只在本机的（`keep-text`、`merge`、`conflict`、`kind: notes`、`kind: content`）删掉文件夹，记一行普通的 `purge`，`change` 是 `{trashId}`。整个离开的记一行 `purge`，`targets[].id`、`targets[].path`、`change` 都是 `{"redacted": true}`；再照上面清干净：所有设备的段里，`targets[].id` 是它、路径里或 `change` 里出现它（含 `aliases`）的行都脱敏；提议里它的 op 删掉，删空了的提议文件删掉；页面里的链接换成 `usuyo://item/forgotten`，回收站里的副本也换，记一行 `purge`（`actor: host`，`targets` 是改过的文件）。索引、`sync.db`、`backups/`、`exports/` 由调用方清。还不推墓碑（同步还没做）。
 - 别的台拉到墓碑后照上面移除自己的文件、清干净自己手上的。条目、主题、卡片、成稿的墓碑只在清干净时推，不另带标记，移除时不在线的那台回来拉到也照办（推断）；它离线时改过或拿回来的照下面「和同步」，那一份等它自己到期再清干净。改写是确定的：每台先改自己手上全部段的副本（包括别的台写的）；各段的主人再把改过的段推一次，记录换成新的 blob id，旧 blob 照[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突) 的清理规则清掉，以后加入的设备拉到的就是改过的。主人已被撤销（`devices/<deviceId>.json` 有 `revokedAt`）时由推墓碑的那台推，这是「每段只有一台写」唯一的例外。同一条一台重新收下、一台移除：拉到对方的版本后条目还在的，那台不做这些改写，界面一行「另一台又收下了，没清掉」（推断）。
 - **导出到 Obsidian 的那份**（11-06 定，[§1.10 第 15 条](#110-要你看一眼)）：归那边，usuyo 删掉时不去动它。读回遇到库里没有或在回收站的 `usuyo_id`，由宿主判成 `item-deleted`（不由插件报），那份文件不读也不写，只在这次导出的问题列表里写一行，不重建文件夹；插件报的 `problems` 里的文件同样不读也不写（[协议 §4.4](plugin-protocol.md#44-导出的-run-与-readback)）。
-- **只留文字**：先生成 `derived/thumb.jpg`，再把 `raw/` 里的图片、视频、音频和 `derived/keyframes/`、`derived/audio/` 移进回收站（`reason: keep-text`），字都留着（11-11 代码：照各快照 `usuyo.fetch.json` 里的 `images` 和 `kind` 是 `video`、`audio` 的 `media` 移；字幕和 `other` 留着；算文字类的输出是 `text`、`html`、`subtitle`、`meta`、`comments`；`thumb.jpg` 还没生成）；`state: text-only`，以后只 `--want` 文字类。回收站里还在时能恢复，之后点「重新取视频」存新快照。
+- **只留文字**：先生成 `derived/thumb.jpg`，再把 `raw/` 里的图片、视频、音频和各次转录里的 `play.mp4`、`keyframes/` 移进回收站（`reason: keep-text`），`run.json` 和文字产物（`asr.vtt`、`ocr.json`、`keyframes.json`）留着，字都留着（11-11 代码：照各快照 `usuyo.fetch.json` 里的 `images` 和 `kind` 是 `video`、`audio` 的 `media` 移；字幕和 `other` 留着；算文字类的输出是 `text`、`html`、`subtitle`、`meta`、`comments`；`thumb.jpg` 还没生成）；`state: text-only`，以后只 `--want` 文字类。回收站里还在时能恢复，之后点「重新取视频」存新快照。
 - **和同步**：一台删、另一台同时改了笔记，回收站赢（撤销那批例外），改动并进回收站那份，出「两边都改过的」卡片。已移除、离线的那台回来时改过它：推的时候撞上墓碑，就放进它自己的回收站再留 `trashDays`，不悄悄复活。离线那台主动收下、从回收站拿回来的不算这种：照 [§1.8](#18-同步) 以墓碑的 `revision` 为底写新版本（推断）。
 
 <a id="18-同步"></a>
@@ -554,8 +588,8 @@ Agent（经 MCP）或宿主调的模型改已有内容，一个提议一个文�
 | `raw/` 的字；网页、图片、视频 | 原样 · S1；S2 放 R2 | 只增；同一路径内容不同只会是出错，两份都留；和 `usuyo.fetch.json` 对不上就不上传 |
 | `manifest.json` | 混合 · S1 | 按 [§1.2.1](#121-manifestjson-v1) 最后一列 |
 | `content.md` | 机器 · 不同步 | 各台照主快照自己生成，见 [§1.2.3](#123-contentmd-和各栏) |
-| `derived/` 的字；`keyframes/`、`thumb.jpg` | 机器 · S1；S2 | 先推上服务器的留下，不出卡片 |
-| `derived/audio/`、`embeddings.bin` 和它们的 `.meta.json` | 机器 · 不同步 | 各台自己算 |
+| `derived/` 的字（含 `runs/<runId>/` 的 `run.json`、`asr.vtt`、`ocr.json`、`keyframes.json`）；`play.mp4`、`keyframes/`、`thumb.jpg` | 机器 · S1；S2 | 先推上服务器的留下，不出卡片；转录写了不改，同一个 `runId` 不会两边不一样 |
+| `embeddings.bin` | 机器 · 不同步 | 各台自己算 |
 | `notes.md`、`highlights.md`、`topics/`、`cards/`、`drafts/`、`canvas/` | 你写的 · S1 | 见下 |
 | `library.json` | 元数据 · S1 | `formatVersion` 要一样，远端新就不同步 |
 | `settings.json`、`subscriptions/`、`devices/` | 元数据 · S1 | 按字段，同一项两边改出卡片 |
@@ -585,10 +619,11 @@ Agent（经 MCP）或宿主调的模型改已有内容，一个提议一个文�
 
 schema 先定这几条：
 
-- `$id`：`urn:usuyo:schema:manifest:1`、`…:changeset:1`、`…:journal-entry:1`、`…:topic:1`、`…:card:1`、`…:draft:1`、`…:notes:1`。
+- `$id`：`urn:usuyo:schema:manifest:1`、`…:changeset:1`、`…:journal-entry:1`、`…:topic:1`、`…:card:1`、`…:draft:1`、`…:notes:1`、`…:run:1`、`…:keyframes:1`、`…:ocr:1`。
 - manifest：`author`、`publishedAt`、`publishedAtOriginal`、`lang`、`missingReason`、`stateAt`、`textOnly` 以外都必填（`topics` 也必填，可以是空数组）；`id` 匹配 `^[a-z0-9][a-z0-9-]*-[a-z2-7]{26}$`；`primarySnapshot` 可为 `null`；`origins` 至少一项，每项必填 `id` `entry` `takenBy` `at` `device`；快照必填 `id` `plugin` `at` `access` `outputs` `missing` `completeness`。`completeness`、`state` 是封闭枚举，`kind`、`outputs` 写 `examples` 不写 `enum`。
 - changeset：必填 `id` `createdAt` `proposer` `state` `ops`，op 必填 `id` `op` `target` `base` `state`；`proposer` 匹配 `^(agent|model):`；`base` 为 `null` 或 `^sha256:[0-9a-f]{64}$`。
 - journal-entry：必填 `id` `n`（从 1 起）`t` `device` `actor` `op` `targets` `batch`；`actor` 匹配 `^(user|external|sync|host|agent:[a-z0-9-]+|model:.+|plugin:.+|subscription:[0-9a-f-]{36})$`；脱敏后的 `targets[].id`、`targets[].path`、`change` 是 `{"redacted": true}`，所以允许对象。
+- run：[§1.2.2](#122-raw-和-derived) 的字段全部必填，可为 `null` 的是 `tool`、`model`、`redoOf`、`reason`；`id`、`device`、`redoOf`、`inputs[].snapshot` 是 UUIDv7，`at` 是 UTC 毫秒；`sha256` 是 64 位小写十六进制；`inputs[].path`、`outputs[].path` 是普通相对路径；`empty: true` 时 `outputs` 为空、`reason` 有值，否则 `reason` 为 `null`。`trigger`、`reason`、`marks[].code` 写 `enum`，`job`、`outputs[].kind` 写 `examples`。keyframes、ocr：插件写、宿主读的产物，`bbox` 四个数都在 0–1，`imageKey` 和 `frameSec` 恰好一个。样例有完整的 `asr`、`no-speech`、宿主写的 `no-audio-track`、`keyframes`、输入是另一次转录的关键帧的 `frames`。
 - topic、card、draft、notes：描述解析出来的 front matter 对象（[§1.4](#14-你写的那一层)）。必填：topic、card 是 `id` `title` `createdAt`，draft 另加 `kind`，notes 没有；`id` 匹配 `^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`，时间是 RFC 3339；同样不写 `additionalProperties: false`。
 
 <a id="110-要你看一眼"></a>

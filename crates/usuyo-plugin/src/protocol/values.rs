@@ -212,6 +212,79 @@ impl fmt::Display for RelPath {
 
 string_schema!(RelPath, "RelPath", {"type": "string", "pattern": "^(?!/)(?!.*(^|/)\\.{1,2}(/|$))(?!.*//)[^\\\\]+$"});
 
+/// 秒数：有限、不小于 0。
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(try_from = "f64", into = "f64")]
+pub struct Seconds(f64);
+
+impl Seconds {
+    pub fn get(self) -> f64 {
+        self.0
+    }
+}
+
+impl TryFrom<f64> for Seconds {
+    type Error = String;
+    fn try_from(v: f64) -> Result<Self, String> {
+        if v.is_finite() && v >= 0.0 {
+            Ok(Self(v))
+        } else {
+            Err(format!("{v} is not a number of seconds"))
+        }
+    }
+}
+
+impl From<Seconds> for f64 {
+    fn from(v: Seconds) -> f64 {
+        v.0
+    }
+}
+
+string_schema!(Seconds, "Seconds", {"type": "number", "minimum": 0});
+
+/// fetch 输出 `media[]` 的 `group`：同一个字符串表示同一段时间线拆开的几个文件（协议 §3.7）。
+/// 1–64 个字节，只有字母、数字和 `. _ : -`。
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub struct MediaGroup(String);
+
+impl MediaGroup {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl TryFrom<String> for MediaGroup {
+    type Error = String;
+    fn try_from(text: String) -> Result<Self, String> {
+        let ok = !text.is_empty()
+            && text.len() <= 64
+            && text
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"._:-".contains(&b));
+        if ok {
+            Ok(Self(text))
+        } else {
+            Err(format!("`{text}` is not 1-64 letters, digits or `._:-`"))
+        }
+    }
+}
+
+impl TryFrom<&str> for MediaGroup {
+    type Error = String;
+    fn try_from(text: &str) -> Result<Self, String> {
+        Self::try_from(text.to_owned())
+    }
+}
+
+impl From<MediaGroup> for String {
+    fn from(v: MediaGroup) -> String {
+        v.0
+    }
+}
+
+string_schema!(MediaGroup, "MediaGroup", {"type": "string", "pattern": "^[A-Za-z0-9._:-]{1,64}$"});
+
 /// 插件 id：GitHub 的 `owner/repo`，全小写；`builtin/` 留给预装插件（协议 §2.2）。
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]

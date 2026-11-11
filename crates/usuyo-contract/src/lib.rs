@@ -7,9 +7,13 @@ mod changeset;
 mod fetch;
 mod frontmatter;
 mod journal;
+mod keyframes;
 mod library_file;
 mod manifest;
+mod ocr;
 mod op;
+mod path;
+mod run;
 mod trash;
 
 use std::collections::BTreeMap;
@@ -18,12 +22,16 @@ pub use changeset::{ChangeOp, Changeset, DecisionState, ProposalState};
 pub use fetch::{FetchRecord, FileHash, MediaFile};
 pub use frontmatter::{CardMeta, DraftMeta, FrontMatter, NotesMeta, TopicMeta};
 pub use journal::{JournalEntry, Redactable, Redacted, Target};
+pub use keyframes::{Keyframe, Keyframes};
 pub use library_file::{DeviceRecord, LibraryFile, Settings};
 pub use manifest::{
     Author, Completeness, Identity, ItemState, MachinePicked, Manifest, Matched, Origin, Snapshot,
     TagMark, Tags, TextOnly,
 };
+pub use ocr::{Ocr, OcrImage, OcrLine};
 pub use op::{Hunk, Op, OpTarget, SetChange};
+pub use path::is_plain_relative;
+pub use run::{Mark, ModelRef, RunInput, RunOutput, RunRecord, Tool, ViaStep};
 pub use trash::TrashEntry;
 
 /// 不认识的字段，按键名排序存着。
@@ -54,6 +62,9 @@ pub const SCHEMAS: &[(&str, &str)] = &[
     ("card", include_str!("../schema/card.schema.json")),
     ("draft", include_str!("../schema/draft.schema.json")),
     ("notes", include_str!("../schema/notes.schema.json")),
+    ("run", include_str!("../schema/run.schema.json")),
+    ("keyframes", include_str!("../schema/keyframes.schema.json")),
+    ("ocr", include_str!("../schema/ocr.schema.json")),
 ];
 
 pub(crate) fn is_false(b: &bool) -> bool {

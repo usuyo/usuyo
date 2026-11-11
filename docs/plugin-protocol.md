@@ -398,23 +398,25 @@ run:
 
 | 字段 | 类型 | 必填 | 含义 | 例子 |
 |---|---|---|---|---|
-| `consumes` | 数组 | 是 | 吃什么：`media:video`、`media:audio`、`image`、`html`、`text`、`subtitle`、`derived:asr`、`derived:ocr`、`derived:vision`、`derived:keyframes`。`text` 指原文那一栏：主快照的 `text`，没有就是 `derived/readable.md`（[SPEC §1.2.3](SPEC.md#123-contentmd-和各栏)）。只吃特定格式时写成对象 `{kind, mime}`，宿主编排时先让抽音轨一类插件转成要的格式 | `[{kind: media:audio, mime: [audio/wav]}]` |
-| `produces` | 字符串数组 | 是 | 产出 [SPEC §1.2.2](SPEC.md#122-raw-和-derived) 里的哪些文件：`derived/readable.md`、`derived/asr.vtt`、`derived/ocr/*.json`、`derived/vision.md`、`derived/summary.md`、`derived/embeddings.bin`、`derived/keyframes/`；抽出的音轨写 `derived/audio/`，下面的文件算 `media:audio`。`derived/thumb.jpg`、`derived/fingerprints.json` 由宿主产出，不进 `produces` | `[derived/asr.vtt]` |
+| `consumes` | 数组 | 是 | 吃什么：`media:video`、`media:audio`、`audio:pcm16k`（别的插件抽出的 16 kHz 单声道 WAV）、`image`、`html`、`text`、`subtitle`、`derived:asr`、`derived:ocr`、`derived:vision`、`derived:keyframes`。`text` 指原文那一栏：主快照的 `text`，没有就是 `derived/readable.md`（[SPEC §1.2.3](SPEC.md#123-contentmd-和各栏)）。只吃特定格式时写成对象 `{kind, mime}`，宿主编排时先让抽音轨一类插件转成要的格式 | `[{kind: media:audio, mime: [audio/wav]}]` |
+| `produces` | 字符串数组 | 是 | 产出哪几种东西，写种类不写路径：`play`（分开的画面和音轨合起来能播的文件）、`audio:pcm16k`（给转写用的中间音频，不进资料库）、`probe`（只回流的信息，不出文件）、`asr`、`keyframes`、`ocr`；以后 `readable`、`vision`、`summary`、`embeddings`。不重复。路径由宿主定在 `derived/runs/<runId>/` 下（[SPEC §1.2.2](SPEC.md#122-raw-和-derived)）；`thumb.jpg`、`fingerprints.json` 由宿主产出，不进 `produces` | `[asr]` |
 | `provider` | 枚举 | 是 | 要不要模型 provider：`none`、`optional`、`required`（[§4.3](#43-模型与密钥由宿主代发)） | `none` |
-| `models` | 对象数组 | 否 | 要宿主下载的模型：`name`、`url`、`sha256`、`size`，放进 `${MODELS}`。可选 `setting`、`value`：只在用户把这个设置选成这个值之后、第一次 `run` 之前才下载；没写的在安装时下载 | 见下 |
+| `models` | 对象数组 | 否 | 要宿主下载的模型，放进 `${MODELS}/<name>/`：`name`（成为目录名：小写字母、数字、`.`、`_`、`-`，不以 `.` 开头，最多 100 字节，不重名）、`url`、`mirrors`（可选，同一个 sha256 的别的地址，`url` 不行时按顺序试）、`sha256`（整个下载文件）、`size`（整个下载文件的字节数，大于 0）、`format`（`file`、`tar.bz2`、`tar.gz`、`zip`；压缩包由宿主解到 `${MODELS}/<name>/`）、`license`（下载前给你看），这些都必填。可选 `setting`、`value`：只在用户把这个设置选成这个值之后才用到这个模型。什么时候下见 feature 003 [§4.3](features/003-transforms.md#43-ffmpeg-和模型怎么到这台电脑上)：第一次用到时问一句，点了才下，宿主下，插件不联网 | 见下 |
 
 ```yaml
 kind: transform
-consumes: [media:audio, media:video]
-produces: [derived/asr.vtt]
+consumes: [audio:pcm16k]
+produces: [asr]
 provider: none
 models:
-  - name: sensevoice-small
-    url: https://example.com/models/sensevoice-small.onnx
-    sha256: 2c624232cdd221771294dfbb310aca000a0df6ac8b66b696d90ef06fdefb64a3
-    size: 234881024
+  - name: sense-voice-int8-2025-09-09
+    url: https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2025-09-09.tar.bz2
+    sha256: 7305f7905bfcf77fa0b39388a313f3da35c68d971661a65475b56fb2162c8e63
+    size: 165783878
+    format: tar.bz2
+    license: FunASR Model Open Source License（可商用，署名并写明模型名）
     setting: model
-    value: sensevoice-small
+    value: sense-voice
 permissions:
   fs:
     read: ["${INPUT}", "${MODELS}"]
@@ -641,6 +643,7 @@ SPEC v0 的适配器协议（[SPEC 附](SPEC.md#附v0-各节和-18-处的去向)
 | `app:` | 要开着的客户端 | `app:wechat` |
 | `state:` | 要用户处理的状态：`unlocked`（屏幕或手机没解锁）、`logged-in`（客户端里没登录）、`debugging`（手机没开开发者选项或 USB 调试）、`authorized`（手机还没允许这台电脑调试） | `state:unlocked` |
 | `file:` | 导入文件的副本已经不在 | `file:twitter-2026-10-30.zip` |
+| `model:` | 转换插件要的模型（清单 `models[].name`）不在 `${MODELS}` 里 | `model:sense-voice-int8-2025-09-09` |
 
 11-11 照 [§13](#13-待定) 第 30 项加了前缀 `version:`，例 `version:usuyo>=1.3`。
 
@@ -758,7 +761,7 @@ SPEC v0 的适配器协议（[SPEC 附](SPEC.md#附v0-各节和-18-处的去向)
 | `ok` | 无 | 必填，成功为 `true` |
 | `identity` | 必填，`platform` 必填 | 没有平台内容 ID 的条目（聊天记录、转发的图片一类）可以省略，或写 `{"platform": "file"}` 不带 `contentId`，省略等于 `{"platform": "file"}`；这样的条目不参与身份层，去重只走内容层（[SPEC §0.4](SPEC.md#04-id)） |
 | `textFormat` | 无 | 可选，`plain`（默认）或 `markdown` |
-| `media` | 路径字符串数组 | 对象数组：`path`、`kind`（`video`、`audio`、`subtitle`、`other`）必填，`mime`、`lang`、`durationSec` 可选。转换插件按 `kind` 编排，靠扩展名猜不可靠 |
+| `media` | 路径字符串数组 | 对象数组：`path`、`kind`（`video`、`audio`、`subtitle`、`other`）必填，`mime`、`lang`、`durationSec`、`group` 可选。转换插件按 `kind` 编排，靠扩展名猜不可靠。`group`：同一个字符串表示同一段时间线拆开的几个文件（例如分开存的画面和音轨），1–64 个字母、数字或 `. _ : -`，不合的整次 `invalid-output`；没有 `group` 时宿主照 feature 003 [§4.1](features/003-transforms.md#41-四个转换插件) 按内容配（[§13](#13-待定) 第 38 项） |
 | `missing` 的取值 | 自由字符串 | 用 `outputs` 的词表，例如 `media:video` |
 | `missingReason` | 无（[SPEC §1.2.1](SPEC.md#121-manifestjson-v1) 的 manifest 有） | 可选，给用户看的原因，例如「分享页没有给出视频地址」 |
 | `evidence.access` | 无 | 必填，这次实际用到的那一层。快照里另有一个值 `deliver`，由宿主给投递来的内容填（[§5.1](#51-本机-http-接口)），不出现在清单的 `access` 里 |
@@ -953,6 +956,8 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip"
 - 宿主用 `run.command` 启动进程，先调 `describe`，核对 `protocol` 和 `version`；可以常驻，模型加载一次处理多条。宿主同一时间向一个进程只发一个 `run`；`gpu: true` 的插件同一时间只开一个进程，其余的按「同时处理几个」的设置并行开进程。
 - [§3.2](#32-调用约定) 的环境变量表同样适用于转换、导出插件，只有 `USUYO_SETTINGS`、`USUYO_SECRETS`、`USUYO_INPUT`、`USUYO_CREDENTIALS`、`USUYO_COOKIES_TXT`、`USUYO_VISITOR`、`USUYO_BROWSER_PROFILE` 不给：这两类插件的非密钥设置只经 `run` 的 `options` 传，密钥只经宿主代发。标准流按本节。进程能看到哪些路径见 [§7.1](#71-常驻进程的路径)。
 - 退出：宿主关闭 stdin，插件 5 秒内退出；否则 SIGTERM，再 5 秒后杀进程组。
+- 宿主可以用后台优先级起转换进程（macOS `taskpolicy -b`，Linux `nice` 加 `ionice -c 3`，Windows `BELOW_NORMAL_PRIORITY_CLASS`），你点名的照普通优先级；闲了（120 秒没有 `run`）可以关掉，放掉模型占的内存，下次要用再起。
+- `progress` 只用来判断卡住（[§3.4](#34-超时与取消) 的无进度时长），不往界面报：界面上没有百分比。
 - 错误：协议错误用 JSON-RPC 标准码（`-32700`、`-32600`、`-32601`、`-32602`）；插件自己的失败用 `-32000`，`data` 是错误对象，`code` 取 [§3.3](#33-信封与错误码) 里适用的值（多是 `unsupported-input`、`dependency-missing`、`network`、`cancelled`、`internal`）。
 
 | 方向 | 方法 | 用途 |
@@ -962,27 +967,37 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip"
 | 宿主 → 插件 | `run` | 处理一条（转换）或一批（导出） |
 | 宿主 → 插件 | `readback` | 只有导出插件，`readback: true` 时 |
 | 宿主 → 插件（通知） | `cancel` | `{id}`；插件仍要回这个请求，错误码 `cancelled`（LSP 的规则） |
-| 插件 → 宿主（通知） | `progress` | `{id, done, total, unit, message}` |
+| 插件 → 宿主（通知） | `progress` | `{id, done, total, unit, message}`，只用来判断卡住 |
 
 <a id="42-转换的-run"></a>
 ### 4.2 转换的 run
 
 ```json
-{"jsonrpc":"2.0","id":7,"method":"run","params":{"item":{"id":"douyin-4plrcxk343onmyxibmrr672kga","kind":"video","title":"手冲咖啡：三段式注水","lang":"zh"},"inputs":[{"kind":"media:audio","mime":"audio/wav","path":"/private/var/folders/xx/usuyo-proc-03/in/7/derived/audio/audio.wav"}],"out":"/private/var/folders/xx/usuyo-proc-03/out/7","options":{"model":"sensevoice-small"},"provider":null}}
+{"jsonrpc":"2.0","id":7,"method":"run","params":{"item":{"id":"bilibili-4plrcxk343onmyxibmrr672kga","kind":"video","title":"手冲咖啡：三段式注水","lang":"zh"},"want":["asr"],"inputs":[{"kind":"audio:pcm16k","mime":"audio/wav","path":"/private/var/folders/xx/usuyo-proc-03/in/7/audio.wav","snapshot":"019a6f2b-4a10-7c3e-8b21-0d9e8f7a6b5c"}],"out":"/private/var/folders/xx/usuyo-proc-03/out/7","options":{"vadThreshold":0.4},"provider":null}}
 ```
 
 ```json
-{"jsonrpc":"2.0","id":7,"result":{"outputs":[{"produces":"derived/asr.vtt","path":"asr.vtt","lang":"zh"}],"model":{"name":"sensevoice-small"}}}
+{"jsonrpc":"2.0","id":7,"result":{"outputs":[{"kind":"asr","path":"asr.vtt","lang":"zh"}],"tool":{"name":"sherpa-onnx","version":"2.0.1"},"options":{"language":"auto","itn":true,"vad":"silero-vad-v5","vadThreshold":0.4,"maxCueSec":15},"model":{"name":"sense-voice-int8-2025-09-09"},"marks":[],"empty":false}}
 ```
 
 ```json
-{"jsonrpc":"2.0","id":8,"result":{"outputs":[],"empty":true,"reason":"no-speech"}}
+{"jsonrpc":"2.0","id":8,"result":{"outputs":[],"tool":{"name":"sherpa-onnx","version":"2.0.1"},"options":{"vadThreshold":0.5},"marks":[{"code":"no-speech","speechSec":0.4,"durationSec":5.0}],"empty":true,"reason":"no-speech"}}
 ```
 
-- `inputs` 是条目文件放进进程暂存目录后的绝对路径，只读（`${INPUT}`，怎么放进去见 [§7.1](#71-常驻进程的路径)）。大块数据不走管道。`consumes` 写了 `mime` 的，宿主只给符合格式的文件，必要时先让抽音轨一类插件转好。
+- `want` 是这次要哪几种产出，取清单 `produces` 的子集、不为空；一个插件能做几种时（抽音轨的插件做 `play`、`audio:pcm16k`、`probe`、`keyframes`）靠它分。
+- `inputs` 是条目文件放进进程暂存目录后的绝对路径，只读（`${INPUT}`，怎么放进去见 [§7.1](#71-常驻进程的路径)）。大块数据不走管道。`consumes` 写了 `mime` 的，宿主只给符合格式的文件，必要时先让抽音轨一类插件转好。每个输入另有可选的 `snapshot`（所在快照）、`imageKey`（图文的图和封面）、`frameSec`（关键帧在第几秒）、`role`（`play` 时哪个是 `video`、哪个是 `audio`）。
 - `options` 是这个插件的非密钥设置。
-- 插件只写 `out`。结果里每个输出写明对应 `produces` 里的哪一项和相对 `out` 的路径；`out` 照 [§3.6](#36-fetch-与输出目录) 的输出目录规则检查，宿主核对后移进 `derived/`，并替插件写 `<文件>.meta.json`（`by` 是插件 id，另记 `version`、`at`、`inputs: [{path, sha256}]`、`model`；`empty: true` 时只写 meta），插件不用自己写（[SPEC §1.2.2](SPEC.md#122-raw-和-derived)）。
-- `empty: true` 表示这条没有可产出的东西（例如没有语音），宿主不再往下游编排摘要，免得模型对着空文稿编造（AI-Video-Transcriber 的 `no_speech` 做法）。
+- 插件只写 `out`。结果里：
+  - `outputs[]` 每项 `{kind, path, lang?}`：`kind` 取 `want` 里会出文件的种类，每种一项；`path` 相对 `out`。`keyframes` 的 `path` 是 `keyframes.json`，帧图片在它旁边的 `keyframes/` 里。文件格式见 [SPEC §1.2.2](SPEC.md#122-raw-和-derived)。
+  - `tool` 必填：插件里干活的程序和版本 `{name, version}`，例如 `ffmpeg 9.0.2`、`sherpa-onnx 2.0.1`；宿主不猜。
+  - `options`：这次实际用的参数，含插件补上的默认值；宿主原样记下，重做时原样交回。
+  - `model`：用了模型时 `{name}`，sha256 由宿主自己核。
+  - `marks[]`：很明显的标记 `{code, speechSec?, durationSec?, frozenSec?}`，`code` 是 `no-audio-track`、`no-speech`、`static-picture`、`no-text`（feature 003 [§6](features/003-transforms.md#6-很明显的标记)）；秒数有限、不小于 0。
+  - `probe[]`：`want` 有 `probe` 时，每个输入一项 `{input, durationSec?, streams: [{kind, codec?}]}`，`input` 是 `inputs` 的下标，`kind` 是 `video`、`audio`、`subtitle`、`other`。宿主用它配对画面和音轨、判出没有声音轨。
+- `out` 照 [§3.6](#36-fetch-与输出目录) 的输出目录规则检查；宿主核对后连同自己算的哈希写成一次转录 `derived/runs/<runId>/`，替插件写 `run.json`（[SPEC §1.2.2](SPEC.md#122-raw-和-derived)），不再写 `<文件>.meta.json`；插件不用自己写。
+- `empty: true` 表示这条没有可产出的东西，这时 `outputs` 为空、`reason` 必填：`no-speech`（没听到人说话）、`no-audio-track`（没有声音轨）、`no-text`（没认出字）；`empty: false` 时不带 `reason`。宿主不再往下游编排摘要，免得模型对着空文稿编造（AI-Video-Transcriber 的 `no_speech` 做法）。不合这几条的结果、`kind` 不在 `want` 里或重复的，宿主按 `invalid-output`。
+- 缺模型回 `dependency-missing`，`needs: ["model:<名字>"]`（[§3.3](#33-信封与错误码)）。
+- 11-11：这些消息的类型在 `crates/usuyo-plugin` 的 `protocol::transform`，JSON Schema 是 `crates/usuyo-plugin/schema/transform-*.schema.json`；Rust 插件的循环在 plugin-kit 的 `transform` 模块（[§10](#10-契约测试与-plugin-kit)）。宿主一侧还没做。
 
 <a id="43-模型与密钥由宿主代发"></a>
 ### 4.3 模型与密钥由宿主代发
@@ -1227,7 +1242,7 @@ Seatbelt 的 profile、bubblewrap 的 bind 和 Landlock 的规则都在进程启
 `bin/` 的做法见 [§2.13](#213-运行时解析)。
 
 - 进程启动时，沙箱只放行这个暂存目录，加上已声明的 `${CACHE}`、`${MODELS}`，以及这个进程的站点集合里 `browser-profile` 站点的 `${PROFILE}`（[§3.12](#312-常驻模式-serve)）；`readback: true` 的导出插件另放行目标文件夹 `${TARGET}`，只读，给 `readback` 用（规则启动时就定下，所以整个进程都看得到；`run` 照 [§4.4](#44-导出的-run-与-readback) 不碰它）。不放行整个 `items/` 或临时目录的上级，插件拿不到资料库根目录（[§1](#1-概念)）。目标文件夹是资料库、在资料库里或包含资料库时，宿主不放行，导出设置里也选不了（推断）。
-- 每次调用，宿主用 clonefile 或 reflink 把输入放进 `in/<callId>/`，不支持时在同一文件系统上建硬链接（`in/` 对进程只读，改不到原文件），再不行才复制；所以宿主尽量把暂存目录建在和资料库同一个文件系统上。新建 `out/<callId>/`，把凭据写进 `cred/<callId>/`。`run`、`fetch` 参数和 `context` 里的路径都指向暂存目录。
+- 每次调用，宿主用 clonefile 或 reflink 把输入放进 `in/<callId>/`，不支持时在同一文件系统上建硬链接（`in/` 对进程只读，改不到原文件），再不行才复制。没有沙箱时（11-11 还没有，[§7](#7-权限与隔离)），硬链接进 `in/` 挡不住插件改到原文件：原样被改过靠 `usuyo.fetch.json` 里的哈希查出来（同步前和「检查与修复」时，[SPEC §1.2.2](SPEC.md#122-raw-和-derived)），不靠挡；有沙箱以后照这一条；所以宿主尽量把暂存目录建在和资料库同一个文件系统上。新建 `out/<callId>/`，把凭据写进 `cred/<callId>/`。`run`、`fetch` 参数和 `context` 里的路径都指向暂存目录。
 - 调用结束后，宿主删掉 `in/<callId>/` 和 `cred/<callId>/`，`out/<callId>/` 照 [§3.6](#36-fetch-与输出目录) 检查后移走。进程退出时整个暂存目录删除。
 - 一个常驻进程能看到它自己正在进行的各次调用的暂存内容，看不到别的进程的。宿主同一时间只向一个进程发一个请求，所以实际只有一份。
 - 一次一进程的调用不需要这一层：启动时就知道这次的路径，`${TMP}` 下的布局照此类推。
@@ -1793,7 +1808,7 @@ usuyo plugin pack --version 0.3.1 dist/*
 35. 一类输出只拿到一部分（2026-11-11 两个插件作者写插件时报的，35–39 同）：`outputs`、`missing` 只说一类有没有，没有字段说「这一类拿到了一部分」；web 插件现在写进 `missingReason`。
 36. 访客凭据：有的平台不登录也要一份访客 cookie 才取得到，[§6](#6-凭据) 的凭据里没有这一种；小红书插件现在做成插件设置，让你自己粘。**11-11 已答**：加了顶层 `visitors` 和能力的 `visitors`（[§2.5.1](#251-访客身份-visitors)），宿主开不登录的窗口取，经 `USUYO_VISITOR` 交；小红书插件改用它，去掉了手填的设置。
 37. 短码的别名：同一条内容的短码没有地方记成身份的别名（推断的后果：用短码和用完整 id 收下的会成两条）。
-38. 音频和视频分开给：`media[]` 说不出两个文件是同一段的音轨和画面、要合起来看。
+38. 音频和视频分开给：`media[]` 说不出两个文件是同一段的音轨和画面、要合起来看。**11-11 已答**：`media[]` 加可选 `group`（[§3.7](#37-fetch-输出)），同一个字符串表示同一段时间线拆开的几个文件；没有 `group` 时宿主照 feature 003 [§4.1](features/003-transforms.md#41-四个转换插件) 的内容规则配（一个画面、一个音轨、时长差不超过 1 秒或 2%）。B 站插件交 `video.m4s`、`audio.m4s` 时写同一个 `group`（`cid:<这一 P 的 cid>`）。
 39. 按语言的提示：`hint` 一次只按 `USUYO_LOCALE` 写一种语言，没有按语言分开给的写法。
 
 调研 11 建议的其余几处还没编号：`owner` 的含义、同时带 `url` 和 `ref` 时先用哪个、`sites[].site` 引用设置项、`feed:` 来源按主机算节奏（`origin.subscription` 已按 SPEC v1 写进 [§3.8](#38-list-与跟着收)），见[调研 11 §6.2](research/11-subscriptions-compat-and-wx-cli.md#62-要补的地方)。

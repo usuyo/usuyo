@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use super::identity::Identity;
 use super::manifest::Access;
-use super::values::{RelPath, Rfc3339, check_http_url};
+use super::values::{MediaGroup, RelPath, Rfc3339, check_http_url};
 
 /// `outputs` 的固定词表（协议 §2.3；`comments` 照 §13 第 31 项）。
 #[derive(
@@ -118,6 +118,9 @@ pub struct Media {
     pub lang: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub duration_sec: Option<f64>,
+    /// 同一个值表示同一段时间线拆开的几个文件，例如分开存的画面和音轨（协议 §13 第 38 项）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<MediaGroup>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

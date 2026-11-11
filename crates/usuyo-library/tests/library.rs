@@ -100,6 +100,7 @@ fn snapshot(lib: &Library, url: &str, text: &str) -> NewSnapshot {
             media: vec![MediaFile {
                 path: "media/video.mp4".into(),
                 kind: "video".into(),
+                group: None,
                 extra: Extra::new(),
             }],
             files: Vec::new(),

@@ -1,26 +1,29 @@
 # 协议 §2.9 的转写插件。
 protocol: 1
-id: usuyo/transform-asr-sherpa
+id: builtin/asr-sherpa
 kind: transform
 name: 口播转文字
 version: 0.1.0
 license: Apache-2.0
 maintainers: [usuyo]
-consumes: [{kind: media:audio, mime: [audio/wav]}, media:video]
-produces: [derived/asr.vtt]
+consumes: [audio:pcm16k]
+produces: [asr]
 provider: none
 settings:
   - key: model
     label: 模型
     type: enum
-    options: [sensevoice-small]
+    options: [sense-voice]
 models:
-  - name: sensevoice-small
-    url: https://example.com/models/sensevoice-small.onnx
-    sha256: 2c624232cdd221771294dfbb310aca000a0df6ac8b66b696d90ef06fdefb64a3
-    size: 234881024
+  - name: sense-voice-int8-2025-09-09
+    url: https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2025-09-09.tar.bz2
+    mirrors: [https://example.com/mirror/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2025-09-09.tar.bz2]
+    sha256: 7305f7905bfcf77fa0b39388a313f3da35c68d971661a65475b56fb2162c8e63
+    size: 165783878
+    format: tar.bz2
+    license: FunASR Model Open Source License（可商用，署名并写明模型名）
     setting: model
-    value: sensevoice-small
+    value: sense-voice
 permissions:
   fs:
     read: ["${INPUT}", "${MODELS}"]

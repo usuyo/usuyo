@@ -7,6 +7,7 @@ mod fetch;
 mod identity;
 mod manifest;
 mod schema;
+mod transform;
 mod values;
 
 pub use credentials::{
@@ -25,12 +26,20 @@ pub use manifest::{
     Access, Asset, Capabilities, CapabilityUse, Consume, ConsumeKind, Credential, Device,
     ExportSpec, ExportWrites, FetchCapability, FetchInputKind, FetchSpec, FsPermissions, Inject,
     Install, Interaction, Limits, ListCapability, ListOrder, Login, MANIFEST_FILE, MatchPattern,
-    ModelSpec, NetworkMode, NetworkPermissions, Pacing, Permissions, PlatformUse, PluginHeader,
-    PluginKind, PluginKindTag, PluginManifest, Produce, ProviderNeed, Run, RuntimeRequirement,
-    SUPPORTED_PROTOCOLS, Setting, SettingType, Site, TransformSpec, Upstream, Visitor,
+    ModelFormat, ModelSpec, NetworkMode, NetworkPermissions, Pacing, Permissions, PlatformUse,
+    PluginHeader, PluginKind, PluginKindTag, PluginManifest, Produce, ProviderNeed, Run,
+    RuntimeRequirement, SUPPORTED_PROTOCOLS, Setting, SettingType, Site, TransformSpec, Upstream,
+    Visitor,
 };
 pub use schema::schemas;
-pub use values::{ByteSize, DurationSpec, PlatformId, PluginId, RelPath, Rfc3339};
+pub use transform::{
+    Cancel, Describe, EmptyReason, Health, HealthCheck, InputRole, METHOD_CANCEL, METHOD_DESCRIBE,
+    METHOD_HEALTH, METHOD_PROGRESS, METHOD_RUN, Mark, MarkCode, ModelUsed, Probe, ProbeStream,
+    Progress, ProviderGrant, RpcError, RpcId, RunInput, RunItem, RunParams, RunProduct, RunResult,
+};
+pub use values::{
+    ByteSize, DurationSpec, MediaGroup, PlatformId, PluginId, RelPath, Rfc3339, Seconds,
+};
 
 #[cfg(feature = "host")]
 pub(crate) use manifest::PLUGIN_DIR_PLACEHOLDER;

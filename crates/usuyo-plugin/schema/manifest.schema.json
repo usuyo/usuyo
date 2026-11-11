@@ -280,18 +280,27 @@
     },
     "ConsumeKind": {
       "description": "转换插件吃的东西（协议 §2.9）。",
-      "type": "string",
-      "enum": [
-        "media:video",
-        "media:audio",
-        "image",
-        "html",
-        "text",
-        "subtitle",
-        "derived:asr",
-        "derived:ocr",
-        "derived:vision",
-        "derived:keyframes"
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "media:video",
+            "media:audio",
+            "image",
+            "html",
+            "text",
+            "subtitle",
+            "derived:asr",
+            "derived:ocr",
+            "derived:vision",
+            "derived:keyframes"
+          ]
+        },
+        {
+          "description": "16 kHz 单声道 WAV，抽音轨插件的中间产物（`produces: audio:pcm16k`），不进资料库。",
+          "type": "string",
+          "const": "audio:pcm16k"
+        }
       ]
     },
     "Credential": {
@@ -444,10 +453,37 @@
         "required"
       ]
     },
+    "ModelFormat": {
+      "description": "下载下来的是什么：单个文件，或宿主解到 `${MODELS}/<name>/` 的压缩包。",
+      "type": "string",
+      "enum": [
+        "file",
+        "tar.bz2",
+        "tar.gz",
+        "zip"
+      ]
+    },
     "ModelSpec": {
+      "description": "要宿主下载的模型（协议 §2.9）。宿主下，插件不联网；放进 `${MODELS}/<name>/`。",
       "type": "object",
       "properties": {
+        "format": {
+          "$ref": "#/$defs/ModelFormat"
+        },
+        "license": {
+          "description": "模型权重的许可，下载前给你看。",
+          "type": "string"
+        },
+        "mirrors": {
+          "description": "同一个 sha256 的别的地址，`url` 不行时按顺序试。",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
         "name": {
+          "description": "目录名：小写字母、数字、`.`、`_`、`-`，不以 `.` 开头，一个清单里不重名。",
           "type": "string"
         },
         "setting": {
@@ -458,9 +494,11 @@
           "default": null
         },
         "sha256": {
+          "description": "整个下载文件的 sha256。",
           "type": "string"
         },
         "size": {
+          "description": "整个下载文件的字节数，下载前给你看。",
           "type": "integer",
           "format": "uint64",
           "minimum": 0
@@ -480,7 +518,9 @@
         "name",
         "url",
         "sha256",
-        "size"
+        "size",
+        "format",
+        "license"
       ]
     },
     "NetworkMode": {
@@ -570,17 +610,35 @@
       ]
     },
     "Produce": {
-      "description": "转换插件产出的文件（协议 §2.9、SPEC §1.2.2）。",
-      "type": "string",
-      "enum": [
-        "derived/readable.md",
-        "derived/asr.vtt",
-        "derived/ocr/*.json",
-        "derived/vision.md",
-        "derived/summary.md",
-        "derived/embeddings.bin",
-        "derived/keyframes/",
-        "derived/audio/"
+      "description": "转换插件产出的东西（协议 §2.9）：产物种类，不是路径。路径由宿主定在 `derived/runs/<runId>/` 下。\n同一个词表也是 `run` 的 `want` 和结果里每个输出的 `kind`（协议 §4.2）。",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "asr",
+            "keyframes",
+            "ocr",
+            "readable",
+            "vision",
+            "summary",
+            "embeddings"
+          ]
+        },
+        {
+          "description": "分开的画面和音轨合起来能播的文件。",
+          "type": "string",
+          "const": "play"
+        },
+        {
+          "description": "给转写用的 16 kHz 单声道 WAV；中间产物，不进资料库。",
+          "type": "string",
+          "const": "audio:pcm16k"
+        },
+        {
+          "description": "只回流的信息（结果里的 `probe`），不出文件。",
+          "type": "string",
+          "const": "probe"
+        }
       ]
     },
     "ProviderNeed": {

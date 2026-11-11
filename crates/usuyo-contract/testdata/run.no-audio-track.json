@@ -1,0 +1,39 @@
+{
+  "id": "019a6f40-0000-7000-8000-000000000003",
+  "job": "asr",
+  "by": "host",
+  "version": "0.0.0",
+  "tool": null,
+  "model": null,
+  "options": {},
+  "at": "2026-11-12T03:06:00.000Z",
+  "device": "019a6f00-0000-7000-8000-000000000001",
+  "trigger": "auto",
+  "redoOf": null,
+  "inputs": [
+    {
+      "path": "raw/019a6f2b-4a10-7c3e-8b21-0d9e8f7a6b5c/media/video.mp4",
+      "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "snapshot": "019a6f2b-4a10-7c3e-8b21-0d9e8f7a6b5c",
+      "via": [
+        {
+          "by": "builtin/media",
+          "version": "0.1.0",
+          "op": "probe",
+          "tool": {
+            "name": "ffprobe",
+            "version": "9.0.2"
+          }
+        }
+      ]
+    }
+  ],
+  "outputs": [],
+  "empty": true,
+  "reason": "no-audio-track",
+  "marks": [
+    {
+      "code": "no-audio-track"
+    }
+  ]
+}

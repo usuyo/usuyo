@@ -2,7 +2,7 @@
 //! 改了类型以后用 `USUYO_BLESS=1 cargo test -p usuyo-plugin --test schema` 重写 schema 文件。
 
 use serde_json::Value;
-use usuyo_plugin::protocol::{Canonicalized, FetchOutput, ListPage, schemas};
+use usuyo_plugin::protocol::{Canonicalized, FetchOutput, ListPage, Media, schemas};
 
 fn dir(name: &str) -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(name)
@@ -73,5 +73,24 @@ fn canonicalize_shapes() {
         r#"{"match": true, "identity": {"platform": "file"}}"#,
     ] {
         assert!(serde_json::from_str::<Canonicalized>(bad).is_err(), "{bad}");
+    }
+}
+
+#[test]
+fn media_group_names_one_timeline() {
+    let video: Media = serde_json::from_str(
+        r#"{"path": "media/video.m4s", "kind": "video", "group": "cid:1176840"}"#,
+    )
+    .unwrap();
+    assert_eq!(video.group.as_ref().unwrap().as_str(), "cid:1176840");
+    let none: Media = serde_json::from_str(r#"{"path": "media/a.m4s", "kind": "audio"}"#).unwrap();
+    assert!(none.group.is_none());
+    assert!(!serde_json::to_string(&none).unwrap().contains("group"));
+    for bad in ["", "a b", "line\\n", &"x".repeat(65), "组"] {
+        let text = format!(
+            r#"{{"path": "media/a.m4s", "kind": "audio", "group": {}}}"#,
+            serde_json::to_string(bad).unwrap()
+        );
+        assert!(serde_json::from_str::<Media>(&text).is_err(), "{bad:?}");
     }
 }

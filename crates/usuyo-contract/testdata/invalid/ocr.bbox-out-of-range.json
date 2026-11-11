@@ -1,0 +1,22 @@
+{
+  "images": [
+    {
+      "input": 0,
+      "imageKey": "3f2a9c0d1e4b5a67",
+      "width": 10,
+      "height": 10,
+      "lines": [
+        {
+          "text": "x",
+          "bbox": [
+            0.5,
+            0.5,
+            1.2,
+            0.1
+          ],
+          "confidence": 0.5
+        }
+      ]
+    }
+  ]
+}

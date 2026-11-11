@@ -1,0 +1,52 @@
+{
+  "id": "019a6f41-0000-7000-8000-000000000004",
+  "job": "keyframes",
+  "by": "builtin/media",
+  "version": "0.1.0",
+  "tool": {
+    "name": "ffmpeg",
+    "version": "9.0.2"
+  },
+  "model": null,
+  "options": {
+    "fps": 4,
+    "scanHeight": 360,
+    "scdetThreshold": 10,
+    "freezeNoise": 0.003,
+    "freezeMinSec": 2,
+    "minGapSec": 2,
+    "maxPerMinute": 6,
+    "maxFrames": 60,
+    "maxEdge": 960,
+    "jpegQuality": 4
+  },
+  "at": "2026-11-12T03:06:30.000Z",
+  "device": "019a6f00-0000-7000-8000-000000000001",
+  "trigger": "auto",
+  "redoOf": null,
+  "inputs": [
+    {
+      "path": "raw/019a6f2b-4a10-7c3e-8b21-0d9e8f7a6b5c/media/video.m4s",
+      "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "snapshot": "019a6f2b-4a10-7c3e-8b21-0d9e8f7a6b5c",
+      "via": []
+    }
+  ],
+  "outputs": [
+    {
+      "path": "keyframes.json",
+      "kind": "keyframes",
+      "size": 420,
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+    }
+  ],
+  "empty": false,
+  "reason": null,
+  "marks": [
+    {
+      "code": "static-picture",
+      "frozenSec": 58.1,
+      "durationSec": 63.2
+    }
+  ]
+}

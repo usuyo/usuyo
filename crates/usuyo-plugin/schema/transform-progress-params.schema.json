@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Progress",
+  "description": "通知 `progress` 的参数。只用来判断卡住，不往界面报（协议 §4.1）。",
+  "type": "object",
+  "properties": {
+    "done": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "format": "double"
+    },
+    "id": {
+      "description": "哪个 `run`。",
+      "$ref": "#/$defs/RpcId"
+    },
+    "message": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "total": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "format": "double"
+    },
+    "unit": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "$defs": {
+    "RpcId": {
+      "description": "JSON-RPC 请求的 `id`：数字或字符串，原样回。",
+      "anyOf": [
+        {
+          "type": "integer",
+          "format": "int64"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    }
+  }
+}

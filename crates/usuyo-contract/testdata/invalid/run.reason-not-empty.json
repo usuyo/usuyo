@@ -1,0 +1,56 @@
+{
+  "id": "019a6f3e-8c1d-7b2a-9e44-5d0c1a2b3c4d",
+  "job": "asr",
+  "by": "builtin/asr-sherpa",
+  "version": "0.1.0",
+  "tool": {
+    "name": "sherpa-onnx",
+    "version": "2.0.1"
+  },
+  "model": {
+    "name": "sense-voice-int8-2025-09-09",
+    "sha256": "7305f7905bfcf77fa0b39388a313f3da35c68d971661a65475b56fb2162c8e63"
+  },
+  "options": {
+    "language": "auto",
+    "itn": true,
+    "vad": "silero-vad-v5",
+    "vadThreshold": 0.5,
+    "maxCueSec": 15
+  },
+  "at": "2026-11-12T03:00:01.123Z",
+  "device": "019a6f00-0000-7000-8000-000000000001",
+  "trigger": "auto",
+  "redoOf": null,
+  "inputs": [
+    {
+      "path": "raw/019a6f2b-4a10-7c3e-8b21-0d9e8f7a6b5c/media/audio.m4s",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "snapshot": "019a6f2b-4a10-7c3e-8b21-0d9e8f7a6b5c",
+      "via": [
+        {
+          "by": "builtin/media",
+          "version": "0.1.0",
+          "op": "audio:pcm16k",
+          "tool": {
+            "name": "ffmpeg",
+            "version": "9.0.2"
+          },
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      ]
+    }
+  ],
+  "outputs": [
+    {
+      "path": "asr.vtt",
+      "kind": "asr",
+      "size": 2048,
+      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "lang": "zh"
+    }
+  ],
+  "empty": false,
+  "reason": "no-speech",
+  "marks": []
+}

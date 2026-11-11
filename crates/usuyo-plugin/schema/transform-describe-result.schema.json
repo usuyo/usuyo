@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Describe",
+  "description": "`describe` 的结果。宿主核对 `protocol` 和清单的 `version`，对不上不加载。",
+  "type": "object",
+  "properties": {
+    "models": {
+      "description": "实际可用的模型或语言。",
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string"
+      }
+    },
+    "protocol": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "version": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "protocol",
+    "version"
+  ]
+}

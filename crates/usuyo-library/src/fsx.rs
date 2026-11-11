@@ -2,7 +2,7 @@
 
 use std::fs;
 use std::io::Write;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -177,14 +177,6 @@ pub(crate) fn private_dir(path: &Path) -> Result<()> {
             .map_err(|e| Error::io(path, e))?;
     }
     Ok(())
-}
-
-/// 记录里的相对路径只许普通的段：不许空、绝对路径、`.`、`..`、盘符。
-pub fn is_plain_relative(p: &str) -> bool {
-    !p.is_empty()
-        && Path::new(p)
-            .components()
-            .all(|c| matches!(c, Component::Normal(_)))
 }
 
 /// 文件夹里有符号链接就报错：插件交来的输出目录不许带，免得指到资料库外面。
