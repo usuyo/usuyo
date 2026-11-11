@@ -956,7 +956,7 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip"
 - 宿主用 `run.command` 启动进程，先调 `describe`，核对 `protocol` 和 `version`；可以常驻，模型加载一次处理多条。宿主同一时间向一个进程只发一个 `run`；`gpu: true` 的插件同一时间只开一个进程，其余的按「同时处理几个」的设置并行开进程。
 - [§3.2](#32-调用约定) 的环境变量表同样适用于转换、导出插件，只有 `USUYO_SETTINGS`、`USUYO_SECRETS`、`USUYO_INPUT`、`USUYO_CREDENTIALS`、`USUYO_COOKIES_TXT`、`USUYO_VISITOR`、`USUYO_BROWSER_PROFILE` 不给：这两类插件的非密钥设置只经 `run` 的 `options` 传，密钥只经宿主代发。标准流按本节。进程能看到哪些路径见 [§7.1](#71-常驻进程的路径)。
 - 退出：宿主关闭 stdin，插件 5 秒内退出；否则 SIGTERM，再 5 秒后杀进程组。
-- 宿主可以用后台优先级起转换进程（macOS `taskpolicy -b`，Linux `nice` 加 `ionice -c 3`，Windows `BELOW_NORMAL_PRIORITY_CLASS`），你点名的照普通优先级；闲了（120 秒没有 `run`）可以关掉，放掉模型占的内存，下次要用再起。
+- 转换进程闲了（120 秒没有 `run`）宿主可以关掉，放掉模型占的内存，下次要用再起。
 - `progress` 只用来判断卡住（[§3.4](#34-超时与取消) 的无进度时长），不往界面报：界面上没有百分比。
 - 错误：协议错误用 JSON-RPC 标准码（`-32700`、`-32600`、`-32601`、`-32602`）；插件自己的失败用 `-32000`，`data` 是错误对象，`code` 取 [§3.3](#33-信封与错误码) 里适用的值（多是 `unsupported-input`、`dependency-missing`、`network`、`cancelled`、`internal`）。
 

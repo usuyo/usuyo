@@ -76,7 +76,7 @@
 | 活 | 默认 | 为什么 | 能换成 |
 |---|---|---|---|
 | 合起来、抽音轨、取关键帧、量画面动不动 | ffmpeg 9.0.2，自己编的精简 LGPL 构建，随 `builtin/media` 插件带 | 只要拆封装、解码、几个滤镜（`scdet`、`freezedetect`、`scale`）、出 JPEG 和 WAV，LGPL 够用（[G2](../open-decisions.md#14-法律意见) 的建议 B）；体积小，版本由我们锁 | 开发时用 Homebrew 的 ffmpeg；以后可以换 PySceneDetect 0.7.3 做关键帧 |
-| 说的转成文字 | sherpa-onnx 2.0.1（官方 Rust crate，静态链接）跑 SenseVoice-Small int8（2025-09-09），silero VAD v5 切段 | 中文为主训练，中英日韩粤，自带标点和数字转写；int8 包 165.8 MB；三系统都有预编译；同一套运行时还能跑 FireRedASR2、Qwen3-ASR，换模型不换插件 | 同插件里选 FireRedASR2-AED int8（838.6 MB，自报普通话 CER 2.89%，覆盖中英混说）、Qwen3-ASR-0.6B int8（878.7 MB），只要中文时可选 Paraformer-zh int8（228.3 MB）；以后另一个插件包 whisper.cpp 1.9.5（多语种）；macOS 26 以后可以加系统的 SpeechAnalyzer |
+| 说的转成文字 | sherpa-onnx 2.0.1（官方 Rust crate，静态链接）跑 SenseVoice-Small int8（2024-07-17 那份），silero VAD v5 切段 | 中文为主训练，中英日韩粤，自带标点和数字转写；int8 包 163 MB；三系统都有预编译；同一套运行时还能跑 FireRedASR2、Qwen3-ASR，换模型不换插件 | 同插件里选 FireRedASR2-AED int8（838.6 MB，自报普通话 CER 2.89%，覆盖中英混说）、Qwen3-ASR-0.6B int8（878.7 MB），只要中文时可选 Paraformer-zh int8（228.3 MB）；以后另一个插件包 whisper.cpp 1.9.5（多语种）；macOS 26 以后可以加系统的 SpeechAnalyzer |
 | 图里的字（macOS） | 系统 Vision（`VNRecognizeTextRequest`，revision 3，`.accurate`，`zh-Hans` + `en-US`），一个 Swift 写的插件 | 不用下载；这台实测 1080×1440 的图一张 0.4–1.0 秒；简体、繁体、粤语、英文都在列表里 | PP-OCRv6 small（经 `oar-ocr` 0.10.2 和 ONNX Runtime），Windows、Linux 的默认，macOS 上「换一个认」 |
 
 <a id="31-说的转成文字"></a>
@@ -88,7 +88,7 @@
 | Apple SFSpeechRecognizer（旧接口） | 这台查到 `zh-CN` 可用、支持本机识别 | 没测成：从命令行程序请求语音识别授权，8 秒内没有回结果（推断：系统要 App 带用途说明，插件这种子进程拿不到） | 无 | 系统 API | 只有 Apple |
 | whisper.cpp 1.9.5 | 中文不是最好，社区常说有幻觉和标点问题（调研 04） | 未实测 | tiny 75 MiB 到 large 2.9 GiB（调研 04）；large-v3-turbo 的大小没查 | MIT | 都有 |
 | sherpa-onnx + Paraformer-zh int8（2025-10-07） | 中文专用，官方说带时间点（调研 04）；不出英文 | 未实测 | 228,262,632 字节；small 版（2024-03-09）77,920,048 字节 | 权重是 FunASR 模型许可（调研 04） | 都有 |
-| **sherpa-onnx 2.0.1 + SenseVoice-Small int8** | 中文、粤语占优（SenseVoice 仓库的对比，数字在图里没读到）；ITN 出标点和数字 | 实测（11-11，合成的 `say` 语音，机器上同时有别的编译）：11 分 23 秒的样例，普通优先级、crate 默认线程（实际 1 线程）实时率 0.13–0.15，2 线程 0.073–0.081；`taskpolicy -b` 下 0.36–1.2，是上限不是干净的数；加载模型约 1 秒，内存峰值 450–525 MB。CER 约 13%（2024-07-17 那份；合成语音偏向模型，真人口播会更差）。**2025-09-09 那份是 WSYue 粤语微调版**（解包后 README 写明来自 `ASLP-lab/WSYue-ASR`），普通话不出标点、不做 ITN，`speech.m4a` 转成「咖F」，CER 约 18%；原版是 `sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17.tar.bz2`（163,002,883 字节，sha256 `7d1efa2138a65b0b488df37f8b89e3d91a60676e416f515b952358d83dfd347e`，解包后 `model.int8.onnx` 239 MB），它转出「咖啡」「注水」、标点和数字 | 165,783,878 字节（压缩包，sha256 和 §4.3 一致；解包后约 247 MB） | 运行时 Apache-2.0；SenseVoice 代码 MIT，权重是 FunASR 模型许可（可商用，要署名、写模型名） | 都有 |
+| **sherpa-onnx 2.0.1 + SenseVoice-Small int8（2024-07-17）** | 中文、粤语占优（SenseVoice 仓库的对比，数字在图里没读到）；ITN 出标点和数字。同名的 2025-09-09 那份是粤语微调版（解包后的 README 写明来自 `ASLP-lab/WSYue-ASR`），普通话不出标点，会把「咖啡」写成「咖F」，不用 | 实测（合成的 `say` 语音，11 分 23 秒）：2 个线程实时率 0.07–0.08，1 个线程 0.13–0.15，加载模型约 1 秒，内存峰值约 0.5 GB；字错率约 13%（合成语音偏向模型，真人口播没量）。脚本和结果在 `plugins/asr-sherpa/bench/` | 163,002,883 字节（压缩包；解包后 `model.int8.onnx` 239 MB） | 运行时 Apache-2.0；SenseVoice 代码 MIT，权重是 FunASR 模型许可（可商用，要署名、写模型名） | 都有 |
 | sherpa-onnx + FireRedASR2-AED int8 | 自报普通话 CER 2.89%，覆盖方言和中英混说（10-30 的调研笔记，这次没重查） | 未实测 | 838,589,068 字节 | Apache-2.0 | 都有 |
 | sherpa-onnx + Qwen3-ASR-0.6B int8 | 调研 04 记的 1.7B 自报分数都好过 Whisper-large-v3；0.6B 的没查 | 未实测 | 878,702,423 字节 | Apache-2.0 | 都有 |
 
@@ -167,9 +167,9 @@ raw 里的图、封面 ──ocr──▶ 图里的字
 | `crates/usuyo-library` | 转录的写入、列出、按层找（[§5](#5-存在哪怎么重做)）；「只留文字」也移走转录里的二进制产物 |
 | `crates/usuyo-contract` | 转录记录 `run.json` 的类型、schema `urn:usuyo:schema:run:1`、`testdata/` 样例 |
 | `crates/usuyo-index` | 新层 `asr`、`ocr`、`frames`；每段多存一个 `source`（转录 id 或平台字幕）；索引版本加一，下次启动整个重建 |
-| `crates/usuyo-api`、`endpoints.ts`、`crates/usuyo-cli` | [§8.1](#81-接口) 的接口和命令 |
+| `crates/usuyo-api`、`endpoints.ts` | [§8.1](#81-接口) 的接口 |
 
-进程优先级：自动跑的转换在 macOS 上用 `/usr/sbin/taskpolicy -b` 起（后台 QoS，只上能效核、限磁盘），Linux 用 `nice -n 10` 加 `ionice -c 3`，Windows 用 `BELOW_NORMAL_PRIORITY_CLASS`（`CommandExt::creation_flags`）。你点名的（打开了这一条、点了「再转一次」）照普通优先级跑。
+线程和优先级：转写一次用 2 个线程（这台 2 个比 1 个快将近一倍，再多反而慢），照普通优先级跑。不压到后台优先级：量过，压下去慢好几倍，而一次只跑一个、只用两个线程，本来就不抢机器。
 
 <a id="43-ffmpeg-和模型怎么到这台电脑上"></a>
 ### 4.3 ffmpeg 和模型怎么到这台电脑上
@@ -182,7 +182,7 @@ raw 里的图、封面 ──ocr──▶ 图里的字
 
 **模型**第一次用到时问一句再下（[T2](../open-decisions.md#8-转换与-ai) 的建议 B）：
 
-- 不在安装时下，不自己悄悄下。第一条要转口播的条目在那一面写：「转口播要先下载 SenseVoice 模型，约 166 MB，只下一次。」旁边一个「下载」；转换插件页也有同一个按钮，写模型名、大小、许可。下好以后，等着的条目照常转。没点就一直等着，不提醒第二次。
+- 不在安装时下，不自己悄悄下。第一条要转口播的条目在那一面写：「转口播要先下载 SenseVoice 模型，约 163 MB，只下一次。」旁边一个「下载」；转换插件页也有同一个按钮，写模型名、大小、许可。下好以后，等着的条目照常转。没点就一直等着，不提醒第二次。
 - 大于 1 GiB 的（以后的 FireRedASR2 不到，Qwen3-ASR 不到，都写大小）同样只点了才下。换模型（插件设置里选另一个）也是先问。
 - 放按机器目录的 `models/<owner>/<repo>/<模型名>/`（[SPEC §1.1](../SPEC.md#11-目录树) 的 `models/`）。宿主下，插件不联网。
 - 下载：先试 `url`，不行按顺序试 `mirrors`（同一个 sha256）；支持 Range 续传；连接 15 秒，60 秒没收到字节算断；下完按整个文件的 sha256 校验，对不上整个丢掉、报原因。压缩包（sherpa 的模型是 `.tar.bz2`）解到同目录下的临时文件夹，再改名进去，同时写 `model.json`：`{name, sha256, size, license, files: [{path, size, sha256}]}`。插件 `describe` 时宿主核对 `files`。
@@ -190,17 +190,17 @@ raw 里的图、封面 ──ocr──▶ 图里的字
 
 ```yaml
 models:
-  - name: sense-voice-int8-2025-09-09
-    url: https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2025-09-09.tar.bz2
-    sha256: 7305f7905bfcf77fa0b39388a313f3da35c68d971661a65475b56fb2162c8e63
-    size: 165783878
+  - name: sense-voice-int8-2024-07-17
+    url: https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17.tar.bz2
+    sha256: 7d1efa2138a65b0b488df37f8b89e3d91a60676e416f515b952358d83dfd347e
+    size: 163002883
     format: tar.bz2
     license: FunASR Model Open Source License（可商用，署名并写明模型名）
     setting: model
     value: sense-voice
 ```
 
-sha256 取自 GitHub 给这个资产的 `digest`，实现时下载一次再核。
+sha256 是下载以后算出来的。
 
 <a id="44-什么时候转"></a>
 ### 4.4 什么时候转
@@ -208,19 +208,17 @@ sha256 取自 GitHub 给这个资产的 `digest`，实现时下载一次再核�
 自动和点名混着来：
 
 - **自动**：一个快照落进资料库（收下、再取一次、导入、交进来的）以后，宿主看它有什么，排上要做的：有视频就排 `play`（配得上时）、`asr`、`keyframes`，关键帧那次落地以后排 `frames`（认关键帧上的字）；有图（含封面）就排 `ocr`。平台给了字幕也照样排 `asr`，两份并排（为什么，见 [§13](#13-风险和待定)「平台给了字幕也照样转」）。设置里 `transforms.auto: false` 时不自动排，只在点名时转。
-- **点名**：打开一条、还有面没转出来，它的任务挪到最前、照普通优先级跑，在电池上也跑；点「再转一次」「换一个转」同样。
+- **点名**：打开一条、还有面没转出来，它的任务挪到最前，在电池上也跑；点「再转一次」「换一个转」同样。
 - **在哪台转**：照 [SPEC §1.2.1](../SPEC.md#121-manifestjson-v1)，`origins` 里最早那一项的那台。别的设备不自动转，等同步来的文字。
 
 **限着，免得一次导入 500 条把电脑烤热**：
 
 - 转换一次只跑一个，整台机器算；和取内容是两条道，各自一次一个，可以同时各跑一个（取内容主要等网络）。
 - 自动的只在接着电源时跑；拔了电，跑着的那个跑完，后面的等着，接上再接着。读电源状态用 `starship-battery` crate（三系统都有）；读不出来记一次日志，当接着电。
-- 自动的用后台优先级（[§4.2](#42-宿主要加的)）。
 - 先后：点名的（0）> 你手动收下的（1）> 导入、跟着收、交进来的（2）；同一档按排进来的先后。
 - 失败照取内容的退避（`RetryPolicy`，30 秒乘 4 的次方，最多 6 次）。缺模型（`dependency-missing`，`needs: model:<名字>`）不算失败、不算次数，等模型。条目进回收站或只留文字时，删掉它的转换任务（只留文字只删要媒体的）。
 - 重启后 `running` 的放回 `queued`，同取内容。
 - 一条一个 `job` 只有一行：点「再转一次」时那一行还排着，就换上你给的插件、参数，挪到最前；正在跑，就回 `conflict`（界面在转的时候不给点）。
-- 你打开了一条、它的任务正在后台优先级下跑：宿主对那个进程 `taskpolicy -B -p <pid>`，让它照普通优先级跑完。
 
 `jobs.db` 加一张表：
 
@@ -249,7 +247,7 @@ PRAGMA user_version = 2;
 | 排着、接着电 | 「口播还没转出来，会慢慢转。」 |
 | 排着、在电池上 | 「口播还没转出来，接上电源时会转。」（你打开了这条，它就直接转，见上） |
 | 在转 | 「在转口播。」不写百分比 |
-| 等模型 | 「转口播要先下载 SenseVoice 模型，约 166 MB，只下一次。」加「下载」 |
+| 等模型 | 「转口播要先下载 SenseVoice 模型，约 163 MB，只下一次。」加「下载」 |
 | 没转出来 | 「口播没转出来：<原因>」加「再试」 |
 | 转好了 | 那一面的内容，头上写来源（「机器转的 · SenseVoice」） |
 
@@ -298,7 +296,7 @@ items/bilibili/bilibili-…/
   "by": "builtin/asr-sherpa",
   "version": "0.1.0",
   "tool": {"name": "sherpa-onnx", "version": "2.0.1"},
-  "model": {"name": "sense-voice-int8-2025-09-09", "sha256": "7305f7905bfcf77fa0b39388a313f3da35c68d971661a65475b56fb2162c8e63"},
+  "model": {"name": "sense-voice-int8-2024-07-17", "sha256": "7d1efa2138a65b0b488df37f8b89e3d91a60676e416f515b952358d83dfd347e"},
   "options": {"language": "auto", "itn": true, "vad": "silero-vad-v5", "vadThreshold": 0.5, "maxCueSec": 15},
   "at": "2026-11-12T03:00:01.123Z",
   "device": "019a6f00-0000-7000-8000-000000000001",
@@ -461,7 +459,6 @@ export interface Pending {
 | `GET /media/{id}/frame/{runId}/{ms}` | 一张关键帧；`/media/{id}/video` 有 `play.mp4` 时给它 |
 | 事件 | 一次转录落地发 `item-updated`；模型状态变了发 `transforms-updated` |
 
-命令行：`usuyo transform <id> [--job play|asr|keyframes|ocr|frames] [--plugin <id>] [--option <键>=<值>]… [--wait]`（`--option` 进 `options`；`--wait` 等这次落地，打印 `runId`，等的是模型时直接退出并说缺哪个模型；没给 `--job` 就是排上这条所有没转的）；`usuyo models [list | download <plugin> <name> | remove <plugin> <name>]`。都经守护进程，和 `add` 一样先握手。
 
 <a id="82-要写回-spec--协议的"></a>
 ### 8.2 要写回 SPEC / 协议的
@@ -483,7 +480,7 @@ export interface Pending {
 1. [x] [§2.9](../plugin-protocol.md#29-转换插件的字段) `produces` 不再写路径，写产物种类：`play`、`audio:pcm16k`（中间产物）、`probe`（只回信息、不出文件）、`asr`、`keyframes`、`ocr`，以后 `readable`、`vision`、`summary`、`embeddings`；路径由宿主定在 `derived/runs/<runId>/` 下。`consumes` 加 `audio:pcm16k`。
 2. [x] [§2.9](../plugin-protocol.md#29-转换插件的字段) `models[]` 加 `format`（`file`、`tar.bz2`、`tar.gz`、`zip`，压缩包由宿主解到 `${MODELS}/<名字>/`）、`mirrors`（同一个 sha256 的别的地址）、`license`（下载前给你看）；`size` 改必填。
 3. [x] [§4.2](../plugin-protocol.md#42-转换的-run) `run` 的参数加 `want`（这次要哪几种产出，一个插件能做几种时用）；`inputs[]` 加 `snapshot`、`imageKey`、`frameSec`、`role`（`video`、`audio`）；结果加 `tool {name, version}`、`options`（实际用的参数，含默认值）、`marks[]`、每个输出的 `kind`；宿主照它写 `run.json`，不再写 `<文件>.meta.json`。`empty` 的 `reason` 词表：`no-speech`、`no-audio-track`、`no-text`。
-4. [x] [§4.1](../plugin-protocol.md#41-分帧与生命周期)：宿主可以用后台优先级起转换进程；闲了可以关掉；`progress` 只用来判断卡住，不往界面报。
+4. [x] [§4.1](../plugin-protocol.md#41-分帧与生命周期)：转换进程闲了可以关掉；`progress` 只用来判断卡住，不往界面报。
 5. [x] [§13 第 38 项](../plugin-protocol.md#13-待定) 的答案：fetch 输出的 `media[]` 加可选 `group`，同一个字符串表示同一段时间线拆开的几个文件；没有 `group` 时宿主照 [§4.1](#41-四个转换插件) 的内容规则配。B 站插件交 `video.m4s`、`audio.m4s` 时写同一个 `group`。
 6. [x] [§7.1](../plugin-protocol.md#71-常驻进程的路径)：没有沙箱时硬链接进 `in/` 挡不住插件改原文件，原样靠 `usuyo.fetch.json` 的哈希查出来（同步前和「检查与修复」时）；有沙箱以后照原文。
 
@@ -506,7 +503,7 @@ export interface Pending {
 
 | # | 做什么 | 碰哪里 | 难度 | 挡住 |
 |---|---|---|---|---|
-| WP0 | 在这台量：sherpa-onnx + SenseVoice int8 转 [§12](#12-测试方案) 的口播样例和一段用户自己的 10 分钟口播（只在本机，不提交），记实时率、内存峰值；Vision 认 20 张小红书式的图（用户自己的，不提交）记每张耗时。先确认 `sherpa-onnx` crate 在这台编得过：它的 build script 第一次要联网下原生库，而 `just dev-plugins` 用 `--offline`，要么先联网编一次留在缓存里，要么改用 `shared` 特性指向本地的库。量完写进本文 [§3.1](#31-说的转成文字)。实时率比 0.2 慢（10 分钟要两分钟以上），回头换模型或改成只点名时转。**11-11 做了一部分**：合成样例和 11 分钟合成口播量了速度、内存、CER（[§3.1](#31-说的转成文字)）；crate 默认静态链接，第一次编译从 GitHub release 下 `sherpa-onnx-v2.0.1-osx-arm64-static-lib.tar.bz2`（约 21 MB，不校验哈希），缓存在 `target/sherpa-onnx-prebuilt/`，同一个 target 目录再编 `--offline` 能过，换 target 目录或 `cargo clean` 后要联网或设 `SHERPA_ONNX_ARCHIVE_DIR`。还没量：用户自己的真人口播、Vision 认 20 张图、干净机器上的后台优先级 | `plugins/asr-sherpa/bench/`（脚本进 git，数据不进） | 低 | WP10 的默认 |
+| WP0 | 量过了：速度、内存、字错率在 [§3.1](#31-说的转成文字)，原型和脚本在 `plugins/asr-sherpa/`，改成插件时要知道的写在它的 README 里。还没量：真人口播、Vision 认 20 张图 | `plugins/asr-sherpa/` | 低 | — |
 | WP1 | `run.json` 类型、schema、样例；把 [§8.2](#82-要写回-spec--协议的) 的 SPEC 各条写回 | `crates/usuyo-contract`、`docs/SPEC.md` | 低 | WP5 |
 | WP2 | 转换的协议类型、清单词表、`models[]` 新字段；plugin-kit 的 JSON-RPC 循环；把 [§8.2](#82-要写回-spec--协议的) 的协议各条写回 | `crates/usuyo-plugin/src/protocol`、`crates/usuyo-plugin-kit`、`docs/plugin-protocol.md` | 中 | WP3、WP9、WP10 |
 | WP3 | 常驻转换进程：启动、核对、`run`、取消、卡住、闲了关、暂存目录、优先级 | `crates/usuyo-plugin/src/host/transform.rs` | 高 | WP6 |
@@ -514,7 +511,7 @@ export interface Pending {
 | WP5 | 转录写入（暂存后改名）、列出、按层找（`resolve_layer` 认转录、`video` 先给 `play.mp4`、`frame/<runId>/<ms>`）、只留文字移走二进制 | `crates/usuyo-library` | 中 | WP6、WP7 |
 | WP6 | 排任务、配对、编排链、电源和先后、`transform_jobs`、事件 | `crates/usuyo-core/src/transform.rs`、`jobs.rs`、`engine.rs` | 高 | WP7 |
 | WP7 | 条目页的 facets 和 `pending`、标记文字、索引三层和 `source`、搜索的层映射 | `crates/usuyo-core/src/content.rs`、`view.rs`、`index_doc.rs`、`crates/usuyo-index` | 中 | WP12 |
-| WP8 | [§8.1](#81-接口) 的接口和命令行 | `apps/desktop/web/src/api/endpoints.ts`、`crates/usuyo-api`、`crates/usuyo-cli` | 中 | WP12 |
+| WP8 | [§8.1](#81-接口) 的接口 | `apps/desktop/web/src/api/endpoints.ts`、`crates/usuyo-api` | 中 | WP12 |
 | WP9 | `builtin/media`：配对时的 `ffprobe`、`play`、`audio:pcm16k`、`keyframes`；精简 LGPL ffmpeg 的编译脚本和 CI；`just dev-plugins` 装上它（开发机链到 Homebrew 的 ffmpeg） | `plugins/media`、`justfile` | 中 | 验收 |
 | WP10 | `builtin/asr-sherpa`：VAD 切段、SenseVoice、cue 切分、去标签、`no-speech` | `plugins/asr-sherpa` | 中 | 验收 |
 | WP11 | `builtin/ocr-vision`：Swift Package、JSON-RPC 循环、Vision 调用、坐标换算、`no-text` | `plugins/ocr-vision` | 中 | 验收 |
@@ -536,17 +533,19 @@ just dev-fixture-plugin                  # 装 WP13 的测试获取插件 fixtur
 usuyo daemon --port 47699 &
 ```
 
-1. `usuyo add https://fixture.test/dash`（画面、音轨分开，带一份 `subtitle.zh.vtt`）。`usuyo transform <id> --job play --wait` 以后，条目里有一次 `job: play` 的转录，`play.mp4` 用 `ffprobe` 看有一条 `video`、一条 `audio`；`raw/` 下每个文件的 sha256 和 `usuyo.fetch.json` 的 `files` 一样（原样没动）。
-2. 同一条：`usuyo models list` 显示 SenseVoice `absent`、约 166 MB；`asr` 任务在 `transform_jobs` 里是 `waiting`、`model:sense-voice-int8-2025-09-09`，资料库里没有 `asr` 转录，模型目录是空的（没自己下）。`usuyo models download builtin/asr-sherpa sense-voice-int8-2025-09-09` 以后，`model.json` 在，sha256 对得上；之后那次 `asr` 转录落地，`asr.vtt` 里有「咖啡」和「注水」。
+等一次转录落地：轮询 `GET /items/<id>`，到 `pending` 里没有这个 `job`；或者听事件流里这一条的 `item-updated`。下面的 `curl` 都带内核的令牌。
+
+1. `usuyo add https://fixture.test/dash`（画面、音轨分开，带一份 `subtitle.zh.vtt`）。`play` 落地以后，条目里有一次 `job: play` 的转录，`play.mp4` 用 `ffprobe` 看有一条 `video`、一条 `audio`；`raw/` 下每个文件的 sha256 和 `usuyo.fetch.json` 的 `files` 一样（原样没动）。
+2. 同一条：`GET /transforms` 里 SenseVoice 是 `absent`、约 163 MB；`asr` 任务在 `transform_jobs` 里是 `waiting`、`model:sense-voice-int8-2024-07-17`，资料库里没有 `asr` 转录，模型目录是空的（没自己下）。`POST /transforms/builtin/asr-sherpa/models/sense-voice-int8-2024-07-17/download` 以后，`model.json` 在，sha256 对得上；之后那次 `asr` 转录落地，`asr.vtt` 里有「咖啡」和「注水」。
 3. 同一条 `GET /items/<id>` 的 `facets` 里有两份 `asr`：`source.by: platform` 和 `source.by: machine`，`key` 不同。
-4. `usuyo transform <id> --job asr --plugin builtin/asr-sherpa --option vadThreshold=0.4 --wait`，出第二次 `asr` 转录，`redoOf` 指第一次；两次的文件夹都在，`GET /items/<id>` 里三份 `asr` 都在。
-5. `usuyo search 咖啡` 命中这条，层是 `asr`，位置是时间；点开的地址带 `#t=`。删掉索引目录，`usuyo reindex` 以后结果一样。
-6. `usuyo add https://fixture.test/note`（两张图，其中一张印着「水温 92°C，粉水比 1:15」，另一张和第一张字节一样）。`ocr` 转录的 `ocr.json` 里有这一行，`bbox` 四个数都在 0–1；`usuyo search 粉水比` 命中，层是 `ocr`，位置带 `imageKey`；`image` 那一面的 `remark` 是「有几张图是同一张」。（窗口里的样子不在这里验：窗口的 CSP 只放行 47615；由主持的会话在 Vite 开发页里看，代理指向这个临时守护进程，或用样例库。）
-7. `usuyo add https://fixture.test/silent`（画面是印着字的图，没有音轨）：`asr` 转录 `empty: true`、`reason: no-audio-track`，那一面照样在、`remark` 是「没有声音轨」；`keyframes` 转录的 `marks` 有 `static-picture`；`frames` 那一面有「Pour over in 3 stages」；`usuyo search Pour` 命中，层是 `frames`。
+4. `POST /items/<id>/transform {"job": "asr", "plugin": "builtin/asr-sherpa", "options": {"vadThreshold": 0.4}}`，出第二次 `asr` 转录，`redoOf` 指第一次；两次的文件夹都在，`GET /items/<id>` 里三份 `asr` 都在。
+5. `GET /search?q=咖啡` 命中这条，层是 `asr`，位置是时间；点开的地址带 `#t=`。删掉索引目录，`POST /reindex` 以后结果一样。
+6. `usuyo add https://fixture.test/note`（两张图，其中一张印着「水温 92°C，粉水比 1:15」，另一张和第一张字节一样）。`ocr` 转录的 `ocr.json` 里有这一行，`bbox` 四个数都在 0–1；搜「粉水比」命中，层是 `ocr`，位置带 `imageKey`；`image` 那一面的 `remark` 是「有几张图是同一张」。
+7. `usuyo add https://fixture.test/silent`（画面是印着字的图，没有音轨）：`asr` 转录 `empty: true`、`reason: no-audio-track`，那一面照样在、`remark` 是「没有声音轨」；`keyframes` 转录的 `marks` 有 `static-picture`；`frames` 那一面有「Pour over in 3 stages」；搜「Pour」命中，层是 `frames`。
 8. `usuyo add https://fixture.test/quiet`（有音轨，只有静音）：`asr` 转录 `empty: true`、`reason: no-speech`，`remark` 是「没听到人说话」。
-9. 用 debug 构建的 `usuyo`（测试开关 `USUYO_TEST_POWER=battery` 只在 debug 构建里认），在 `transform_jobs` 里放一条导入档（2）的任务，模拟在电池上：它一直 `waiting`、`power`；`POST /items/<id>/transform {"jobs": "pending"}` 以后它马上跑，用的是普通优先级。
+9. 用 debug 构建的 `usuyo`（测试开关 `USUYO_TEST_POWER=battery` 只在 debug 构建里认），在 `transform_jobs` 里放一条导入档（2）的任务，模拟在电池上：它一直 `waiting`、`power`；`POST /items/<id>/transform {"jobs": "pending"}` 以后它马上跑。
 10. 对 `dash` 那条做「只留文字」：`play.mp4`、`keyframes/` 进了回收站，`run.json`、`asr.vtt`、`ocr.json` 还在，搜索照样命中；「把移走的图和视频拿回来」以后又能播。
-11. `ps -o pid,pri,nice,command` 看自动跑的转换进程：经 `taskpolicy -b` 起的进程在这台显示 `PRI 4`、`NI 5`（用 `taskpolicy -b sleep 20` 试过）；第 9 步点名以后跑的那个不是 `PRI 4`。
+11. 在窗口里看（Vite 开发页，代理指向这个临时守护进程；打包后的窗口只连 47615）：打开 `dash` 那条，几面并排，每面头上有来源；还没转出来的那一面只写一句话；等模型的那一面有「下载」，点了以后转出来；「再转一次」出第二份并排；获取插件页上列着转换插件和模型。
 12. `GET /items/<id>`、条目页文字、日志里没有「未转」「待处理」「进度」「队列」这类字，也没有任何计数。
 13. 插件仓库 CI 编出来的精简 ffmpeg（不是 Homebrew 那份）跑一遍 `plugins/media` 的样例测试，全过：`USUYO_TEST_FFMPEG=<CI 的 ffmpeg> USUYO_TEST_FFPROBE=<CI 的 ffprobe> cargo test --manifest-path plugins/media/Cargo.toml`。
 14. `just check` 和前端的检查都过。
@@ -590,13 +589,15 @@ usuyo daemon --port 47699 &
 3. **`ort` 没有正式版。** PP-OCRv6 那条路（WP14）只能用 `ort` 2.0.0-rc.15。定：先只做 macOS 的 Vision，Windows、Linux 上线前再看 `ort` 出没出 2.0.0。
 4. **转录不删。** 定：第一版不给「删掉这一次」；删掉条目时跟着条目走。
 5. **SPEC 的 `derived/` 改成一次一个文件夹**（定：照这样，几次并排正是用户要的「换个角度再认一遍」），和调研 16 [§2](../research/16-piecing-engine.md#2-每一步怎么指得回去怎么重做) 的「现在那份放原处」不一样（[§5.1](#51-一次转换一个文件夹)）；004 的向量文件也照这个放。
-6. **自动转只看接没接电，不看空闲。** PRD 写「接电、空闲时做」；空闲要读系统的输入空闲时间。定：第一版用后台优先级代替，量过温度再说。
+6. **自动转只看接没接电，不看空闲，也不压优先级。** PRD 写「接电、空闲时做」；空闲要读系统的输入空闲时间。定：自动的照普通优先级、2 个线程、一次一条、只在接电时跑；后台优先级量过，慢好几倍，不用。
 7. **模型什么时候下。** 定：第一条用到它的条目上问一次，写大小和许可，一个按钮；不点就不下，也不再提。
 8. **口播为主的视频也出画面那一面。** 定：照出，头上标「画面几乎不动」，不藏。
+9. **不配命令行。** 转换和模型不加命令行命令，验收走本机接口和窗口；条目页和获取插件页上的那些按钮是这条线的一部分，一起做完。
+10. **默认模型用 2024-07-17 那份 SenseVoice。** 2025-09-09 那份是粤语微调版。
 
 **没核实的**
 
-- SenseVoice 在这台只用合成语音量过（[§3.1](#31-说的转成文字)）；真人口播的效果、干净机器上后台优先级的速度没量。FireRedASR2、Qwen3-ASR 都没跑（没下载模型）；表里只有厂商的数和调研 04 的数。
+- SenseVoice 在这台只用合成语音量过（[§3.1](#31-说的转成文字)）；真人口播的效果没量。FireRedASR2、Qwen3-ASR 都没跑（没下载模型）；表里只有厂商的数和调研 04 的数。
 - PP-OCRv6 各档模型多大（ModelScope 不给）；精简 ffmpeg 静态构建多大。
 - SFSpeechRecognizer 从 Tauri 的 App 里（而不是命令行子进程）能不能拿到授权：没试，也不打算用它当默认。
 - 中英混说一句里切换时 SenseVoice 的效果；小红书的手写、艺术字在 Vision 上的效果。
@@ -606,7 +607,7 @@ usuyo daemon --port 47699 &
 
 - 抖音式快剪 `scdet` 会多检，靠每分钟 6 帧、一条 60 帧的上限压住（调研 04 说上限比阈值更要紧）。
 - 硬链接进暂存目录、又没沙箱时，插件能改到原样；靠哈希查出来，不靠挡。
-- 一条 1 小时的视频，第一遍低清扫要把整片解一遍，后台优先级下可能要几分钟；没有进度条，就是那一面晚一点出来。
+- 一条 1 小时的视频，第一遍低清扫要把整片解一遍，可能要几分钟；没有进度条，就是那一面晚一点出来。
 
 <a id="来源"></a>
 ## 来源
