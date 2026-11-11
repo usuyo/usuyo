@@ -20,51 +20,56 @@ export function ImportPage() {
   return (
     <div className="relative h-full overflow-hidden bg-bg">
       <Rail label="主导航" />
-      <main className="absolute inset-y-0 right-0 left-rail overflow-hidden">
-        <div className="absolute top-7 left-gutter w-[752px]">
-          <h1 className="m-0 text-title font-semibold text-text">导入</h1>
-          <p className="m-0 mt-1 text-note text-sub">把你在平台上存过的列出来，先看一眼，再按平台的节奏慢慢收下。</p>
+      <main className="absolute inset-y-0 right-0 left-rail overflow-y-auto">
+        {/* 窗口够宽时两栏，记录在右；窄了记录排到下面。 */}
+        <div className="grid grid-cols-[minmax(0,752px)_320px] justify-between gap-x-8 gap-y-6 px-gutter pt-7 pb-10 max-[1040px]:grid-cols-1">
+          <header className="col-span-full flex max-w-[752px] items-start justify-between gap-4">
+            <div className="min-w-0">
+              <h1 className="m-0 text-title font-semibold text-text">导入</h1>
+              <p className="m-0 mt-1 text-note text-sub">把你在平台上存过的列出来，先看一眼，再按平台的节奏慢慢收下。</p>
+            </div>
+            {open ? (
+              <Button variant="outline" size="md" className="flex-none" onPress={() => show(undefined)}>
+                <Plus size={15} aria-hidden="true" />
+                新的导入
+              </Button>
+            ) : null}
+          </header>
+          <div className="min-w-0">
+            {open ? (
+              <ImportDetail key={open} id={open} onGone={() => show(undefined)} />
+            ) : (
+              <>
+                <SourcePicker onStarted={show} />
+                <DeliverTokens />
+              </>
+            )}
+          </div>
+          <aside aria-label="导入记录" className="min-w-0 px-2 max-[1040px]:mt-4">
+            <h2 className="m-0 text-body font-semibold text-text">导入记录</h2>
+            <p className="m-0 mt-0.5 text-small text-sub">每次导入留一条记录；交进来的清单也在这里。</p>
+            {imports.error ? <ErrorLine error={imports.error} className="mt-3" /> : null}
+            <ul className="m-0 mt-3 flex list-none flex-col border-t border-border p-0">
+              {(imports.data ?? []).map((v) => (
+                <li key={v.id} className="border-b border-border">
+                  <Link
+                    to="/import"
+                    search={{ open: v.id }}
+                    className={`press -mx-2 my-1 block rounded-btn px-2 py-2 no-underline hover:bg-chip/60 ${v.id === open ? "bg-chip" : ""}`}
+                  >
+                    <div className="mono text-tag text-faint">
+                      {dayText(v.createdAt)}
+                      {v.kind === "delivered" ? ` · 交进来的${v.client ? ` · ${v.client}` : ""}` : ""}
+                    </div>
+                    <div className="mt-0.5 truncate text-body font-medium text-text">{v.title}</div>
+                    <div className="text-small text-sub">{stateLine(v)}</div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            {imports.data && imports.data.length === 0 ? <p className="m-0 mt-3 text-small text-faint">还没有导入过。</p> : null}
+          </aside>
         </div>
-        {open ? (
-          <Button variant="outline" size="md" className="absolute top-7 right-[400px]" onPress={() => show(undefined)}>
-            <Plus size={15} aria-hidden="true" />
-            新的导入
-          </Button>
-        ) : null}
-        <div className="absolute top-[104px] bottom-0 left-gutter w-[752px] overflow-y-auto pr-2 pb-10">
-          {open ? (
-            <ImportDetail key={open} id={open} onGone={() => show(undefined)} />
-          ) : (
-            <>
-              <SourcePicker onStarted={show} />
-              <DeliverTokens />
-            </>
-          )}
-        </div>
-        <aside aria-label="导入记录" className="absolute top-[104px] right-gutter bottom-0 w-[320px] overflow-x-hidden overflow-y-auto px-2 pb-10">
-          <h2 className="m-0 text-body font-semibold text-text">导入记录</h2>
-          <p className="m-0 mt-0.5 text-small text-sub">每次导入留一条记录；交进来的清单也在这里。</p>
-          {imports.error ? <ErrorLine error={imports.error} className="mt-3" /> : null}
-          <ul className="m-0 mt-3 flex list-none flex-col border-t border-border p-0">
-            {(imports.data ?? []).map((v) => (
-              <li key={v.id} className="border-b border-border">
-                <Link
-                  to="/import"
-                  search={{ open: v.id }}
-                  className={`press -mx-2 my-1 block rounded-btn px-2 py-2 no-underline hover:bg-chip/60 ${v.id === open ? "bg-chip" : ""}`}
-                >
-                  <div className="mono text-tag text-faint">
-                    {dayText(v.createdAt)}
-                    {v.kind === "delivered" ? ` · 交进来的${v.client ? ` · ${v.client}` : ""}` : ""}
-                  </div>
-                  <div className="mt-0.5 truncate text-body font-medium text-text">{v.title}</div>
-                  <div className="text-small text-sub">{stateLine(v)}</div>
-                </Link>
-              </li>
-            ))}
-          </ul>
-          {imports.data && imports.data.length === 0 ? <p className="m-0 mt-3 text-small text-faint">还没有导入过。</p> : null}
-        </aside>
       </main>
     </div>
   );

@@ -92,7 +92,7 @@ export function SourcePicker({ onStarted }: { onStarted: (id: string) => void })
           </Link>
         </p>
       ) : null}
-      <div className="mt-3.5 grid grid-cols-2 gap-3">
+      <div className="mt-3.5 grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3">
         {listing.map((p) => {
           const expanded = openId === p.id;
           const site = p.sites.map((s) => sites.data?.find((x) => x.site === s)).find((s) => s !== undefined);

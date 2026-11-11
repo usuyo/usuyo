@@ -50,8 +50,8 @@ export function DeliverTokens() {
         浏览器里的脚本或扩展、手机，可以把一批链接交给 usuyo：每一批在右边单独一条，一样先给你看再收。每个用自己的令牌，只能交，读不了你的资料库；撤销马上生效。
       </p>
 
-      <div className="mt-3.5 flex items-end gap-2">
-        <TextField value={name} onChange={setName} aria-label="给它起个名字" className="w-[260px]">
+      <div className="mt-3.5 flex flex-wrap items-end gap-2">
+        <TextField value={name} onChange={setName} aria-label="给它起个名字" className="w-[260px] max-w-full">
           <Label className="mb-1 block text-small text-faint">给它起个名字</Label>
           <Input
             placeholder="例如 小红书油猴脚本"
