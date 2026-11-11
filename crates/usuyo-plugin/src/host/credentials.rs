@@ -630,8 +630,15 @@ fn write_private(path: &Path, bytes: &[u8]) -> Result<(), PluginError> {
 /// 把交出去的值从插件的日志和错误里洗掉。
 pub(crate) fn scrub(text: &mut String, values: &[String]) {
     for v in values {
-        if text.contains(v.as_str()) {
-            *text = text.replace(v.as_str(), "[redacted]");
+        // 原样的，和被 JSON、Debug 转义过的写法（值里有引号、反斜杠、非 ASCII 字符时不一样）
+        let json = serde_json::to_string(v).unwrap_or_default();
+        let debug = format!("{v:?}");
+        let escaped =
+            [json.as_str(), debug.as_str()].map(|quoted| quoted.trim_matches('"').to_owned());
+        for form in [v.as_str(), escaped[0].as_str(), escaped[1].as_str()] {
+            if !form.is_empty() && text.contains(form) {
+                *text = text.replace(form, "[redacted]");
+            }
         }
     }
 }
@@ -706,5 +713,20 @@ mod tests {
         let mut t = "cookie SESSDATA=abcdef123 failed".to_owned();
         scrub(&mut t, &["abcdef123".into()]);
         assert_eq!(t, "cookie SESSDATA=[redacted] failed");
+    }
+
+    #[test]
+    fn scrub_matches_escaped_forms() {
+        let value = "a\"b\\c\u{4e2d}".to_owned();
+        // 解析错误里值是按 Debug 转义出现的，JSON 里是按 JSON 转义出现的
+        let mut debug = format!("invalid type: string {value:?}, expected a sequence");
+        scrub(&mut debug, std::slice::from_ref(&value));
+        assert_eq!(
+            debug,
+            "invalid type: string \"[redacted]\", expected a sequence"
+        );
+        let mut json = format!("got {}", serde_json::json!(value));
+        scrub(&mut json, std::slice::from_ref(&value));
+        assert_eq!(json, "got \"[redacted]\"");
     }
 }

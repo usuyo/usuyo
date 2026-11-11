@@ -839,10 +839,11 @@ impl Call {
         };
         let ok = map.remove("ok");
         let mut unknown = Vec::new();
-        let invalid = |(field, message): (String, String)| {
+        // 只说是哪一栏不对：解析器的原话会引用那一栏的值，值里可能夹着交出去的凭据。
+        let invalid = |(field, _): (String, String)| {
             host(
                 ErrorCode::InvalidOutput,
-                format!("envelope at `{field}`: {message}"),
+                format!("envelope at `{field}` has the wrong type or shape"),
             )
         };
         let result = match ok {
@@ -861,6 +862,11 @@ impl Call {
                 ) {
                     Ok(Failed { mut error }) => Err(match error.check_from_plugin() {
                         Ok(()) => {
+                            // 先洗再截：截短以后被切开的值就认不出来了
+                            credentials::scrub(&mut error.message, &scrub);
+                            if let Some(h) = &mut error.hint {
+                                credentials::scrub(h, &scrub);
+                            }
                             envelope_text::failure(&mut error);
                             error
                         }
@@ -879,7 +885,7 @@ impl Call {
             tracing::warn!(plugin = %plugin.id(), call = %self.id, field = ?field, "unknown output field ignored");
         }
         result.map_err(|mut failure| {
-            // 插件报的和宿主拼的都在这里过一遍：解析错误会引用原文，交出去的值不许留在里面。
+            // 宿主拼的错误里也可能带着插件给的字（栏名、平台名），在这里再过一遍。
             credentials::scrub(&mut failure.message, &scrub);
             if let Some(hint) = &mut failure.hint {
                 credentials::scrub(hint, &scrub);

@@ -358,7 +358,11 @@ async fn values_are_scrubbed_from_host_made_errors() {
     // 假插件把收到的第一个 cookie 值写进了形状不对的信封
     assert!(!all.contains("local-value-1"), "{all}");
     assert!(!all.contains("secret-sid-value"), "{all}");
-    assert!(failure.message.contains("[redacted]"), "{all}");
+    // 宿主拼的错误只说哪一栏，不引用值
+    assert_eq!(
+        failure.message,
+        "envelope at `sources` has the wrong type or shape"
+    );
 }
 
 #[tokio::test]
