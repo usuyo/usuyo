@@ -1,0 +1,11 @@
+[package]
+name = "spike-asr"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.104"
+sherpa-onnx = "2.0.1"
+
+# 独立的包：带原生依赖，不进仓库的工作区，有自己的锁文件。
+[workspace]
