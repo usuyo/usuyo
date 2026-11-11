@@ -89,6 +89,7 @@ pub(crate) fn build(engine: Engine, gate: Arc<Gate>, origins: &[String]) -> Rout
         .route("/items/{id}/trash", post(trash))
         .route("/items/{id}/restore", post(restore))
         .route("/items/{id}/restore-media", post(restore_media))
+        .route("/trash/{id}/purge", post(purge_now))
         .route("/items/{id}/text-only", post(text_only))
         .route("/items/{id}/refetch", post(refetch))
         .route("/search", get(search))
@@ -351,6 +352,15 @@ async fn restore_media(State(s): State<AppState>, Path(id): Path<String>) -> Api
     Ok(Json(
         blocking(move || s.engine.restore_media(&id, Via::App, &links)).await?,
     ))
+}
+
+/// 回收站里「立即清除」一项，不等 `trashDays`。
+async fn purge_now(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, Problem> {
+    blocking(move || s.engine.purge_now(&id, Via::App)).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn text_only(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<ItemView> {

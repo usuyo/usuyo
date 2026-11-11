@@ -13,6 +13,7 @@ mod jobs;
 mod layout;
 mod pace;
 mod registry;
+mod trash;
 mod vault;
 pub mod view;
 
@@ -21,5 +22,6 @@ pub use error::{Error, Result};
 pub use imports::{BATCH_MAX, DeliveredLink};
 pub use inbox::InboxReport;
 pub use layout::{HashLayout, Layout, LayoutItem, Placed};
+pub use trash::{ClockGuard, Expiry};
 pub use usuyo_plugin::{CallLimits, Vault};
 pub use vault::{FileVault, system_vault};

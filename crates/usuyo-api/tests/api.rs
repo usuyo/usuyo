@@ -570,3 +570,51 @@ async fn create_topic_then_put_an_item_in_it() {
     let health = json_of(send(&f.app, authed("/health")).await).await;
     assert!(health["library"].as_str().unwrap().ends_with("lib"));
 }
+
+#[tokio::test]
+async fn purge_now_removes_a_trash_entry() {
+    let f = fixture();
+    let post = |path: &str| {
+        get(path)
+            .method("POST")
+            .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+            .body(Body::empty())
+            .unwrap()
+    };
+    let taken = f
+        .engine
+        .take("https://example.test/a", "link", Via::Api)
+        .await
+        .unwrap();
+    let res = send(&f.app, post(&format!("/items/{}/trash", taken.id))).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let trash = f.engine.library_root().join(".usuyo/trash");
+    let tid = std::fs::read_dir(&trash)
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .file_name()
+        .into_string()
+        .unwrap();
+
+    let path = format!("/trash/{tid}/purge");
+    assert_eq!(
+        send(&f.app, post(&path)).await.status(),
+        StatusCode::NO_CONTENT
+    );
+    assert!(!trash.join(&tid).exists());
+    problem(
+        send(&f.app, authed(&format!("/items/{}", taken.id))).await,
+        StatusCode::NOT_FOUND,
+        "not-found",
+    )
+    .await;
+    // 已经没有了：再清一次是 404，不是成功。
+    problem(
+        send(&f.app, post(&path)).await,
+        StatusCode::NOT_FOUND,
+        "not-found",
+    )
+    .await;
+}

@@ -411,6 +411,10 @@ pub enum Event {
     ItemTrashed {
         id: String,
     },
+    /// 回收站里的条目到期或被立即清除，从资料库里移除了（已清干净，拉不到了）。
+    ItemRemoved {
+        id: String,
+    },
     TopicUpdated {
         id: String,
     },
@@ -452,6 +456,11 @@ mod tests {
         assert_eq!(
             serde_json::to_value(&e).unwrap()["type"],
             json!("item-fetch-failed")
+        );
+        let removed = Event::ItemRemoved { id: "a".into() };
+        assert_eq!(
+            serde_json::to_value(&removed).unwrap(),
+            json!({"type": "item-removed", "id": "a"})
         );
     }
 }

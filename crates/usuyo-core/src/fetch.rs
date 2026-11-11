@@ -150,9 +150,14 @@ impl Engine {
         })
     }
 
-    /// 一直跑后台的事：取内容、列导入、收件文件夹。有新任务时 [`Engine::take`] 会叫醒取内容那一路。
+    /// 一直跑后台的事：取内容、列导入、收件文件夹、回收站到期。有新任务时 [`Engine::take`] 会叫醒取内容那一路。
     pub async fn run_worker(&self) {
-        tokio::join!(self.run_fetches(), self.run_imports(), self.run_inbox());
+        tokio::join!(
+            self.run_fetches(),
+            self.run_imports(),
+            self.run_inbox(),
+            self.run_expiry()
+        );
     }
 
     async fn run_fetches(&self) {
