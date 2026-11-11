@@ -42,7 +42,7 @@ fn main() -> ExitCode {
                     &out,
                     want.as_ref(),
                     s.allow_private_network,
-                    &Policy::strict(),
+                    &Policy::from_host(),
                 )
             })),
             None => usage(),

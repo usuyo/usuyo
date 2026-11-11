@@ -4,6 +4,7 @@
 //! 按用户排的顺序换插件、平台节奏、暂停和各种锁由调用方（内核的编排）做，
 //! 判断需要的信息都在返回值里：错误码的 `tries_next`、`retryable`、`pause`，清单的 `pacing`。
 
+mod network;
 mod outdir;
 mod process;
 
@@ -600,6 +601,13 @@ impl PluginHost {
                 source: e,
             })?;
             env.push(("USUYO_SETTINGS".into(), path.into()));
+        }
+        // 这台机器开着假 IP 模式的代理时告诉插件，不然它会把每个网站都当成内网地址拒掉。
+        if tokio::task::spawn_blocking(network::behind_fake_ip_proxy)
+            .await
+            .unwrap_or(false)
+        {
+            env.push(("USUYO_NETWORK".into(), "fake-ip".into()));
         }
         let spawn = Spawn {
             program,

@@ -146,12 +146,12 @@ pub struct Client {
 }
 
 impl Client {
-    /// 用严格的地址策略：只连公网地址。
+    /// 用严格的地址策略：只连公网地址；宿主说明了网络环境的照它来（见 [`Policy::from_host`]）。
     pub fn new(user_agent: impl Into<String>, hosts: Hosts) -> Self {
         Client {
             user_agent: user_agent.into(),
             hosts,
-            policy: Policy::strict(),
+            policy: Policy::from_host(),
         }
     }
 
@@ -554,6 +554,7 @@ mod tests {
             lookup,
             public: |ip| ip == IpAddr::from([127, 0, 0, 1]),
             cookies_over_http: true,
+            ..Policy::strict()
         }
     }
 

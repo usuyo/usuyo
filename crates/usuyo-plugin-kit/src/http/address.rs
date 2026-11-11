@@ -17,6 +17,8 @@ pub struct Policy {
     pub public: fn(IpAddr) -> bool,
     /// 登录信息能不能走明文 http。出厂的策略不许；连本地测试服务器的测试才开。
     pub cookies_over_http: bool,
+    /// 宿主查到这台机器开着假 IP 模式的代理：域名查出来全在假 IP 段时照常放行。
+    pub fake_ip_names: bool,
 }
 
 impl Policy {
@@ -25,6 +27,16 @@ impl Policy {
             lookup: system_lookup,
             public: is_public,
             cookies_over_http: false,
+            fake_ip_names: false,
+        }
+    }
+
+    /// 插件实际运行时用的：严格策略，加上宿主经 `USUYO_NETWORK` 说明的网络环境。
+    /// 是不是假 IP 环境由宿主拿固定的公网域名去查，不看要取的那个域名自己的回答。
+    pub fn from_host() -> Self {
+        Policy {
+            fake_ip_names: std::env::var("USUYO_NETWORK").is_ok_and(|v| v == "fake-ip"),
+            ..Self::strict()
         }
     }
 }
@@ -98,6 +110,27 @@ fn is_fake_ip(ip: IpAddr) -> bool {
     matches!(ip, IpAddr::V4(v4) if in_v4(u32::from(v4), FAKE_IP))
 }
 
+/// 一看就是本机或内网的名字：没有点的单段名，和这些后缀。
+/// 只在假 IP 环境下用：平时由解析出的地址把关，这时地址看不到，先按名字挡一道。
+fn is_local_name(name: &str) -> bool {
+    const SUFFIXES: [&str; 9] = [
+        "localhost",
+        "local",
+        "internal",
+        "lan",
+        "home",
+        "home.arpa",
+        "corp",
+        "intranet",
+        "private",
+    ];
+    let name = name.trim_end_matches('.').to_ascii_lowercase();
+    !name.contains('.')
+        || SUFFIXES
+            .iter()
+            .any(|s| name.strip_suffix(s).is_some_and(|rest| rest.ends_with('.')))
+}
+
 #[derive(Debug)]
 pub(crate) enum Refusal {
     /// 不是 http(s)、带账号密码、没有主机。
@@ -126,10 +159,13 @@ pub(crate) fn admit(
         return refuse("no port".into());
     };
     // 数字地址由 URL 类型解析，十进制、十六进制、八进制的写法都已经变成 IP
-    let (addrs, named) = match url.host() {
-        Some(Host::Ipv4(ip)) => (vec![SocketAddr::new(ip.into(), port)], false),
-        Some(Host::Ipv6(ip)) => (vec![SocketAddr::new(ip.into(), port)], false),
-        Some(Host::Domain(name)) => ((policy.lookup)(name, port).map_err(Refusal::Lookup)?, true),
+    let (addrs, name) = match url.host() {
+        Some(Host::Ipv4(ip)) => (vec![SocketAddr::new(ip.into(), port)], None),
+        Some(Host::Ipv6(ip)) => (vec![SocketAddr::new(ip.into(), port)], None),
+        Some(Host::Domain(name)) => (
+            (policy.lookup)(name, port).map_err(Refusal::Lookup)?,
+            Some(name),
+        ),
         None => return refuse("no host".into()),
     };
     if addrs.is_empty() {
@@ -138,10 +174,12 @@ pub(crate) fn admit(
             "no address",
         )));
     }
-    // 域名查出来全是假 IP：这台机器开着假 IP 模式的代理，公网的域名都长这样，只能放行。
-    // 代价是这时看不到真正的地址，一个真指向内网的域名拦不住，要靠代理工具自己的规则。
-    // 链接里直接写这一段的数字地址不算，照样拒绝。
-    let proxied = named && addrs.iter().all(|a| is_fake_ip(a.ip()));
+    // 宿主说这台机器开着假 IP 模式的代理时，公网的域名查出来全在假 IP 段，只能放行。
+    // 代价是这时看不到真正的地址：一个真指向内网的域名拦不住，要靠代理工具自己的规则；
+    // 能做的是按名字先挡掉一看就是本机、内网的。链接里直接写这一段的数字地址照样拒绝。
+    let proxied = policy.fake_ip_names
+        && name.is_some_and(|n| !is_local_name(n))
+        && addrs.iter().all(|a| is_fake_ip(a.ip()));
     if !private_ok
         && !proxied
         && let Some(bad) = addrs.iter().find(|a| !(policy.public)(a.ip()))
@@ -242,7 +280,12 @@ mod tests {
             "intranet.test" => &["192.168.1.10"],
             "mixed.test" => &["93.184.216.34", "10.0.0.1"],
             "mapped.test" => &["::ffff:127.0.0.1"],
-            "proxied.test" => &["198.18.11.245"],
+            "proxied.test"
+            | "router"
+            | "nas.local"
+            | "nas.local."
+            | "db.corp"
+            | "metadata.google.internal" => &["198.18.11.245"],
             "half-proxied.test" => &["198.18.11.245", "10.0.0.1"],
             _ => return Err(io::Error::new(io::ErrorKind::NotFound, "no such host")),
         };
@@ -281,15 +324,44 @@ mod tests {
         ));
     }
 
+    fn check_behind_fake_ip(input: &str) -> Result<Vec<SocketAddr>, Refusal> {
+        let policy = Policy {
+            lookup: table,
+            fake_ip_names: true,
+            ..Policy::strict()
+        };
+        admit(&Url::parse(input).unwrap(), false, &policy)
+    }
+
     #[test]
-    fn fake_ip_answers_are_admitted_only_for_names() {
+    fn fake_ip_answers_need_the_host_to_say_so() {
+        // 宿主没说是假 IP 环境：这一段照旧拒绝
+        assert!(refused("https://proxied.test/"));
         assert_eq!(
-            check("https://proxied.test/", false).unwrap(),
+            check_behind_fake_ip("https://proxied.test/").unwrap(),
             [SocketAddr::new(ip("198.18.11.245"), 443)]
         );
-        assert!(refused("http://half-proxied.test/"));
-        assert!(refused("http://198.18.11.245/"));
-        assert!(refused("http://198.18.0.1/"));
+        for input in [
+            "http://half-proxied.test/",
+            "http://198.18.11.245/",
+            "http://198.18.0.1/",
+            "http://router/",
+            "http://nas.local/",
+            "http://NAS.Local./",
+            "http://db.corp/",
+            "http://metadata.google.internal/",
+            "http://intranet.test/",
+        ] {
+            assert!(
+                matches!(
+                    check_behind_fake_ip(input),
+                    Err(Refusal::Invalid(_) | Refusal::NotPublic(_))
+                ),
+                "{input}"
+            );
+        }
+        assert!(!is_local_name("notlocal.example"));
+        assert!(!is_local_name("mylan.example.com"));
     }
 
     #[test]
