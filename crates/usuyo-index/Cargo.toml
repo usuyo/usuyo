@@ -1,0 +1,22 @@
+[package]
+name = "usuyo-index"
+description = "usuyo 的可重建全文索引：中英文分词、拼音、按条目分组的搜索"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+jieba-rs = "0.11.0"
+pinyin = "0.11.0"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+tantivy = "0.27.0"
+thiserror = "2.0.21"
+
+[dev-dependencies]
+tempfile = "3.27.0"
