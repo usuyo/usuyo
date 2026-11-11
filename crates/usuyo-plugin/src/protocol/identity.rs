@@ -32,6 +32,9 @@ impl Identity {
     }
 }
 
+/// `contentId` 最长多少字节：它进条目 id 的哈希、manifest 和日志。
+const CONTENT_ID_BYTES: usize = 256;
+
 /// 线上的形状：`{platform, contentId?, url?}`。
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -61,6 +64,11 @@ impl TryFrom<WireIdentity> for Identity {
                 _ => Err("a `file` identity has neither `contentId` nor `url`".into()),
             },
             _ => match w.content_id {
+                Some(id) if id.len() > CONTENT_ID_BYTES || id.chars().any(char::is_control) => {
+                    Err(format!(
+                        "`contentId` is over {CONTENT_ID_BYTES} bytes or has control characters"
+                    ))
+                }
                 Some(id) if !id.is_empty() => Ok(Identity::Platform {
                     platform: w.platform,
                     content_id: id,

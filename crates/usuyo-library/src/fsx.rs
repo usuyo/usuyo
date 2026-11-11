@@ -167,6 +167,18 @@ pub fn move_path(from: &Path, to: &Path) -> Result<()> {
     fs::rename(from, to).map_err(|e| Error::io(from, e))
 }
 
+/// 只有自己能进的文件夹（按机器的目录：令牌、任务队列、日志在里面），没有就建。
+pub(crate) fn private_dir(path: &Path) -> Result<()> {
+    fs::create_dir_all(path).map_err(|e| Error::io(path, e))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o700))
+            .map_err(|e| Error::io(path, e))?;
+    }
+    Ok(())
+}
+
 /// 记录里的相对路径只许普通的段：不许空、绝对路径、`.`、`..`、盘符。
 pub fn is_plain_relative(p: &str) -> bool {
     !p.is_empty()

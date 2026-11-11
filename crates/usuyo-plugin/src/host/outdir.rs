@@ -22,6 +22,8 @@ pub struct OutFile {
 const NAME_BYTES: usize = 200;
 /// 相对输出目录的路径最多多少个 UTF-16 单位：条目文件夹以内 140，减去 `raw/<UUIDv7>/` 的 41。
 const PATH_UTF16: usize = 140 - "raw/".len() - 36 - 1;
+/// 输出目录里最多多少项（文件加目录）：上百万个空文件也要花内存、inode 和逐个哈希。
+const MAX_ENTRIES: usize = 10_000;
 /// Windows 的保留名，带扩展名也算。
 const RESERVED: [&str; 22] = [
     "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
@@ -39,6 +41,7 @@ pub(crate) fn inspect(root: &Path, max_bytes: u64) -> Result<Vec<OutFile>, Strin
     let mut walk = Walk {
         files: Vec::new(),
         total: 0,
+        entries: 0,
         max_bytes,
     };
     walk.dir(root, "")?;
@@ -49,6 +52,7 @@ pub(crate) fn inspect(root: &Path, max_bytes: u64) -> Result<Vec<OutFile>, Strin
 struct Walk {
     files: Vec<OutFile>,
     total: u64,
+    entries: usize,
     max_bytes: u64,
 }
 
@@ -58,6 +62,10 @@ impl Walk {
         let mut folded = HashSet::new();
         for entry in entries {
             let entry = entry.map_err(|e| format!("{prefix}: {e}"))?;
+            self.entries += 1;
+            if self.entries > MAX_ENTRIES {
+                return Err(format!("output has more than {MAX_ENTRIES} entries"));
+            }
             let name = entry.file_name();
             let name = name
                 .to_str()

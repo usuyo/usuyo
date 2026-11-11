@@ -31,6 +31,22 @@ pub fn expires_at(trashed_at: &str, trash_days: Option<u32>) -> Result<Option<St
         .transpose()
 }
 
+/// 读一份 `entry.json`：`path` 和 `files` 拿回来时要拼成路径，可能在 usuyo 外被改过，
+/// 只许资料库以内的相对路径。
+fn parse_entry(path: &std::path::Path, bytes: &[u8]) -> Result<TrashEntry> {
+    let e: TrashEntry = fsx::parse_json(path, bytes)?;
+    match std::iter::once(&e.path)
+        .chain(&e.files)
+        .find(|p| !fsx::is_plain_relative(p))
+    {
+        Some(bad) => Err(Error::malformed(
+            path,
+            format!("path `{bad}` leaves its folder"),
+        )),
+        None => Ok(e),
+    }
+}
+
 /// 只在本机、到期只删本机文件的回收站项。
 fn local_only(e: &TrashEntry) -> bool {
     matches!(e.reason.as_str(), "keep-text" | "merge" | "conflict")
@@ -45,13 +61,16 @@ impl Library {
         Ok(self.path(".usuyo/trash").join(tid))
     }
 
-    /// 回收站里的全部项。
+    /// 回收站里的全部项。读不了的跳过并记日志，不挡住别的。
     pub fn trash_entries(&self) -> Result<Vec<TrashEntry>> {
         let mut out = Vec::new();
         for dir in crate::item::read_dirs(&self.path(".usuyo/trash"))? {
             let p = dir.join("entry.json");
             if let Some(b) = read_opt(&p)? {
-                out.push(fsx::parse_json(&p, &b)?);
+                match parse_entry(&p, &b) {
+                    Ok(e) => out.push(e),
+                    Err(e) => tracing::warn!(error = %e, "trash entry not readable"),
+                }
             }
         }
         out.sort_by(|a: &TrashEntry, b| (&a.trashed_at, &a.id).cmp(&(&b.trashed_at, &b.id)));
@@ -61,7 +80,7 @@ impl Library {
     pub fn trash_entry(&self, tid: &str) -> Result<TrashEntry> {
         let p = self.trash_path(tid)?.join("entry.json");
         let b = read_opt(&p)?.ok_or_else(|| Error::NotFound(format!("trash {tid}")))?;
-        fsx::parse_json(&p, &b)
+        parse_entry(&p, &b)
     }
 
     /// 删掉或撤销收下进回收站的这一条。
@@ -583,7 +602,13 @@ impl Library {
     /// 别的条目 manifest 的 `sameAs`、`notSameAs`、`aliases` 去掉它。
     fn drop_item_refs(&self, ids: &[String]) -> Result<()> {
         for other in self.item_ids()? {
-            let mut item = self.item(&other)?;
+            let mut item = match self.item(&other) {
+                Ok(item) => item,
+                Err(e) => {
+                    tracing::warn!(item = %other, error = %e, "item not readable");
+                    continue;
+                }
+            };
             let m = &mut item.manifest;
             let n = m.same_as.len() + m.not_same_as.len() + m.aliases.len();
             for v in [&mut m.same_as, &mut m.not_same_as, &mut m.aliases] {

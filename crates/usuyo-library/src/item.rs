@@ -11,10 +11,10 @@ use usuyo_contract::{
 };
 
 use crate::fsx::{self, list_files, read_opt, write_json};
-use crate::hash::{hash_tag, sha256_hex};
+use crate::hash::hash_tag;
 use crate::id::{ItemId, uuid7};
 use crate::journal::{Batch, Step, target};
-use crate::text::{angle_url, md_inline, plain_to_markdown, rel_path_fits};
+use crate::text::{angle_url, markdown_is_inert, md_inline, plain_to_markdown, rel_path_fits};
 use crate::{Error, Library, Result, time};
 
 /// 条目文件夹以内的相对路径不超过的 UTF-16 单位。
@@ -68,7 +68,27 @@ pub struct NewSnapshot {
     pub missing_reason: Option<String>,
     pub text_origin: Option<String>,
     pub staged: PathBuf,
+    /// `staged` 里每个文件的哈希，由 [`hash_staged`] 在拿资料库的锁之前算好。
+    pub files: Vec<FileHash>,
     pub fetch: FetchRecord,
+}
+
+/// 暂存目录里每个文件（`usuyo.fetch.json` 除外）的路径、大小、哈希。大文件也不整个读进内存；
+/// 不用拿资料库的锁，收下前先算，拿锁的时候只核对路径和大小。
+pub fn hash_staged(staged: &Path) -> Result<Vec<FileHash>> {
+    let mut files = Vec::new();
+    for rel in list_files(staged)? {
+        if rel == "usuyo.fetch.json" {
+            continue;
+        }
+        let (size, sha256) = crate::hash::sha256_file(&staged.join(&rel))?;
+        files.push(FileHash {
+            path: rel,
+            size,
+            sha256,
+        });
+    }
+    Ok(files)
 }
 
 /// 一次收下。
@@ -255,12 +275,15 @@ pub fn render_content(
         s.push_str(&format!("<{}>\n", angle_url(&u)));
     }
     s.push_str("\n---\n\n");
-    let body =
-        match primary.and_then(|f| f.text.as_deref().filter(|t| !t.is_empty()).map(|t| (t, f))) {
-            Some((t, f)) if f.text_format.as_deref() == Some("markdown") => t.to_owned(),
-            Some((t, _)) => plain_to_markdown(t),
-            None => readable.unwrap_or_default().to_owned(),
-        };
+    let body = match primary
+        .and_then(|f| f.text.as_deref().filter(|t| !t.is_empty()).map(|t| (t, f)))
+    {
+        Some((t, f)) if f.text_format.as_deref() == Some("markdown") && markdown_is_inert(t) => {
+            t.to_owned()
+        }
+        Some((t, _)) => plain_to_markdown(t),
+        None => readable.unwrap_or_default().to_owned(),
+    };
     if !body.is_empty() {
         s.push_str(&body);
         if !body.ends_with('\n') {
@@ -547,18 +570,23 @@ impl Library {
                 "fetch output path `{bad}` leaves the output folder"
             )));
         }
-        let mut files = Vec::new();
+        // 算哈希以后暂存目录不该再变：路径和大小对不上就不收。
+        let mut listed = Vec::new();
         for rel in list_files(&s.staged)? {
             if rel == "usuyo.fetch.json" {
                 continue;
             }
-            let bytes = fsx::read(&s.staged.join(&rel))?;
-            files.push(FileHash {
-                path: rel,
-                size: bytes.len() as u64,
-                sha256: sha256_hex(&bytes),
-            });
+            let path = s.staged.join(&rel);
+            let size = fs::metadata(&path).map_err(|e| Error::io(&path, e))?.len();
+            listed.push((rel, size));
         }
+        let hashed: Vec<(String, u64)> = s.files.iter().map(|f| (f.path.clone(), f.size)).collect();
+        if listed != hashed {
+            return Err(Error::InvalidArgs(
+                "staged files changed after they were hashed".into(),
+            ));
+        }
+        let files = s.files;
         // 和已有快照逐个文件哈希都一样：不新建。
         for existing in &m.snapshots {
             let path = dir.join("raw").join(&existing.id).join("usuyo.fetch.json");
@@ -701,8 +729,9 @@ impl Library {
             // 解析掉符号链接以后还得是条目文件夹里的文件。
             let real = p.canonicalize().map_err(|_| not_found())?;
             let root = dir.canonicalize().map_err(|e| Error::io(&dir, e))?;
+            // 回解析后的路径：之后打开它的不再跟着符号链接走。
             if real.is_file() && real.starts_with(&root) {
-                Ok(LayerSource::File(p))
+                Ok(LayerSource::File(real))
             } else {
                 Err(not_found())
             }
@@ -766,12 +795,19 @@ impl Library {
     }
 
     /// 别的条目 `aliases` 里有这个 id：回那一条。逐个读 manifest，以后由索引代替。
+    /// 读不了的条目跳过并记日志，不挡住收下新的。
     fn resolve_alias(&self, id: &ItemId) -> Result<Option<ItemId>> {
         if self.item_dir(id).exists() {
             return Ok(None);
         }
         for other in self.item_ids()? {
-            let item = self.item(&other)?;
+            let item = match self.item(&other) {
+                Ok(item) => item,
+                Err(e) => {
+                    tracing::warn!(item = %other, error = %e, "item not readable");
+                    continue;
+                }
+            };
             if item.manifest.aliases.iter().any(|a| a == id.as_str()) {
                 return Ok(Some(other));
             }

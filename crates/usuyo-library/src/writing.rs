@@ -180,8 +180,9 @@ impl Library {
             None => base,
             Some((_, other_name)) => {
                 let other_path = dir.join(&other_name);
-                let other = Doc::<M>::parse(&other_path, &fsx::read(&other_path)?)?;
-                if other.meta.id() > meta.id() {
+                // 解析不了的是别人放的文件：名字算占着，它不动。
+                let other = Doc::<M>::parse(&other_path, &fsx::read(&other_path)?).ok();
+                if other.is_some_and(|o| o.meta.id() > meta.id()) {
                     // 对方 id 大：对方挪到下一个空名字，这份用本名。
                     let free = next_free(&stem, &holders);
                     fsx::move_path(&other_path, &dir.join(&free))?;

@@ -80,6 +80,7 @@ fn snapshot(lib: &Library, url: &str, text: &str) -> NewSnapshot {
         ],
         missing_reason: None,
         text_origin: Some("platform".into()),
+        files: usuyo_library::hash_staged(&staged).unwrap(),
         staged,
         fetch: FetchRecord {
             identity: Some(web(url)),
@@ -1504,4 +1505,144 @@ fn fetch_record_paths_cannot_leave_the_snapshot_folder() {
             "not-found"
         );
     }
+}
+
+#[test]
+fn opening_clears_call_folders_left_by_a_crash() {
+    let e = env();
+    drop(Library::init(&e.root, &e.machine).unwrap());
+    let tmp = e.root.join(".usuyo/tmp");
+    fs::create_dir_all(tmp.join("usuyo-call-0190-x/out")).unwrap();
+    fs::write(tmp.join("usuyo-call-0190-x/out/big.bin"), b"x").unwrap();
+    let staged = tmp.join(usuyo_library::uuid7());
+    fs::create_dir_all(&staged).unwrap();
+    fs::write(tmp.join("migrate-1-2.json"), b"{}").unwrap();
+    fs::create_dir_all(tmp.join("not-ours")).unwrap();
+    let _lib = Library::open(&e.root, &e.machine).unwrap();
+    assert!(!tmp.join("usuyo-call-0190-x").exists());
+    assert!(!staged.exists());
+    assert!(tmp.join("migrate-1-2.json").is_file(), "迁移计划不动");
+    assert!(tmp.join("not-ours").is_dir(), "认不出的不动");
+}
+
+#[cfg(unix)]
+#[test]
+fn machine_folders_are_private() {
+    use std::os::unix::fs::PermissionsExt;
+    let e = env();
+    let lib = Library::init(&e.root, &e.machine).unwrap();
+    for dir in [e.machine.as_path(), lib.machine_dir()] {
+        let mode = fs::metadata(dir).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o700, "{}", dir.display());
+    }
+}
+
+#[test]
+fn trash_entry_paths_cannot_leave_their_folders() {
+    let e = env();
+    let mut lib = Library::init(&e.root, &e.machine).unwrap();
+    let id = lib
+        .add_item(&user(), capture(&lib, "https://example.com/a", "正文"))
+        .unwrap()
+        .id()
+        .clone();
+    lib.apply(&user(), &item_target(&id), Op::KeepText {})
+        .unwrap();
+    let tid = lib.trash_entries().unwrap()[0].id.clone();
+    let path = e.root.join(".usuyo/trash").join(&tid).join("entry.json");
+    let good: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    for (field, bad) in [
+        ("files", json!(["../../../outside.txt"])),
+        ("files", json!(["/etc/hosts"])),
+        ("path", json!("items/web/../../outside")),
+    ] {
+        let mut v = good.clone();
+        v[field] = bad;
+        fs::write(&path, serde_json::to_vec(&v).unwrap()).unwrap();
+        assert_eq!(lib.trash_entry(&tid).unwrap_err().code(), "internal");
+        assert!(
+            lib.trash_entries().unwrap().is_empty(),
+            "写坏的一项不列，别的照常"
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn layer_paths_are_the_files_actually_served() {
+    let e = env();
+    let mut lib = Library::init(&e.root, &e.machine).unwrap();
+    let id = lib
+        .add_item(&user(), capture(&lib, "https://example.com/a", "原文的字"))
+        .unwrap()
+        .id()
+        .clone();
+    let sid = lib.item(&id).unwrap().manifest.primary_snapshot.unwrap();
+    let raw = e.root.join(id.rel_dir()).join("raw").join(&sid);
+    fs::remove_file(raw.join("media/video.mp4")).unwrap();
+    std::os::unix::fs::symlink(raw.join("page.html"), raw.join("media/video.mp4")).unwrap();
+    let usuyo_library::LayerSource::File(p) = lib.resolve_layer(&id, "video", None).unwrap() else {
+        panic!()
+    };
+    assert_eq!(p, raw.join("page.html").canonicalize().unwrap());
+}
+
+#[test]
+fn plugin_markdown_with_html_or_other_schemes_is_written_as_plain_text() {
+    let e = env();
+    let mut lib = Library::init(&e.root, &e.machine).unwrap();
+    let content = |lib: &mut Library, url: &str, text: &str| {
+        let mut c = capture(lib, url, "x");
+        let f = &mut c.snapshot.as_mut().unwrap().fetch;
+        f.text = Some(text.into());
+        f.text_format = Some("markdown".into());
+        let id = lib.add_item(&user(), c).unwrap().id().clone();
+        fs::read_to_string(e.root.join(id.rel_dir()).join("content.md")).unwrap()
+    };
+    let md = content(
+        &mut lib,
+        "https://example.com/html",
+        "## 小标题\n\n<img src=x onerror=alert(1)>\n",
+    );
+    assert!(md.contains("\\<img"), "{md}");
+    let md = content(
+        &mut lib,
+        "https://example.com/scheme",
+        "[打开](obsidian://open?vault=x)\n\n[^1]: file:///etc/hosts\n",
+    );
+    assert!(md.contains("\\[打开\\]"), "{md}");
+    for sneaky in [
+        "[x]( obsidian://open)",
+        "[x](\nfile:///etc/hosts)",
+        "[x](file&colon;///etc/hosts)",
+        "[x](&#111;bsidian://open)",
+        "> [a]: file:///x",
+        "[a]:\nfile:///x",
+    ] {
+        let md = content(
+            &mut lib,
+            &format!("https://example.com/{}", sneaky.len()),
+            sneaky,
+        );
+        assert!(md.contains("\\["), "{sneaky}: {md}");
+    }
+    let md = content(
+        &mut lib,
+        "https://example.com/clean",
+        "## 小标题\n\n**粗** [链接](https://example.com/x) 和 [站内](#a)\n",
+    );
+    assert!(
+        md.contains("## 小标题\n\n**粗** [链接](https://example.com/x)"),
+        "{md}"
+    );
+}
+
+#[test]
+fn staged_files_that_change_after_hashing_are_refused() {
+    let e = env();
+    let mut lib = Library::init(&e.root, &e.machine).unwrap();
+    let c = capture(&lib, "https://example.com/a", "字");
+    let staged = c.snapshot.as_ref().unwrap().staged.clone();
+    fs::write(staged.join("images/002.jpg"), b"late").unwrap();
+    assert_eq!(lib.add_item(&user(), c).unwrap_err().code(), "invalid-args");
 }

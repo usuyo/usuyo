@@ -4,6 +4,7 @@
 //! 按用户排的顺序换插件、平台节奏、暂停和各种锁由调用方（内核的编排）做，
 //! 判断需要的信息都在返回值里：错误码的 `tries_next`、`retryable`、`pause`，清单的 `pacing`。
 
+mod envelope_text;
 mod network;
 mod outdir;
 mod process;
@@ -399,6 +400,7 @@ impl PluginHost {
             )
             .await?;
         let mut output: FetchOutput = call.decode(plugin, finished)?;
+        envelope_text::fetch(&mut output);
         let invalid = |m: String| call.failed(plugin, ErrorCode::InvalidOutput, m);
 
         if let Some(identity) = &output.identity {
@@ -423,6 +425,11 @@ impl PluginHost {
             return Err(invalid(format!(
                 "`{missing}` is referenced but is not a file in the output"
             )));
+        }
+        // 一个文件只担一种角色：不然「只留文字」挪走图片时会带走评论文件。
+        let mut seen = BTreeSet::new();
+        if let Some(twice) = output.referenced_files().find(|p| !seen.insert(*p)) {
+            return Err(invalid(format!("`{twice}` is referenced more than once")));
         }
 
         // 完整度以宿主算的为准（§3.1）：缺的 = 想要的 − 实际拿到的；一样都没拿到算只认出了链接
@@ -485,7 +492,8 @@ impl PluginHost {
         let finished = self
             .run(plugin, &call, vec!["sources".into()], None, total, opts)
             .await?;
-        let out: SourcesOutput = call.decode(plugin, finished)?;
+        let mut out: SourcesOutput = call.decode(plugin, finished)?;
+        envelope_text::sources(&mut out.sources);
         Ok(out.sources)
     }
 
@@ -531,7 +539,8 @@ impl PluginHost {
                 opts,
             )
             .await?;
-        let page: ListPage = call.decode(plugin, finished)?;
+        let mut page: ListPage = call.decode(plugin, finished)?;
+        envelope_text::list(&mut page);
         for (i, item) in page.items.iter().enumerate() {
             let check = || -> Result<(), String> {
                 match (&item.url, &item.reference) {
@@ -736,8 +745,11 @@ impl Call {
                     Value::Object(map),
                     &mut unknown,
                 ) {
-                    Ok(Failed { error }) => Err(match error.check_from_plugin() {
-                        Ok(()) => error,
+                    Ok(Failed { mut error }) => Err(match error.check_from_plugin() {
+                        Ok(()) => {
+                            envelope_text::failure(&mut error);
+                            error
+                        }
                         Err(why) => host(ErrorCode::InvalidOutput, why),
                     }),
                     Err(e) => Err(invalid(e)),
@@ -749,7 +761,8 @@ impl Call {
             )),
         };
         for field in unknown {
-            tracing::warn!(plugin = %plugin.id(), call = %self.id, "unknown output field `{field}` ignored");
+            // 字段名来自插件：按 Debug 写，换行进不了日志
+            tracing::warn!(plugin = %plugin.id(), call = %self.id, field = ?field, "unknown output field ignored");
         }
         result.map_err(|failure| self.fail(plugin, failure, stderr))
     }
@@ -851,6 +864,12 @@ fn call_env(
     let mut set = |k: &str, v: OsString| {
         env.insert(k.into(), v);
     };
+    // 先放清单声明要透传的，宿主自己设的随后覆盖
+    for name in &plugin.header.permissions.env {
+        if let Some(v) = std::env::var_os(name) {
+            set(name, v);
+        }
+    }
     set("USUYO_PROTOCOL", "1".into());
     set("USUYO_PLUGIN_DIR", plugin.dir.clone().into());
     set("USUYO_CACHE_DIR", call.cache.clone().into());
@@ -880,11 +899,6 @@ fn call_env(
     match std::env::join_paths(path) {
         Ok(joined) => set("PATH", joined),
         Err(e) => tracing::warn!("plugin PATH not set: {e}"),
-    }
-    for name in &plugin.header.permissions.env {
-        if let Some(v) = std::env::var_os(name) {
-            set(name, v);
-        }
     }
     env.into_iter().collect()
 }

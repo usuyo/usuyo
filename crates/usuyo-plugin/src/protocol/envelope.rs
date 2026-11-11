@@ -213,6 +213,9 @@ pub struct CallFailure {
 /// 限流没给 `retryAfter` 时暂停多久（协议 §3.1）。
 const DEFAULT_RATE_LIMIT_PAUSE: Duration = Duration::from_secs(15 * 60);
 
+/// 一次暂停最长多久。宿主在解码插件的错误时把 `retryAfter` 封到这里，调用方存暂停时也按它查旧数据。
+pub const MAX_PAUSE: Duration = Duration::from_secs(3600);
+
 /// 出错以后，这个插件在这个平台上暂停多久（协议 §3.1）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Pause {

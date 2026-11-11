@@ -9,7 +9,8 @@ mod schema;
 mod values;
 
 pub use envelope::{
-    CallFailure, Envelope, ErrorCode, Need, NotFoundReason, Pause, PluginEvent, WaitReason,
+    CallFailure, Envelope, ErrorCode, MAX_PAUSE, Need, NotFoundReason, Pause, PluginEvent,
+    WaitReason,
 };
 pub use fetch::{
     Author, Canonicalized, Completeness, Evidence, FetchOutput, ItemKind, ListAction, ListItem,

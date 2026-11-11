@@ -398,7 +398,7 @@ async fn deleting_the_index_and_reindexing_gives_the_same_results() {
     let engine = f.engine();
     let after: Vec<Vec<String>> = queries.iter().map(|q| hit_ids(&engine, q)).collect();
     assert_eq!(before, after);
-    assert_eq!(engine.reindex().unwrap(), 3);
+    assert_eq!(engine.reindex().unwrap().items, 3);
     let again: Vec<Vec<String>> = queries.iter().map(|q| hit_ids(&engine, q)).collect();
     assert_eq!(before, again);
 }
@@ -493,4 +493,211 @@ async fn partial_fetch_is_not_complete() {
     let v = engine.item(&t.id, &Links::default()).unwrap();
     assert_eq!(v.stored, Stored::Complete);
     assert_eq!(v.missing, None);
+}
+
+fn machine_dir(f: &Fixture) -> PathBuf {
+    std::fs::read_dir(f.machine().join("libraries"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path()
+}
+
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64
+}
+
+#[tokio::test]
+async fn a_rate_limit_pauses_one_site_not_the_whole_web() {
+    let f = Fixture::new();
+    let script = format!(
+        r#"case "$2" in
+  *slow.test*) cat <<'JSON'
+{{"ok": false, "error": {{"code": "rate-limited", "message": "429", "retryAfter": 99999999999}}}}
+JSON
+  exit 1;;
+esac
+{FETCH_OK}"#
+    );
+    f.install("fake/web", "web", "*", &script);
+    let engine = f.engine();
+    let slow = engine
+        .take("https://slow.test/a", "link", Via::Cli)
+        .await
+        .unwrap();
+    engine.run_due().await.unwrap();
+    let other = engine
+        .take("https://example.test/b", "link", Via::Cli)
+        .await
+        .unwrap();
+    assert_eq!(engine.run_due().await.unwrap(), 1);
+    let v = engine.item(&other.id, &Links::default()).unwrap();
+    assert_eq!(v.stored, Stored::Complete, "别的网站照取");
+
+    let db = rusqlite::Connection::open(machine_dir(&f).join("jobs.db")).unwrap();
+    let until: i64 = db
+        .query_row("SELECT MAX(until_at) FROM pauses", [], |r| r.get(0))
+        .unwrap();
+    assert!(until <= now_ms() + 3_600_000, "暂停最多一小时：{until}");
+    let due: i64 = db
+        .query_row(
+            "SELECT due_at FROM fetch_jobs WHERE item_id = ?1",
+            [&slow.id],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(due <= now_ms() + 6 * 3_600_000, "{due}");
+}
+
+#[tokio::test]
+async fn a_pause_saved_before_the_cap_does_not_hold_the_queue() {
+    let f = Fixture::new();
+    f.install("fake/web", "web", "*", FETCH_OK);
+    let t = {
+        let engine = f.engine();
+        engine
+            .take("https://example.test/pour", "link", Via::Cli)
+            .await
+            .unwrap()
+    };
+    let db = rusqlite::Connection::open(machine_dir(&f).join("jobs.db")).unwrap();
+    db.execute("UPDATE fetch_jobs SET due_at = 101794421686988", [])
+        .unwrap();
+    db.execute(
+        "INSERT INTO pauses (plugin, platform, until_at) VALUES
+         ('fake/web', 'web', 101794421686988), ('fake/web', 'example.test', NULL)",
+        [],
+    )
+    .unwrap();
+    drop(db);
+    let engine = f.engine();
+    assert_eq!(engine.run_due().await.unwrap(), 1);
+    let v = engine.item(&t.id, &Links::default()).unwrap();
+    assert_eq!(v.stored, Stored::Complete);
+}
+
+#[tokio::test]
+async fn one_unreadable_item_does_not_stop_the_rest() {
+    let f = Fixture::new();
+    f.install("fake/web", "web", "*", FETCH_OK);
+    let ids: Vec<String> = {
+        let engine = f.engine();
+        let mut ids = Vec::new();
+        for p in ["a", "b", "c"] {
+            let t = engine
+                .take(&format!("https://example.test/{p}"), "link", Via::Cli)
+                .await
+                .unwrap();
+            ids.push(t.id);
+        }
+        engine.run_due().await.unwrap();
+        ids
+    };
+    // 在 Obsidian 里手改坏的 notes.md，和写坏的 manifest.json、回收站项
+    std::fs::write(
+        f.item_dir(&ids[0]).join("notes.md"),
+        "---\ntakeaway: hello\n---\n",
+    )
+    .unwrap();
+    std::fs::write(f.item_dir(&ids[1]).join("manifest.json"), "{").unwrap();
+    let trash = f
+        .library
+        .join(".usuyo/trash/0190a000-0000-7000-8000-000000000000");
+    std::fs::create_dir_all(&trash).unwrap();
+    std::fs::write(trash.join("entry.json"), "{").unwrap();
+    std::fs::remove_dir_all(machine_dir(&f).join("index")).unwrap();
+
+    let engine = f.engine();
+    let map = engine.map().unwrap();
+    assert_eq!(map.points.len(), 2);
+    assert_eq!(
+        map.unreadable.iter().map(|u| &u.id).collect::<Vec<_>>(),
+        [&ids[1]]
+    );
+    let r = engine.reindex().unwrap();
+    assert_eq!(r.items, 1);
+    let mut skipped: Vec<&String> = r.unreadable.iter().map(|u| &u.id).collect();
+    skipped.sort();
+    let mut expected = vec![&ids[0], &ids[1]];
+    expected.sort();
+    assert_eq!(skipped, expected);
+    engine
+        .take("https://example.test/d", "link", Via::Cli)
+        .await
+        .unwrap();
+    engine.run_due().await.unwrap();
+    assert_eq!(hit_ids(&engine, "闷蒸").len(), 2, "c 和新收的 d");
+}
+
+#[tokio::test]
+async fn links_with_a_user_name_or_password_are_not_taken() {
+    let f = Fixture::new();
+    f.install("fake/web", "web", "*", FETCH_OK);
+    let engine = f.engine();
+    let e = engine
+        .take("https://me:secret@example.test/x", "link", Via::Cli)
+        .await
+        .unwrap_err();
+    assert_eq!(e.code(), "unsupported-input");
+}
+
+#[tokio::test]
+async fn a_foreign_file_with_the_topic_name_is_left_alone() {
+    let f = Fixture::new();
+    std::fs::write(f.library.join("topics/咖啡.md"), "随手记的，不是主题\n").unwrap();
+    let engine = f.engine();
+    engine.create_topic("咖啡", Via::App).unwrap();
+    assert_eq!(engine.topics().unwrap().len(), 1);
+    assert_eq!(
+        std::fs::read_to_string(f.library.join("topics/咖啡.md")).unwrap(),
+        "随手记的，不是主题\n"
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn jobs_database_is_private() {
+    use std::os::unix::fs::PermissionsExt;
+    let f = Fixture::new();
+    let _engine = f.engine();
+    let mode = std::fs::metadata(machine_dir(&f).join("jobs.db"))
+        .unwrap()
+        .permissions()
+        .mode();
+    assert_eq!(mode & 0o777, 0o600);
+}
+
+#[tokio::test]
+async fn blocked_with_no_other_plugin_fails_once_and_forgets_the_link() {
+    let f = Fixture::new();
+    f.install(
+        "fake/web",
+        "web",
+        "*",
+        r#"if [ "$1" = fetch ]; then echo x >> "$USUYO_CACHE_DIR/calls"; fi
+echo '{"ok": false, "error": {"code": "blocked", "message": "captcha", "hint": "要验证码"}}'; exit 1"#,
+    );
+    let engine = f.engine();
+    let t = engine
+        .take("https://example.test/a?xsec_token=secret", "link", Via::Cli)
+        .await
+        .unwrap();
+    engine.run_due().await.unwrap();
+    let v = engine.item(&t.id, &Links::default()).unwrap();
+    assert_eq!(v.missing.as_deref(), Some("取不到内容：要验证码"));
+    let calls = std::fs::read_to_string(f.machine().join("cache/plugins/fake/web/calls")).unwrap();
+    assert_eq!(calls.lines().count(), 1);
+    let db = rusqlite::Connection::open(machine_dir(&f).join("jobs.db")).unwrap();
+    let url: String = db
+        .query_row(
+            "SELECT url FROM fetch_jobs WHERE item_id = ?1",
+            [&t.id],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(!url.contains("secret"));
 }

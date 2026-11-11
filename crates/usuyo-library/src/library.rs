@@ -128,6 +128,8 @@ impl Library {
             None => Settings::default(),
         };
         let machine_dir = machine_root.join("libraries").join(&file.library_id);
+        fsx::private_dir(machine_root)?;
+        fsx::private_dir(&machine_dir)?;
         let device_path = machine_dir.join("device.json");
         let (device_id, previous_path) = match read_opt(&device_path)? {
             Some(b) => {
@@ -163,8 +165,21 @@ impl Library {
         };
         if lib.read_only.is_none() {
             lib.touch_device()?;
+            lib.clear_staging()?;
         }
         Ok(lib)
+    }
+
+    /// 上次没收尾的暂存：插件调用目录（`usuyo-call-*`）和收下时的拼装目录（UUIDv7）。
+    /// 拿着锁时才清，这时不会有调用在用它们；别的（迁移计划）不动。
+    fn clear_staging(&self) -> Result<()> {
+        for dir in crate::item::read_dirs(&self.path(".usuyo/tmp"))? {
+            let name = dir.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+            if name.starts_with("usuyo-call-") || crate::id::is_uuid7(name) {
+                fsx::remove_dir(&dir)?;
+            }
+        }
+        Ok(())
     }
 
     fn touch_device(&self) -> Result<()> {
@@ -235,6 +250,7 @@ impl Library {
             .parent()
             .map(|p| p.join(&self.file.library_id))
             .ok_or_else(|| Error::InvalidArgs("machine dir has no parent".into()))?;
+        fsx::private_dir(&self.machine_dir)?;
         self.write_machine_device()?;
         self.previous_path = None;
         Ok(())

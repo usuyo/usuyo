@@ -223,3 +223,46 @@ fn invalid_samples_name_the_field() {
     let message = rejects("protocol: 1\nid: [", "line 3");
     assert!(message.contains("YAML"), "{message}");
 }
+
+#[test]
+fn env_cannot_reach_host_variables_or_agents() {
+    let w = web();
+    for name in [
+        "HOME",
+        "Path",
+        "TMPDIR",
+        "XDG_CONFIG_HOME",
+        "USUYO_CALL_ID",
+        "SSH_AUTH_SOCK",
+        "GITHUB_AUTH",
+    ] {
+        rejects(
+            &replace(&w, "  fs:\n", &format!("  env: [{name}]\n  fs:\n")),
+            "permissions.env[0]",
+        );
+    }
+    parse(&replace(&w, "  fs:\n", "  env: [LANG, TZ]\n  fs:\n")).unwrap();
+}
+
+#[test]
+fn capability_timeout_has_a_ceiling() {
+    let m = parse(&replace(
+        &web(),
+        "    login: none\n    outputs",
+        "    login: none\n    timeout: 1000h\n    outputs",
+    ))
+    .unwrap();
+    let t = m
+        .fetch()
+        .unwrap()
+        .capabilities
+        .fetch
+        .as_ref()
+        .unwrap()
+        .uses
+        .timeout;
+    assert!(
+        t.is_some_and(|t| t.get() <= std::time::Duration::from_secs(2 * 3600)),
+        "{t:?}"
+    );
+}

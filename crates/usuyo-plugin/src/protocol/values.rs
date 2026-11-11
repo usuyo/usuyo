@@ -86,6 +86,10 @@ impl DurationSpec {
     pub fn get(self) -> Duration {
         self.0
     }
+
+    pub(crate) fn at_most(self, max: Duration) -> Self {
+        Self(self.0.min(max))
+    }
 }
 
 impl TryFrom<String> for DurationSpec {
@@ -326,8 +330,18 @@ impl fmt::Display for PlatformId {
 
 string_schema!(PlatformId, "PlatformId", {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"});
 
+/// 插件交来的链接最长多少字节。
+const URL_BYTES: usize = 4096;
+
 /// 能解析的 http(s) 绝对链接；原文保留，不做规范化（规范化归资料库，SPEC §0.4）。
+/// 原文会存下来，所以也不许超长、不许带控制字符（解析时会被悄悄去掉的换行、制表也算）。
 pub(crate) fn check_http_url(text: &str) -> Result<url::Url, String> {
+    if text.len() > URL_BYTES {
+        return Err(format!("a URL is longer than {URL_BYTES} bytes"));
+    }
+    if text.chars().any(char::is_control) {
+        return Err("a URL has control characters".into());
+    }
     let url = url::Url::parse(text).map_err(|e| format!("`{text}` is not a URL: {e}"))?;
     if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() {
         return Err(format!("`{text}` is not an http(s) URL"));

@@ -8,14 +8,18 @@ use std::time::Duration;
 
 use serde_json::Value;
 use usuyo_contract::FetchRecord;
-use usuyo_library::{AddOutcome, Capture, ItemId, NewOrigin, NewSnapshot, normalize_web_url};
-use usuyo_plugin::protocol::{CallFailure, Canonicalized, ErrorCode, FetchOutput, Pause};
+use usuyo_library::{
+    AddOutcome, Capture, ItemId, NewOrigin, NewSnapshot, hash_staged, normalize_web_url,
+};
+use usuyo_plugin::protocol::{
+    CallFailure, Canonicalized, ErrorCode, FetchOutput, MAX_PAUSE, Pause,
+};
 use usuyo_plugin::{
     CallOptions, FetchInput, FetchPlugin, FetchRequest, FetchedSnapshot, PluginError,
 };
 
 use crate::engine::{Engine, Via};
-use crate::jobs::{FetchJob, PausedUntil};
+use crate::jobs::FetchJob;
 use crate::view::{Event, TakeResponse};
 use crate::{Error, Result};
 
@@ -51,6 +55,12 @@ impl Engine {
         }
         let url = first_url(input)
             .ok_or_else(|| Error::UnsupportedInput("no http(s) link in the input".into()))?;
+        // 带用户名、密码的链接不收：它们会原样进标题、身份和 `content.md`。
+        if !url.username().is_empty() || url.password().is_some() {
+            return Err(Error::UnsupportedInput(
+                "links with a user name or password are not taken".into(),
+            ));
+        }
         let (identity, fetch_url) = self.identify(&url).await?;
         let this = self.clone();
         tokio::task::spawn_blocking(move || this.add(identity, fetch_url, via))
@@ -184,7 +194,8 @@ impl Engine {
         let id = ItemId::parse(&job.item_id)?;
         let platform = id.platform().to_owned();
         let url = url::Url::parse(&job.url)
-            .map_err(|e| Error::InvalidArgs(format!("bad job url `{}`: {e}", job.url)))?;
+            // 链接可能带分享参数，原因里不写它：这句会进日志和 `jobs.db`
+            .map_err(|e| Error::InvalidArgs(format!("bad job url: {e}")))?;
         let candidates: Vec<&FetchPlugin> = self
             .inner
             .host
@@ -198,13 +209,18 @@ impl Engine {
         let mut paused_until: Option<i64> = None;
         for plugin in candidates {
             let pid = plugin.id().to_string();
-            match self.inner.jobs.paused(&pid, &platform, now_ms())? {
-                Some(PausedUntil::At(t)) => {
-                    paused_until = Some(paused_until.map_or(t, |p| p.min(t)));
-                    continue;
-                }
-                Some(PausedUntil::Resumed) => continue,
-                None => {}
+            // 通用网页插件的平台是所有网站：按网站暂停，一个站限流不停掉别的站。
+            let scope = if plugin.spec.is_web() {
+                url.host_str().unwrap_or_default()
+            } else {
+                platform.as_str()
+            };
+            if let Some(t) = self.inner.jobs.paused(&pid, scope, now_ms())? {
+                paused_until = Some(paused_until.map_or(t, |p| p.min(t)));
+                last.get_or_insert_with(|| {
+                    CallFailure::new(ErrorCode::RateLimited, format!("{pid} is paused here"))
+                });
+                continue;
             }
             let request = FetchRequest {
                 input: FetchInput::Url(url.clone()),
@@ -218,12 +234,17 @@ impl Engine {
                 .await
             {
                 Ok(snap) => {
+                    // 先在锁外算好哈希，大文件也不让别的请求等着资料库
+                    let staged = snap.out_dir();
+                    let files = tokio::task::spawn_blocking(move || hash_staged(&staged))
+                        .await
+                        .map_err(|e| Error::Task(e.to_string()))??;
                     let this = self.clone();
                     let plugin = plugin.clone();
                     let input_url = job.url.clone();
                     let item = id.clone();
                     tokio::task::spawn_blocking(move || {
-                        this.attach(&item, &plugin, input_url, snap)
+                        this.attach(&item, &plugin, input_url, snap, files)
                     })
                     .await
                     .map_err(|e| Error::Task(e.to_string()))??;
@@ -233,21 +254,20 @@ impl Engine {
                 }
                 Err(PluginError::Call { failure, .. }) => {
                     tracing::info!(plugin = %pid, item = %id, failure = %failure, "fetch failed");
-                    match failure.pause() {
-                        Some(Pause::For(d)) => {
-                            let ms = i64::try_from(d.as_millis()).unwrap_or(i64::MAX);
-                            let until = now_ms().saturating_add(ms);
-                            self.inner
-                                .jobs
-                                .pause(&pid, &platform, PausedUntil::At(until))?;
+                    // 「等用户点继续」还没有入口：被拦也按最长的暂停记，到点自己解开。
+                    // 被拦的这一条不因暂停重试（`blocked` 不可重试），只有限流的到点再试。
+                    let (pause, retry_after_pause) = match failure.pause() {
+                        Some(Pause::For(d)) => (Some(d), true),
+                        Some(Pause::UntilResumed) => (Some(MAX_PAUSE), false),
+                        None => (None, false),
+                    };
+                    if let Some(d) = pause {
+                        let ms = i64::try_from(d.as_millis()).unwrap_or(i64::MAX);
+                        let until = now_ms().saturating_add(ms);
+                        self.inner.jobs.pause(&pid, scope, until)?;
+                        if retry_after_pause {
                             paused_until = Some(paused_until.map_or(until, |p| p.min(until)));
                         }
-                        Some(Pause::UntilResumed) => {
-                            self.inner
-                                .jobs
-                                .pause(&pid, &platform, PausedUntil::Resumed)?;
-                        }
-                        None => {}
                     }
                     retryable |= failure.code.retryable();
                     let stop = !failure.code.tries_next();
@@ -303,6 +323,7 @@ impl Engine {
         plugin: &FetchPlugin,
         input_url: String,
         snap: FetchedSnapshot,
+        files: Vec<usuyo_contract::FileHash>,
     ) -> Result<()> {
         let out = &snap.output;
         let fetch = fetch_record(out)?;
@@ -335,6 +356,7 @@ impl Engine {
             missing_reason: out.missing_reason.clone(),
             text_origin: None,
             staged: snap.out_dir(),
+            files,
             fetch,
         };
         let mut lib = self.lib();

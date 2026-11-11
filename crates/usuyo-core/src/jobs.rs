@@ -1,4 +1,5 @@
-//! 本机任务队列 `jobs.db`（SPEC §1.1）：取内容的任务、插件按平台的暂停、上次写的 `content.md` 的哈希。
+//! 本机任务队列 `jobs.db`（SPEC §1.1）：取内容的任务、插件的暂停、上次写的 `content.md` 的哈希。
+//! 暂停按 (插件, 范围) 记：平台插件的范围是平台，通用网页插件的是网站的主机名（列名沿用 `platform`）。
 //!
 //! 一条一个任务（按 `item_id` 去重）；`running` 的在重新打开时放回 `queued`，重启后接着做。
 
@@ -6,8 +7,10 @@ use std::path::Path;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use rusqlite::{Connection, OptionalExtension, params};
+use usuyo_plugin::protocol::MAX_PAUSE;
 
-use crate::Result;
+use crate::engine::RETRY_DELAY_MAX;
+use crate::{Error, Result};
 
 const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS fetch_jobs (
@@ -69,27 +72,38 @@ impl JobState {
     }
 }
 
-/// 暂停到什么时候。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PausedUntil {
-    At(i64),
-    /// 到用户点「继续」。
-    Resumed,
-}
-
 pub(crate) struct Jobs {
     conn: Mutex<Connection>,
 }
 
 impl Jobs {
     /// 打开（没有就建），把上次没做完的 `running` 放回队列。
-    pub fn open(path: &Path) -> Result<Jobs> {
+    ///
+    /// 旧版本存下的暂停没有上限（一个 `Retry-After` 能停到几千年后），也有等「继续」的、
+    /// 没有入口能解开的暂停：超过现在的上限的暂停删掉，到点时间远过重试上限的任务马上排。
+    pub fn open(path: &Path, now: i64) -> Result<Jobs> {
         let conn = Connection::open(path)?;
+        // 里面有链接（可能带分享参数），只给自己读
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
+                .map_err(|e| Error::io(path, e))?;
+        }
         conn.busy_timeout(std::time::Duration::from_secs(5))?;
         conn.execute_batch(SCHEMA)?;
         conn.execute(
             "UPDATE fetch_jobs SET state = 'queued' WHERE state = 'running'",
             [],
+        )?;
+        let ms = |d: std::time::Duration| i64::try_from(d.as_millis()).unwrap_or(i64::MAX);
+        conn.execute(
+            "DELETE FROM pauses WHERE until_at IS NULL OR until_at > ?1",
+            params![now.saturating_add(ms(MAX_PAUSE))],
+        )?;
+        conn.execute(
+            "UPDATE fetch_jobs SET due_at = ?1 WHERE state = 'queued' AND due_at > ?2",
+            params![now, now.saturating_add(ms(RETRY_DELAY_MAX))],
         )?;
         Ok(Jobs {
             conn: Mutex::new(conn),
@@ -178,45 +192,43 @@ impl Jobs {
         Ok(())
     }
 
+    /// 不再试：链接清掉（可能带分享参数，之后没人读它；再取一次时 `enqueue` 重新写）。
     pub fn fail(&self, item_id: &str, code: &str, hint: Option<&str>) -> Result<()> {
         self.conn().execute(
-            "UPDATE fetch_jobs SET state = ?2, error_code = ?3, error_hint = ?4 WHERE item_id = ?1",
+            "UPDATE fetch_jobs SET state = ?2, url = '', error_code = ?3, error_hint = ?4
+             WHERE item_id = ?1",
             params![item_id, JobState::Failed.as_str(), code, hint],
         )?;
         Ok(())
     }
 
-    pub fn pause(&self, plugin: &str, platform: &str, until: PausedUntil) -> Result<()> {
-        let at = match until {
-            PausedUntil::At(t) => Some(t),
-            PausedUntil::Resumed => None,
-        };
+    /// 这个插件在这个范围上暂停到 `until`（Unix 毫秒）。
+    pub fn pause(&self, plugin: &str, scope: &str, until: i64) -> Result<()> {
         self.conn().execute(
             "INSERT INTO pauses (plugin, platform, until_at) VALUES (?1, ?2, ?3)
              ON CONFLICT (plugin, platform) DO UPDATE SET until_at = excluded.until_at",
-            params![plugin, platform, at],
+            params![plugin, scope, until],
         )?;
         Ok(())
     }
 
-    /// 这个插件在这个平台上是不是还在暂停；到点的暂停顺手删掉。
-    pub fn paused(&self, plugin: &str, platform: &str, now: i64) -> Result<Option<PausedUntil>> {
+    /// 这个插件在这个范围上暂停到什么时候；到点的暂停顺手删掉。
+    pub fn paused(&self, plugin: &str, scope: &str, now: i64) -> Result<Option<i64>> {
         let conn = self.conn();
         let row: Option<Option<i64>> = conn
             .query_row(
                 "SELECT until_at FROM pauses WHERE plugin = ?1 AND platform = ?2",
-                params![plugin, platform],
+                params![plugin, scope],
                 |r| r.get(0),
             )
             .optional()?;
         match row {
             None => Ok(None),
-            Some(None) => Ok(Some(PausedUntil::Resumed)),
-            Some(Some(t)) if t > now => Ok(Some(PausedUntil::At(t))),
-            Some(Some(_)) => {
+            Some(Some(t)) if t > now => Ok(Some(t)),
+            Some(_) => {
                 conn.execute(
                     "DELETE FROM pauses WHERE plugin = ?1 AND platform = ?2",
-                    params![plugin, platform],
+                    params![plugin, scope],
                 )?;
                 Ok(None)
             }
@@ -264,7 +276,7 @@ mod tests {
     fn queue_retry_and_resume() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("jobs.db");
-        let jobs = Jobs::open(&path).unwrap();
+        let jobs = Jobs::open(&path, 0).unwrap();
         jobs.enqueue("web-a", "https://a.test/", 10).unwrap();
         jobs.enqueue("web-a", "https://a.test/other", 10).unwrap();
         assert_eq!(jobs.claim_due(5).unwrap(), None);
@@ -276,7 +288,7 @@ mod tests {
         assert_eq!(j.attempts, 1);
         drop(jobs);
         // 重启：running 回到 queued
-        let jobs = Jobs::open(&path).unwrap();
+        let jobs = Jobs::open(&path, 50).unwrap();
         assert_eq!(jobs.job("web-a").unwrap().unwrap().state, JobState::Queued);
         jobs.fail("web-a", "not-found", Some("没了")).unwrap();
         jobs.enqueue("web-a", "https://a.test/", 60).unwrap();
@@ -287,17 +299,9 @@ mod tests {
     #[test]
     fn pauses_expire() {
         let dir = tempfile::tempdir().unwrap();
-        let jobs = Jobs::open(&dir.path().join("jobs.db")).unwrap();
-        jobs.pause("a/b", "web", PausedUntil::At(100)).unwrap();
-        assert_eq!(
-            jobs.paused("a/b", "web", 50).unwrap(),
-            Some(PausedUntil::At(100))
-        );
-        assert_eq!(jobs.paused("a/b", "web", 100).unwrap(), None);
-        jobs.pause("a/b", "web", PausedUntil::Resumed).unwrap();
-        assert_eq!(
-            jobs.paused("a/b", "web", 1 << 40).unwrap(),
-            Some(PausedUntil::Resumed)
-        );
+        let jobs = Jobs::open(&dir.path().join("jobs.db"), 0).unwrap();
+        jobs.pause("a/b", "a.test", 100).unwrap();
+        assert_eq!(jobs.paused("a/b", "a.test", 50).unwrap(), Some(100));
+        assert_eq!(jobs.paused("a/b", "a.test", 100).unwrap(), None);
     }
 }

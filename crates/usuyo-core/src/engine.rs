@@ -20,9 +20,12 @@ use crate::jobs::{JobState, Jobs};
 use crate::layout::{HashLayout, Layout, LayoutItem};
 use crate::view::{
     Comment, Event, Facet, HitLayer, ImageRef, ItemSummary, ItemView, MapPoint, MapView, Platform,
-    SearchHit, Segment, Stored, Topic,
+    Reindexed, SearchHit, Segment, Stored, Topic, Unreadable,
 };
 use crate::{Error, Result};
+
+/// 重试最多隔多久。排着的任务到点时间不会比现在晚过这么久（暂停封顶一小时，见 `MAX_PAUSE`）。
+pub(crate) const RETRY_DELAY_MAX: Duration = Duration::from_secs(6 * 3600);
 
 /// 失败以后多久再试：`base × 4^已试次数`，最多 6 小时；试满 `max_attempts` 次就停。
 #[derive(Debug, Clone, Copy)]
@@ -43,9 +46,7 @@ impl Default for RetryPolicy {
 impl RetryPolicy {
     pub(crate) fn delay(&self, attempts: u32) -> Duration {
         let factor = 4u32.saturating_pow(attempts.min(10));
-        self.base
-            .saturating_mul(factor)
-            .min(Duration::from_secs(6 * 3600))
+        self.base.saturating_mul(factor).min(RETRY_DELAY_MAX)
     }
 }
 
@@ -160,7 +161,7 @@ impl Engine {
         let machine_dir = library.machine_dir().to_owned();
         std::fs::create_dir_all(&machine_dir).map_err(|e| Error::io(&machine_dir, e))?;
         let index = SearchIndex::open_or_create(&machine_dir.join("index"))?;
-        let jobs = Jobs::open(&machine_dir.join("jobs.db"))?;
+        let jobs = Jobs::open(&machine_dir.join("jobs.db"), crate::fetch::now_ms())?;
 
         let mut plugins: Vec<usuyo_plugin::FetchPlugin> = Vec::new();
         for root in config.plugin_roots.iter().filter(|r| r.is_dir()) {
@@ -287,18 +288,24 @@ impl Engine {
         Ok(())
     }
 
-    /// 从资料库重建整个索引，回条目数。
-    pub fn reindex(&self) -> Result<usize> {
+    /// 从资料库重建整个索引，回收进去的条目数和读不了、跳过的条目。
+    pub fn reindex(&self) -> Result<Reindexed> {
         let lib = self.lib();
         let mut docs = Vec::new();
+        let mut unreadable = Vec::new();
         for id in lib.item_ids()? {
-            let item = lib.item(&id)?;
-            let c = content::read(&lib, &item)?;
-            docs.push(index_doc(&item.manifest, &c));
+            let read = lib
+                .item(&id)
+                .map_err(Error::from)
+                .and_then(|item| Ok((content::read(&lib, &item)?, item)));
+            match read {
+                Ok((c, item)) => docs.push(index_doc(&item.manifest, &c)),
+                Err(e) => unreadable.push(skipped(&id, &e)),
+            }
         }
-        let n = docs.len();
+        let items = docs.len();
         self.inner.index.rebuild(docs)?;
-        Ok(n)
+        Ok(Reindexed { items, unreadable })
     }
 
     /// 读一条；在回收站里的也回，带 `trashedAt`，不带各个侧面。
@@ -482,8 +489,12 @@ impl Engine {
         let lib = self.lib();
         let topics = topics_of(&lib)?;
         let mut manifests = Vec::new();
+        let mut unreadable = Vec::new();
         for id in lib.item_ids()? {
-            manifests.push(lib.item(&id)?.manifest);
+            match lib.item(&id) {
+                Ok(item) => manifests.push(item.manifest),
+                Err(e) => unreadable.push(skipped(&id, &e.into())),
+            }
         }
         drop(lib);
         let items: Vec<LayoutItem> = manifests
@@ -513,6 +524,7 @@ impl Engine {
         Ok(MapView {
             regions: placed.regions,
             points,
+            unreadable,
         })
     }
 
@@ -663,6 +675,15 @@ impl Engine {
             .enqueue(id.as_str(), &url, crate::fetch::now_ms())?;
         self.inner.wake.notify_one();
         self.view(&lib, &id, links)
+    }
+}
+
+/// 扫条目时跳过的一条：记日志，也回给问的人。
+fn skipped(id: &ItemId, e: &Error) -> Unreadable {
+    tracing::warn!(item = %id, error = %e, "item not readable; skipped");
+    Unreadable {
+        id: id.to_string(),
+        reason: e.to_string(),
     }
 }
 

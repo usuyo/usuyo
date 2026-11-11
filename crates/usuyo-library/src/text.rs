@@ -116,6 +116,26 @@ pub fn plain_to_markdown(s: &str) -> String {
     out
 }
 
+/// 插件交来的 Markdown 能不能原样写进 `content.md`：不带 HTML（没有 `<`），每个链接目标
+/// （`](` 和 `]:` 之后，跳过空白）都以 http(s)、mailto、usuyo 或 `#` 开头。
+/// 不能的按纯文字写，免得在 Obsidian 里成了网页或本机链接。只认字面前缀，实体、换行都绕不过去。
+pub(crate) fn markdown_is_inert(s: &str) -> bool {
+    const ALLOWED: [&str; 5] = ["http://", "https://", "mailto:", "usuyo://", "#"];
+    if s.contains('<') {
+        return false;
+    }
+    ["](", "]:"].iter().all(|opener| {
+        s.match_indices(opener).all(|(i, _)| {
+            let target = s[i + opener.len()..].trim_start();
+            ALLOWED.iter().any(|p| {
+                target
+                    .get(..p.len())
+                    .is_some_and(|t| t.eq_ignore_ascii_case(p))
+            })
+        })
+    })
+}
+
 /// `<…>` 里的链接：空格、`<`、`>` 百分号编码。
 pub fn angle_url(url: &str) -> String {
     url.replace(' ', "%20")

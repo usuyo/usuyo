@@ -137,6 +137,24 @@ pub struct MapPoint {
 pub struct MapView {
     pub regions: Vec<MapRegion>,
     pub points: Vec<MapPoint>,
+    /// 读不了、没摆上地图的条目。
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub unreadable: Vec<Unreadable>,
+}
+
+/// 一条读不了的条目（多半在 usuyo 外改坏了文件）：跳过它，别的照常，把它和原因告诉问的人。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Unreadable {
+    pub id: String,
+    pub reason: String,
+}
+
+/// 重建索引的结果。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Reindexed {
+    pub items: usize,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub unreadable: Vec<Unreadable>,
 }
 
 /// 命中的那一层；标题、作者、记一句另算。

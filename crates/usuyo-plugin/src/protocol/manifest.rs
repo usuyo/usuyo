@@ -735,7 +735,26 @@ fn invalid(field: impl Into<String>, message: impl Into<String>) -> Invalid {
 type Check<T> = Result<T, Invalid>;
 
 /// 不能出现在环境变量名里的字样：凭据只走凭据文件（§2.7）。
-const CREDENTIAL_WORDS: [&str; 5] = ["TOKEN", "COOKIE", "KEY", "SECRET", "PASSWORD"];
+/// `AUTH`、`SOCK`：`SSH_AUTH_SOCK` 一类变量交出的是用户的代理和登录态。
+const CREDENTIAL_WORDS: [&str; 7] = [
+    "TOKEN", "COOKIE", "KEY", "SECRET", "PASSWORD", "AUTH", "SOCK",
+];
+
+/// 宿主自己给插件设的变量（§3.2），清单不能声明透传它们；前缀以 `_` 结尾。
+const HOST_SET_ENV: [&str; 9] = [
+    "HOME",
+    "PATH",
+    "TMPDIR",
+    "TMP",
+    "TEMP",
+    "SYSTEMROOT",
+    "WINDIR",
+    "XDG_",
+    "USUYO_",
+];
+
+/// 能力的 `timeout` 最长算多久：一个插件声明得再长，也不能一直占着取内容的那一个工人。
+const CAPABILITY_TIMEOUT_MAX: std::time::Duration = std::time::Duration::from_secs(2 * 3600);
 
 /// 能写在 `permissions.fs` 里的占位符（§2.7）。
 const FS_PLACEHOLDERS: [&str; 9] = [
@@ -966,6 +985,16 @@ fn check_permissions(
             ));
         }
         let upper = name.to_ascii_uppercase();
+        let host_set = HOST_SET_ENV.iter().any(|h| match h.strip_suffix('_') {
+            Some(_) => upper.starts_with(h),
+            None => upper == *h,
+        });
+        if host_set {
+            return Err(invalid(
+                format!("permissions.env[{i}]"),
+                format!("`{name}` is set by the host"),
+            ));
+        }
         if let Some(word) = CREDENTIAL_WORDS.iter().find(|w| upper.contains(*w)) {
             return Err(invalid(
                 format!("permissions.env[{i}]"),
@@ -1323,7 +1352,7 @@ fn capability_use(
         access,
         login,
         sites: c.sites.clone(),
-        timeout: c.timeout,
+        timeout: c.timeout.map(|t| t.at_most(CAPABILITY_TIMEOUT_MAX)),
         per_platform,
         interaction: c.interaction,
         provider: c.provider,

@@ -9,7 +9,8 @@ use std::time::{Duration, Instant};
 use tempfile::TempDir;
 use tokio::sync::mpsc;
 use usuyo_plugin::protocol::{
-    Canonicalized, Completeness, ErrorCode, Identity, NotFoundReason, OutputKind, PluginEvent,
+    Canonicalized, Completeness, ErrorCode, Identity, NotFoundReason, OutputKind, Pause,
+    PluginEvent,
 };
 use usuyo_plugin::{
     CallLimits, CallOptions, CancellationToken, FetchInput, FetchPlugin, FetchRequest, HostConfig,
@@ -595,4 +596,168 @@ fn candidates_put_web_last() {
     };
     assert_eq!(ids("https://example.com/x"), ["fake/plugin", "builtin/web"]);
     assert_eq!(ids("https://other.org/x"), ["builtin/web"]);
+}
+
+#[tokio::test]
+async fn retry_after_has_a_ceiling() {
+    let f = install(
+        r#"cat <<'JSON'
+{"ok": false, "error": {"code": "rate-limited", "message": "429", "retryAfter": 18446744073709551615}}
+JSON
+exit 1"#,
+    );
+    match f.fetch(None, &CallOptions::default()).await {
+        Err(PluginError::Call { failure, .. }) => {
+            let pause = failure.pause();
+            assert!(
+                matches!(pause, Some(Pause::For(d)) if d <= Duration::from_secs(3600)),
+                "{pause:?}"
+            );
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn one_file_in_two_roles_is_refused() {
+    for roles in [
+        r#""html": "comments.json", "images": [], "media": []"#,
+        r#""images": ["comments.json"], "media": []"#,
+        r#""images": [], "media": [{"path": "comments.json", "kind": "other"}]"#,
+    ] {
+        let f = install(&format!(
+            r#"printf '[]' > "$out/comments.json"
+cat <<'JSON'
+{{"ok": true, "kind": "post", "text": "x", {roles}, "comments": "comments.json",
+ "platformTags": [], "completeness": "full", "missing": [],
+ "evidence": {{"fetchedAt": "2026-11-01T03:00:01Z", "access": "public-web"}}}}
+JSON"#
+        ));
+        assert_eq!(
+            code(f.fetch(None, &CallOptions::default()).await),
+            ErrorCode::InvalidOutput,
+            "{roles}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn waiting_has_one_budget_per_call() {
+    let f = install_with(
+        r#"while true; do
+  echo '@usuyo {"event":"waiting","reason":"user-action"}' >&2
+  sleep 1
+  echo '@usuyo {"event":"progress"}' >&2
+done"#,
+        |l| {
+            l.fetch = Duration::from_secs(60);
+            l.waiting = Duration::from_secs(3);
+        },
+    );
+    // 每次 waiting 都不到 3 秒，加起来过了 3 秒就算超时
+    let started = Instant::now();
+    let result = tokio::time::timeout(
+        Duration::from_secs(20),
+        f.fetch(None, &CallOptions::default()),
+    )
+    .await
+    .expect("waiting and progress in turns kept the call alive");
+    assert_eq!(code(result), ErrorCode::Timeout);
+    assert!(started.elapsed() < Duration::from_secs(10));
+}
+
+#[tokio::test]
+async fn envelope_strings_are_bounded() {
+    let long = "标".repeat(5000);
+    let f = install_with(
+        &format!(
+            r#"printf x > "$out/page.html"
+cat <<'JSON'
+{{"ok": true, "kind": "post", "title": "{long}\nsecond", "author": {{"name": "{long}"}},
+ "text": "a\u0007b\nc\u001b[31m", "html": "page.html", "images": [], "media": [],
+ "platformTags": ["{long}", "ok"], "missingReason": "{long}",
+ "completeness": "full", "missing": [],
+ "evidence": {{"fetchedAt": "2026-11-01T03:00:01Z", "access": "public-web", "site": "{long}"}}}}
+JSON"#
+        ),
+        |l| l.stdout_bytes = 1 << 20,
+    );
+    let snap = f.fetch(None, &CallOptions::default()).await.unwrap();
+    let o = &snap.output;
+    let title = o.title.as_deref().unwrap();
+    assert!(
+        title.len() <= 1024 && !title.contains('\n'),
+        "{}",
+        title.len()
+    );
+    assert!(o.author.as_ref().unwrap().name.len() <= 1024);
+    assert!(o.missing_reason.as_deref().unwrap().len() <= 1024);
+    assert!(o.evidence.site.as_deref().unwrap().len() <= 1024);
+    assert!(o.platform_tags.iter().all(|t| t.len() <= 100));
+    assert_eq!(o.platform_tags[1], "ok");
+    assert_eq!(
+        o.text.as_deref(),
+        Some("a\u{7}b\nc\u{1b}[31m"),
+        "正文照原样"
+    );
+
+    let f = install(&format!(
+        r#"cat <<'JSON'
+{{"ok": false, "error": {{"code": "network", "message": "one\nforged line\r", "hint": "{long}"}}}}
+JSON
+exit 1"#
+    ));
+    match f.fetch(None, &CallOptions::default()).await {
+        Err(PluginError::Call { failure, .. }) => {
+            assert!(
+                !failure.message.contains(['\n', '\r']),
+                "{}",
+                failure.message
+            );
+            assert!(failure.hint.unwrap().len() <= 1024);
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn too_many_output_files_are_refused() {
+    let f = install(&format!(
+        "printf x > \"$out/page.html\"\nmkdir \"$out/many\" && (cd \"$out/many\" && seq 1 10001 | xargs touch)\n{}",
+        output_with("page.html")
+    ));
+    assert_eq!(
+        code(f.fetch(None, &CallOptions::default()).await),
+        ErrorCode::InvalidOutput
+    );
+}
+
+#[tokio::test]
+async fn over_long_identities_are_refused() {
+    let long = "x".repeat(5000);
+    for identity in [
+        format!(r#"{{"platform": "example", "contentId": "{long}"}}"#),
+        format!(
+            r#"{{"platform": "example", "contentId": "1", "url": "https://example.com/{long}"}}"#
+        ),
+        r#"{"platform": "example", "contentId": "1\n2"}"#.to_owned(),
+    ] {
+        let f = install_with(
+            &format!(
+                r#"printf x > "$out/page.html"
+cat <<'JSON'
+{{"ok": true, "identity": {identity}, "kind": "post", "text": "x", "html": "page.html", "images": [],
+ "media": [], "platformTags": [], "completeness": "full", "missing": [],
+ "evidence": {{"fetchedAt": "2026-11-01T03:00:01Z", "access": "public-web"}}}}
+JSON"#
+            ),
+            |l| l.stdout_bytes = 1 << 20,
+        );
+        assert_eq!(
+            code(f.fetch(None, &CallOptions::default()).await),
+            ErrorCode::InvalidOutput,
+            "{}",
+            &identity[..60.min(identity.len())]
+        );
+    }
 }

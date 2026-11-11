@@ -1,7 +1,7 @@
 //! 起一个插件进程，看着它跑完（协议 §3.2、§3.4）。
 //!
 //! 进程自己一个进程组；stdout 有上限，stderr 只留最后几行并拆出 `@usuyo ` 事件；
-//! 总时长、无进度时长、`waiting` 暂停三种计时；超时或取消时先 SIGTERM 整组，
+//! 总时长、无进度时长、`waiting` 暂停三种计时（一次调用里的 waiting 合起来算一份）；超时或取消时先 SIGTERM 整组，
 //! 宽限期后 SIGKILL 整组。
 
 use std::collections::VecDeque;
@@ -81,12 +81,14 @@ pub(crate) async fn run(
     let mut total_deadline = start + total;
     let mut idle_deadline: Option<Instant> = None;
     let mut waiting_since: Option<Instant> = None;
+    // 这次调用已经在 waiting 里花掉的时间；每段 waiting 都不长，合起来也不能超过 `limits.waiting`。
+    let mut waited = Duration::ZERO;
     let mut stdout_result: Option<io::Result<(Vec<u8>, bool)>> = None;
     let mut events_open = true;
 
     let ending = loop {
         let deadline = match waiting_since {
-            Some(since) => since + limits.waiting,
+            Some(since) => since + limits.waiting.saturating_sub(waited),
             None => idle_deadline.map_or(total_deadline, |idle| idle.min(total_deadline)),
         };
         tokio::select! {
@@ -107,6 +109,7 @@ pub(crate) async fn run(
                         PluginEvent::Progress { .. } => {
                             // waiting 期间两种计时都停，下一个 progress 恢复
                             if let Some(since) = waiting_since.take() {
+                                waited += now - since;
                                 total_deadline += now - since;
                             }
                             idle_deadline = Some(now + limits.idle);
