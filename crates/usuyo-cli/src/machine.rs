@@ -22,6 +22,11 @@ pub fn daemon_path(root: &Path) -> PathBuf {
     root.join("daemon.json")
 }
 
+/// 投递令牌（浏览器扩展、脚本、手机各一个），0600。
+pub fn clients_path(root: &Path) -> PathBuf {
+    root.join("deliver-tokens.json")
+}
+
 fn settings_path(root: &Path) -> PathBuf {
     root.join("settings.json")
 }

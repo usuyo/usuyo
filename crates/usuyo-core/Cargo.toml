@@ -25,6 +25,10 @@ usuyo-plugin = { version = "0.0.0", path = "../usuyo-plugin" }
 [lints]
 workspace = true
 
+# 钥匙串：只接 macOS 和 Windows 的系统实现；别的系统用按机器目录里 0600 的文件（见 src/vault.rs）。
+[target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
+keyring = { version = "3.6.3", features = ["apple-native", "windows-native"] }
+
 [dev-dependencies]
 tempfile = "3.27.0"
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros"] }

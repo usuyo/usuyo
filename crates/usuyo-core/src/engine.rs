@@ -12,12 +12,13 @@ use tokio::sync::{Notify, broadcast};
 use usuyo_contract::{ItemState, Manifest, Op, OpTarget, SetChange, TopicMeta};
 use usuyo_index::{Filter, SearchIndex, SearchRequest, Visibility};
 use usuyo_library::{Batch, ItemId, Library};
-use usuyo_plugin::{CallLimits, HostConfig, PluginHost, discover};
+use usuyo_plugin::{CallLimits, HostConfig, PluginHost, Vault, discover};
 
 use crate::content::{self, Content};
 use crate::index_doc::index_doc;
 use crate::jobs::{JobState, Jobs};
 use crate::layout::{HashLayout, Layout, LayoutItem};
+use crate::pace::{Pacing, PlatformLocks};
 use crate::view::{
     Comment, Event, Facet, HitLayer, ImageRef, ItemSummary, ItemView, MapPoint, MapView, Platform,
     Reindexed, SearchHit, Segment, Stored, Topic, Unreadable,
@@ -62,6 +63,13 @@ pub struct EngineConfig {
     pub locale: String,
     /// 插件 id → 用户给它的设置（协议 §2.11），来自按机器的 `settings.json`。
     pub plugin_settings: BTreeMap<String, serde_json::Value>,
+    /// 平台登录的 cookie 和插件的密钥设置存在这里。默认是按机器目录里 0600 的 `secrets.json`，
+    /// 不碰系统钥匙串；守护进程换成 [`crate::system_vault`]。
+    pub vault: Arc<dyn Vault>,
+    /// 收件文件夹：手机经云盘放进来的 `.txt` 链接（协议 §5.2）。默认 `<machine_root>/inbox`。
+    pub inbox: PathBuf,
+    /// 收件文件夹里的文件多久没变才处理（云盘可能还在传）。默认 10 秒。
+    pub inbox_settle: Duration,
 }
 
 impl EngineConfig {
@@ -71,6 +79,11 @@ impl EngineConfig {
         Self {
             library: library.into(),
             plugin_roots: vec![machine_root.join("plugins")],
+            vault: Arc::new(crate::vault::FileVault::new(
+                machine_root.join("secrets.json"),
+            )),
+            inbox: machine_root.join("inbox"),
+            inbox_settle: Duration::from_secs(10),
             machine_root,
             limits: CallLimits::default(),
             retry: RetryPolicy::default(),
@@ -88,6 +101,12 @@ pub enum Via {
     Cli,
     /// 带令牌调本机接口的别的程序。
     Api,
+    /// 浏览器扩展、油猴脚本，带自己的投递令牌（协议 §5.1）。
+    Extension,
+    /// 手机：收件文件夹、手机用的投递令牌。
+    Mobile,
+    /// 导入：插件列出来的、交进来的一批，你确认过。
+    Import,
 }
 
 impl Via {
@@ -96,6 +115,9 @@ impl Via {
             Via::App => "paste",
             Via::Cli => "cli",
             Via::Api => "api",
+            Via::Extension => "extension",
+            Via::Mobile => "mobile",
+            Via::Import => "import",
         }
     }
 
@@ -104,7 +126,15 @@ impl Via {
             Via::App => "app",
             Via::Cli => "cli",
             Via::Api => "api",
+            Via::Extension => "extension",
+            Via::Mobile => "mobile",
+            Via::Import => "import",
         }
+    }
+
+    /// 不是你在窗口、终端里亲手收的：遇到私密条目跳过（SPEC §1.7 的表）。
+    pub(crate) fn skips_private(self) -> bool {
+        !matches!(self, Via::App | Via::Cli | Via::Import)
     }
 
     pub(crate) fn batch(self) -> Result<Batch> {
@@ -136,10 +166,19 @@ pub(crate) struct Inner {
     pub host: PluginHost,
     /// 平台 id → 显示名，取自装着的获取插件。
     pub platforms: BTreeMap<String, String>,
+    /// 平台 id → 合起来的节奏。
+    pub pacing: BTreeMap<String, Pacing>,
+    pub locks: PlatformLocks,
+    /// 没加载的插件：目录和原因。
+    pub rejected: Vec<(PathBuf, String)>,
     pub events: broadcast::Sender<Event>,
     pub wake: Notify,
+    /// 有导入要列、要认身份时叫醒导入的那一路。
+    pub imports_wake: Notify,
     pub retry: RetryPolicy,
     pub layout: Box<dyn Layout>,
+    pub inbox: PathBuf,
+    pub inbox_settle: Duration,
 }
 
 #[derive(Clone)]
@@ -164,10 +203,12 @@ impl Engine {
         let jobs = Jobs::open(&machine_dir.join("jobs.db"), crate::fetch::now_ms())?;
 
         let mut plugins: Vec<usuyo_plugin::FetchPlugin> = Vec::new();
+        let mut rejected = Vec::new();
         for root in config.plugin_roots.iter().filter(|r| r.is_dir()) {
             let found = discover(root)?;
             for r in &found.rejected {
                 tracing::warn!(dir = %r.dir.display(), error = %r.error, "plugin not loaded");
+                rejected.push((r.dir.clone(), r.error.to_string()));
             }
             for p in found.fetch {
                 if !plugins.iter().any(|q| q.id() == p.id()) {
@@ -192,6 +233,7 @@ impl Engine {
             .entry("file".into())
             .or_insert_with(|| "文件".into());
 
+        let pacing = crate::pace::combine(&plugins);
         // 插件的输出目录要和资料库在同一个文件系统上，移进 raw/ 才是改名。
         let work_dir = library.root().join(".usuyo/tmp");
         let host = PluginHost::new(
@@ -203,7 +245,9 @@ impl Engine {
             },
             plugins,
         )
-        .with_settings(config.plugin_settings);
+        .with_settings(config.plugin_settings)
+        .with_vault(config.vault, &config.machine_root);
+        host.sweep_credentials()?;
         let (events, _) = broadcast::channel(256);
         let engine = Engine {
             inner: Arc::new(Inner {
@@ -212,10 +256,16 @@ impl Engine {
                 jobs,
                 host,
                 platforms,
+                pacing,
+                locks: PlatformLocks::default(),
+                rejected,
                 events,
                 wake: Notify::new(),
+                imports_wake: Notify::new(),
                 retry: config.retry,
                 layout: Box::new(HashLayout),
+                inbox: config.inbox,
+                inbox_settle: config.inbox_settle,
             }),
         };
         if engine.inner.index.needs_rebuild() {

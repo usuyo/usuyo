@@ -32,8 +32,8 @@ pub use hash::{hash_tag, sha256_hex};
 pub use highlights::Highlight;
 pub use id::{ItemId, block_id, identity_key, is_block_id, is_uuid7, normalize_web_url, uuid7};
 pub use item::{
-    AddOutcome, Capture, Item, LayerSource, NewOrigin, NewSnapshot, hash_staged, outputs_of,
-    refresh, render_content,
+    AddOutcome, Capture, Item, LayerSource, NewOrigin, NewSnapshot, Whereabouts, hash_staged,
+    outputs_of, refresh, render_content,
 };
 pub use journal::Batch;
 pub use library::{FORMAT_VERSION, Library};

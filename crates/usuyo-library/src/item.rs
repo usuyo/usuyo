@@ -814,6 +814,59 @@ impl Library {
         }
         Ok(None)
     }
+
+    /// 一批 id 现在各在哪：库里、回收站里、都不在。别名换成它指向的那一条。
+    /// 只读；条目的 manifest 和回收站都只扫一遍（导入的预览一次问几百条）。
+    pub fn whereabouts(&self, ids: &[ItemId]) -> Result<Vec<Whereabouts>> {
+        let mut aliases: Option<std::collections::BTreeMap<String, ItemId>> = None;
+        let trash = self.trash_entries()?;
+        let mut out = Vec::with_capacity(ids.len());
+        for id in ids {
+            if self.item_dir(id).exists() {
+                out.push(Whereabouts::Stored(id.clone()));
+                continue;
+            }
+            let map = match &mut aliases {
+                Some(m) => m,
+                None => {
+                    let mut m = std::collections::BTreeMap::new();
+                    for other in self.item_ids()? {
+                        match self.item(&other) {
+                            Ok(item) => {
+                                for a in item.manifest.aliases {
+                                    m.insert(a, other.clone());
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!(item = %other, error = %e, "item not readable")
+                            }
+                        }
+                    }
+                    aliases.insert(m)
+                }
+            };
+            if let Some(target) = map.get(id.as_str()) {
+                out.push(Whereabouts::Stored(target.clone()));
+            } else if trash.iter().any(|e| {
+                e.kind == "item"
+                    && e.target == id.as_str()
+                    && matches!(e.reason.as_str(), "delete" | "undo")
+            }) {
+                out.push(Whereabouts::Trashed(id.clone()));
+            } else {
+                out.push(Whereabouts::Absent(id.clone()));
+            }
+        }
+        Ok(out)
+    }
+}
+
+/// 一条现在在哪（[`Library::whereabouts`]）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Whereabouts {
+    Stored(ItemId),
+    Trashed(ItemId),
+    Absent(ItemId),
 }
 
 pub(crate) fn read_dirs(dir: &Path) -> Result<Vec<PathBuf>> {

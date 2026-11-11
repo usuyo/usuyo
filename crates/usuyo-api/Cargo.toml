@@ -13,6 +13,7 @@ default = ["server"]
 server = [
     "dep:axum",
     "dep:futures-util",
+    "dep:jiff",
     "dep:serde",
     "dep:serde_json",
     "dep:tokio",
@@ -21,7 +22,9 @@ server = [
     "dep:tower",
     "dep:tower-http",
     "dep:tracing",
+    "dep:url",
     "dep:usuyo-core",
+    "dep:usuyo-plugin",
 ]
 client = ["dep:serde_json", "dep:ureq"]
 
@@ -30,6 +33,7 @@ axum = { version = "0.8.9", optional = true }
 futures-util = { version = "0.3.34", optional = true }
 getrandom = "0.4.3"
 hmac = "0.13.0"
+jiff = { version = "0.2.42", optional = true }
 serde = { version = "1.0.229", features = ["derive"], optional = true }
 serde_json = { version = "1.0.154", optional = true }
 sha2 = "0.11.1"
@@ -41,7 +45,9 @@ tower = { version = "0.5.3", features = ["util"], optional = true }
 tower-http = { version = "0.7.1", features = ["cors", "fs", "set-header"], optional = true }
 tracing = { version = "0.1.44", optional = true }
 ureq = { version = "3.5.1", optional = true }
+url = { version = "2.5.8", optional = true }
 usuyo-core = { version = "0.0.0", path = "../usuyo-core", optional = true }
+usuyo-plugin = { version = "0.0.0", path = "../usuyo-plugin", default-features = false, optional = true }
 
 [lints]
 workspace = true

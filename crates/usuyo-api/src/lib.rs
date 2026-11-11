@@ -6,6 +6,8 @@
 //! 别的一律 `application/octet-stream`，再加 `nosniff` 和沙箱 CSP，不会被当网页打开。
 
 #[cfg(feature = "server")]
+mod clients;
+#[cfg(feature = "server")]
 mod guard;
 pub mod handshake;
 #[cfg(feature = "server")]
@@ -27,6 +29,8 @@ use axum::Router;
 #[cfg(feature = "server")]
 use usuyo_core::Engine;
 
+#[cfg(feature = "server")]
+pub use clients::{Client, ClientKind};
 #[cfg(feature = "server")]
 pub use problem::Problem;
 
@@ -68,6 +72,8 @@ pub struct ApiConfig {
     /// 命令行和别的程序带的令牌。
     pub token: String,
     pub origins: Vec<String>,
+    /// 投递令牌存在哪（`<按机器目录>/deliver-tokens.json`）；`None` 只放在内存里。
+    pub clients: Option<std::path::PathBuf>,
 }
 
 #[cfg(feature = "server")]
@@ -80,6 +86,7 @@ pub fn router(engine: Engine, config: ApiConfig) -> Result<Router, Error> {
         token: config.token,
         media_secret,
         origins: config.origins.clone(),
+        clients: clients::Clients::open(config.clients)?,
     });
     Ok(routes::build(engine, gate, &config.origins))
 }
@@ -125,13 +132,19 @@ pub async fn serve(
 
 #[cfg(feature = "server")]
 /// 生成这次启动的令牌，写进只有自己能读（0600）的文件；以前的那个作废。
-/// 先写到旁边的临时文件再换名，读的一方不会读到半个令牌。
 pub fn create_token(path: &Path) -> Result<String, Error> {
+    let token = handshake::random_hex().map_err(Error::Random)?;
+    write_private(path, token.as_bytes())?;
+    Ok(token)
+}
+
+#[cfg(feature = "server")]
+/// 写一个只有自己能读（0600）的文件：先写到旁边的临时文件再换名，读的一方不会读到一半。
+pub(crate) fn write_private(path: &Path, bytes: &[u8]) -> Result<(), Error> {
     let io = |source| Error::Io {
         path: path.to_owned(),
         source,
     };
-    let token = handshake::random_hex().map_err(Error::Random)?;
     let tmp = path.with_extension("tmp");
     let mut opts = std::fs::OpenOptions::new();
     opts.write(true).create(true).truncate(true);
@@ -143,8 +156,8 @@ pub fn create_token(path: &Path) -> Result<String, Error> {
     f.set_permissions(std::os::unix::fs::PermissionsExt::from_mode(0o600))
         .map_err(io)?;
     use std::io::Write;
-    f.write_all(token.as_bytes()).map_err(io)?;
+    f.write_all(bytes).map_err(io)?;
     f.sync_all().map_err(io)?;
     std::fs::rename(&tmp, path).map_err(io)?;
-    Ok(token)
+    Ok(())
 }

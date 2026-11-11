@@ -192,6 +192,197 @@ pub struct TakeResponse {
     pub taken_at: String,
 }
 
+/// 一次导入走到哪了（见 `imports.rs` 的模块说明）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ImportState {
+    /// 在列（或在认交进来的链接的身份）。
+    Listing,
+    /// 列完了，等你看一眼、确认。
+    Ready,
+    /// 你确认了，按节奏一条条收。
+    Taking,
+    /// 你让它先停下。
+    Held,
+    /// 收完了。
+    Done,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ImportKind {
+    /// 插件列出来的（`list`）。
+    Source,
+    /// 交进来的一批链接（`/v1/batches`）。
+    Delivered,
+}
+
+/// 预览里各几条：新的、库里已经有的、在回收站里的。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct PreviewCounts {
+    pub new: u32,
+    pub stored: u32,
+    pub trashed: u32,
+}
+
+/// 为什么在等、停着。`code`：插件的错误码（`login-required`、`rate-limited`、`blocked`……），
+/// 或 `pacing`（等间隔）、`daily-limit`（今天批量的次数用完了）、`held`（你让插件先别试）、
+/// `batch-off`（这个平台不做导入）。没有 `until` 的等你动手。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Waiting {
+    pub code: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub until: Option<String>,
+}
+
+/// 一次导入。只说事实：列了几页、预览里各几条、收下了几条、为什么在等；不说还剩多少。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportView {
+    pub id: String,
+    pub kind: ImportKind,
+    pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plugin_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    /// 交进来的那个投递令牌的名字。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client: Option<String>,
+    pub created_at: String,
+    pub state: ImportState,
+    pub pages: u32,
+    pub preview: PreviewCounts,
+    /// 收下了几条。
+    pub taken: u32,
+    /// 收下了、但内容取不到的（条目页写着原因）。
+    pub not_stored: u32,
+    /// 轮到时已经进了回收站、或是私密的，没收。
+    pub skipped: u32,
+    /// 下一步大概什么时候。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub waiting: Option<Waiting>,
+}
+
+/// 预览里的一条。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportEntryView {
+    pub seq: i64,
+    pub url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub action: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub acted_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub item_id: Option<String>,
+    /// `new`、`stored`、`trashed`、`unresolved`（还没认出身份）。
+    pub standing: String,
+    /// 已经收下了。
+    pub taken: bool,
+}
+
+/// 一个获取插件（`/plugins`）。档位和登录要求只是给你挑的标签，不拦什么。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginView {
+    pub id: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub version: String,
+    pub platforms: Vec<Platform>,
+    /// 七层取法里最高的那层（协议 §2.4）。
+    pub access: usuyo_plugin::protocol::Access,
+    pub login: usuyo_plugin::protocol::Login,
+    /// 能列出你存过的（有 `list`）。
+    pub can_list: bool,
+    /// 清单里写死的来源，登录前就能显示；运行时以 `/plugins/{id}/sources` 为准。
+    pub sources: Vec<usuyo_plugin::protocol::SourceInfo>,
+    /// 会用到哪些站点的账号；登录状态见 `/sites`。
+    pub sites: Vec<String>,
+    pub settings: Vec<SettingView>,
+    pub pacing: Vec<PacingView>,
+    /// 现在停着的地方和原因。
+    pub pauses: Vec<PauseView>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingView {
+    pub key: String,
+    pub label: String,
+    #[serde(rename = "type")]
+    pub value_type: usuyo_plugin::protocol::SettingType,
+    pub secret: bool,
+    /// 密钥设置填了没有；值从不回出来。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filled: Option<bool>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PacingView {
+    pub platform: String,
+    pub batch: bool,
+    pub interval_sec: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub daily: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PauseView {
+    /// 平台，或通用网页插件的网站；`*` 是你点的「先别试」。
+    pub scope: String,
+    /// 你点了「先别试」。
+    pub by_you: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub until: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hint: Option<String>,
+}
+
+/// 没加载的插件和原因。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct NotLoaded {
+    pub dir: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginsView {
+    pub plugins: Vec<PluginView>,
+    pub not_loaded: Vec<NotLoaded>,
+}
+
+/// 一个登录站点（`/sites`）：登录窗口照它开、照它判断登录好了没有。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SiteView {
+    pub site: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub login_url: Option<String>,
+    /// 登录后才有的 cookie 名：都在就算登录好了。空的时候有任何没过期的 cookie 就算。
+    pub cookies: Vec<String>,
+    /// 除了站点本身和它的上级域名，还要读哪些域名的 cookie。
+    pub domains: Vec<String>,
+    pub login: usuyo_plugin::LoginState,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub captured_at: Option<String>,
+    pub plugins: Vec<String>,
+}
+
 /// 推给前端的事件；SSE 的事件名就是 `type`。
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(
@@ -223,6 +414,12 @@ pub enum Event {
     TopicUpdated {
         id: String,
     },
+    /// 一次导入变了：列了一页、收下了一条、停下了。重新拉 `/imports/{id}`。
+    ImportUpdated {
+        id: String,
+    },
+    /// 插件的暂停、站点的登录变了。重新拉 `/plugins`、`/sites`。
+    PluginsUpdated,
 }
 
 #[cfg(test)]

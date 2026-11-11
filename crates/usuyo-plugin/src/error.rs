@@ -20,6 +20,14 @@ pub enum PluginError {
     #[error("plugin {plugin} cannot take this call: {message}")]
     Unsupported { plugin: PluginId, message: String },
 
+    /// 交来的凭据或密钥不合规：站点没有插件声明、设置不是密钥、cookie 都不属于这个站点。
+    #[error("credentials for `{target}`: {message}")]
+    Credentials { target: String, message: String },
+
+    /// 钥匙串（或它的替身）读写失败。消息里没有值。
+    #[error("secret store: {0}")]
+    Vault(String),
+
     /// 一次调用失败了。`stderr` 是最后几行日志，给诊断用。
     #[error("plugin {plugin} call {call_id} failed: {failure}")]
     Call {

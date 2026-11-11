@@ -79,6 +79,7 @@ fn fixture() -> Fixture {
             port: PORT,
             token: TOKEN.into(),
             origins: default_origins(),
+            clients: None,
         },
     )
     .unwrap();

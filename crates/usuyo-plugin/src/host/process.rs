@@ -41,6 +41,8 @@ pub(crate) struct Finished {
     pub ending: Ending,
     pub stdout: Vec<u8>,
     pub stderr: Vec<String>,
+    /// 这次交出去的凭据和密钥的值：插件报的错里出现时洗掉。由调用方填。
+    pub scrub: Vec<String>,
 }
 
 pub(crate) async fn run(
@@ -159,6 +161,7 @@ pub(crate) async fn run(
         ending,
         stdout,
         stderr,
+        scrub: Vec::new(),
     })
 }
 

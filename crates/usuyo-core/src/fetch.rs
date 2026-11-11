@@ -9,7 +9,8 @@ use std::time::Duration;
 use serde_json::Value;
 use usuyo_contract::FetchRecord;
 use usuyo_library::{
-    AddOutcome, Capture, ItemId, NewOrigin, NewSnapshot, hash_staged, normalize_web_url,
+    AddOutcome, Capture, ItemId, NewOrigin, NewSnapshot, Whereabouts, hash_staged,
+    normalize_web_url,
 };
 use usuyo_plugin::protocol::{
     CallFailure, Canonicalized, ErrorCode, FetchOutput, MAX_PAUSE, Pause,
@@ -20,6 +21,7 @@ use usuyo_plugin::{
 
 use crate::engine::{Engine, Via};
 use crate::jobs::FetchJob;
+use crate::pace;
 use crate::view::{Event, TakeResponse};
 use crate::{Error, Result};
 
@@ -69,7 +71,10 @@ impl Engine {
     }
 
     /// 身份：插件 canonicalize 的第一个命中；都不认，或因联网、超时失败，就照 `web:` 自己算（SPEC §0.4）。
-    async fn identify(&self, url: &url::Url) -> Result<(usuyo_contract::Identity, String)> {
+    pub(crate) async fn identify(
+        &self,
+        url: &url::Url,
+    ) -> Result<(usuyo_contract::Identity, String)> {
         let host = &self.inner.host;
         for plugin in host.candidates(url) {
             match host
@@ -119,8 +124,8 @@ impl Engine {
                     ..NewOrigin::default()
                 },
                 snapshot: None,
-                // 你自己在窗口和终端里收的，私密的也照收（SPEC §1.7 的表）。
-                skip_if_private: false,
+                // 你自己在窗口和终端里收的，私密的也照收；别的程序交来的跳过（SPEC §1.7 的表）。
+                skip_if_private: via.skips_private(),
             },
         )?;
         let id = outcome.id().clone();
@@ -145,22 +150,33 @@ impl Engine {
         })
     }
 
-    /// 一直跑后台任务；有新任务时 [`Engine::take`] 会叫醒它。
+    /// 一直跑后台的事：取内容、列导入、收件文件夹。有新任务时 [`Engine::take`] 会叫醒取内容那一路。
     pub async fn run_worker(&self) {
+        tokio::join!(self.run_fetches(), self.run_imports(), self.run_inbox());
+    }
+
+    async fn run_fetches(&self) {
         loop {
-            if let Err(e) = self.run_due().await {
-                tracing::error!(error = %e, "fetch jobs");
-            }
-            let wait = match self.inner.jobs.next_due() {
-                Ok(Some(at)) => {
-                    Duration::from_millis(u64::try_from(at - now_ms()).unwrap_or(0)).min(IDLE)
-                }
-                Ok(None) => IDLE,
+            let blocked = match self.run_ready().await {
+                Ok((_, wake)) => wake,
                 Err(e) => {
-                    tracing::error!(error = %e, "jobs database");
-                    IDLE
+                    tracing::error!(error = %e, "fetch jobs");
+                    None
                 }
             };
+            let now = now_ms();
+            let next = match self.inner.jobs.next_due_after(now) {
+                Ok(at) => at,
+                Err(e) => {
+                    tracing::error!(error = %e, "jobs database");
+                    None
+                }
+            };
+            let wait = [next, blocked]
+                .into_iter()
+                .flatten()
+                .min()
+                .map_or(IDLE, |at| until(at, now).min(IDLE));
             tokio::select! {
                 () = self.inner.wake.notified() => {}
                 () = tokio::time::sleep(wait) => {}
@@ -168,29 +184,88 @@ impl Engine {
         }
     }
 
-    /// 把到点的任务一个个做完，回做了几个。
+    /// 把现在能做的任务一个个做完，回做了几个。等节奏、等暂停的留着，后台到点再做。
     pub async fn run_due(&self) -> Result<usize> {
-        let mut n = 0;
-        while let Some(job) = self.inner.jobs.claim_due(now_ms())? {
-            n += 1;
-            if let Err(e) = self.run_job(&job).await {
-                // 资料库这边出的错（写不进、条目没了）：不再自动重试，原因记在任务上。
-                tracing::error!(item = %job.item_id, error = %e, "fetch job");
-                self.inner
-                    .jobs
-                    .fail(&job.item_id, e.code(), Some(&e.to_string()))?;
-                self.emit(Event::ItemFetchFailed {
-                    id: job.item_id.clone(),
-                    code: e.code().into(),
-                    hint: None,
-                    retry: false,
-                });
-            }
-        }
-        Ok(n)
+        Ok(self.run_ready().await?.0)
     }
 
-    async fn run_job(&self, job: &FetchJob) -> Result<()> {
+    /// 同 [`Engine::run_due`]，另回还在等的任务最早什么时候能做。
+    async fn run_ready(&self) -> Result<(usize, Option<i64>)> {
+        let mut n = 0;
+        loop {
+            let now = now_ms();
+            let mut wake: Option<i64> = None;
+            let mut picked = None;
+            for job in self.inner.jobs.due(now)? {
+                if let Some(at) = self.blocked(&job, now)? {
+                    if at != i64::MAX {
+                        wake = Some(wake.map_or(at, |w| w.min(at)));
+                    }
+                    continue;
+                }
+                let platform = platform_of(&job.item_id).to_owned();
+                // 这个平台正在跑别的调用（例如导入在列清单）：过一秒再看。
+                let Ok(guard) = self.inner.locks.get(&platform).try_lock_owned() else {
+                    wake = Some(wake.map_or(now + 1000, |w| w.min(now + 1000)));
+                    continue;
+                };
+                if self.inner.jobs.claim(&job.item_id)? {
+                    picked = Some((job, platform, guard));
+                    break;
+                }
+            }
+            let Some((job, platform, _guard)) = picked else {
+                return Ok((n, wake));
+            };
+            n += 1;
+            let batch = job.import_id.is_some();
+            let called = match self.run_job(&job).await {
+                Ok(called) => called,
+                Err(e) => {
+                    // 资料库这边出的错（写不进、条目没了）：不再自动重试，原因记在任务上。
+                    tracing::error!(item = %job.item_id, error = %e, "fetch job");
+                    self.inner
+                        .jobs
+                        .fail(&job.item_id, e.code(), Some(&e.to_string()))?;
+                    self.emit(Event::ItemFetchFailed {
+                        id: job.item_id.clone(),
+                        code: e.code().into(),
+                        hint: None,
+                        retry: false,
+                    });
+                    true
+                }
+            };
+            if called {
+                self.inner
+                    .jobs
+                    .record_call(&platform, now_ms(), &pace::today(), batch)?;
+            }
+            if let Some(import) = &job.import_id {
+                self.emit(Event::ImportUpdated { id: import.clone() });
+            }
+        }
+    }
+
+    /// 这个任务现在不能做：回最早什么时候能（`i64::MAX` 是等你动手）。
+    fn blocked(&self, job: &FetchJob, now: i64) -> Result<Option<i64>> {
+        Ok(self
+            .wait_for(job, now)?
+            .map(|w| w.until.unwrap_or(i64::MAX)))
+    }
+
+    /// 回这次有没有调过插件（调过才记进节奏）。
+    async fn run_job(&self, job: &FetchJob) -> Result<bool> {
+        if let Some(import) = job.import_id.clone() {
+            let this = self.clone();
+            let j = job.clone();
+            let go = tokio::task::spawn_blocking(move || this.take_entry(&import, &j))
+                .await
+                .map_err(|e| Error::Task(e.to_string()))??;
+            if !go {
+                return Ok(false);
+            }
+        }
         let id = ItemId::parse(&job.item_id)?;
         let platform = id.platform().to_owned();
         let url = url::Url::parse(&job.url)
@@ -207,6 +282,7 @@ impl Engine {
         let mut last: Option<CallFailure> = None;
         let mut retryable = false;
         let mut paused_until: Option<i64> = None;
+        let mut called = false;
         for plugin in candidates {
             let pid = plugin.id().to_string();
             // 通用网页插件的平台是所有网站：按网站暂停，一个站限流不停掉别的站。
@@ -215,10 +291,17 @@ impl Engine {
             } else {
                 platform.as_str()
             };
-            if let Some(t) = self.inner.jobs.paused(&pid, scope, now_ms())? {
-                paused_until = Some(paused_until.map_or(t, |p| p.min(t)));
+            if let Some(p) = self.inner.jobs.paused(&pid, scope, now_ms())? {
+                if let Some(t) = p.until {
+                    paused_until = Some(paused_until.map_or(t, |x| x.min(t)));
+                }
                 last.get_or_insert_with(|| {
-                    CallFailure::new(ErrorCode::RateLimited, format!("{pid} is paused here"))
+                    let mut f =
+                        CallFailure::new(ErrorCode::RateLimited, format!("{pid} is paused here"));
+                    if p.held {
+                        f.hint = Some("你让这个插件先别试了".into());
+                    }
+                    f
                 });
                 continue;
             }
@@ -227,6 +310,7 @@ impl Engine {
                 want: None,
                 input_file: None,
             };
+            called = true;
             match self
                 .inner
                 .host
@@ -250,7 +334,7 @@ impl Engine {
                     .map_err(|e| Error::Task(e.to_string()))??;
                     self.inner.jobs.finish(id.as_str())?;
                     self.emit(Event::ItemUpdated { id: id.to_string() });
-                    return Ok(());
+                    return Ok(true);
                 }
                 Err(PluginError::Call { failure, .. }) => {
                     tracing::info!(plugin = %pid, item = %id, failure = %failure, "fetch failed");
@@ -264,7 +348,13 @@ impl Engine {
                     if let Some(d) = pause {
                         let ms = i64::try_from(d.as_millis()).unwrap_or(i64::MAX);
                         let until = now_ms().saturating_add(ms);
-                        self.inner.jobs.pause(&pid, scope, until)?;
+                        self.inner.jobs.pause(
+                            &pid,
+                            scope,
+                            until,
+                            failure.code.as_str(),
+                            failure.hint.as_deref(),
+                        )?;
                         if retry_after_pause {
                             paused_until = Some(paused_until.map_or(until, |p| p.min(until)));
                         }
@@ -313,7 +403,92 @@ impl Engine {
             hint,
             retry: can_retry,
         });
-        Ok(())
+        Ok(called)
+    }
+
+    /// 导入里的一条轮到了：先收下（只有链接，记 `entry: import`），再取内容。
+    /// 回要不要接着取：轮到时已进回收站（又没让拿回来）、库里已经存着内容、或者导入删了，就不取。
+    fn take_entry(&self, import: &str, job: &FetchJob) -> Result<bool> {
+        let jobs = &self.inner.jobs;
+        let (Some(imp), Some(entry)) =
+            (jobs.import(import)?, jobs.entry_for(import, &job.item_id)?)
+        else {
+            jobs.finish(&job.item_id)?;
+            return Ok(false);
+        };
+        if entry.added {
+            return Ok(true);
+        }
+        let identity: usuyo_contract::Identity = serde_json::from_str(
+            entry
+                .identity
+                .as_deref()
+                .ok_or_else(|| Error::InvalidArgs("import entry has no identity".into()))?,
+        )?;
+        let id = ItemId::parse(&job.item_id)?;
+        let (acted_at, acted_at_original) = match entry.acted_at.as_deref() {
+            Some(raw) => {
+                let ts = usuyo_library::time::parse(raw)?;
+                let original = (!raw.ends_with('Z') && !raw.ends_with('z')).then(|| raw.to_owned());
+                (Some(usuyo_library::time::format(ts)), original)
+            }
+            None => (None, None),
+        };
+        let mut lib = self.lib();
+        if !imp.also_trashed
+            && matches!(
+                lib.whereabouts(std::slice::from_ref(&id))?.first(),
+                Some(Whereabouts::Trashed(_))
+            )
+        {
+            drop(lib);
+            jobs.finish(&job.item_id)?;
+            jobs.import_skipped(import)?;
+            return Ok(false);
+        }
+        let outcome = lib.add_item(
+            &Via::Import.batch()?,
+            Capture {
+                identity: Some(identity),
+                title_hint: entry.title.clone(),
+                origin: NewOrigin {
+                    entry: Via::Import.entry().into(),
+                    // 你自己平台上的收藏、列表，你确认过才收：不是机器挑的（SPEC §1.2.1）。
+                    taken_by: "user".into(),
+                    import_batch: Some(import.to_owned()),
+                    action: entry.action.clone(),
+                    acted_at,
+                    acted_at_original,
+                    ..NewOrigin::default()
+                },
+                snapshot: None,
+                skip_if_private: false,
+            },
+        )?;
+        let got = outcome.id().clone();
+        if matches!(outcome, AddOutcome::Skipped(_)) {
+            drop(lib);
+            jobs.finish(&job.item_id)?;
+            jobs.import_skipped(import)?;
+            return Ok(false);
+        }
+        self.reindex_item(&lib, &got)?;
+        let has_content = !lib.item(&got)?.manifest.snapshots.is_empty();
+        drop(lib);
+        jobs.mark_added(import, &job.item_id)?;
+        self.emit(match outcome {
+            AddOutcome::Created(_) => Event::ItemAdded {
+                id: got.to_string(),
+            },
+            _ => Event::ItemUpdated {
+                id: got.to_string(),
+            },
+        });
+        if got != id || has_content {
+            jobs.finish(&job.item_id)?;
+            return Ok(false);
+        }
+        Ok(true)
     }
 
     /// 取到的输出目录交给资料库当一份快照，再重写 `content.md` 和索引。
@@ -389,6 +564,15 @@ fn fetch_record(out: &FetchOutput) -> Result<FetchRecord> {
         }
     }
     Ok(serde_json::from_value(v)?)
+}
+
+/// 条目 id 前面那段就是平台（SPEC §0.4）。
+pub(crate) fn platform_of(item_id: &str) -> &str {
+    item_id.rsplit_once('-').map_or("", |(p, _)| p)
+}
+
+fn until(at: i64, now: i64) -> Duration {
+    Duration::from_millis(u64::try_from(at.saturating_sub(now)).unwrap_or(0))
 }
 
 #[cfg(test)]

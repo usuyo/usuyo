@@ -7,6 +7,10 @@
 //! 先 `cargo build`，工作区里的 `plugins/web` 编出来的 `usuyo-plugin-web` 和本程序在同一个
 //! 目录，会照安装的样子放进 `<按机器的目录>/dev-plugins/`；别的目录用 `--plugins` 或 `USUYO_PLUGINS` 加。
 //! 按机器的目录默认是系统的（macOS `~/Library/Application Support/usuyo`），`USUYO_HOME` 可以换。
+//!
+//! 守护进程还看着收件文件夹 `<按机器的目录>/inbox/`：放进去的 `.txt`（一行一个链接，或整段分享文字）
+//! 10 秒没变就收下里面的链接，文件移到 `.usuyo-done/<日期>/`，收不成的移到 `.usuyo-failed/`；别的文件不碰。
+//! 登录站点的 cookie 和插件的密钥设置在系统钥匙串里（Linux 上是按机器目录里 0600 的 `secrets.json`）。
 
 mod client;
 mod machine;
@@ -149,6 +153,8 @@ fn open(root: &std::path::Path, cli: &Cli) -> Result<Engine> {
     roots.extend(config.plugin_roots);
     config.plugin_roots = roots;
     config.plugin_settings = machine::plugin_settings(root)?;
+    // 登录的 cookie 和密钥：macOS、Windows 进系统钥匙串，别的系统是按机器目录里 0600 的文件。
+    config.vault = usuyo_core::system_vault(root);
     Engine::open(config).with_context(|| format!("cannot open library {}", library.display()))
 }
 
@@ -168,12 +174,14 @@ async fn daemon(engine: Engine, root: &std::path::Path, port: u16) -> Result<()>
     tracing::info!(
         library = %engine.library_root().display(),
         plugins = ?engine.plugin_ids(),
+        inbox = %engine.inbox_dir().display(),
         "listening on http://127.0.0.1:{port}"
     );
     let config = usuyo_api::ApiConfig {
         port,
         token: token.clone(),
         origins: usuyo_api::default_origins(),
+        clients: Some(machine::clients_path(root)),
     };
     let result = usuyo_api::serve(listener, engine, config, stop_signal()).await;
     machine::forget_daemon(&info, pid);

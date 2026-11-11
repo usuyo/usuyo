@@ -4,6 +4,7 @@
 //! 按用户排的顺序换插件、平台节奏、暂停和各种锁由调用方（内核的编排）做，
 //! 判断需要的信息都在返回值里：错误码的 `tries_next`、`retryable`、`pause`，清单的 `pacing`。
 
+mod credentials;
 mod envelope_text;
 mod network;
 mod outdir;
@@ -12,6 +13,7 @@ mod process;
 use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Duration;
 
 use serde::de::DeserializeOwned;
@@ -19,14 +21,16 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
+pub use credentials::{DeclaredSite, LoginState, Vault};
 pub use outdir::OutFile;
 use process::{Ending, Finished, Spawn};
 
 use crate::PluginError;
 use crate::protocol::{
-    CallFailure, Canonicalized, Completeness, ErrorCode, FetchInputKind, FetchOutput, FetchSpec,
-    Identity, ListPage, MANIFEST_FILE, OutputKind, PLUGIN_DIR_PLACEHOLDER, PluginEvent,
-    PluginHeader, PluginId, PluginKind, PluginManifest, Rfc3339, SourceInfo, SourcesOutput,
+    CallFailure, Canonicalized, CapabilityUse, Completeness, ErrorCode, FetchInputKind,
+    FetchOutput, FetchSpec, Identity, ListPage, MANIFEST_FILE, OutputKind, PLUGIN_DIR_PLACEHOLDER,
+    PluginEvent, PluginHeader, PluginId, PluginKind, PluginManifest, Rfc3339, Site, SourceInfo,
+    SourcesOutput, StorageState,
 };
 
 /// 每次调用的上限。默认值照协议 §3.2、§3.4、§3.6；用户的「调用超时加长」「输出大小上限」改这里。
@@ -280,16 +284,66 @@ pub struct PluginHost {
     plugins: Vec<FetchPlugin>,
     /// 插件 id → 用户给它的非密钥设置（§2.11），调用时写成 `USUYO_SETTINGS` 指的文件。
     settings: BTreeMap<String, Value>,
+    logins: Arc<credentials::Logins>,
 }
 
 impl PluginHost {
     /// `plugins` 的顺序就是用户排的顺序（§3.1）。
     pub fn new(config: HostConfig, plugins: Vec<FetchPlugin>) -> Self {
+        let logins = Arc::new(credentials::Logins::none());
         Self {
             config,
             plugins,
             settings: BTreeMap::new(),
+            logins,
         }
+    }
+
+    /// 凭据和密钥存在 `vault`（§6）。`private_dir` 是按机器的目录（不在资料库里）：
+    /// 交给插件的凭据文件建在它的 `run/` 下，登录索引是 `logins.json`。
+    /// 没调这个时插件拿不到任何凭据，存凭据报错。
+    pub fn with_vault(mut self, vault: Arc<dyn Vault>, private_dir: &Path) -> Self {
+        self.logins = Arc::new(credentials::Logins::new(private_dir, vault));
+        self
+    }
+
+    /// 清掉上次没删掉的凭据目录（进程被杀时会剩下）。
+    pub fn sweep_credentials(&self) -> Result<(), PluginError> {
+        self.logins.sweep()
+    }
+
+    pub fn plugin(&self, id: &str) -> Option<&FetchPlugin> {
+        self.plugins.iter().find(|p| p.id().as_str() == id)
+    }
+
+    /// 装着的插件声明过的登录站点和登录状态。只读索引，不碰钥匙串。
+    pub fn sites(&self) -> Result<Vec<DeclaredSite>, PluginError> {
+        self.logins.declared(&self.plugins)
+    }
+
+    /// 存下登录窗口读出的 cookie（只留属于这个站点的）。写钥匙串，会阻塞。
+    pub fn save_site(&self, site: &str, state: &StorageState) -> Result<DeclaredSite, PluginError> {
+        self.logins.save(&self.plugins, site, state)
+    }
+
+    /// 忘掉一个站点的登录。
+    pub fn forget_site(&self, site: &str) -> Result<(), PluginError> {
+        self.logins.forget(site)
+    }
+
+    /// 填（或用空值去掉）一个插件的密钥设置（§2.11）。
+    pub fn set_secret(
+        &self,
+        plugin: &FetchPlugin,
+        key: &str,
+        value: &str,
+    ) -> Result<(), PluginError> {
+        self.logins.set_secret(plugin, key, value)
+    }
+
+    /// 这个插件填了值的密钥设置。
+    pub fn secrets_set(&self, plugin: &PluginId) -> Result<BTreeSet<String>, PluginError> {
+        self.logins.secrets_set(plugin)
     }
 
     /// 带上各插件的设置（插件 id → JSON 对象）。没有设置的插件不传 `USUYO_SETTINGS`。
@@ -321,13 +375,16 @@ impl PluginHost {
     ) -> Result<Canonicalized, PluginError> {
         let call = self.start_call(plugin, false)?;
         let args = vec!["canonicalize".into(), url.as_str().into()];
-        let finished = self
+        let (finished, _) = self
             .run(
                 plugin,
                 &call,
-                args,
-                None,
-                self.config.limits.canonicalize,
+                Invocation {
+                    args,
+                    input_file: None,
+                    cap: None,
+                    total: self.config.limits.canonicalize,
+                },
                 opts,
             )
             .await?;
@@ -389,17 +446,30 @@ impl PluginHost {
             .uses
             .timeout
             .map_or(self.config.limits.fetch, |t| t.get());
-        let finished = self
+        let (finished, handed) = self
             .run(
                 plugin,
                 &call,
-                args,
-                request.input_file.as_deref(),
-                total,
+                Invocation {
+                    args,
+                    input_file: request.input_file.as_deref(),
+                    cap: Some(&cap.uses),
+                    total,
+                },
                 opts,
             )
             .await?;
         let mut output: FetchOutput = call.decode(plugin, finished)?;
+        // 换了的会话 cookie 写回钥匙串，不随快照进资料库（§6）。
+        if let Some(update) = output.credentials_update.take() {
+            let logins = Arc::clone(&self.logins);
+            let written = tokio::task::spawn_blocking(move || logins.update(&handed, &update))
+                .await
+                .map_err(|e| PluginError::Vault(format!("credentials update: {e}")))?;
+            if let Err(e) = written {
+                tracing::warn!(plugin = %plugin.id(), call = %call.id, error = %e, "credentialsUpdate not saved");
+            }
+        }
         envelope_text::fetch(&mut output);
         let invalid = |m: String| call.failed(plugin, ErrorCode::InvalidOutput, m);
 
@@ -489,8 +559,18 @@ impl PluginHost {
             .uses
             .timeout
             .map_or(self.config.limits.sources, |t| t.get());
-        let finished = self
-            .run(plugin, &call, vec!["sources".into()], None, total, opts)
+        let (finished, _) = self
+            .run(
+                plugin,
+                &call,
+                Invocation {
+                    args: vec!["sources".into()],
+                    input_file: None,
+                    cap: Some(&cap.uses),
+                    total,
+                },
+                opts,
+            )
             .await?;
         let mut out: SourcesOutput = call.decode(plugin, finished)?;
         envelope_text::sources(&mut out.sources);
@@ -529,13 +609,16 @@ impl PluginHost {
             .uses
             .timeout
             .map_or(self.config.limits.list, |t| t.get());
-        let finished = self
+        let (finished, _) = self
             .run(
                 plugin,
                 &call,
-                args,
-                request.input_file.as_deref(),
-                total,
+                Invocation {
+                    args,
+                    input_file: request.input_file.as_deref(),
+                    cap: Some(&cap.uses),
+                    total,
+                },
                 opts,
             )
             .await?;
@@ -590,19 +673,34 @@ impl PluginHost {
         Ok(Call { id, dir, cache })
     }
 
+    /// 起一次进程；回结局和交了凭据的站点。
     async fn run(
         &self,
         plugin: &FetchPlugin,
         call: &Call,
-        args: Vec<OsString>,
-        input_file: Option<&Path>,
-        total: Duration,
+        inv: Invocation<'_>,
         opts: &CallOptions,
-    ) -> Result<Finished, PluginError> {
+    ) -> Result<(Finished, Vec<Site>), PluginError> {
+        let Invocation {
+            args,
+            input_file,
+            cap,
+            total,
+        } = inv;
         let (program, mut command_args) =
             resolve_command(plugin).map_err(|failure| call.fail(plugin, failure, Vec::new()))?;
         command_args.extend(args);
         let mut env = call_env(&self.config, plugin, call, input_file);
+        // 凭据和密钥（§6、§2.11）：读钥匙串会阻塞，放到阻塞线程上；文件随 `handover` 在进程结束时删掉。
+        let handover = {
+            let logins = Arc::clone(&self.logins);
+            let plugin = plugin.clone();
+            let cap = cap.cloned();
+            tokio::task::spawn_blocking(move || logins.handover(&plugin, cap.as_ref()))
+                .await
+                .map_err(|e| PluginError::Vault(format!("credentials: {e}")))??
+        };
+        env.extend(handover.env.iter().cloned());
         if let Some(settings) = self.settings.get(plugin.id().as_str()) {
             let path = call.dir.path().join("settings.json");
             std::fs::write(&path, settings.to_string()).map_err(|e| PluginError::Io {
@@ -624,7 +722,7 @@ impl PluginHost {
             env,
             cwd: call.dir.path().join("tmp"),
         };
-        process::run(spawn, total, &self.config.limits, opts)
+        let mut finished = process::run(spawn, total, &self.config.limits, opts)
             .await
             .map_err(|e| {
                 call.failed(
@@ -632,8 +730,23 @@ impl PluginHost {
                     ErrorCode::Crashed,
                     format!("could not run the plugin: {e}"),
                 )
-            })
+            })?;
+        for line in &mut finished.stderr {
+            credentials::scrub(line, &handover.values);
+        }
+        finished.scrub = handover.values.clone();
+        let sites = handover.sites.clone();
+        drop(handover);
+        Ok((finished, sites))
     }
+}
+
+/// 一次进程要的：参数、导入文件、这次用的能力（决定交哪些站点的凭据，`canonicalize` 没有）、总时长。
+struct Invocation<'a> {
+    args: Vec<OsString>,
+    input_file: Option<&'a Path>,
+    cap: Option<&'a CapabilityUse>,
+    total: Duration,
 }
 
 /// 一次调用的 id、暂存目录和缓存目录。
@@ -667,6 +780,7 @@ impl Call {
             ending,
             stdout,
             stderr,
+            scrub,
         } = finished;
         let host = |code: ErrorCode, message: String| CallFailure::new(code, message);
         let status = match ending {
@@ -748,6 +862,10 @@ impl Call {
                     Ok(Failed { mut error }) => Err(match error.check_from_plugin() {
                         Ok(()) => {
                             envelope_text::failure(&mut error);
+                            credentials::scrub(&mut error.message, &scrub);
+                            if let Some(h) = &mut error.hint {
+                                credentials::scrub(h, &scrub);
+                            }
                             error
                         }
                         Err(why) => host(ErrorCode::InvalidOutput, why),

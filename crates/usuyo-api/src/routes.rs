@@ -10,7 +10,7 @@ use axum::extract::{DefaultBodyLimit, Path, Query, Request, State};
 use axum::http::{HeaderName, HeaderValue, Method, StatusCode, header};
 use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post, put};
 use axum::{Extension, Json, Router, middleware};
 use futures_util::{Stream, StreamExt};
 use serde::Deserialize;
@@ -21,10 +21,15 @@ use tower::ServiceExt;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::services::ServeFile;
 use tower_http::set_header::SetResponseHeaderLayer;
-use usuyo_core::view::{ItemView, MapView, SearchHit, TakeResponse, Topic};
-use usuyo_core::{Engine, Links, Via};
+use usuyo_core::view::{
+    ImportEntryView, ImportView, ItemView, MapView, PluginView, PluginsView, SearchHit, SiteView,
+    TakeResponse, Topic,
+};
+use usuyo_core::{DeliveredLink, Engine, Links, Via};
+use usuyo_plugin::protocol::{SourceInfo, StorageState};
 
-use crate::guard::{self, Gate};
+use crate::clients::{Client, ClientKind};
+use crate::guard::{self, Caller, Gate};
 use crate::handshake;
 use crate::problem::Problem;
 
@@ -35,8 +40,14 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const SEARCH_LIMIT: usize = 50;
 const SEARCH_MAX: usize = 200;
 
-/// 握手的请求体上限：一个 64 位的随机数。
+/// 握手的请求体上限：一个 64 位的随机数，加一个投递端 id。
 const HANDSHAKE_BODY_LIMIT: usize = 256;
+/// 登录窗口交来的 cookie 和 localStorage。
+const LOGIN_BODY_LIMIT: usize = 256 << 10;
+/// 一批链接（`/v1/batches`），最多 5000 条。
+const BATCH_BODY_LIMIT: usize = 4 << 20;
+/// 列来源要按节奏等上一次调用，再等插件跑完。
+const SOURCES_TIMEOUT: Duration = Duration::from_secs(120);
 
 #[derive(Clone)]
 struct AppState {
@@ -83,21 +94,54 @@ pub(crate) fn build(engine: Engine, gate: Arc<Gate>, origins: &[String]) -> Rout
         .route("/search", get(search))
         .route("/reindex", post(reindex))
         .route("/media/{id}/{*layer}", get(media))
+        .route("/plugins", get(plugins))
+        .route("/plugins/{owner}/{repo}/try-now", post(plugin_try_now))
+        .route("/plugins/{owner}/{repo}/hold", post(plugin_hold))
+        .route(
+            "/plugins/{owner}/{repo}/secrets/{key}",
+            put(plugin_secret_set).delete(plugin_secret_forget),
+        )
+        .route("/sites", get(sites))
+        .route(
+            "/sites/{site}/login",
+            put(site_login)
+                .delete(site_forget)
+                .layer(DefaultBodyLimit::max(LOGIN_BODY_LIMIT)),
+        )
+        .route("/imports", get(imports).post(start_import))
+        .route("/imports/{id}", get(import).delete(delete_import))
+        .route("/imports/{id}/entries", get(import_entries))
+        .route("/imports/{id}/confirm", post(confirm_import))
+        .route("/imports/{id}/hold", post(hold_import))
+        .route("/imports/{id}/resume", post(resume_import))
+        .route("/deliver-tokens", get(clients).post(create_client))
+        .route("/deliver-tokens/{id}", delete(revoke_client))
+        .route("/inbox", get(inbox))
+        .route("/v1/ping", get(ping))
+        .route("/v1/deliver", post(deliver))
+        .route(
+            "/v1/batches",
+            post(batch).layer(DefaultBodyLimit::max(BATCH_BODY_LIMIT)),
+        )
         .layer(middleware::from_fn(deadline));
+    let slow = Router::new()
+        .route("/plugins/{owner}/{repo}/sources", get(plugin_sources))
+        .layer(middleware::from_fn(slow_deadline));
     let origins: Vec<HeaderValue> = origins
         .iter()
         .filter_map(|o| HeaderValue::from_str(o).ok())
         .collect();
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::list(origins))
-        .allow_methods([Method::GET, Method::POST])
+        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION, header::RANGE])
         .expose_headers([
             header::CONTENT_RANGE,
             header::ACCEPT_RANGES,
             header::RETRY_AFTER,
         ]);
-    api.merge(Router::new().route("/events", get(events)))
+    api.merge(slow)
+        .merge(Router::new().route("/events", get(events)))
         .fallback(|| async { Problem::new("not-found", "no such route") })
         .method_not_allowed_fallback(|| async {
             let mut p = Problem::new("invalid-args", "method not allowed on this route");
@@ -119,6 +163,13 @@ type ApiResult<T> = Result<Json<T>, Problem>;
 /// 慢请求（含读请求体）到点就回 `timeout`；事件流不经这里。
 async fn deadline(req: Request, next: middleware::Next) -> Response {
     match tokio::time::timeout(REQUEST_TIMEOUT, next.run(req)).await {
+        Ok(res) => res,
+        Err(_) => Problem::new("timeout", "request took too long").into_response(),
+    }
+}
+
+async fn slow_deadline(req: Request, next: middleware::Next) -> Response {
+    match tokio::time::timeout(SOURCES_TIMEOUT, next.run(req)).await {
         Ok(res) => res,
         Err(_) => Problem::new("timeout", "request took too long").into_response(),
     }
@@ -147,9 +198,12 @@ fn body<T>(r: Result<Json<T>, JsonRejection>) -> Result<T, Problem> {
 #[derive(Deserialize)]
 struct HandshakeRequest {
     nonce: String,
+    /// 投递端的 id（令牌 `.` 前面那段）：证明用它的整个令牌算。不给就用主令牌。
+    client: Option<String>,
 }
 
 /// 证明自己是这次启动的内核，只回证明（见 [`crate::handshake`]）。
+/// 不认识的投递端照样回一个证明（用随机的密钥），对面分不出那个 id 在不在。
 async fn answer_handshake(
     State(s): State<AppState>,
     req: Result<Json<HandshakeRequest>, JsonRejection>,
@@ -161,7 +215,14 @@ async fn answer_handshake(
             "nonce must be 64 lowercase hex characters",
         ));
     }
-    let proof = handshake::proof(&s.gate.token, s.gate.port, &req.nonce);
+    let key = match &req.client {
+        None => s.gate.token.clone(),
+        Some(id) => match s.gate.clients.token_of(id) {
+            Some(t) => t,
+            None => handshake::random_hex().map_err(|e| Problem::new("internal", e.to_string()))?,
+        },
+    };
+    let proof = handshake::proof(&key, s.gate.port, &req.nonce);
     Ok(Json(json!({ "proof": proof })))
 }
 
@@ -322,6 +383,370 @@ async fn search(
 async fn reindex(State(s): State<AppState>) -> ApiResult<serde_json::Value> {
     let n = blocking(move || s.engine.reindex()).await?;
     Ok(Json(json!({"items": n.items, "unreadable": n.unreadable})))
+}
+
+// —— 获取插件和登录站点 ——
+
+/// 插件 id 是 `owner/repo`，路径里拆成两段。
+fn plugin_id(owner: &str, repo: &str) -> String {
+    format!("{owner}/{repo}")
+}
+
+async fn plugins(State(s): State<AppState>) -> ApiResult<PluginsView> {
+    Ok(Json(blocking(move || s.engine.plugins()).await?))
+}
+
+async fn plugin_sources(
+    State(s): State<AppState>,
+    Path((owner, repo)): Path<(String, String)>,
+) -> ApiResult<Vec<SourceInfo>> {
+    Ok(Json(
+        s.engine.plugin_sources(&plugin_id(&owner, &repo)).await?,
+    ))
+}
+
+async fn plugin_try_now(
+    State(s): State<AppState>,
+    Path((owner, repo)): Path<(String, String)>,
+) -> ApiResult<PluginView> {
+    Ok(Json(
+        blocking(move || s.engine.try_plugin_now(&plugin_id(&owner, &repo))).await?,
+    ))
+}
+
+async fn plugin_hold(
+    State(s): State<AppState>,
+    Path((owner, repo)): Path<(String, String)>,
+) -> ApiResult<PluginView> {
+    Ok(Json(
+        blocking(move || s.engine.hold_plugin(&plugin_id(&owner, &repo))).await?,
+    ))
+}
+
+#[derive(Deserialize)]
+struct SecretRequest {
+    value: String,
+}
+
+async fn plugin_secret_set(
+    State(s): State<AppState>,
+    Path((owner, repo, key)): Path<(String, String, String)>,
+    req: Result<Json<SecretRequest>, JsonRejection>,
+) -> ApiResult<PluginView> {
+    let req = body(req)?;
+    if req.value.trim().is_empty() {
+        return Err(Problem::new(
+            "invalid-args",
+            "value is empty; DELETE the setting to remove it",
+        ));
+    }
+    Ok(Json(
+        blocking(move || {
+            s.engine
+                .set_plugin_secret(&plugin_id(&owner, &repo), &key, &req.value)
+        })
+        .await?,
+    ))
+}
+
+async fn plugin_secret_forget(
+    State(s): State<AppState>,
+    Path((owner, repo, key)): Path<(String, String, String)>,
+) -> ApiResult<PluginView> {
+    Ok(Json(
+        blocking(move || {
+            s.engine
+                .set_plugin_secret(&plugin_id(&owner, &repo), &key, "")
+        })
+        .await?,
+    ))
+}
+
+async fn sites(State(s): State<AppState>) -> ApiResult<Vec<SiteView>> {
+    Ok(Json(blocking(move || s.engine.sites()).await?))
+}
+
+/// 壳的登录窗口读出 cookie 以后交到这里：只留属于这个站点的，存进钥匙串。回的里面没有值。
+async fn site_login(
+    State(s): State<AppState>,
+    Path(site): Path<String>,
+    req: Result<Json<StorageState>, JsonRejection>,
+) -> ApiResult<SiteView> {
+    let state = body(req)?;
+    Ok(Json(
+        blocking(move || s.engine.save_site(&site, &state)).await?,
+    ))
+}
+
+async fn site_forget(
+    State(s): State<AppState>,
+    Path(site): Path<String>,
+) -> Result<StatusCode, Problem> {
+    blocking(move || s.engine.forget_site(&site)).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// —— 导入 ——
+
+async fn imports(State(s): State<AppState>) -> ApiResult<Vec<ImportView>> {
+    Ok(Json(blocking(move || s.engine.imports()).await?))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StartImportRequest {
+    plugin_id: String,
+    source: String,
+    #[serde(default)]
+    title: String,
+}
+
+async fn start_import(
+    State(s): State<AppState>,
+    req: Result<Json<StartImportRequest>, JsonRejection>,
+) -> ApiResult<ImportView> {
+    let req = body(req)?;
+    Ok(Json(
+        blocking(move || {
+            s.engine
+                .start_import(&req.plugin_id, &req.source, &req.title)
+        })
+        .await?,
+    ))
+}
+
+async fn import(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<ImportView> {
+    Ok(Json(blocking(move || s.engine.import(&id)).await?))
+}
+
+async fn delete_import(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, Problem> {
+    blocking(move || s.engine.delete_import(&id)).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct EntriesQuery {
+    standing: Option<String>,
+    #[serde(default)]
+    offset: u32,
+    limit: Option<u32>,
+}
+
+async fn import_entries(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+    q: Result<Query<EntriesQuery>, QueryRejection>,
+) -> ApiResult<Vec<ImportEntryView>> {
+    let Query(q) = q.map_err(|e| Problem::new("invalid-args", e.body_text()))?;
+    Ok(Json(
+        blocking(move || {
+            s.engine
+                .import_entries(&id, q.standing.as_deref(), q.offset, q.limit.unwrap_or(100))
+        })
+        .await?,
+    ))
+}
+
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct ConfirmRequest {
+    #[serde(default)]
+    also_trashed: bool,
+}
+
+async fn confirm_import(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+    req: Result<Json<ConfirmRequest>, JsonRejection>,
+) -> ApiResult<ImportView> {
+    let req = match req {
+        Err(JsonRejection::MissingJsonContentType(_)) => ConfirmRequest::default(),
+        other => body(other)?,
+    };
+    Ok(Json(
+        blocking(move || s.engine.confirm_import(&id, req.also_trashed)).await?,
+    ))
+}
+
+async fn hold_import(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<ImportView> {
+    Ok(Json(blocking(move || s.engine.hold_import(&id)).await?))
+}
+
+async fn resume_import(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<ImportView> {
+    Ok(Json(blocking(move || s.engine.resume_import(&id)).await?))
+}
+
+// —— 投递令牌、收件文件夹 ——
+
+async fn clients(State(s): State<AppState>) -> Json<Vec<Client>> {
+    Json(s.gate.clients.list())
+}
+
+#[derive(Deserialize)]
+struct CreateClientRequest {
+    name: String,
+    kind: ClientKind,
+}
+
+/// 发一个投递令牌；`token` 只在这里回一次。
+async fn create_client(
+    State(s): State<AppState>,
+    req: Result<Json<CreateClientRequest>, JsonRejection>,
+) -> ApiResult<serde_json::Value> {
+    let req = body(req)?;
+    let name = req.name.trim();
+    if name.is_empty() || name.chars().count() > 80 {
+        return Err(Problem::new(
+            "invalid-args",
+            "name must be 1 to 80 characters",
+        ));
+    }
+    let (client, token) = s
+        .gate
+        .clients
+        .create(name, req.kind)
+        .map_err(|e| Problem::new("internal", e.to_string()))?;
+    let mut v =
+        serde_json::to_value(client).map_err(|e| Problem::new("internal", e.to_string()))?;
+    v["token"] = json!(token);
+    Ok(Json(v))
+}
+
+async fn revoke_client(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, Problem> {
+    let gone = s
+        .gate
+        .clients
+        .revoke(&id)
+        .map_err(|e| Problem::new("internal", e.to_string()))?;
+    if gone {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(Problem::new("not-found", "no such deliver token"))
+    }
+}
+
+async fn inbox(State(s): State<AppState>) -> Json<serde_json::Value> {
+    Json(json!({ "path": s.engine.inbox_dir() }))
+}
+
+// —— 投递接口（协议 §5.1）：投递令牌只能进这几条 ——
+
+/// 谁交的：投递端按它的入口类型记，主令牌按 `api` 记。
+fn deliverer(caller: &Caller) -> (Via, Option<String>) {
+    match caller {
+        Caller::Deliver(c) => (c.kind.via(), Some(c.name.clone())),
+        _ => (Via::Api, None),
+    }
+}
+
+async fn ping(Extension(caller): Extension<Caller>) -> Json<serde_json::Value> {
+    let (_, client) = deliverer(&caller);
+    Json(json!({
+        "name": "usuyo",
+        "version": env!("CARGO_PKG_VERSION"),
+        "protocol": 1,
+        "client": client,
+    }))
+}
+
+#[derive(Deserialize)]
+struct DeliverRequest {
+    url: Option<String>,
+    text: Option<String>,
+}
+
+/// 收下一条链接（或带链接的分享文字）。只收链接：已经取到的内容还不收。
+async fn deliver(
+    State(s): State<AppState>,
+    Extension(caller): Extension<Caller>,
+    req: Result<Json<DeliverRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<serde_json::Value>), Problem> {
+    let req = body(req)?;
+    let input = req
+        .url
+        .or(req.text)
+        .ok_or_else(|| Problem::new("invalid-args", "give `url` or `text`"))?;
+    let (via, _) = deliverer(&caller);
+    let taken = s.engine.take(&input, "link", via).await?;
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(json!({"id": taken.id, "state": "accepted", "duplicate": taken.seen})),
+    ))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BatchLink {
+    url: String,
+    title: Option<String>,
+    acted_at: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct BatchRequest {
+    #[serde(default)]
+    name: String,
+    action: Option<String>,
+    links: Vec<BatchLink>,
+}
+
+const ACTIONS: [&str; 5] = ["favorite", "like", "share", "view", "unknown"];
+
+/// 交一批链接：进导入的预览，你确认了才按节奏去收。
+async fn batch(
+    State(s): State<AppState>,
+    Extension(caller): Extension<Caller>,
+    req: Result<Json<BatchRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<serde_json::Value>), Problem> {
+    let req = body(req)?;
+    if let Some(a) = &req.action
+        && !ACTIONS.contains(&a.as_str())
+    {
+        return Err(Problem::new(
+            "invalid-args",
+            format!("unknown action `{a}`"),
+        ));
+    }
+    if req.links.is_empty() || req.links.len() > usuyo_core::BATCH_MAX {
+        return Err(Problem::new(
+            "invalid-args",
+            format!("a batch has 1 to {} links", usuyo_core::BATCH_MAX),
+        ));
+    }
+    let mut links = Vec::with_capacity(req.links.len());
+    for (i, l) in req.links.into_iter().enumerate() {
+        let bad = |why: &str| Problem::new("invalid-args", format!("links[{i}]: {why}"));
+        let url = url::Url::parse(&l.url).map_err(|_| bad("not a link"))?;
+        if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() {
+            return Err(bad("not an http(s) link"));
+        }
+        if !url.username().is_empty() || url.password().is_some() {
+            return Err(bad("links with a user name or password are not taken"));
+        }
+        if let Some(t) = &l.acted_at
+            && t.parse::<jiff::Timestamp>().is_err()
+        {
+            return Err(bad("`actedAt` is not RFC 3339"));
+        }
+        links.push(DeliveredLink {
+            url,
+            title: l.title.map(|t| t.chars().take(500).collect()),
+            acted_at: l.acted_at,
+        });
+    }
+    let (_, client) = deliverer(&caller);
+    let view = blocking(move || {
+        s.engine
+            .deliver_batch(&req.name, req.action.as_deref(), links, client.as_deref())
+    })
+    .await?;
+    Ok((StatusCode::ACCEPTED, Json(json!({ "id": view.id }))))
 }
 
 /// 媒体：支持 Range（视频拖进度）。类型只给白名单里的，别的不让浏览器当网页或脚本打开。

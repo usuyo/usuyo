@@ -48,6 +48,7 @@ impl Error {
             },
             Error::Plugin(PluginError::Call { failure, .. }) => failure.code.as_str(),
             Error::Plugin(PluginError::Unsupported { .. }) => "unsupported-input",
+            Error::Plugin(PluginError::Credentials { .. }) => "invalid-args",
             Error::Plugin(_) => "internal",
             Error::Jobs(_) | Error::Json(_) | Error::Io { .. } | Error::Task(_) => "internal",
             Error::InvalidArgs(_) => "invalid-args",
