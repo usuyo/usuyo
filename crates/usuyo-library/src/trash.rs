@@ -214,16 +214,13 @@ impl Library {
         for s in &item.manifest.snapshots {
             let path = dir.join("raw").join(&s.id).join("usuyo.fetch.json");
             if let Some(b) = read_opt(&path)? {
-                let rec: usuyo_contract::FetchRecord = fsx::parse_json(&path, &b)?;
+                let rec = crate::item::parse_fetch_record(&path, &b)?;
                 let media = rec
                     .media
                     .iter()
                     .filter(|m| matches!(m.kind.as_str(), "video" | "audio"))
                     .map(|m| m.path.clone());
                 for p in rec.images.iter().cloned().chain(media) {
-                    if p.contains("..") {
-                        continue;
-                    }
                     let rel = format!("raw/{}/{p}", s.id);
                     if dir.join(&rel).is_file() {
                         moved.insert(rel);

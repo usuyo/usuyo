@@ -105,6 +105,29 @@ impl AddOutcome {
     }
 }
 
+/// `usuyo.fetch.json` 里的路径来自插件，文件也可能在 usuyo 外被改过：
+/// 只许快照文件夹以内的相对路径。回第一个不合的。
+fn bad_fetch_path(rec: &FetchRecord) -> Option<&str> {
+    rec.images
+        .iter()
+        .map(String::as_str)
+        .chain(rec.media.iter().map(|m| m.path.as_str()))
+        .chain(rec.files.iter().map(|f| f.path.as_str()))
+        .find(|p| !fsx::is_plain_relative(p))
+}
+
+/// 读一份 `usuyo.fetch.json` 并查过里面的路径。
+pub(crate) fn parse_fetch_record(path: &Path, bytes: &[u8]) -> Result<FetchRecord> {
+    let rec: FetchRecord = fsx::parse_json(path, bytes)?;
+    match bad_fetch_path(&rec) {
+        Some(bad) => Err(Error::Malformed {
+            path: path.to_owned(),
+            reason: format!("path `{bad}` leaves the snapshot folder"),
+        }),
+        None => Ok(rec),
+    }
+}
+
 /// 快照实际拿到了哪些输出（`outputs` 词表）。
 pub fn outputs_of(fetch: &FetchRecord) -> Vec<String> {
     let mut out = BTreeSet::new();
@@ -305,13 +328,12 @@ impl Library {
         if !crate::id::is_uuid7(snapshot) {
             return Err(Error::InvalidArgs(format!("bad snapshot id `{snapshot}`")));
         }
-        fsx::read_json(
-            &self
-                .item_dir(id)
-                .join("raw")
-                .join(snapshot)
-                .join("usuyo.fetch.json"),
-        )
+        let path = self
+            .item_dir(id)
+            .join("raw")
+            .join(snapshot)
+            .join("usuyo.fetch.json");
+        parse_fetch_record(&path, &fsx::read(&path)?)
     }
 
     /// 写回 manifest：数组排好、按主快照重算。回改前改后的哈希。
@@ -519,6 +541,12 @@ impl Library {
         s: NewSnapshot,
     ) -> Result<Option<String>> {
         self.check_staged(&s.staged)?;
+        fsx::reject_symlinks(&s.staged)?;
+        if let Some(bad) = bad_fetch_path(&s.fetch) {
+            return Err(Error::InvalidArgs(format!(
+                "fetch output path `{bad}` leaves the output folder"
+            )));
+        }
         let mut files = Vec::new();
         for rel in list_files(&s.staged)? {
             if rel == "usuyo.fetch.json" {
@@ -535,7 +563,7 @@ impl Library {
         for existing in &m.snapshots {
             let path = dir.join("raw").join(&existing.id).join("usuyo.fetch.json");
             if let Some(b) = read_opt(&path)? {
-                let rec: FetchRecord = fsx::parse_json(&path, &b)?;
+                let rec = parse_fetch_record(&path, &b)?;
                 if !files.is_empty() && rec.files == files {
                     fsx::remove_dir(&s.staged)?;
                     return Ok(None);
@@ -669,10 +697,14 @@ impl Library {
             }
         };
         let existing = |p: PathBuf| -> Result<LayerSource> {
-            if p.exists() {
+            let not_found = || Error::NotFound(format!("{layer} of {id}"));
+            // 解析掉符号链接以后还得是条目文件夹里的文件。
+            let real = p.canonicalize().map_err(|_| not_found())?;
+            let root = dir.canonicalize().map_err(|e| Error::io(&dir, e))?;
+            if real.is_file() && real.starts_with(&root) {
                 Ok(LayerSource::File(p))
             } else {
-                Err(Error::NotFound(format!("{layer} of {id}")))
+                Err(not_found())
             }
         };
         let (name, key) = match layer.split_once('/') {
@@ -721,7 +753,7 @@ impl Library {
                 let m = rec
                     .media
                     .iter()
-                    .find(|m| m.kind == name && !m.path.contains(".."))
+                    .find(|m| m.kind == name)
                     .ok_or_else(|| Error::NotFound(format!("{layer} of {id}")))?;
                 existing(dir.join("raw").join(&s).join(&m.path))
             }

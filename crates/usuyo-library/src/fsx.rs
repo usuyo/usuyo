@@ -2,7 +2,7 @@
 
 use std::fs;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -165,6 +165,38 @@ pub fn move_path(from: &Path, to: &Path) -> Result<()> {
         fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
     }
     fs::rename(from, to).map_err(|e| Error::io(from, e))
+}
+
+/// 记录里的相对路径只许普通的段：不许空、绝对路径、`.`、`..`、盘符。
+pub fn is_plain_relative(p: &str) -> bool {
+    !p.is_empty()
+        && Path::new(p)
+            .components()
+            .all(|c| matches!(c, Component::Normal(_)))
+}
+
+/// 文件夹里有符号链接就报错：插件交来的输出目录不许带，免得指到资料库外面。
+pub fn reject_symlinks(root: &Path) -> Result<()> {
+    let entries = match fs::read_dir(root) {
+        Ok(e) => e,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(Error::io(root, e)),
+    };
+    for entry in entries {
+        let entry = entry.map_err(|e| Error::io(root, e))?;
+        let path = entry.path();
+        let ft = entry.file_type().map_err(|e| Error::io(&path, e))?;
+        if ft.is_symlink() {
+            return Err(Error::InvalidArgs(format!(
+                "{} is a symlink",
+                path.display()
+            )));
+        }
+        if ft.is_dir() {
+            reject_symlinks(&path)?;
+        }
+    }
+    Ok(())
 }
 
 /// 文件夹里所有文件的相对路径（`/` 分隔），排好序。

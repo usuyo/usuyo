@@ -1442,3 +1442,66 @@ fn layers_resolve_to_text_or_files() {
         "invalid-args"
     );
 }
+
+#[test]
+fn fetch_record_paths_cannot_leave_the_snapshot_folder() {
+    let e = env();
+    let mut lib = Library::init(&e.root, &e.machine).unwrap();
+
+    // 插件交来的路径是绝对路径：不收。
+    let mut absolute = capture(&lib, "https://example.com/absolute", "字");
+    absolute.snapshot.as_mut().unwrap().fetch.media[0].path = "/etc/hosts".into();
+    assert_eq!(
+        lib.add_item(&user(), absolute).unwrap_err().code(),
+        "invalid-args"
+    );
+
+    // 输出目录里带符号链接：不收。
+    #[cfg(unix)]
+    {
+        let linked = capture(&lib, "https://example.com/linked", "字");
+        let staged = linked.snapshot.as_ref().unwrap().staged.clone();
+        std::os::unix::fs::symlink("/etc/hosts", staged.join("media/link.mp4")).unwrap();
+        assert_eq!(
+            lib.add_item(&user(), linked).unwrap_err().code(),
+            "invalid-args"
+        );
+    }
+
+    // 收下以后，记录在 usuyo 外被改成指到库外：读的时候算写坏了，不给路径。
+    let id = lib
+        .add_item(&user(), capture(&lib, "https://example.com/a", "原文的字"))
+        .unwrap()
+        .id()
+        .clone();
+    let sid = lib.item(&id).unwrap().manifest.primary_snapshot.unwrap();
+    let raw = e
+        .root
+        .join("items/web")
+        .join(id.as_str())
+        .join("raw")
+        .join(&sid);
+    let record = raw.join("usuyo.fetch.json");
+    let original = fs::read_to_string(&record).unwrap();
+    fs::write(&record, original.replace("media/video.mp4", "/etc/hosts")).unwrap();
+    assert_eq!(
+        lib.resolve_layer(&id, "video", Some(&sid))
+            .unwrap_err()
+            .code(),
+        "internal"
+    );
+    fs::write(&record, &original).unwrap();
+
+    // 文件本身被换成指到库外的符号链接：当作没有。
+    #[cfg(unix)]
+    {
+        fs::remove_file(raw.join("media/video.mp4")).unwrap();
+        std::os::unix::fs::symlink("/etc/hosts", raw.join("media/video.mp4")).unwrap();
+        assert_eq!(
+            lib.resolve_layer(&id, "video", Some(&sid))
+                .unwrap_err()
+                .code(),
+            "not-found"
+        );
+    }
+}
