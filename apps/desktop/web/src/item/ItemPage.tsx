@@ -4,7 +4,7 @@ import type { Item, Topic } from "../api/endpoints";
 import { useItem, useItemChange, useTopics } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
 import { Rail } from "../frame/Rail";
-import { openExternal } from "../shell";
+import { openExternal, webUrl } from "../shell";
 import { Button } from "../ui/Button";
 import { PlatformChip, SectionLabel } from "../ui/Chip";
 import { FlashLine, useFlash } from "../ui/Flash";
@@ -96,10 +96,11 @@ function ItemBody({ item, topics }: { item: Item; topics: Topic[] }) {
           <Button
             variant="outline"
             size="md"
-            isDisabled={item.url === ""}
+            isDisabled={webUrl(item.url) === null}
             onPress={() => {
-              openExternal(item.url);
-              open.show("在浏览器里打开了原帖");
+              void openExternal(item.url).then((opened) => {
+                if (opened) open.show("在浏览器里打开了原帖");
+              });
             }}
           >
             <ExternalLink size={14} aria-hidden="true" />

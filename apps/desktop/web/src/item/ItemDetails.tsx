@@ -3,7 +3,7 @@ import { useState, type ReactNode } from "react";
 import { Button as AriaButton, Dialog, DialogTrigger, Input, Popover, TextField, ToggleButton } from "react-aria-components";
 import type { Item, Topic } from "../api/endpoints";
 import { useItemChange } from "../api/hooks";
-import { openExternal } from "../shell";
+import { openExternal, webUrl } from "../shell";
 import { TopicPill } from "../ui/Chip";
 import { FlashLine, useFlash } from "../ui/Flash";
 import { dayText, savedText } from "./format";
@@ -33,10 +33,11 @@ export function ItemMeta({ item, topics }: { item: Item; topics: Topic[] }) {
           {item.author ? ` · ${item.author}` : ""} ·
         </span>
         <AriaButton
-          isDisabled={item.url === ""}
+          isDisabled={webUrl(item.url) === null}
           onPress={() => {
-            openExternal(item.url);
-            src.show("在浏览器里打开了");
+            void openExternal(item.url).then((opened) => {
+              if (opened) src.show("在浏览器里打开了");
+            });
           }}
           className="-my-1 -ml-1.5 h-ctl-sm cursor-pointer rounded-sm border-0 bg-transparent px-1.5 font-sans text-note text-text underline decoration-border2 underline-offset-4 outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent"
         >

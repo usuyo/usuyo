@@ -3,8 +3,10 @@
 //! - `Host` 必须是本机地址加这个端口（挡 DNS rebinding）。
 //! - 带 `Origin` 的（浏览器发的）只认名单里的：桌面壳的 webview。`Origin` 谁都能伪造，只用来挡，不用来放行。
 //! - 每个请求都要带令牌 `Authorization: Bearer <token>`；令牌在只有自己能读的文件里。
-//! - 只有 CORS 预检（带名单里的 `Origin`）不带令牌也放行，预检本身不碰资料库。
-//! - `<img>`、`<video>` 带不了令牌，`/media/` 下认守护进程每次启动随机生成的 `k`。
+//! - 只有 CORS 预检（带名单里的 `Origin`）和 `POST /handshake` 不带令牌也放行：
+//!   预检不碰资料库，握手只回一个证明（见 [`crate::handshake`]）。Host、Origin 的规则照样管它们。
+//! - `<img>`、`<video>` 带不了令牌，`/media/<id>/` 下认这一条的 `k`：守护进程每次启动随机生成一个
+//!   密钥，按条目 id 算出来。漏出去一个媒体地址，只看得到那一条的图和视频。
 
 use std::sync::Arc;
 
@@ -13,12 +15,13 @@ use axum::http::{HeaderMap, Method, header};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 
+use crate::handshake;
 use crate::problem::Problem;
 
 pub(crate) struct Gate {
     pub port: u16,
     pub token: String,
-    pub media_key: String,
+    pub media_secret: String,
     pub origins: Vec<String>,
 }
 
@@ -30,6 +33,11 @@ pub(crate) async fn check(State(gate): State<Arc<Gate>>, req: Request, next: Nex
 }
 
 impl Gate {
+    /// 条目 `id` 的媒体地址带的 `k`。
+    pub fn media_key(&self, id: &str) -> String {
+        handshake::hmac_hex(&self.media_secret, &format!("usuyo-media/v1\n{id}"))
+    }
+
     fn admit(&self, req: &Request) -> Result<(), Problem> {
         let headers = req.headers();
         let host = headers
@@ -57,11 +65,18 @@ impl Gate {
                 return Ok(());
             }
         }
+        if req.method() == Method::POST && req.uri().path() == handshake::PATH {
+            return Ok(());
+        }
         if bearer(headers).is_some_and(|t| same(t, &self.token)) {
             return Ok(());
         }
-        if req.uri().path().starts_with("/media/")
-            && media_key(req).is_some_and(|k| same(k, &self.media_key))
+        if let Some(id) = req
+            .uri()
+            .path()
+            .strip_prefix("/media/")
+            .and_then(|p| p.split('/').next())
+            && media_key(req).is_some_and(|k| same(k, &self.media_key(id)))
         {
             return Ok(());
         }
@@ -91,11 +106,4 @@ fn same(a: &str, b: &str) -> bool {
             .zip(b.bytes())
             .fold(0u8, |acc, (x, y)| acc | (x ^ y))
             == 0
-}
-
-/// 32 字节随机数的十六进制。
-pub(crate) fn random_secret() -> Result<String, getrandom::Error> {
-    let mut b = [0u8; 32];
-    getrandom::fill(&mut b)?;
-    Ok(b.iter().map(|x| format!("{x:02x}")).collect())
 }

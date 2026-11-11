@@ -19,9 +19,12 @@ tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "signal"]
 tracing = "0.1.44"
 tracing-subscriber = "0.3.23"
 ureq = "3.5.1"
-usuyo-api = { version = "0.0.0", path = "../usuyo-api" }
+usuyo-api = { version = "0.0.0", path = "../usuyo-api", features = ["client"] }
 usuyo-core = { version = "0.0.0", path = "../usuyo-core" }
 usuyo-library = { version = "0.0.0", path = "../usuyo-library" }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+tempfile = "3.27.0"

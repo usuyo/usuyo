@@ -25,6 +25,7 @@ use usuyo_core::view::{ItemView, MapView, SearchHit, TakeResponse, Topic};
 use usuyo_core::{Engine, Links, Via};
 
 use crate::guard::{self, Gate};
+use crate::handshake;
 use crate::problem::Problem;
 
 /// 请求体上限：这里的请求都是几个短字段。
@@ -34,21 +35,38 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const SEARCH_LIMIT: usize = 50;
 const SEARCH_MAX: usize = 200;
 
+/// 握手的请求体上限：一个 64 位的随机数。
+const HANDSHAKE_BODY_LIMIT: usize = 256;
+
 #[derive(Clone)]
 struct AppState {
     engine: Engine,
-    links: Arc<Links>,
+    gate: Arc<Gate>,
     /// 资料库在哪；`/health` 不去拿资料库的锁。
     library: Arc<FsPath>,
 }
 
-pub(crate) fn build(engine: Engine, links: Links, gate: Arc<Gate>, origins: &[String]) -> Router {
+impl AppState {
+    /// 条目 `id` 的媒体地址：`k` 只对这一条有效。
+    fn links(&self, id: &str) -> Links {
+        Links {
+            base: format!("http://127.0.0.1:{}", self.gate.port),
+            key: Some(self.gate.media_key(id)),
+        }
+    }
+}
+
+pub(crate) fn build(engine: Engine, gate: Arc<Gate>, origins: &[String]) -> Router {
     let state = AppState {
         library: engine.library_root().into(),
         engine,
-        links: Arc::new(links),
+        gate: Arc::clone(&gate),
     };
     let api = Router::new()
+        .route(
+            handshake::PATH,
+            post(answer_handshake).layer(DefaultBodyLimit::max(HANDSHAKE_BODY_LIMIT)),
+        )
         .route("/health", get(health))
         .route("/map", get(map))
         .route("/topics", get(topics).post(create_topic))
@@ -126,6 +144,27 @@ fn body<T>(r: Result<Json<T>, JsonRejection>) -> Result<T, Problem> {
     }
 }
 
+#[derive(Deserialize)]
+struct HandshakeRequest {
+    nonce: String,
+}
+
+/// 证明自己是这次启动的内核，只回证明（见 [`crate::handshake`]）。
+async fn answer_handshake(
+    State(s): State<AppState>,
+    req: Result<Json<HandshakeRequest>, JsonRejection>,
+) -> ApiResult<serde_json::Value> {
+    let req = body(req)?;
+    if !handshake::valid_nonce(&req.nonce) {
+        return Err(Problem::new(
+            "invalid-args",
+            "nonce must be 64 lowercase hex characters",
+        ));
+    }
+    let proof = handshake::proof(&s.gate.token, s.gate.port, &req.nonce);
+    Ok(Json(json!({ "proof": proof })))
+}
+
 async fn health(State(s): State<AppState>) -> Json<serde_json::Value> {
     Json(json!({
         "status": "ok",
@@ -188,7 +227,8 @@ async fn take(
 }
 
 async fn item(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<ItemView> {
-    Ok(Json(blocking(move || s.engine.item(&id, &s.links)).await?))
+    let links = s.links(&id);
+    Ok(Json(blocking(move || s.engine.item(&id, &links)).await?))
 }
 
 #[derive(Deserialize)]
@@ -202,8 +242,9 @@ async fn note(
     req: Result<Json<NoteRequest>, JsonRejection>,
 ) -> ApiResult<ItemView> {
     let req = body(req)?;
+    let links = s.links(&id);
     Ok(Json(
-        blocking(move || s.engine.set_note(&id, &req.text, Via::App, &s.links)).await?,
+        blocking(move || s.engine.set_note(&id, &req.text, Via::App, &links)).await?,
     ))
 }
 
@@ -220,43 +261,47 @@ async fn topic_membership(
     req: Result<Json<TopicMembershipRequest>, JsonRejection>,
 ) -> ApiResult<ItemView> {
     let req = body(req)?;
+    let links = s.links(&id);
     Ok(Json(
         blocking(move || {
             s.engine
-                .set_topic(&id, &req.topic_id, req.member, Via::App, &s.links)
+                .set_topic(&id, &req.topic_id, req.member, Via::App, &links)
         })
         .await?,
     ))
 }
 
 async fn trash(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<ItemView> {
+    let links = s.links(&id);
     Ok(Json(
-        blocking(move || s.engine.trash(&id, Via::App, &s.links)).await?,
+        blocking(move || s.engine.trash(&id, Via::App, &links)).await?,
     ))
 }
 
 async fn restore(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<ItemView> {
+    let links = s.links(&id);
     Ok(Json(
-        blocking(move || s.engine.restore(&id, Via::App, &s.links)).await?,
+        blocking(move || s.engine.restore(&id, Via::App, &links)).await?,
     ))
 }
 
 async fn restore_media(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<ItemView> {
+    let links = s.links(&id);
     Ok(Json(
-        blocking(move || s.engine.restore_media(&id, Via::App, &s.links)).await?,
+        blocking(move || s.engine.restore_media(&id, Via::App, &links)).await?,
     ))
 }
 
 async fn text_only(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<ItemView> {
+    let links = s.links(&id);
     Ok(Json(
-        blocking(move || s.engine.text_only(&id, Via::App, &s.links)).await?,
+        blocking(move || s.engine.text_only(&id, Via::App, &links)).await?,
     ))
 }
 
 async fn refetch(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<ItemView> {
-    Ok(Json(
-        blocking(move || s.engine.refetch(&id, &s.links)).await?,
-    ))
+    let links = s.links(&id);
+    Ok(Json(blocking(move || s.engine.refetch(&id, &links)).await?))
 }
 
 #[derive(Deserialize)]
@@ -276,7 +321,7 @@ async fn search(
 
 async fn reindex(State(s): State<AppState>) -> ApiResult<serde_json::Value> {
     let n = blocking(move || s.engine.reindex()).await?;
-    Ok(Json(json!({"items": n})))
+    Ok(Json(json!({"items": n.items, "unreadable": n.unreadable})))
 }
 
 /// 媒体：支持 Range（视频拖进度）。类型只给白名单里的，别的不让浏览器当网页或脚本打开。
@@ -304,6 +349,8 @@ async fn media(
         header::CACHE_CONTROL,
         HeaderValue::from_static("private, max-age=3600"),
     );
+    // 窗口（`tauri://localhost`）和开发页面（`localhost:5173`）对 127.0.0.1 都是跨站，
+    // 收紧成 same-site 图就出不来；能看到哪一条由按条目的 `k` 管。
     h.insert(
         HeaderName::from_static("cross-origin-resource-policy"),
         HeaderValue::from_static("cross-origin"),

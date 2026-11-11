@@ -4,7 +4,7 @@ import { ApiError, DaemonUnreachableError } from "../api/client";
 export function ErrorLine({ error, className = "" }: { error: Error; className?: string }) {
   const text =
     error instanceof DaemonUnreachableError
-      ? "内核没在运行"
+      ? (error.reason ?? "内核没在运行")
       : error instanceof ApiError
         ? `内核回了 ${error.status}`
         : "没能取到";

@@ -234,6 +234,83 @@ async fn host_origin_and_token_rules() {
     assert_eq!(send(&f.app, bare).await.status(), StatusCode::UNAUTHORIZED);
 }
 
+fn handshake() -> axum::http::request::Builder {
+    get(usuyo_api::handshake::PATH)
+        .method("POST")
+        .header(header::CONTENT_TYPE, "application/json")
+}
+
+#[tokio::test]
+async fn handshake_proves_without_the_token() {
+    let f = fixture();
+    let nonce = usuyo_api::handshake::new_nonce().unwrap();
+    let body = || Body::from(json!({ "nonce": nonce }).to_string());
+
+    // 不带令牌也回证明；对的令牌核得上，错的核不上
+    let res = send(&f.app, handshake().body(body()).unwrap()).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let answer = json_of(res).await;
+    assert_eq!(
+        answer.as_object().unwrap().len(),
+        1,
+        "only the proof: {answer}"
+    );
+    let proof = answer["proof"].as_str().unwrap();
+    assert!(!proof.contains(TOKEN));
+    assert!(usuyo_api::handshake::verify(TOKEN, PORT, &nonce, proof));
+    assert!(!usuyo_api::handshake::verify(
+        "other-token",
+        PORT,
+        &nonce,
+        proof
+    ));
+
+    // 名单里的来源可以握手；别的网页不行
+    let req = handshake()
+        .header(header::ORIGIN, "tauri://localhost")
+        .body(body())
+        .unwrap();
+    assert_eq!(send(&f.app, req).await.status(), StatusCode::OK);
+    for origin in ["http://evil.test", "null"] {
+        let req = handshake()
+            .header(header::ORIGIN, origin)
+            .body(body())
+            .unwrap();
+        problem(send(&f.app, req).await, StatusCode::FORBIDDEN, "forbidden").await;
+    }
+    // Host 照样核对
+    let req = Request::post(usuyo_api::handshake::PATH)
+        .header(header::HOST, "evil.test")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(body())
+        .unwrap();
+    problem(send(&f.app, req).await, StatusCode::FORBIDDEN, "forbidden").await;
+
+    // 请求体有上限；随机数要合格
+    let big = json!({ "nonce": "0".repeat(4096) }).to_string();
+    let req = handshake().body(Body::from(big)).unwrap();
+    problem(
+        send(&f.app, req).await,
+        StatusCode::PAYLOAD_TOO_LARGE,
+        "too-large",
+    )
+    .await;
+    for bad in ["abc", &"Z".repeat(64)] {
+        let req = handshake()
+            .body(Body::from(json!({ "nonce": bad }).to_string()))
+            .unwrap();
+        problem(
+            send(&f.app, req).await,
+            StatusCode::BAD_REQUEST,
+            "invalid-args",
+        )
+        .await;
+    }
+    // 只有 POST 不带令牌；GET 照样要令牌
+    let req = get(usuyo_api::handshake::PATH).body(Body::empty()).unwrap();
+    assert_eq!(send(&f.app, req).await.status(), StatusCode::UNAUTHORIZED);
+}
+
 #[tokio::test]
 async fn take_then_media_with_range() {
     let f = fixture();
@@ -302,6 +379,43 @@ async fn take_then_media_with_range() {
             get(&format!("/items/{id}?k={k}"))
                 .body(Body::empty())
                 .unwrap(),
+        )
+        .await,
+        StatusCode::UNAUTHORIZED,
+        "unauthorized",
+    )
+    .await;
+    // 一条的 k 只管这一条：拿去读另一条的图不行
+    let req = get("/items")
+        .method("POST")
+        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({"input": "https://example.test/b", "kind": "link"}).to_string(),
+        ))
+        .unwrap();
+    let other = json_of(send(&f.app, req).await).await["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    f.engine.run_due().await.unwrap();
+    let other_item = json_of(send(&f.app, authed(&format!("/items/{other}"))).await).await;
+    let other_url = other_item["facets"][0]["images"][0]["url"]
+        .as_str()
+        .unwrap();
+    let other_path = other_url.split('?').next().unwrap();
+    assert_ne!(other_url.split("?k=").nth(1).unwrap(), k);
+    problem(
+        send(
+            &f.app,
+            get(&format!(
+                "{}?k={k}",
+                other_path
+                    .strip_prefix(&format!("http://127.0.0.1:{PORT}"))
+                    .unwrap()
+            ))
+            .body(Body::empty())
+            .unwrap(),
         )
         .await,
         StatusCode::UNAUTHORIZED,

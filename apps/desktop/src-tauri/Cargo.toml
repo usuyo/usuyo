@@ -22,7 +22,14 @@ anyhow = "1.0.104"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2.7.3"
+thiserror = "2.0.21"
 ureq = "3.5.1"
+# 只要握手的客户端一半，不链内核。
+usuyo-api = { path = "../../../crates/usuyo-api", default-features = false, features = ["client"] }
+
+[dev-dependencies]
+tempfile = "3.27.0"
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.31", features = ["signal"] }

@@ -42,7 +42,7 @@ pub fn remember_library(root: &Path, library: &Path) -> Result<()> {
         "library".into(),
         Value::String(library.to_string_lossy().into_owned()),
     );
-    std::fs::create_dir_all(root)?;
+    make_private_root(root)?;
     let path = settings_path(root);
     let mut bytes = serde_json::to_vec_pretty(&s)?;
     bytes.push(b'\n');
@@ -63,6 +63,44 @@ pub fn first_library(dir: &Path, root: &Path) -> Result<PathBuf> {
     };
     remember_library(root, &path)?;
     Ok(path)
+}
+
+/// 按机器的目录只给自己（0700）：里面有令牌、日志、设置。早就在的也改过来。
+pub fn make_private_root(root: &Path) -> Result<()> {
+    std::fs::create_dir_all(root).with_context(|| format!("cannot create {}", root.display()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(root, std::fs::Permissions::from_mode(0o700))
+            .with_context(|| format!("cannot restrict {}", root.display()))?;
+    }
+    Ok(())
+}
+
+/// 写一个只有自己能读（0600）的文件：先写旁边的临时文件再换名，读的一方不会读到一半。
+pub fn write_private(path: &Path, bytes: &[u8]) -> Result<()> {
+    use std::io::Write;
+    let tmp = path.with_extension("tmp");
+    let mut opts = std::fs::OpenOptions::new();
+    opts.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut opts, 0o600);
+    let mut f = opts
+        .open(&tmp)
+        .with_context(|| format!("cannot write {}", tmp.display()))?;
+    #[cfg(unix)]
+    f.set_permissions(std::os::unix::fs::PermissionsExt::from_mode(0o600))?;
+    f.write_all(bytes)
+        .with_context(|| format!("cannot write {}", tmp.display()))?;
+    std::fs::rename(&tmp, path).with_context(|| format!("cannot write {}", path.display()))
+}
+
+/// 退出时去掉令牌文件，只在里面还是自己的令牌时：这次启动的令牌跟着这次启动作废。
+pub fn forget_token(path: &Path, token: &str) {
+    let ours = std::fs::read_to_string(path).is_ok_and(|t| t.trim() == token);
+    if ours && let Err(e) = std::fs::remove_file(path) {
+        tracing::warn!(path = %path.display(), error = %e, "cannot remove the api token");
+    }
 }
 
 /// 退出时去掉 daemon.json，只在它还登记着自己时。

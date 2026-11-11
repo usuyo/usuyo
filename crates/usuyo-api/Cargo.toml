@@ -7,20 +7,41 @@ license.workspace = true
 repository.workspace = true
 publish.workspace = true
 
+# `server` 是接口本身；`client` 是找内核的一方核对对面是不是内核（桌面壳只要这一半，不链内核）。
+[features]
+default = ["server"]
+server = [
+    "dep:axum",
+    "dep:futures-util",
+    "dep:serde",
+    "dep:serde_json",
+    "dep:tokio",
+    "dep:tokio-stream",
+    "dep:tokio-util",
+    "dep:tower",
+    "dep:tower-http",
+    "dep:tracing",
+    "dep:usuyo-core",
+]
+client = ["dep:serde_json", "dep:ureq"]
+
 [dependencies]
-axum = "0.8.9"
-futures-util = "0.3.34"
+axum = { version = "0.8.9", optional = true }
+futures-util = { version = "0.3.34", optional = true }
 getrandom = "0.4.3"
-serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.154"
+hmac = "0.13.0"
+serde = { version = "1.0.229", features = ["derive"], optional = true }
+serde_json = { version = "1.0.154", optional = true }
+sha2 = "0.11.1"
 thiserror = "2.0.21"
-tokio = { version = "1.54.1", features = ["rt-multi-thread", "net", "macros", "sync", "time"] }
-tokio-stream = { version = "0.1.19", features = ["sync"] }
-tokio-util = "0.7.20"
-tower = { version = "0.5.3", features = ["util"] }
-tower-http = { version = "0.7.1", features = ["cors", "fs", "set-header"] }
-tracing = "0.1.44"
-usuyo-core = { version = "0.0.0", path = "../usuyo-core" }
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "net", "macros", "sync", "time"], optional = true }
+tokio-stream = { version = "0.1.19", features = ["sync"], optional = true }
+tokio-util = { version = "0.7.20", optional = true }
+tower = { version = "0.5.3", features = ["util"], optional = true }
+tower-http = { version = "0.7.1", features = ["cors", "fs", "set-header"], optional = true }
+tracing = { version = "0.1.44", optional = true }
+ureq = { version = "3.5.1", optional = true }
+usuyo-core = { version = "0.0.0", path = "../usuyo-core", optional = true }
 
 [lints]
 workspace = true

@@ -1,7 +1,7 @@
 // 内核推的事件：一条连接，收到就让对应的数据重新拉一次，地图、列表和开着的条目跟着变。
 // 事件流要带令牌，EventSource 带不了请求头，所以用 fetch 读流。
 import type { QueryClient } from "@tanstack/react-query";
-import { authHeaders, connection, unreachable, urlOf } from "./client";
+import { authHeaders, connection, forgetConnection, unreachable, urlOf } from "./client";
 import { paths, type LibraryEvent } from "./endpoints";
 import { queryKeys } from "./hooks";
 import { usingMockLibrary } from "./source";
@@ -44,8 +44,11 @@ export function startLiveUpdates(queryClient: QueryClient): () => void {
           delay = RETRY_MIN_MS;
           await read(response.body, (e) => applyEvent(queryClient, e));
         }
+        // 流断了或进不去：内核可能重启过，下次重新问连接。
+        forgetConnection();
       } catch (error) {
         if (stop.signal.aborted) return;
+        forgetConnection();
         console.info("usuyo: 事件流断了，过会儿再连", error);
       }
       await sleep(delay, stop.signal);

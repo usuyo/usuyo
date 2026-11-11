@@ -5,9 +5,13 @@ const REQUEST_TIMEOUT_MS = 8000;
 
 /** 连不上内核：没启动、被拒绝或超时。 */
 export class DaemonUnreachableError extends Error {
-  constructor(cause: unknown) {
+  /** 桌面壳说的原因，给用户看的一句话（比如端口被别的程序占着）；没有就是 undefined。 */
+  readonly reason: string | undefined;
+
+  constructor(cause: unknown, reason?: string) {
     super("daemon unreachable", { cause });
     this.name = "DaemonUnreachableError";
+    this.reason = reason;
   }
 }
 
@@ -45,9 +49,15 @@ async function resolve(): Promise<Connection> {
 export function connection(): Promise<Connection> {
   connecting ??= resolve().catch((error: unknown) => {
     connecting = null;
-    throw new DaemonUnreachableError(error);
+    // 壳回的错是给用户看的一句话。
+    throw new DaemonUnreachableError(error, typeof error === "string" ? error : undefined);
   });
   return connecting;
+}
+
+/** 连不上或令牌不对（内核重启过，令牌换了）：下次再问桌面壳，它重新核对、给新的令牌。 */
+export function forgetConnection(): void {
+  connecting = null;
 }
 
 /** `base` 下的地址：`base` 可以带路径（开发代理的 `/api`）。 */
@@ -85,10 +95,12 @@ export async function request<T>(
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch (error) {
+    forgetConnection();
     throw new DaemonUnreachableError(error);
   }
 
   if (unreachable(response)) throw new DaemonUnreachableError(new Error("proxy could not reach the daemon"));
+  if (response.status === 401) forgetConnection();
   if (!response.ok) {
     throw new ApiError(response.status, (await response.text()) || response.statusText);
   }

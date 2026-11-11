@@ -7,7 +7,7 @@ import { useItem, useItemChange } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
 import { FacetPreview } from "../item/FacetPreview";
 import { dayText, LAYER_NAME, positionText, snippetParts, STORED_TEXT } from "../item/format";
-import { openExternal } from "../shell";
+import { openExternal, webUrl } from "../shell";
 import { Button } from "../ui/Button";
 import { PlatformChip, TopicPill } from "../ui/Chip";
 
@@ -171,7 +171,7 @@ function DetailBody({ item, hasQ, topics, onClose }: { item: Item; hasQ: boolean
         </>
       )}
       <div className="mt-7 flex gap-2">
-        <Button variant="outline" size="md" onPress={() => openExternal(item.url)} isDisabled={item.url === ""}>
+        <Button variant="outline" size="md" onPress={() => void openExternal(item.url)} isDisabled={webUrl(item.url) === null}>
           <ExternalLink size={14} aria-hidden="true" />
           <span>打开原帖</span>
         </Button>

@@ -10,6 +10,7 @@
 
 mod client;
 mod machine;
+mod redact;
 
 use std::path::PathBuf;
 
@@ -74,7 +75,7 @@ fn main() -> Result<()> {
         _ => tracing_subscriber::filter::LevelFilter::WARN,
     };
     tracing_subscriber::fmt()
-        .with_writer(std::io::stderr)
+        .with_writer(redact::Redacted)
         .with_max_level(level)
         .init();
     let rt = tokio::runtime::Runtime::new().context("cannot start the async runtime")?;
@@ -130,7 +131,10 @@ async fn run(cli: Cli) -> Result<()> {
         }
         Command::Reindex => {
             let n = engine.reindex()?;
-            println!("重建了索引：{n} 条");
+            println!("重建了索引：{} 条", n.items);
+            for u in &n.unreadable {
+                println!("读不了，跳过：{} （{}）", u.id, u.reason);
+            }
             Ok(())
         }
         Command::Daemon { port, .. } => daemon(engine, &root, port).await,
@@ -149,14 +153,17 @@ fn open(root: &std::path::Path, cli: &Cli) -> Result<Engine> {
 }
 
 async fn daemon(engine: Engine, root: &std::path::Path, port: u16) -> Result<()> {
-    let token = usuyo_api::load_or_create_token(&machine::token_path(root))?;
-    // 先拿到端口再登记：端口被别的占着时不碰正在跑的那个的 daemon.json。
+    // 先拿到端口再写令牌和 daemon.json：端口被别的占着时不碰正在跑的那个的。
+    // 绑上以后到开始应答之前，连进来的请求只排队，应答时用的已经是这次的令牌。
     let listener = usuyo_api::bind(port).await?;
+    machine::make_private_root(root)?;
+    let token_path = machine::token_path(root);
+    let token = usuyo_api::create_token(&token_path)?;
     let pid = std::process::id();
     let info = machine::daemon_path(root);
-    std::fs::write(
+    machine::write_private(
         &info,
-        serde_json::to_vec(&json!({"port": port, "pid": pid}))?,
+        &serde_json::to_vec(&json!({"port": port, "pid": pid}))?,
     )?;
     tracing::info!(
         library = %engine.library_root().display(),
@@ -165,11 +172,12 @@ async fn daemon(engine: Engine, root: &std::path::Path, port: u16) -> Result<()>
     );
     let config = usuyo_api::ApiConfig {
         port,
-        token,
+        token: token.clone(),
         origins: usuyo_api::default_origins(),
     };
     let result = usuyo_api::serve(listener, engine, config, stop_signal()).await;
     machine::forget_daemon(&info, pid);
+    machine::forget_token(&token_path, &token);
     Ok(result?)
 }
 
