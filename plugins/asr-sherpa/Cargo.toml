@@ -1,11 +1,32 @@
 [package]
-name = "spike-asr"
+name = "usuyo-plugin-asr-sherpa"
+description = "usuyo 预装的口播转文字插件：silero VAD 切段，sherpa-onnx 跑 SenseVoice"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
+publish = false
+
+[[bin]]
+name = "usuyo-plugin-asr-sherpa"
+path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0.104"
-sherpa-onnx = "2.0.1"
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+# 锁死版本：预编译静态库的哈希（sherpa-onnx-v2.0.1.sha256）跟着这个版本走。
+sherpa-onnx = "=2.0.1"
+thiserror = "2.0.21"
+usuyo-plugin-kit = { path = "../../crates/usuyo-plugin-kit" }
+
+[dev-dependencies]
+tempfile = "3.27.0"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
 
 # 独立的包：带原生依赖，不进仓库的工作区，有自己的锁文件。
 [workspace]
