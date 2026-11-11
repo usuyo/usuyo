@@ -8,7 +8,7 @@
 
 ```toml
 [dependencies]
-usuyo-plugin-kit = { path = "../xiecun/crates/usuyo-plugin-kit" }
+usuyo-plugin-kit = { path = "../usuyo/crates/usuyo-plugin-kit" }
 ```
 
 ## 每个请求都走 `http::Client`
