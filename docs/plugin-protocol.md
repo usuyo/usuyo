@@ -47,7 +47,7 @@ GitHub 组织（2026-11-05 定，用户自己注册）：官方组织 `usuyo`，
 | 平台与获取方式 | 登录方式：不需要 / 复用日常浏览器 / 专用资料目录 / cookie 文件（[§6](#6-凭据)） | 待定，见 [§13](#13-待定) 第 4 项 | | 替换「不需要 / 用浏览器里登录着的 / cookie 文件」 |
 | 平台与获取方式 | `login: optional` 的获取方式带不带账号（[§2.4](#24-access-与-login)） | 待定，见 [§13](#13-待定) 第 11 项 | | 新增 |
 | 平台与获取方式 | 获取方式来源：组织名或 `owner/repo`；每个来源显示「由 `<owner>/<repo>` 的发版工作流构建」或「没有来源证明」（[§8.3](#83-校验与来源证明)、[§8.4](#84-三种来源)） | 空 | | 替换「获取方式来源列表；官方不内置任何来源，显示签名指纹」 |
-| 平台与获取方式 | 插件那一行：「继续」（被暂停或连续崩溃后停用的；11-11 还没有这个按钮，`blocked` 先暂停一小时，[§3.1](#31-运行器与节奏)）、「在平台上取消收藏」开关（[§2.6](#26-账号写操作)） | 取消收藏关 | | 新增 |
+| 平台与获取方式 | 插件那一行：「现在再试」（去掉这个插件的暂停，11-11 做了；`blocked` 暂停一小时，[§3.1](#31-运行器与节奏)）和「先别试」（到点「现在再试」为止不调它）；连续崩溃后停用再按「继续」恢复还没做、「在平台上取消收藏」开关（[§2.6](#26-账号写操作)） | 取消收藏关 | | 新增 |
 | 平台与获取方式 | 外部程序的路径：chrome、yt-dlp、ffmpeg 等（[§2.13](#213-运行时解析)） | 自动查找 | | 新增 |
 | 平台与获取方式 | 调用超时加长（[§3.4](#34-超时与取消)） | 按插件声明 | | 新增 |
 | 平台与获取方式 | 一次获取的输出大小上限（[§3.6](#36-fetch-与输出目录)） | 8 GiB | | 新增 |
@@ -292,6 +292,7 @@ capabilities:
 
 - **和同一主机的账号是两回事。** 访客身份和账号各存一份（钥匙串里分开的两项），登录窗口和访客窗口各用一份网页数据；以后登录这个主机，不会和访客身份混在一起。只列了访客身份的调用拿不到账号的 cookie，只列了 `sites` 的调用拿不到访客身份。
 - **能力里的每一项都要在顶层 `visitors` 里声明**，否则清单不合格。`login: none` 的能力可以列访客身份，照样不能列 `sites`。
+- 页面要访客身份而没有交来、或交来的页面仍不收时，插件回 `visitor-required`（不是 `login-required`），在 `message` 里分清是哪一种；界面据此写「要先取访客身份」或「换一份」，不会让人去找一个不存在的登录。
 - 访客身份只存 cookie，不存 localStorage；`credentialsUpdate` 只写回账号站点（[§6](#6-凭据)），不改访客身份。
 - 界面只说有没有、什么时候存下的、最早哪个 cookie 什么时候过期；不出现在登录站点的列表里，也不算「还没登录」。
 
@@ -505,7 +506,7 @@ SPEC v0 的适配器协议（[SPEC 附](SPEC.md#附v0-各节和-18-处的去向)
 
 - **身份**：收下一个链接时，宿主在 `match` 命中的插件上按用户排的顺序调 `canonicalize`，取第一个 `match: true` 的结果作为身份（[SPEC §0.4](SPEC.md#04-id)）。`identity.contentId` 要符合平台列表里的格式（[§2.3](#23-获取插件的字段)），不符合的按 `invalid-output` 处理（11-11 代码：平台列表还没有，只查非空、不超过 256 字节、没有控制字符）。
 - **顺序**：每个平台按用户排的顺序依次调 `fetch`，失败换下一个，全部失败停在 `link` 并记下各自的原因。默认顺序是待定项（[§13](#13-待定) 第 3 项）。不论 `access` 高低都照这个顺序换。平台插件和 `platforms` 含 `web` 的插件都命中时，先把平台插件全部试完，再轮到 `web` 插件。
-- **暂停单个插件**：插件返回 `rate-limited` 时，宿主在 `retryAfter` 之内（没给就 15 分钟）不再在这个平台上调它；返回 `blocked` 时，暂停到用户在插件那一行点「继续」；11-11 还没有这个按钮，先暂停一小时，这一条不因这次暂停重试。11-11 代码：`retryAfter` 最多算一小时（更长的按一小时）；`platforms` 含 `web` 的插件按链接的主机暂停，别的按平台；`jobs.db` 打开时丢掉比现在晚一小时以上的旧暂停。别的插件照常按顺序试，包括用同一个账号的插件：平台的限流常按接口分开计，换一个插件、换一个接口可能还取得到（推断），这是按 D-c 和实用优先定的技术做法。
+- **暂停单个插件**：插件返回 `rate-limited` 时，宿主在 `retryAfter` 之内（没给就 15 分钟）不再在这个平台上调它；返回 `blocked` 时，暂停一小时，用户在插件那一行点「现在再试」可以更早去掉（2026-11-11 定；原先设想的「暂停到用户点继续」不做了），这一条不因这次暂停重试。11-11 代码：`retryAfter` 最多算一小时（更长的按一小时）；`platforms` 含 `web` 的插件按链接的主机暂停，别的按平台；`jobs.db` 打开时丢掉比现在晚一小时以上的旧暂停。别的插件照常按顺序试，包括用同一个账号的插件：平台的限流常按接口分开计，换一个插件、换一个接口可能还取得到（推断），这是按 D-c 和实用优先定的技术做法。
 - **完整度只升不降**：宿主给每个快照记下实际拿到的输出集合（`outputs` 词表里的值）。新快照算不算升级、用户改了「只留文字」之类的设置后要不要再取，比的是这个集合，不比 `full`、`partial` 这两个字样。失败不降级。
 
 **节奏。** 每个平台一组上限，该平台所有获取插件共用（D-e，目的是不被限流、能一直用）：
@@ -650,8 +651,9 @@ SPEC v0 的适配器协议（[SPEC 附](SPEC.md#附v0-各节和-18-处的去向)
 | `unsupported-input` | 不是这个插件能处理的链接、文件或来源（例如直播） | 换下一个 |
 | `not-found` | 内容不存在、已删除或当前身份看不到；能分清时填 `reason` | 换下一个。只有全部是 `not-found` 且 `reason` 都是 `deleted` 时，条目才记「平台上已看不到」；有 `link-expired` 时提示用户重新分享或重新导出链接；其余记「取不到」并列出原因 |
 | `login-required` | 没登录，或登录已过期 | 换下一个；插件那一行提示重新登录 `site` |
+| `visitor-required` | 站点要一份访客身份（[§2.5.1](#251-访客身份-visitors)）：没有交来，或交来的页面仍不收 | 换下一个；界面写成要取或要换访客身份，不说登录；和 `login-required` 一样不自己暂停 |
 | `rate-limited` | 被平台限流 | 换下一个；这个插件在这个平台暂停到 `retryAfter` |
-| `blocked` | 平台出现验证页、风控提示或拦截 | 换下一个；这个插件在这个平台暂停到用户点「继续」（11-11 先暂停一小时，[§3.1](#31-运行器与节奏)） |
+| `blocked` | 平台出现验证页、风控提示或拦截 | 换下一个；这个插件在这个平台暂停一小时，用户点「现在再试」可更早解开（2026-11-11 定，[§3.1](#31-运行器与节奏)） |
 | `upstream-changed` | 页面或接口改版，解析不出 | 换下一个；记进插件的最近失败 |
 | `network` | 网络不通、DNS、TLS 或插件自己的请求超时 | 换下一个 |
 | `dependency-missing` | 缺运行时、外部程序、设备、设置、系统授权、本机服务，或要用户处理的状态 | 换下一个；界面列出 `needs` |
@@ -930,7 +932,7 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip"
 - **环境变量**：先清空，再放 `permissions.env` 里列的、宿主自己环境里有的，再放宿主设的（同名的以宿主为准，清单也不许列它们，[§2.7](#27-权限-permissions)）。宿主设：`USUYO_PROTOCOL=1`、`USUYO_PLUGIN_DIR`、`USUYO_CACHE_DIR`（按机器目录的 `cache/plugins/<owner>/<repo>/`）、`USUYO_CALL_ID`（UUIDv7）、`USUYO_LOCALE`、导入时的 `USUYO_INPUT`、`HOME`、`XDG_CONFIG_HOME`、`XDG_CACHE_HOME`、`TMPDIR`、`TMP`、`TEMP`、`PATH`（`${TMP}/bin` 加系统目录）。工作目录是 `${TMP}`，stdin 是空的。
 - **`USUYO_SETTINGS`**：按机器 `settings.json` 里 `plugins.<插件 id>.settings` 有值时，宿主把它写成这次调用文件夹里的 `settings.json`，变量指向它；没有就不设。
 - **`USUYO_NETWORK`**：宿主查 `example.com`、`example.org` 两个名字（两秒内），两个都有回答、回答全在 `198.18.0.0/15` 里时设成 `fake-ip`，结果缓存一分钟；查不到、超时都算不是。不看要取的那个域名自己的回答。
-- **节奏还没做**：[§3.1](#31-运行器与节奏) 的 `interval`、`daily`、每平台一个调用的锁、整机锁和设备锁都还没有；任务一次只跑一个。
+- **节奏做了一部分**：[§3.1](#31-运行器与节奏) 的 `interval`、`daily`、`batch: false`、每平台一个调用的锁有了（取最严的一组，记账在 `jobs.db`，重启后照旧）；整机锁和设备锁还没做；任务一次只跑一个。「现在再试」「先别试」有了（`POST /plugins/{owner}/{repo}/try-now`、`…/hold`），用户改节奏的设置还没做。
 - **凭据和密钥**：`credential: cookies` 的站点经 `USUYO_CREDENTIALS`、`USUYO_COOKIES_TXT`，密钥设置经 `USUYO_SECRETS`，访客身份经 `USUYO_VISITOR`（[§2.5.1](#251-访客身份-visitors)）。值在系统钥匙串里（没有钥匙串的系统上是按机器目录的 0600 文件），按机器目录的 `logins.json` 只记名字、域名和过期时间；文件放在按机器目录 `run/` 下这次调用自己的 0700 目录里，0600，进程结束就删；交出去的值从 stderr、插件的错误和宿主拼的错误里洗掉（包括 JSON、Debug 转义过的写法）。plugin-kit 的 `http::Cookie::visitor` 把访客身份读成只发给给定主机、只走 https 的 Cookie。
 - **还没传的**：`USUYO_BROWSER_PROFILE`、`USUYO_PROVIDER`、`ADB_SERVER_SOCKET`、`ANDROID_SERIAL`、各个代理变量。本机代理和沙箱（[§7](#7-权限与隔离)）都还没做；插件的出站现在靠 plugin-kit 的客户端自己把关（[§10.1](#101-plugin-kit-的-http-客户端11-11)）。
 - **调用文件夹**：资料库的 `.usuyo/tmp/usuyo-call-<UUIDv7>-<随机>/`，里面 `tmp/`、`tmp/home/`、`tmp/bin/`，`fetch` 另有 `out/`；用完整个删掉，崩溃留下的在下次打开库时清掉。
@@ -1064,19 +1066,19 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip"
 <a id="51-本机-http-接口"></a>
 ### 5.1 本机 HTTP 接口
 
-对应 PRD 的浏览器扩展、本地 HTTP API，约定照 [03 §6.3](research/03-agent-protocols.md#63-对歇存的意义)。这一节是设计，11-11 还没做：守护进程现在只有给窗口和命令行的接口（端口 47615，见 [SPEC 本机接口](SPEC.md#本机接口第-2-层11-11-照代码)），下面的 `/v1/deliver`、`/v1/batches` 和按投递端发的令牌在 [feature 002](features/002-platforms.md) 里做。
+对应 PRD 的浏览器扩展、本地 HTTP API，约定照 [03 §6.3](research/03-agent-protocols.md#63-对歇存的意义)。11-11 代码做了其中一部分：`/v1/ping`、`/v1/deliver`（只收链接）、`/v1/batches` 和按投递端发的令牌，和窗口用的路由在同一个监听口上，规则见 [SPEC 本机接口](SPEC.md#本机接口第-2-层11-11-照代码)；下面没做的部分标了「还没做」。
 
-- 只绑 `127.0.0.1`，默认端口 `47821`，可改。
-- 每个请求带 `Authorization: Bearer <令牌>`。令牌在设置 › 隐私 › 本地接口的访问令牌里按投递端分别生成：名字（例如「xhs-vault 脚本」）、入口类型（`extension`、`mobile`、`api`），可单独撤销。令牌存在本机配置目录，不放进资料库。
-- 除 `chrome-extension://`、`moz-extension://`、`safari-web-extension://` 以外，带任何 `Origin` 头的请求都拒绝，包括 `Origin: null`（沙箱 iframe、`file://` 页面会带它），也不回 CORS 头：普通网页发不进来，也读不到响应。没有 `Origin` 的请求放行。宿主另外核对 `Host` 头是 `127.0.0.1:<端口>` 或 `localhost:<端口>`。各油猴脚本管理器的 `GM_xmlhttpRequest` 实际带什么 `Origin` 待核实。
+- 只绑 `127.0.0.1`，端口 `47615`，和给窗口用的路由是同一个监听口，不另开端口（11-11 代码；原先设想的 `47821` 不用）。
+- 每个请求带 `Authorization: Bearer <令牌>`。令牌按投递端分别生成：名字（例如「xhs-vault 脚本」）、入口类型（`extension`、`mobile`、`api`），可单独撤销。11-11 代码：在应用的导入页里发（`POST /deliver-tokens`，主令牌调），格式 `<id>.<秘密>`，整个令牌只在发的那一次回给调用方；存在按机器目录的 `deliver-tokens.json`，不放进资料库。投递令牌只能进 `/v1/ping`、`/v1/deliver`、`/v1/batches`。
+- 除 `chrome-extension://`、`moz-extension://`、`safari-web-extension://` 以外，带任何 `Origin` 头的请求都拒绝，包括 `Origin: null`（沙箱 iframe、`file://` 页面会带它），也不回 CORS 头：普通网页发不进来，也读不到响应。没有 `Origin` 的请求放行。宿主另外核对 `Host` 头是 `127.0.0.1:<端口>`、`localhost:<端口>` 或 `[::1]:<端口>`。各油猴脚本管理器的 `GM_xmlhttpRequest` 实际带什么 `Origin` 待核实。11-11 代码：投递令牌发出去以前先握手：`POST /handshake`，请求 `{nonce, client}`，`client` 是令牌 `.` 前面的 id，内核用整个令牌当密钥回 HMAC 证明，令牌本身不上线路（[SPEC 本机接口](SPEC.md#本机接口第-2-层11-11-照代码)）。`/v1/…` 不回 CORS 头，也不答 CORS 预检（Safari 的 Userscripts 没有网站访问权限时会先发预检，还没做，[TODO](TODO.md#4-开始写代码)）。
 - 条目在 `origins[]` 里那一项的 `entry` 取令牌的入口类型。`extension` 令牌交来已取到的内容时，快照的 `plugin` 记 `deliver:<令牌名>`；只交链接的，快照记去取它的那个插件。投递来的内容同样按不可信输入处理。
-- **令牌能交什么。** `api` 和 `mobile` 类令牌只接受链接（`url`、`text` 和 `/v1/batches`），不接受已取到的内容；已取到的内容只接受 `extension` 类令牌和收件文件夹（[§5.2](#52-监听文件夹)）。Agent 用 `api` 令牌交已取好的内容，等于没经过改动提议就改了已有条目，和「Agent 写入先提议后生效」的原则冲突。
+- **令牌能交什么。** `api` 和 `mobile` 类令牌只接受链接（`url`、`text` 和 `/v1/batches`），不接受已取到的内容；已取到的内容只接受 `extension` 类令牌和收件文件夹（[§5.2](#52-监听文件夹)）（11-11 还没做：`/v1/deliver` 现在只收链接，没有 multipart，任何令牌都不能交已取到的内容）。Agent 用 `api` 令牌交已取好的内容，等于没经过改动提议就改了已有条目，和「Agent 写入先提议后生效」的原则冲突。
 - **身份由宿主重新算。** 宿主不采用投递方给的 `identity`，而是用 `identity.url`（没有就用 `url`）重新调 `canonicalize` 得出身份；拿不到身份的（没有网址的；http(s) 链接马上就有身份，最差是这条链接的 `web:` 身份，离线时的短链也一样，之后可能并进平台 id，见 [§3.1](#31-运行器与节奏)），按无平台 ID 的条目处理（[SPEC §0.4](SPEC.md#04-id)）。不然一个持有令牌的脚本报出某个已有条目的身份、再带上 `completeness: full`，就能覆盖那个条目。
 
 | 方法与路径 | 用途 | 返回 |
 |---|---|---|
 | `GET /v1/ping` | 检查令牌和连通 | `{"name":"usuyo","version":"…","protocol":1,"client":"xhs-vault 脚本"}` |
-| `POST /v1/deliver` | 收下一条：只有链接或分享文字，或已取到的内容 | `202`，身份一算出就回条目 id（一般 3 秒内）；`canonicalize` 因网络失败或超时（例如离线时的短链）时，回这条链接的 `web-` id，联网后可能并进平台 id，旧 id 留作别名（[SPEC §0.4](SPEC.md#04-id)） |
+| `POST /v1/deliver` | 收下一条：只有链接或分享文字，或已取到的内容（已取到的内容 11-11 还没做；请求体只认 `url`、`text`，别的字段包括 `action` 都被忽略） | `202`，身份一算出就回条目 id（一般 3 秒内）；`canonicalize` 因网络失败或超时（例如离线时的短链）时，回这条链接的 `web-` id，联网后可能并进平台 id，旧 id 留作别名（[SPEC §0.4](SPEC.md#04-id)） |
 | `POST /v1/batches` | 交一批链接，进导入预览 | `202`，批次 id；新增、已有的数目在导入预览里随身份算出逐步出现 |
 
 只有链接时，宿主照 [§3.1](#31-运行器与节奏) 去取内容；`text` 是手机分享出来的整段文字，宿主从里面找出第一个链接：
@@ -1089,16 +1091,16 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip"
 {"text": "7.94 复制打开抖音，看看【咖啡日常的作品】手冲咖啡：三段式注水 https://v.douyin.com/iRNBho6u/ 12/30 abc:/"}
 ```
 
-返回（不收的条目怎么回要改，见 [§13](#13-待定) 第 33 项）：
+返回（不收的条目怎么回要改，见 [§13](#13-待定) 第 33 项；11-11 代码：私密条目被跳过时现在回的和「收下过」一样，`duplicate: true`，没有单独的 `skipped`）：
 
 ```json
 {"id": "douyin-4plrcxk343onmyxibmrr672kga", "state": "accepted", "duplicate": false}
 ```
 
-已经取到内容的（例如在页面里拿到了正文和图片），用 `multipart/form-data`：`item` 部分是 fetch 输出 JSON；每个文件部分的**字段名**就是 JSON 里引用的相对路径，宿主按字段名找文件，`filename` 只作参考。原因：有的 multipart 库取文件名时只留最后一段（Go 的 `Part.FileName()` 会先过一遍 `filepath.Base`，11-05 用 Go 1.26 的 `go doc` 核对过），`images/001.jpg` 会变成 `001.jpg`；各家浏览器扩展对带斜杠的 `filename` 处理也不一致（推断）。字段名照 [§3.6](#36-fetch-与输出目录) 的输出目录规则校验，一次投递默认最多 1 GiB。`item` 按 fetch 输出的 schema 校验，只有 `evidence.access` 可以省略，宿主在快照里记成 `deliver`。
+已经取到内容的（例如在页面里拿到了正文和图片），用 `multipart/form-data`（还没做，下面是设计）：`item` 部分是 fetch 输出 JSON；每个文件部分的**字段名**就是 JSON 里引用的相对路径，宿主按字段名找文件，`filename` 只作参考。原因：有的 multipart 库取文件名时只留最后一段（Go 的 `Part.FileName()` 会先过一遍 `filepath.Base`，11-05 用 Go 1.26 的 `go doc` 核对过），`images/001.jpg` 会变成 `001.jpg`；各家浏览器扩展对带斜杠的 `filename` 处理也不一致（推断）。字段名照 [§3.6](#36-fetch-与输出目录) 的输出目录规则校验，一次投递默认最多 1 GiB。`item` 按 fetch 输出的 schema 校验，只有 `evidence.access` 可以省略，宿主在快照里记成 `deliver`。
 
 ```
-curl -X POST http://127.0.0.1:47821/v1/deliver \
+curl -X POST http://127.0.0.1:47615/v1/deliver \
   -H "Authorization: Bearer $USUYO_TOKEN" \
   -F 'item=@item.json;type=application/json' \
   -F 'images/001.jpg=@images/001.jpg'
@@ -1115,7 +1117,7 @@ curl -X POST http://127.0.0.1:47821/v1/deliver \
 <a id="52-监听文件夹"></a>
 ### 5.2 监听文件夹
 
-不开网络端口的办法，适合手机经用户自己的云盘（iCloud 云盘等）投递，对应 PRD 的「自有云盘监听目录」。用户在设置里选一个收件文件夹，宿主处理里面的：
+不开网络端口的办法，适合手机经用户自己的云盘（iCloud 云盘等）投递，对应 PRD 的「自有云盘监听目录」。用户在设置里选一个收件文件夹，宿主处理里面的（11-11 代码：收件文件夹固定是按机器目录里的 `inbox/`，不能选，设置里还没有；只读顶层的 `.txt`，下表别的行都还没做）：
 
 | 放进去的东西 | 当作 |
 |---|---|
@@ -1145,7 +1147,7 @@ curl -X POST http://127.0.0.1:47821/v1/deliver \
 | 别的工具的产物（BiliNote 的 `note_results`） | 导入插件，或监听文件夹 | `import` |
 | 照搬 qiaomu-clipper 一类做成的浏览器扩展（例如视频号在元宝页内取） | 扩展只能经 `POST /v1/deliver` 往宿主推内容，不在运行器的顺序里；手机分享过来的链接，宿主没法交给扩展去取。要让扩展也当获取方式，就给 `extension` 令牌加一个领任务的接口：例如 `GET /v1/jobs?platform=wechat-channels&wait=30` 长轮询领链接，交回时 `POST /v1/deliver` 带上 `jobId`。做不做见 [§13](#13-待定) 第 12 项 | `extension` |
 
-**局域网直传**是唯一听非回环地址的入口，默认关。打开后另起一个端口，手机扫电脑上的二维码拿到地址和这台手机专用的令牌。局域网上的明文 HTTP 会让同一网络里的人看到令牌和内容；手机端快捷指令对自签证书的支持待核实，所以默认推荐监听文件夹（默认走哪条见 [§13](#13-待定) 第 6 项）。
+**局域网直传**（还没做）是唯一听非回环地址的入口，默认关。打开后另起一个端口，手机扫电脑上的二维码拿到地址和这台手机专用的令牌。局域网上的明文 HTTP 会让同一网络里的人看到令牌和内容；手机端快捷指令对自签证书的支持待核实，所以默认推荐监听文件夹（默认走哪条见 [§13](#13-待定) 第 6 项）。
 
 <a id="6-凭据"></a>
 ## 6. 凭据
@@ -1508,7 +1510,7 @@ permissions:
 function sendTousuyo(links) {
   GM_xmlhttpRequest({
     method: "POST",
-    url: "http://127.0.0.1:47821/v1/batches",
+    url: "http://127.0.0.1:47615/v1/batches",
     headers: {"Authorization": "Bearer " + GM_getValue("usuyoToken"), "Content-Type": "application/json"},
     data: JSON.stringify({name: "小红书收藏夹", action: "favorite", links: links}),
   });

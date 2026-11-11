@@ -11,7 +11,7 @@ v0.1 · 2026-11-04，2026-11-05 改名。产品名 **usuyo**，只用拉丁字�
 - **是什么**：在推荐流外，维护一套你自己的思路：收下的内容原样存在你电脑上，能搜，摆在点阵迷雾地图上。
 - **已定**：见 [§3](#3-已经定了的)；原则是 CLAUDE.md 的六条（[PRD §4](PRD.md#4-原则) 扩成九条）。
 - **待讨论**：[discussion](discussion.md#1-什么东西进资料库) 的 17 条 11-04、11-05 都答了，记在 [open-decisions §1.8](open-decisions.md#18-grill-回答)；还剩获取插件组织的名字。
-- **接口**：插件协议和资料库（[SPEC](SPEC.md#0-约定第-0-层) 第 0、1 层）是 v1 草案，11-11 照代码补过；本机接口照代码写了一节；MCP、投递、导出还没做（[§5](#5-接口做到哪了)）。
+- **接口**：插件协议和资料库（[SPEC](SPEC.md#0-约定第-0-层) 第 0、1 层）是 v1 草案，11-11 照代码补过；本机接口（含投递）照代码写了一节；MCP、导出还没做（[§5](#5-接口做到哪了)）。
 - **语言**：Rust 内核加 Tauri 2 壳（11-11 定，[ADR-004](decisions/ADR-004-rust-tauri.md)，取代 11-04 的 Go 加 MyGo）；只做桌面，手机以后原生重写。
 - **wx-cli**：2026-07-15 起被 GitHub 屏蔽（腾讯方面的 DMCA），你这台微信 3.8.8.19 也用不了。建议 `usuyo-fetch` 不收微信 client-hook 插件，导出文件照 official-export 导入，见 [9](discussion.md#9-自己的获取插件组织收什么)。
 - **RSS、Horizon**：建议在现成阅读器里读，加星算收下；Horizon 当普通 feed，见 [1](discussion.md#1-什么东西进资料库)。
@@ -72,12 +72,12 @@ flowchart LR
 | [插件协议](plugin-protocol.md#01-读者与状态) | v1 草案；宿主和 plugin-kit 有了第一版（[§3.13](plugin-protocol.md#313-宿主和-plugin-kit-现在做到的11-11)、[§10.1](plugin-protocol.md#101-plugin-kit-的-http-客户端11-11)） | [待定](plugin-protocol.md#13-待定) 39 项里 29–32 答了；凭据、沙箱、本机代理、`serve`、schema 文件、`usuyo plugin check` |
 | 资料库格式（[SPEC §1](SPEC.md#1-资料库-v1第-1-层)） | v1 草案，`crates/usuyo-contract`、`crates/usuyo-library` 照它实现 | 联网后并身份、到期移除没接上；同步 |
 | 改动提议、改动记录（[SPEC §1.5](SPEC.md#15-改动提议)、[§1.6](SPEC.md#16-改动记录)） | v1 草案，资料库层能写能撤 | 接受提议的流程、界面 |
-| 宿主 ↔ 界面（[SPEC 本机接口](SPEC.md#本机接口第-2-层11-11-照代码)） | 照代码写了；契约文件是 `apps/desktop/web/src/api/endpoints.ts` | `/v1/` 前缀、分页、OpenAPI 描述 |
-| 内核推的事件 | server-sent events，五种事件（同上） | 补发、信封 |
+| 宿主 ↔ 界面（[SPEC 本机接口](SPEC.md#本机接口第-2-层11-11-照代码)） | 照代码写了；契约文件是 `apps/desktop/web/src/api/endpoints.ts` | 窗口用的路径还不带 `/v1/`、分页、OpenAPI 描述 |
+| 内核推的事件 | server-sent events，八种事件（同上） | 补发、信封 |
 | [MCP 工具](SPEC.md#10-mcp-工具m0) | v0 草案，没实现 | 全部 |
 | [命令行](SPEC.md#9-clim0) | `init`、`add`、`get`、`search`、`reindex`、`daemon` | 输出形状、其余子命令 |
 | [搜索语法](SPEC.md#11-索引) | tantivy 索引能搜；语法没写 | 查询串、筛选、分页 |
-| [投递接口](plugin-protocol.md#5-投递接口) | 草案，没实现，在 [feature 002](features/002-platforms.md) 里做 | 批次查询；按投递端的令牌 |
+| [投递接口](plugin-protocol.md#5-投递接口) | `/v1/ping`、`/v1/deliver`（只收链接）、`/v1/batches` 和按投递端发的令牌做了（[feature 002](features/002-platforms.md)），和窗口用的路由同一个监听口 | 已取到的内容（multipart）、批次查询、给 Safari 的预检 |
 | [导出与读回](plugin-protocol.md#44-导出的-run-与-readback) | 草案 | 笔记库里的文件形状 |
 | 配置、版本策略（[SPEC §0.2](SPEC.md#02-版本与兼容)、[§1.1](SPEC.md#11-目录树)） | v1 草案 | 设置的完整清单 |
 | 订阅源 | 没有 | 你填的地址、订阅对象 |
@@ -139,8 +139,8 @@ flowchart LR
 ## 8. 我们打算这样定的技术默认
 
 - 本机接口用 REST 加 [OpenAPI 3.2](https://github.com/OAI/OpenAPI-Specification/releases)（3.2.1，2026-09-10）：投递接口已是 `/v1/*`，一份描述生成客户端和文档。
-- 事件用 SSE，信封取 [CloudEvents 1.0](https://github.com/cloudevents/spec/releases)（1.0.2，2022-02-06）的字段：只要单向，浏览器自带重连；ADR-002 改一句。11-11 做了 SSE，因为要带令牌，前端用 `fetch` 读、自己重连，信封先是 `{type, id, …}`，没用 CloudEvents（[SPEC 本机接口](SPEC.md#本机接口第-2-层11-11-照代码)）。
-- 界面和投递分两个端口：投递端口的 `Origin` 规则不用为 webview 放宽。
+- 事件用 SSE，信封是 `{type, id, …}`，不用 CloudEvents（2026-11-11 定）：只要单向；因为要带令牌，前端用 `fetch` 读、自己重连，不用 `EventSource`（[SPEC 本机接口](SPEC.md#本机接口第-2-层11-11-照代码)）。
+- 界面和投递原本想分两个端口；11-11 代码是同一个监听口，靠路径分：`/v1/…` 只认扩展的 `Origin`，别的路径只认 webview 的，投递令牌只能进三条路径（[SPEC 本机接口](SPEC.md#本机接口第-2-层11-11-照代码)）。
 - 改动提议逐个存成文件：文件是真相，后台任务记录按机器分开时也不会丢。
 - 搜索用自己的小语法（`字段:值`、引号、`-`、`after:`）：不把索引实现绑进接口。
 

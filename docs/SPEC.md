@@ -32,7 +32,7 @@ semver：patch 改错；minor 加可选字段、枚举值、错误码、接口�
 | 对象 | 线上带的 | 读到更新的主版本 |
 |---|---|---|
 | 插件协议 | `protocol: 1`；文档头写 `1.0.0` | 不加载，写原因 |
-| 内核服务 | 路径 `/v1/`；MCP 工具、命令行 `--json` 跟它走。11-11 代码：路径还不带 `/v1/`，版本由 `GET /health` 报（[本机接口](#本机接口第-2-层11-11-照代码)） | `/v1/ping` 报版本 |
+| 内核服务 | 路径 `/v1/`；MCP 工具、命令行 `--json` 跟它走。11-11 代码：只有投递接口在 `/v1/` 下（`/v1/ping` 回 `protocol: 1` 和版本），给窗口用的路径还不带 `/v1/`，版本由 `GET /health` 报（[本机接口](#本机接口第-2-层11-11-照代码)） | `/v1/ping` 报版本 |
 | JSON Schema | `$id` 为 `urn:usuyo:schema:<名字>:<主版本>`（没有域名也能用） | 校验失败 |
 | 资料库 | `.usuyo/library.json` 的 `formatVersion`、`extensions` | 只读，不给 Agent、不导出，提示升级 |
 
@@ -198,15 +198,22 @@ SHA-256，小写十六进制，算存下来的字节。字段名叫 `sha256` 时
 
 | 在哪 | 放什么 |
 |---|---|
-| `libraries/<libraryId>/` | `device.json`（`deviceId`、库路径）、`index/`、`jobs.db`（任务状态、跟着收列过的身份、翻页游标和 `--since`、还没展开的短链（重试）、上次写的 `content.md` 的哈希）、`sync.db`（游标、底本（你写的那层和 manifest 上次见过的那份，没开同步也存，[§1.4](#14-你写的那一层) 外面改了靠它合并）、上次见过的路径）、`activity/`（Agent 搜过、读过什么，一行一次，不给 Agent、不同步；格式和留多久归第 2 层，推断）、`exports/<target>.json`（每个对象 `{path, hash, base}`，`base` 是上次和 vault 对上的那份用户层：写出去了就是交给导出插件的那份，没写出去就是那次读回的值，私密脚注已换成占位；[§1.4](#14-你写的那一层) 导出读回靠它合并）、`imports/<importBatch>/`（导入文件副本）、`backups/` |
-| 根目录 | `settings.json`（外观、模型端点、插件启用和设置；11-11 代码只用 `library` 和 `plugins.<插件 id>.settings`）、`plugins/`、`profiles/`、`models/`、`cache/plugins/<owner>/<repo>/`、本机接口令牌 `api-token`、`daemon.json`、日志 `logs/daemon.log` |
+| `libraries/<libraryId>/` | `device.json`（`deviceId`、库路径）、`index/`、`clock-mark`（回收站到期用的时钟记录，见 [§1.7](#17-删掉)）、`jobs.db`（任务状态、跟着收列过的身份、翻页游标和 `--since`、还没展开的短链（重试）、上次写的 `content.md` 的哈希）、`sync.db`（游标、底本（你写的那层和 manifest 上次见过的那份，没开同步也存，[§1.4](#14-你写的那一层) 外面改了靠它合并）、上次见过的路径）、`activity/`（Agent 搜过、读过什么，一行一次，不给 Agent、不同步；格式和留多久归第 2 层，推断）、`exports/<target>.json`（每个对象 `{path, hash, base}`，`base` 是上次和 vault 对上的那份用户层：写出去了就是交给导出插件的那份，没写出去就是那次读回的值，私密脚注已换成占位；[§1.4](#14-你写的那一层) 导出读回靠它合并）、`imports/<importBatch>/`（导入文件副本）、`backups/` |
+| 根目录 | `settings.json`（外观、模型端点、插件启用和设置；11-11 代码只用 `library` 和 `plugins.<插件 id>.settings`）、`plugins/`、`profiles/`、`models/`、`cache/plugins/<owner>/<repo>/`、本机接口令牌 `api-token`、投递令牌 `deliver-tokens.json`、`daemon.json`、登录索引 `logins.json`、`run/`、`inbox/`、日志 `logs/daemon.log`（各项见下面「11-11 代码」） |
 | 系统钥匙串 | 同步令牌和库钥匙、模型和插件密钥、平台登录态（[协议 §6](plugin-protocol.md#6-凭据)） |
 
 11-11 代码：
 
-- 按机器的根目录可以用 `USUYO_HOME` 换成别处（测试用）；Linux 没设 `$XDG_STATE_HOME` 时是 `~/.local/state/usuyo/`。根目录、`libraries/<libraryId>/` 和 `logs/` 只给本人（0700），`jobs.db`、`api-token`、`daemon.json`、`logs/daemon.log` 是 0600。
+- 按机器的根目录可以用 `USUYO_HOME` 换成别处（测试用）；Linux 没设 `$XDG_STATE_HOME` 时是 `~/.local/state/usuyo/`。根目录、`libraries/<libraryId>/` 和 `logs/` 只给本人（0700），`jobs.db`、`api-token`、`deliver-tokens.json`、`daemon.json`、`logs/daemon.log` 是 0600。
 - `api-token` 存令牌本身，不存哈希：握手要拿它当密钥（[本机接口](#本机接口第-2-层11-11-照代码)）。每次启动守护进程换一个，正常退出时连同 `daemon.json`（`{port, pid}`）一起删掉。
-- `device.json` 是 `{deviceId, libraryPath}`。`jobs.db` 里有三张表：取内容的任务（每条一行，按 `itemId` 去重）、插件的暂停（按插件和平台，web 插件按主机）、上次写的 `content.md` 的哈希。失败的任务清掉链接，只留错误码和原因。任务一次跑一个。
+- `device.json` 是 `{deviceId, libraryPath}`。`jobs.db`（建表分两版，`user_version` 是 1）里有六张表：取内容的任务（每条一行，按 `itemId` 去重，带优先级和所属导入）、插件的暂停（按插件和范围，范围是平台，web 插件按主机，`*` 是你点的「先别试」；记错误码、原因、到什么时候）、上次写的 `content.md` 的哈希、平台的节奏记账（每个平台上次调用结束的时间、今天批量调用了几次，重启后照旧）、导入、导入的清单（每个导入里每条链接一行，记身份、在库里的哪里、收下没有）。失败的任务清掉链接，只留错误码和原因。任务一次跑一个，同一平台同一时间只跑一个调用。
+- `daemon.json` 是 `{port, pid}`。`api-token`、`daemon.json` 的来去见[本机接口](#本机接口第-2-层11-11-照代码)。根目录 `settings.json` 现在只有 `library`（当前资料库）和 `plugins.<插件 id>.settings`，别的键读写时原样留着。
+- `deliver-tokens.json`：投递令牌的清单，一个数组，每项 `{id, name, kind, secret, createdAt}`，`kind` 取 `extension`、`mobile`、`api`。`secret` 是明文（读文件的权限只有本人），令牌整个只在发的那一次回给调用方；撤销马上生效。
+- `logins.json`：登录站点、访客身份和密钥设置的索引，不含任何值。站点和访客身份各按主机记存下的时间和每个 cookie 的名字、域名、过期时间；密钥设置记每个插件填了哪几项。看登录状态、过期没有只读它，不碰钥匙串。
+- `run/`：一次调用要交凭据给插件时，在这里建这次自己的文件夹 `usuyo-cred-<随机>`（0700），文件 0600：`credentials.json` 和 `cookies.txt`（账号站点）、`visitor.json`（访客身份）、`secrets.json`（密钥设置），路径经 `USUYO_CREDENTIALS`、`USUYO_COOKIES_TXT`、`USUYO_VISITOR`、`USUYO_SECRETS` 传给插件（[协议 §6](plugin-protocol.md#6-凭据)）；进程结束整个文件夹删掉，守护进程启动时再清一遍上次被杀留下的 `usuyo-cred-*`。没有可交的就不建。
+- `inbox/`：收件文件夹，手机经云盘放进来。只认顶层的 `.txt` 普通文件；点开头的、别的扩展名、子文件夹都不碰；每 5 秒看一轮，一个文件 10 秒没变才处理；最多读 1 MiB、收 500 条链接，文件里每个 http(s) 链接收下一条（整段分享文字也行），入口记 `mobile`，放进去本身就是确认，不进导入预览。全收成了移到 `.usuyo-done/<日期>/`；没有链接、有链接没收成、或是符号链接的移到 `.usuyo-failed/`，旁边一个 `<名字>.error.json`（`{errors: […]}`，原因只写主机和错误码）。`GET /inbox` 回它在哪。
+- `libraries/<libraryId>/clock-mark`：回收站到期检查记下的最大时间，见 [§1.7](#17-删掉)。
+- 钥匙串（macOS、Windows）：服务名 `usuyo`，账户名是 `<12 位十六进制>/<键>`，前一段是按机器根目录（取规范路径）的 SHA-256 前 12 位，所以不同的 `USUYO_HOME` 各管各的，开发用的另一套不会盖掉正式那套。键有三类：`site:<主机>`（这个站点的登录，storageState 的 JSON）、`visitor:<主机>`（这个站点的访客身份，不是账号，和同一主机的 `site:` 分开）、`secret:<插件 id>:<设置键>`（一个密钥设置）。Linux 还没接 Secret Service，换成根目录里 0600 的 `secrets.json`，键一样，是替身：挡得住别的用户，挡不住以你的身份跑的程序。壳的登录窗口在 macOS 上用系统的网页数据仓库，Windows、Linux 上放在根目录的 `webviews/` 下，见 [apps/desktop/README.md](../apps/desktop/README.md#登录窗口)。
 - 以写方式打开库（拿到 `.usuyo/lock`）时，清掉 `.usuyo/tmp/` 里崩溃留下的调用文件夹（`usuyo-call-*`）和以 UUIDv7 命名的暂存文件夹，别的不动。
 - 扫描（启动、重建索引、地图、收下）遇到读不了的条目、回收站项、主题、卡片、成稿就跳过，写日志；条目另外列进结果的 `unreadable`（`{id, reason}`），一个坏文件不挡住别的。界面还不显示它们。
 
@@ -518,12 +525,12 @@ Agent（经 MCP）或宿主调的模型改已有内容，一个提议一个文�
 | 主题、卡片、成稿 | `body.md` | `["body.md"]` |
 | `notes`、`content` | 原文件名的那个文件（`reason: conflict`） | 那一个 |
 | 只留文字 | 照条目里的相对路径放，例 `raw/<snapshotId>/images/001.jpg` | 这些路径 |
-- **到期**：条目按 manifest 的 `stateAt`，主题、卡片、成稿按记录上的 `trashedAt`，加当前的 `trashDays` 现算（[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突)「到期照 A 写的算」），「一直」不到期；`entry.json` 的 `trashedAt` 照同步来的值写，不用本机挪进来的时间；`merge`、`conflict`、`kind: notes` 和 `kind: content` 只在本机，按本机的。移除本机文件，记 `purge`（`actor: host`）；`keep-text`、`merge`、`conflict`、`kind: notes` 和 `kind: content` 到期只做这一步。对象整个离开资料库的（条目 `reason: delete` 或 `undo`；主题、卡片、成稿，`conflict` 的除外）还要清干净、推墓碑，见下面的「清干净」。开了同步的库启动后先拉完一轮再判，按服务器时间（[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突)），离线时不移除，推墓碑走 CAS，底本不是最新就放弃这次、重新判断。没开同步的按本机时间；本机时间比记下的最大时间晚了超过 `trashDays`（会把回收站整个移除），先不移除，你点「照时间移除」才移除（推断）。你在回收站里「立即清除」（[product-model §7.3](product-model.md#73-其他对象)）照到期办，不等 `trashDays`（11-06 定，[§1.10 第 16 条](#110-要你看一眼)）；确认框列出还在引用它的页（推断）。11-11 代码：守护进程启动时和之后每 6 小时查一遍，到期的照下面移除；一条读不了的跳过、记数，不拦别的。上面说的「本机时间比记下的最大时间晚了超过 `trashDays`」时这一遍不移除，等你点「照时间移除」（界面还没做）。回收站里一条也可以「立即清除」（`POST /trash/{id}/purge`）。
+- **到期**：照回收站项 `entry.json` 的 `trashedAt`（条目、主题、卡片、成稿都一样；2026-11-11 定，原先写的是条目按 manifest 的 `stateAt`），加当前的 `trashDays` 现算（[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突)「到期照 A 写的算」），「一直」不到期；`entry.json` 的 `trashedAt` 照同步来的值写，不用本机挪进来的时间；`merge`、`conflict`、`kind: notes` 和 `kind: content` 只在本机，按本机的。移除本机文件，记 `purge`（`actor: host`）；`keep-text`、`merge`、`conflict`、`kind: notes` 和 `kind: content` 到期只做这一步。对象整个离开资料库的（条目 `reason: delete` 或 `undo`；主题、卡片、成稿，`conflict` 的除外）还要清干净、推墓碑，见下面的「清干净」。开了同步的库启动后先拉完一轮再判，按服务器时间（[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突)），离线时不移除，推墓碑走 CAS，底本不是最新就放弃这次、重新判断。没开同步的按本机时间；本机时间比记下的最大时间晚了超过 `trashDays`（会把回收站整个移除），先不移除，你点「照时间移除」才移除（推断；这个放行还没做，[TODO](TODO.md#4-开始写代码)）。你在回收站里「立即清除」（[product-model §7.3](product-model.md#73-其他对象)）照到期办，不等 `trashDays`（11-06 定，[§1.10 第 16 条](#110-要你看一眼)）；确认框列出还在引用它的页（推断）。11-11 代码：守护进程启动时查一遍，之后每 6 小时一遍（每遍都是整个回收站），到期的照下面移除。到期时间照回收站项 `entry.json` 的 `trashedAt` 加 `trashDays` 现算；`trashDays` 是「一直」时不到期。一项读不了的跳过、只记回收站 id 和错误码（日志里没有标题），不拦别的。时钟守卫：记下的最大时间放在 `libraries/<libraryId>/clock-mark`（还没有就取改动记录里最晚的一行）；这一遍有到期的、而现在比它晚了超过 `trashDays` 整天时，一项也不移除，只记下有几项因此留着（日志里的 `held`），`clock-mark` 也不更新。没有这种情况的话，这一遍结束把 `clock-mark` 更新成它和现在中较晚的。代码里有「照时间移除」这条路（跳过守卫），但还没有接口和界面能触发（还没做，[TODO](TODO.md#4-开始写代码)）；每 6 小时的那一遍永远只用 `Check`，守卫拦下以后会不会自己放行是个开放的问题，也记在 TODO。回收站里一项也可以「立即清除」：`POST /trash/{trashId}/purge`，`trashId` 是回收站项的 id，不是条目 id；成功回 204，一项照到期办，整个离开资料库的条目发 `item-removed`。现在没有列出回收站的接口，也没有回收站页。
 - **再遇到同一身份**（11-06 改，[§1.10 第 12 条](#110-要你看一眼)：不记删过的，移除以后再收下就是普通收下）：
 
 | 入口 | 在回收站里 | 私密 |
 |---|---|---|
-| 你或 Agent 主动收的：窗口（粘贴、拖入、快捷键、`usuyo://add`）、命令行、扩展、手机、Agent（`mcp`）、本机接口令牌（`api`）、批量导入 | 拿回来，记 `restore`，能撤销；不提醒 | 窗口、终端里的命令行、扩展、手机、批量导入照常，多一项 `origins`；Agent、`api`、终端外的命令行跳过 |
+| 你或 Agent 主动收的：窗口（粘贴、拖入、快捷键、`usuyo://add`）、命令行、扩展、手机、Agent（`mcp`）、本机接口令牌（`api`）、批量导入 | 拿回来，记 `restore`，能撤销；不提醒 | 窗口、终端里的命令行、扩展、手机、批量导入照常，多一项 `origins`；Agent、`api`、终端外的命令行跳过（11-11 还没做：`POST /items` 一律记窗口里收的，命令行从不跳过；导入不跳私密，扩展、手机和 `api` 令牌的投递会跳过。见 [TODO](TODO.md#4-开始写代码)） |
 | 跟着收（这个订阅没列过的） | 跳过 | 照常 |
 
 - **跟着收**只收这个订阅没列过的（[§1.1](#11-目录树)）：列过的一律跳过，它列过、你删掉的，到期移除以后也不会被它收回来；它没列过的（比如你自己粘贴过、删掉、已经到期移除的），以后它第一次列出来就照新的收（这是代价）。库里已有、它没列过的不新建，只多一项 `origins`（推断）。`newest-first` 的来源翻到一整页都是这个订阅列过的就停（[协议 §3.8](plugin-protocol.md#38-list-与跟着收)）。
@@ -613,20 +620,42 @@ schema 先定这几条：
 <a id="本机接口第-2-层11-11-照代码"></a>
 ## 本机接口（第 2 层，11-11 照代码）
 
-守护进程（`usuyo daemon`，`crates/usuyo-api`）给桌面窗口、命令行和开发服务器用的本机 HTTP 接口，照 8c41e21 的代码写。完整的第 2 层（MCP、OpenAPI、搜索语法、投递）还没写。**路径和类型以 `apps/desktop/web/src/api/endpoints.ts` 为准**：改接口先改这个文件，Rust 那边照它做。
+守护进程（`usuyo daemon`，`crates/usuyo-api`）给桌面窗口、命令行、开发服务器和投递端（浏览器扩展、油猴脚本、手机）用的本机 HTTP 接口，照 11-11 的代码写（HEAD 5e98e5a）。完整的第 2 层（MCP、OpenAPI、搜索语法）还没写。**路径和类型以 `apps/desktop/web/src/api/endpoints.ts` 为准**：改接口先改这个文件，Rust 那边照它做。
 
-- **监听**：只绑 `127.0.0.1`，端口固定 47615（`--port`、`USUYO_PORT` 能改，但窗口的 CSP 只放行 47615）。端口被占时守护进程起不来，已有的 `api-token`、`daemon.json` 不动；壳不再起第二个，窗口里说端口被别的程序占着。
-- **令牌**：除了 CORS 预检、`POST /handshake` 和带 `k` 的媒体地址，每个请求都带 `Authorization: Bearer <令牌>`，`/health`、`/events` 也要。令牌是 32 字节随机数的小写十六进制，每次启动新生成，绑上端口以后写进按机器目录的 `api-token`（0600，先写临时文件再改名），正常退出时连同 `daemon.json` 删掉（只删还是自己写的那份）。按定长时间比对；错了回 401 `unauthorized`。
+- **监听**：只绑 `127.0.0.1`，端口固定 47615（`--port`、`USUYO_PORT` 能改，但窗口的 CSP 只放行 47615）。一个监听口，窗口用的路由和投递接口（`/v1/…`）都在上面，不另开端口。端口被占时守护进程起不来，已有的 `api-token`、`daemon.json` 不动；壳不再起第二个，窗口里说端口被别的程序占着。
+- **谁能调什么**：每个请求过一道门（`guard.rs`），分三种调用方。
+  - 带主令牌的（`api-token` 里的那个：壳、命令行、开发代理、别的本机程序）：所有路由，包括 `/v1/…`；经 `/v1/deliver` 收下的记入口 `api`。
+  - 带投递令牌的：只能进 `GET /v1/ping`、`POST /v1/deliver`、`POST /v1/batches`，名单以外一律 401 `unauthorized`，和没带令牌一样。
+  - 不带令牌也放行的：CORS 预检（只限窗口用的路径）、`POST /handshake`、带对的 `k` 的 `/media/<itemId>/…`。
+- **令牌**：除了上面三种，每个请求都带 `Authorization: Bearer <令牌>`，`/health`、`/events` 也要。主令牌是 32 字节随机数的小写十六进制，每次启动新生成，绑上端口以后写进按机器目录的 `api-token`（0600，先写临时文件再改名），正常退出时连同 `daemon.json` 删掉（只删还是自己写的那份）。按定长时间比对；错了回 401 `unauthorized`。
 - **`Host`**：最先查，只认 `127.0.0.1:<端口>`、`localhost:<端口>`、`[::1]:<端口>`（不分大小写），别的回 403 `forbidden`。
-- **`Origin`**：只当跨站过滤。没带的照常查令牌（命令行和开发代理都不带）；带了的要在名单里，名单只有 Tauri 的 webview：`tauri://localhost`、`http://tauri.localhost`。不在名单里回 403 `forbidden`，令牌对也一样。开发服务器的来源不在名单里：Vite 代理只接自己页面的同源请求，在服务端带上令牌，去掉 `Origin`、`Referer`。
-- **握手**：客户端先确认端口上是这次启动的守护进程，再发令牌。`POST /handshake`，请求 `{"nonce": "<64 位小写十六进制>"}`（请求体最多 256 字节，不合格回 400 `invalid-args`），回 `{"proof": "<64 位小写十六进制>"}`：以令牌的 UTF-8 字节为密钥，对 `usuyo-daemon-proof/v1\n127.0.0.1:<端口>\n<nonce>` 做 HMAC-SHA256。端口写进消息，换个端口转来的回答对不上。核对的是客户端，用自己读到的令牌：壳（找守护进程时和每次重新连时）、命令行、Vite 代理（令牌文件变了就重新握手，对不上回 502，不把令牌发过去）。
+- **`Origin`**：只当跨站过滤，谁都能伪造，不用来放行。没带的照常查令牌（命令行、开发代理、油猴脚本管理器常不带）；带了的按路径分：
+  - 窗口用的路径：只认 Tauri 的 webview，`tauri://localhost`、`http://tauri.localhost`。
+  - `/v1/…`：只认浏览器扩展的来源，以 `chrome-extension://`、`moz-extension://`、`safari-web-extension://` 开头的；窗口的来源、普通网页、`null` 都回 403。
+  - `/handshake`：扩展的来源和窗口的来源都认（扩展发令牌以前要先确认对面是内核）。
+  - 不合的回 403 `forbidden`，令牌对也一样。开发服务器的来源不在名单里：Vite 代理只接自己页面的同源请求，在服务端带上令牌，去掉 `Origin`、`Referer`。
+  - CORS 头只给窗口的来源（允许 GET、POST、PUT、DELETE，请求头 `Content-Type`、`Authorization`、`Range`，暴露 `Content-Range`、`Accept-Ranges`、`Retry-After`）。`/v1/…` 不回 CORS 头，也不答 CORS 预检（预检不带令牌，落到 401）。
+- **握手**：客户端先确认端口上是这次启动的守护进程，再发令牌。`POST /handshake`，请求 `{"nonce": "<64 位小写十六进制>", "client": "<投递令牌的 id>"}`，`client` 可省（请求体最多 256 字节，不合格回 400 `invalid-args`），回 `{"proof": "<64 位小写十六进制>"}`：以密钥的 UTF-8 字节为密钥，对 `usuyo-daemon-proof/v1\n127.0.0.1:<端口>\n<nonce>` 做 HMAC-SHA256。不给 `client` 时密钥是主令牌；给了，密钥是那个投递令牌的整个 `<id>.<秘密>`（投递端只发 id，令牌本身不上线路）。不认识的 id 也回一个证明，用随机的密钥，对面分不出那个 id 在不在、撤没撤。端口写进消息，换个端口转来的回答对不上。核对的是客户端，用自己读到的令牌：壳（找守护进程时和每次重新连时）、命令行、Vite 代理（令牌文件变了就重新握手，对不上回 502，不把令牌发过去）、投递端（油猴脚本核对不过就什么都不发）。
+- **投递令牌**：格式 `<id>.<秘密>`，`id` 是 16 位小写十六进制（不是秘密），`秘密` 是 64 位小写十六进制。主令牌调 `POST /deliver-tokens`（`{name, kind}`，`name` 1 到 80 个字，`kind` 取 `extension`、`mobile`、`api`）发一个，整个令牌只在这一次的回答里出现（在 `{id, name, kind, createdAt}` 之外多一项 `token`）；`GET /deliver-tokens` 列出投递端，没有令牌；`DELETE /deliver-tokens/{id}` 撤销，马上生效，回 204，没有这个 id 回 404。存在按机器目录的 `deliver-tokens.json`，见 [§1.1](#11-目录树)。投递令牌的 `kind` 决定条目 `origins[].entry`：`extension`、`mobile`、`api`。
 - **媒体**：`<img>`、`<video>` 带不了头，`ItemView` 里的媒体地址是 `/media/<itemId>/<层>?k=<key>`。`k` 是 HMAC-SHA256 的十六进制，密钥每次启动另生成（和令牌无关），消息是 `usuyo-media/v1\n<itemId>`，只对这一条有效。支持 Range。`Content-Type` 只回允许的几种，别的写 `application/octet-stream`；另带 `Content-Security-Policy: default-src 'none'; sandbox`、`Cache-Control: private, max-age=3600`、`Cross-Origin-Resource-Policy: cross-origin`。所有回答都带 `X-Content-Type-Options: nosniff`。
-- **事件**：`GET /events` 是 server-sent events，要带令牌，所以前端用 `fetch` 读，不用 `EventSource`。每条是 `event: <type>` 加 `data: <JSON>`；type 有 `item-added`、`item-updated`、`item-fetch-failed`（另带 `code`、`hint`、`retry`）、`item-trashed`、`topic-updated`，都带 `id`。收到就重新拉对应的数据；落后丢掉的不补发。不受 30 秒的时限。
+- **事件**：`GET /events` 是 server-sent events，要带令牌，所以前端用 `fetch` 读，不用 `EventSource`。每条是 `event: <type>` 加 `data: <JSON>`，`data` 里有 `type` 和下面的字段。收到就重新拉对应的数据；落后丢掉的不补发。不受 30 秒的时限，守护进程要停时结束。
+
+| `type` | 什么时候发 | 字段 |
+|---|---|---|
+| `item-added` | 收下了一条新的（粘贴、投递、收件文件夹、导入） | `id` |
+| `item-updated` | 已经有的又被收下一次；取到了内容；记一句、主题、拿回来、只留文字、再取一次这类改了条目 | `id` |
+| `item-fetch-failed` | 这次没取到；`retry` 为真时过会儿自己再试 | `id`、`code`、`hint`（可省）、`retry` |
+| `item-trashed` | 条目进了回收站 | `id` |
+| `item-removed` | 回收站里的条目到期、或你「立即清除」，从资料库里移除了；再拉它是 404 | `id` |
+| `topic-updated` | 建了主题，或改了关注 | `id` |
+| `import-updated` | 一次导入变了：列了一页、认了一段身份、确认了、停下或接着、收下了一条、删掉了 | `id`（导入的） |
+| `plugins-updated` | 插件的暂停变了（被限流或拦住、「现在再试」「先别试」）、站点的登录、访客身份、密钥设置变了 | 无 |
+
 - **错误**：照 [§0.3](#03-错误模型)：`application/problem+json`，字段 `type`（`urn:usuyo:problem:<code>`）、`title`、`status`、`detail`、`instance`（`urn:uuid:<随机>`）、`code`、`retryable`；插件报的另带 `plugin`，一律 502。可重试的带 `Retry-After: 5`。没有的路径 404 `not-found`，方法不对 405 `invalid-args`。
-- **上限**：请求体 64 KiB，超了 413 `too-large`；每个请求 30 秒，超了 504 `timeout`；搜索 `limit` 默认 50，限在 1 到 200。
+- **上限**：请求体 64 KiB，超了 413 `too-large`；握手 256 字节；登录和访客身份的 cookie 256 KiB；`/v1/batches` 4 MiB；每个请求 30 秒，超了 504 `timeout`，列来源（`GET /plugins/{owner}/{repo}/sources`）120 秒；搜索 `limit` 默认 50，限在 1 到 200。
 - **日志**：守护进程和命令行的日志里，链接 `?`、`#` 以后的部分和 `Bearer ` 后面的字换成 `…`。
 
-`endpoints.ts`（8c41e21）的 `paths`：
+`endpoints.ts` 的 `paths` 和 `deliverPaths`（11-11）：
 
 | 方法与路径 | 做什么 |
 |---|---|
@@ -634,21 +663,59 @@ schema 先定这几条：
 | `GET /map` | 地图 |
 | `GET /topics`；`POST /topics` | 列出主题；按 `{name}` 建一个，同名的已经有了就回那个 |
 | `POST /topics/{id}/follow` | `{followed}` |
-| `POST /items` | 收下 `{input, kind}`，`kind` 现在只认 `link` |
+| `POST /items` | 收下 `{input, kind}`，`kind` 现在只认 `link`；记 `via: app`、入口 `paste` |
 | `GET /items/{id}` | 一条；在回收站里的也回，带 `trashedAt` |
 | `POST /items/{id}/note` | `{text}` |
 | `POST /items/{id}/topics` | `{topicId, member}` |
 | `POST /items/{id}/trash`；`POST /items/{id}/restore` | 进回收站；整条拿回来 |
 | `POST /items/{id}/text-only`；`POST /items/{id}/restore-media` | 只留文字；把移走的图和视频拿回来 |
 | `POST /items/{id}/refetch` | 再取一次 |
+| `POST /trash/{trashId}/purge` | 立即清除回收站里的一项，204 |
 | `GET /search?q=&limit=` | 搜索 |
 | `GET /events` | 事件流 |
+| `GET /plugins` | 装着的获取插件（标签、设置、节奏、暂停）和没加载的（目录和原因） |
+| `GET /plugins/{owner}/{repo}/sources` | 这个插件现在能列的来源；会调插件，计入节奏，要等的超过 60 秒就不等，回 422 `unsupported-input` 并说什么时候能再试 |
+| `POST /plugins/{owner}/{repo}/try-now` | 「现在再试」：去掉这个插件所有的暂停（包括「先别试」），排着的任务和导入马上再看 |
+| `POST /plugins/{owner}/{repo}/hold` | 「先别试」：到你点「现在再试」为止哪儿都不调它，别的插件照常 |
+| `PUT /plugins/{owner}/{repo}/secrets/{key}`；`DELETE …` | 填一个密钥设置 `{value}`（空的回 400），存进钥匙串；`DELETE` 去掉。值从不回出来，回的是插件 |
+| `GET /sites` | 装着的插件会用到的账号站点和登录状态 |
+| `PUT /sites/{site}/login`；`DELETE …` | 壳的登录窗口交来 storageState，只留属于这个站点的，存进钥匙串，回的里面没有值；`DELETE` 忘掉登录，204 |
+| `GET /visitors` | 装着的插件在清单里声明的访客身份，和有没有存着、最早什么时候过期；不出现在 `/sites` 里 |
+| `PUT /visitors/{site}`；`DELETE …` | 同上，存成 `visitor:<站点>`，和同一主机的账号分开；`DELETE` 去掉，账号不动 |
+| `GET /imports`；`POST /imports` | 全部导入（新的在前）；按 `{pluginId, source, title?}` 从一个插件的来源开始列 |
+| `GET /imports/{id}`；`DELETE …` | 一次导入；不要了：清单和还没收的去掉，已经收下的留着，204 |
+| `GET /imports/{id}/entries?standing=&offset=&limit=` | 预览里的条目；`standing` 取 `new`、`stored`、`trashed`、`unresolved`，不给就是全部；`limit` 默认 100，限在 1 到 500 |
+| `POST /imports/{id}/confirm` | 确认，见下 |
+| `POST /imports/{id}/hold`；`POST /imports/{id}/resume` | 先停下；接着导入 |
+| `GET /deliver-tokens`；`POST /deliver-tokens`；`DELETE /deliver-tokens/{id}` | 见上「投递令牌」 |
+| `GET /inbox` | `{path}`，收件文件夹在哪（[§1.1](#11-目录树)） |
+| `GET /v1/ping` | 投递：`{name: "usuyo", version, protocol: 1, client}`，`client` 是投递令牌的名字，主令牌是 `null` |
+| `POST /v1/deliver` | 投递：见下 |
+| `POST /v1/batches` | 投递：见下 |
 
-守护进程另有三条，不在 `endpoints.ts` 里：`POST /handshake`（上面）；`POST /reindex`，命令行用，回 `{items, unreadable}`；`GET /media/<itemId>/<层>`，地址由 `ItemView` 给。
+守护进程另有四条，不在 `endpoints.ts` 的 `paths` 里：`POST /handshake`（上面）；`POST /reindex`，命令行用，回 `{items, unreadable}`；`GET /media/<itemId>/<层>`，地址由 `ItemView` 给；`GET /events` 在 `paths` 里，但不走 30 秒的时限。
+
+**投递**（[协议 §5.1](plugin-protocol.md#51-本机-http-接口)）：
+- `POST /v1/deliver`，`{url?, text?}`，给一个（两个都给取 `url`）。`text` 是手机分享出来的整段文字，从里面找第一个链接。只收链接，已经取到的内容（multipart）还不收。回 202 `{id, state: "accepted", duplicate}`，`duplicate` 为真是以前收下过。条目的入口取令牌的 `kind`，取内容照常排任务。遇到私密条目不收、不加来源，现在的回答和「收下过」一样（`duplicate: true`），没有单独的 `skipped`。
+- `POST /v1/batches`，`{name?, action?, links: [{url, title?, actedAt?}]}`，进导入的预览，你确认了才按节奏去收。`links` 1 到 5000 条；`action` 取 `favorite`、`like`、`share`、`view`、`unknown`；每条 `url` 要是带主机的 http(s)、不带用户名密码，`actedAt` 要是 RFC 3339，`title` 超过 500 字截掉；`name` 不给写「交进来的一批」，最多 200 字。不合的回 400 `invalid-args`，说是第几条。回 202 `{id}`，是新建的导入的 id（`kind: delivered`，`client` 是令牌名）。每条的身份由宿主重新算，不信交来的；认不出的这一条去掉，记日志；清单里身份相同的合成一条。
+
+**导入**：一次导入的状态不单独存，由几项现算：`listing`（还在列）、`ready`（列完了，等你看一眼）、`taking`（确认了，还有排着的任务）、`done`（确认了，没有排着的了），`held` 盖过其余，是你点了「先停下」。走向：
+1. 开始（`POST /imports` 或 `POST /v1/batches`）：`source` 类要这个插件能列（不能回 422 `unsupported-input`），来源非空、最多 512 字节，平台没声明 `batch: false`（声明了回 422）。`source` 类按平台的节奏一页页调插件的 `list`，`delivered` 类每轮认 50 条的身份。每条按身份分成 `new`、`stored`（库里已经有）、`trashed`（在回收站里）；认不出来的是 `unresolved`。这一步不建任何条目。
+2. 列完是 `ready`。`POST /imports/{id}/confirm`，请求体 `{new, trashed, except?}`（不认识的字段回 400）：`new` 是「新的」整组收不收；`trashed` 是「回收站里的」整组收不收，收下就是拿回来；`except` 是 `seq` 的数组，这些条目和自己那组选得反着来（整组收的，它不收；整组不收的，它收）。只交例外：预览按页看，没翻到的条目跟着整组走。`stored` 和 `unresolved` 的不收，也不能出现在 `except` 里，出现了回 400。还在列的、或已经确认过的再确认，回 400。
+3. 确认后，挑中的每条排一个取内容的任务，优先级低于你手动收下的；按平台的节奏一条条来。轮到时先收下（入口 `import`，`takenBy: user`，同一批共用 `importBatch`，带 `action`、`actedAt`），再取内容。这一条已经有任务（你刚手动收过）的不动。轮到时发现已经进了回收站、而你没挑回收站那一组的，不收，`skipped` 加一；私密条目批量导入照收（[§1.7](#17-删掉) 的表）。`taken` 是收下的条数，`notStored` 是收下了但内容取不到的。
+4. `POST /imports/{id}/hold` 随时可以，不再列、不再收，已经收下的不动；`resume` 从停的地方接着，停在要你处理的原因上（例如重新登录以后）也从这里再试。导入页只说事实（列了几页、各几条、收下几条、为什么在等和什么时候），不给还剩多少。
+
+列的时候的错：联网、超时、插件崩了这一类，等 60 秒乘 2 的次方再试，试满 6 次就停下等你；被限流、被拦住记在插件的暂停上（见下），导入照它显示原因，暂停一去掉就接着列；别的错停在这次导入上，`waiting.code` 是错误码（例如 `login-required`，或页面把没有访客身份的请求送回首页时插件报的 `visitor-required`），没有 `until`，等你重新登录或取到访客身份以后点「接着导入」。`waiting.code` 还可能是 `pacing`（等间隔）、`daily-limit`（今天批量的次数用完了）、`held`（你让插件先别试）、`batch-off`（这个平台不做导入）。
+
+**节奏和暂停**（[协议 §3.1](plugin-protocol.md#31-运行器与节奏)）：
+- 节奏来自装着的插件清单里的 `pacing`，同一平台的几个插件取最严的：间隔取最长的，`daily` 取最小的，有一个写了 `batch: false` 就不做导入。没声明的平台不等。
+- `interval`：上一次调用结束到下一次开始的最短间隔，`fetch`、`list` 的一页、`sources` 都算，你手动收下的也守，导入的和手动的在同一个平台上排队。`daily`：批量（导入）的调用一个本地日期最多几次，到本地零点重新数；你手动收下的单条不计入，也不被它挡住，只守间隔。同一平台同一时间只跑一个调用。记账在 `jobs.db`，重启后照旧。`canonicalize` 不计。
+- 列一页要等的超过 60 秒就不等，记下到点的时间，到点再来。
+- 插件报 `rate-limited`：暂停到 `retryAfter` 以后（没给 15 分钟，最多算 1 小时）。报 `blocked`：现在也只暂停 1 小时，到点自己解开；你点「现在再试」更早去掉它。暂停只管这个插件在这个平台上（web 插件按主机），别的插件照常；暂停期间它不被调用，排着的任务往后排，不白白耗掉重试次数。`hold`（「先别试」）没有 `until`，是 `byYou`，一直到「现在再试」。暂停和它的错误码、一句话原因在 `GET /plugins` 的 `pauses` 里。
 
 **命令行**：`add`、`get`、`search`、`reindex` 先读 `daemon.json` 和 `api-token`，握手，再 `GET /health`；都成了就经守护进程，不然在本进程里直接开库。握手没过不发令牌。`init` 总在本进程。
 
-**和别处还不一样的**：路径不带 `/v1/`，没有 `/v1/ping`（[§0.2](#02-版本与兼容)）；列表回普通数组，没有游标（[§0.8](#08-分页和游标)）；经这个接口的写操作都记 `via: app`，收下记 `entry: paste`、`takenBy: user`，私密条目照收，命令行经守护进程收下的也一样（[§1.7](#17-删掉) 的表要求 `api` 和终端外的命令行跳过私密）。
+**和别处还不一样的**：窗口用的路径不带 `/v1/`（只有投递接口带）；列表回普通数组，没有游标（[§0.8](#08-分页和游标)）；用主令牌经窗口用的路径做的写操作都记 `via: app`，`POST /items` 收下记 `entry: paste`、`takenBy: user`，私密条目照收，命令行经守护进程收下的也一样（[§1.7](#17-删掉) 的表要求 `api` 和终端外的命令行跳过私密）；经 `/v1/deliver` 的投递，扩展、手机、`api` 令牌遇到私密条目会跳过，终端里和终端外的命令行（本进程里直接收下时记 `cli`）都不跳。
 
 <a id="2-留着的-v0第-2-层重写前保留"></a>
 ## 2. 留着的 v0（第 2 层重写前保留）
