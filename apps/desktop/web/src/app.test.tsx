@@ -12,7 +12,9 @@ afterEach(() => {
 
 it("shows one calm line when the daemon is not running", async () => {
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
-  const router = createAppRouter(createMemoryHistory({ initialEntries: ["/items"] }));
+  // jsdom 没有 scrollTo，路由换页时会调它。
+  vi.stubGlobal("scrollTo", vi.fn());
+  const router = createAppRouter(createMemoryHistory({ initialEntries: ["/"] }));
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <RouterProvider router={router} />

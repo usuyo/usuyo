@@ -5,6 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
     <title>usuyo</title>
+    <link rel="icon" href="data:," />
+    <script>
+      // 第一帧之前就定好深浅色，免得先闪一下另一种。之后由 src/theme/apply.ts 接手。
+      try {
+        var pref = JSON.parse(localStorage.getItem("usuyo-ui") || "{}").state || {};
+        var theme = pref.theme === "dark" || pref.theme === "light" ? pref.theme : matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+        document.documentElement.dataset.theme = theme;
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

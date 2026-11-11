@@ -1,0 +1,204 @@
+import { ChevronLeft, ChevronRight, Pause, Play, RefreshCw } from "lucide-react";
+import type { KeyboardEvent, PointerEvent } from "react";
+import { Button as AriaButton } from "react-aria-components";
+import type { Facet, Item } from "../api/endpoints";
+import { useReducedMotion } from "../motion/clock";
+import { Button } from "../ui/Button";
+import { MonoLabel } from "../ui/Chip";
+import { FlashLine, useFlash } from "../ui/Flash";
+import { clock, facetOf, imageName } from "./format";
+import type { Player } from "./usePlayer";
+
+type ImageFacet = Extract<Facet, { layer: "image" }>;
+
+/** 画面：视频、封面和缩略图，或图文的几张图。它和右边几栏一样是一个侧面，有自己的位置。 */
+export function Viewer({ item, player, onRetry }: { item: Item; player: Player; onRetry: () => void }) {
+  const images = facetOf(item, "image");
+  const asr = facetOf(item, "asr");
+  const flash = useFlash(1400);
+  const reduced = useReducedMotion();
+  const { video, attachVideo } = player;
+
+  let src: string | undefined;
+  let alt = "";
+  if (video) {
+    if (player.image === "cover" || (!player.playing && player.t === 0 && video.cover)) {
+      src = video.cover?.url;
+      alt = "封面";
+    } else {
+      const frame = [...video.frames].reverse().find((f) => f.sec <= player.t + 0.01) ?? video.frames[0];
+      src = frame?.url;
+      alt = `${clock(player.t)} 的画面`;
+    }
+  } else if (images) {
+    const im = images.images.find((x) => x.key === player.image) ?? images.images[0];
+    src = im?.url;
+    alt = im ? imageName(im.key) : "";
+  }
+  const textOnly = item.stored === "text-only";
+  const remark = video?.remark ?? images?.remark;
+
+  return (
+    <div>
+      <section
+        aria-label="画面"
+        className="relative h-[348px] w-[620px] overflow-hidden rounded-card border border-border bg-card2"
+      >
+        {video?.url && player.canPlay ? (
+          <video
+            ref={attachVideo}
+            src={video.url}
+            poster={video.cover?.url}
+            className="size-full object-contain"
+            onTimeUpdate={(e) => player.onTime(e.currentTarget.currentTime)}
+          />
+        ) : src ? (
+          <img src={src} alt={alt} className={`size-full object-contain transition-opacity duration-200 ${textOnly ? "opacity-35" : ""}`} />
+        ) : null}
+
+        {video || images ? (
+          <div className="pointer-events-none absolute top-3 right-3 flex h-7 items-center gap-2 rounded-full border border-border bg-hud px-3">
+            <MonoLabel>{video ? `画面 · ${clock(video.durationSec)}` : `画面 · ${images?.images.length ?? 0} 张`}</MonoLabel>
+            {remark ? <span className="text-small text-label">{remark}</span> : null}
+          </div>
+        ) : null}
+
+        {player.canPlay ? (
+          <AriaButton
+            aria-label="播放"
+            onPress={() => {
+              player.toggle();
+              flash.show(`从 ${clock(player.t >= (video?.durationSec ?? 0) - 0.1 ? 0 : player.t)} 播`);
+            }}
+            className={`absolute top-1/2 left-1/2 -mt-7 -ml-7 flex size-14 cursor-pointer items-center justify-center rounded-full border border-border2 bg-hud pl-[3px] text-text outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent ${player.playing ? "pointer-events-none scale-[0.92] opacity-0 duration-[140ms]" : "scale-100 opacity-100 duration-200"} transition-[opacity,scale] ease-out ${reduced ? "scale-100" : ""}`}
+          >
+            <Play size={22} aria-hidden="true" />
+          </AriaButton>
+        ) : null}
+
+        {textOnly ? (
+          <div className="absolute inset-x-0 bottom-0 animate-rise border-t border-border bg-hud px-5 py-4">
+            <div className="text-body font-medium text-text">视频和封面在回收站里</div>
+            <div className="mt-0.5 text-small text-sub">30 天内能恢复；口播文字、图里的字和画面缩略图都还在</div>
+          </div>
+        ) : null}
+
+        {item.stored === "link" ? (
+          <div className="absolute inset-0 flex animate-rise flex-col items-center justify-center text-center">
+            {item.missing ? (
+              <>
+                <div className="text-note font-medium text-warn">{item.missing}</div>
+                <div className="mt-1 text-small text-sub">原帖还在的话，可以再试一次</div>
+                <Button variant="soft" size="md" className="mt-3.5 px-4" onPress={onRetry}>
+                  <RefreshCw size={14} aria-hidden="true" />
+                  <span>重试</span>
+                </Button>
+              </>
+            ) : (
+              <>
+                <div className="text-body font-medium text-text">正在取内容</div>
+                <div className="mt-1 text-small text-sub">取到以后这里是视频或图，口播会转成文字</div>
+              </>
+            )}
+          </div>
+        ) : null}
+
+        <FlashLine
+          flash={flash}
+          className="absolute top-3 left-3 flex h-7 items-center rounded-full border border-border bg-hud px-3 text-small font-medium whitespace-nowrap text-text"
+        />
+      </section>
+
+      {video ? <Timeline player={player} marks={asr?.segments.flatMap((s) => (s.position?.kind === "time" ? [s.position.sec] : [])) ?? []} onJump={flash.show} /> : null}
+      {images ? <Strip images={images} player={player} /> : null}
+    </div>
+  );
+}
+
+function Timeline({ player, marks, onJump }: { player: Player; marks: number[]; onJump: (text: string) => void }) {
+  const dur = player.video?.durationSec ?? 1;
+  const p = Math.min(1, player.t / dur);
+  const current = marks.reduce((k, sec, i) => (sec <= player.t + 0.01 ? i : k), -1);
+  const started = player.playing || player.t > 0;
+  const jump = (sec: number) => {
+    player.seek(sec);
+    onJump(player.canPlay ? `从 ${clock(sec)} 播` : `视频在回收站里，恢复以后从 ${clock(sec)} 播`);
+  };
+  return (
+    <div className="mt-2 flex h-ctl items-center gap-3">
+      <Button variant="outline" size="md" square aria-label={!player.canPlay ? "视频不在，不能播" : player.playing ? "暂停" : "播放"} onPress={player.toggle} isDisabled={!player.canPlay}>
+        {player.playing ? <Pause size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}
+      </Button>
+      <div
+        role="slider"
+        tabIndex={0}
+        aria-label="时间轴：点一下跳到那一秒，左右方向键前后 5 秒"
+        aria-valuemin={0}
+        aria-valuemax={Math.round(dur)}
+        aria-valuenow={Math.round(player.t)}
+        aria-valuetext={clock(player.t)}
+        className="relative h-ctl-sm min-w-0 flex-1 cursor-pointer rounded-chip outline-none focus-visible:outline-2 focus-visible:outline-accent"
+        onPointerDown={(e: PointerEvent<HTMLDivElement>) => {
+          const rc = e.currentTarget.getBoundingClientRect();
+          jump(((e.clientX - rc.left) / (rc.width || 1)) * dur);
+        }}
+        onKeyDown={(e: KeyboardEvent<HTMLDivElement>) => {
+          if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+          e.preventDefault();
+          jump(player.t + (e.key === "ArrowRight" ? 5 : -5));
+        }}
+      >
+        <span className="absolute inset-x-0 top-4 h-1 rounded-[2px] bg-chip" />
+        <span className="absolute inset-x-0 top-4 h-1 origin-left rounded-[2px] bg-sub" style={{ transform: `scaleX(${p})` }} />
+        {marks.map((sec, i) => (
+          <span
+            key={sec}
+            className={`pointer-events-none absolute top-3 -ml-px h-3 w-0.5 rounded-[1px] transition-colors duration-150 ${started && i === current ? "bg-label" : "bg-border2"}`}
+            style={{ left: `${(sec / dur) * 100}%` }}
+          />
+        ))}
+        <span className="pointer-events-none absolute inset-0" style={{ transform: `translateX(${p * 100}%)` }}>
+          <span className="absolute top-3 -left-1.5 size-3 rounded-full bg-text" />
+        </span>
+      </div>
+      <span className="mono w-24 shrink-0 text-right text-tag text-sub">
+        {clock(player.t)} / {clock(dur)}
+      </span>
+    </div>
+  );
+}
+
+function Strip({ images, player }: { images: ImageFacet; player: Player }) {
+  const list = images.images;
+  const index = Math.max(0, list.findIndex((x) => x.key === player.image));
+  const go = (i: number) => {
+    const im = list[(i + list.length) % list.length];
+    if (im) player.showImage(im.key);
+  };
+  return (
+    <div className="mt-2 flex h-ctl items-center gap-2">
+      <Button variant="outline" size="md" square aria-label="上一张" onPress={() => go(index - 1)} isDisabled={list.length < 2}>
+        <ChevronLeft size={16} aria-hidden="true" />
+      </Button>
+      <div role="group" aria-label="几张图" className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto">
+        {list.map((im, i) => (
+          <AriaButton
+            key={im.key}
+            aria-label={imageName(im.key)}
+            aria-current={i === index}
+            onPress={() => player.showImage(im.key)}
+            className={`press h-ctl w-[64px] shrink-0 cursor-pointer overflow-hidden rounded-sm border bg-card2 p-0 outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent ${i === index ? "border-label" : "border-border"}`}
+          >
+            <img src={im.url} alt="" className="size-full object-cover" />
+          </AriaButton>
+        ))}
+      </div>
+      <span className="mono w-14 shrink-0 text-right text-tag text-sub">
+        {index + 1} / {list.length}
+      </span>
+      <Button variant="outline" size="md" square aria-label="下一张" onPress={() => go(index + 1)} isDisabled={list.length < 2}>
+        <ChevronRight size={16} aria-hidden="true" />
+      </Button>
+    </div>
+  );
+}

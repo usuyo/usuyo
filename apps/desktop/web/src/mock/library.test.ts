@@ -1,0 +1,38 @@
+import { describe, expect, it } from "vitest";
+import { createMockLibrary } from "./library";
+
+describe("mock library", () => {
+  it("finds a word in the speech text with its second", async () => {
+    const lib = createMockLibrary(false);
+    const hits = await lib.search("手冲");
+    const c1 = hits.find((h) => h.itemId === "c1");
+    expect(c1?.layer).toBe("asr");
+    expect(c1?.position).toMatchObject({ kind: "time", sec: 12 });
+    expect(c1?.snippet.slice(c1.match[0], c1.match[1])).toBe("手冲");
+  });
+
+  it("keeps every facet an item has", async () => {
+    const item = await createMockLibrary(false).item("c1");
+    expect(item.facets.map((f) => f.layer)).toEqual(["video", "asr", "ocr", "text", "comments"]);
+  });
+
+  it("says a share it has seen before is seen, and lands a new one", async () => {
+    const lib = createMockLibrary(false);
+    const seen = await lib.take({ input: "【4:6 冲煮法复刻（一）：比例-哔哩哔哩】 https://b23.tv/x", kind: "link" });
+    expect(seen).toMatchObject({ id: "c1", seen: true });
+    const fresh = await lib.take({ input: "https://www.xiaohongshu.com/explore/abc", kind: "link" });
+    expect(fresh.seen).toBe(false);
+    expect(fresh.platform.name).toBe("小红书");
+    expect((await lib.map()).points.some((p) => p.itemId === fresh.id)).toBe(true);
+  });
+
+  it("writes every time as RFC 3339 UTC with milliseconds", async () => {
+    for (const p of (await createMockLibrary(false).map()).points) {
+      expect(new Date(p.takenAt).toISOString()).toBe(p.takenAt);
+    }
+  });
+
+  it("starts empty when asked", async () => {
+    expect((await createMockLibrary(true).map()).points).toHaveLength(0);
+  });
+});

@@ -22,4 +22,9 @@ export async function closeWindow(): Promise<void> {
   if (isDesktopShell()) await (await currentWindow()).close();
 }
 
+/** 在系统浏览器里打开原帖。桌面壳以后换成 opener 插件；浏览器里开一个新标签页。 */
+export function openExternal(url: string): void {
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
 // 以后放在这里：托盘、全局快捷键、登录窗口（见 src-tauri/src/main.rs）。

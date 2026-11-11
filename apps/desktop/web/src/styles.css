@@ -1,83 +1,247 @@
 @import "tailwindcss";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
 
-/* 只放中性的系统字体和间距令牌；视觉身份以后从画布原型移植。 */
-:root {
-  --bg: #ffffff;
-  --fg: #1c1c1e;
-  --muted: #6e6e73;
-  --line: #d9d9de;
-  --accent: #0a6cff;
-  --font-stack: system-ui, -apple-system, "PingFang SC", "Segoe UI", sans-serif;
-  color-scheme: light dark;
+/* 设计值来自 usuyo-canvas/README.md「现用的设计值」。深色是默认，跟系统；data-theme 是手动切换。 */
+:root,
+:root[data-theme="dark"] {
+  --bg: #0b0d10;
+  --rail: #0f1216;
+  --text: #eceef1;
+  --label: #b4bcc7;
+  --sub: #98a1ad;
+  --faint: #7d8692;
+  --card: #14171c;
+  --card2: #191d23;
+  --border: #252a32;
+  --border2: #38404b;
+  --chip: #20252c;
+  --hud: rgba(11, 13, 16, 0.86);
+  --shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+  --warn: #e0a35a;
+  --fog-rgb: 150, 160, 174;
+  --item-rgb: 214, 219, 226;
+  /* 强调色由 theme/apply.ts 按用户选的颜色写进来；浅色下已经和黑色各半混好。 */
+  --accent: #f2b866;
+  --accent-rgb: 242, 184, 102;
+  color-scheme: dark;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #1c1c1e;
-    --fg: #f2f2f7;
-    --muted: #98989d;
-    --line: #3a3a3c;
-    --accent: #4c9bff;
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #eceef1;
+    --rail: #e3e6ea;
+    --text: #14171b;
+    --label: #3e4650;
+    --sub: #56606b;
+    --faint: #6a737e;
+    --card: #ffffff;
+    --card2: #f6f7f9;
+    --border: #d8dce2;
+    --border2: #b9c0ca;
+    --chip: #dde1e6;
+    --hud: rgba(236, 238, 241, 0.9);
+    --shadow: 0 18px 48px rgba(20, 30, 45, 0.16);
+    --warn: #9a5b13;
+    --fog-rgb: 64, 74, 88;
+    --item-rgb: 24, 28, 34;
+    color-scheme: light;
   }
+}
+
+:root[data-theme="light"] {
+  --bg: #eceef1;
+  --rail: #e3e6ea;
+  --text: #14171b;
+  --label: #3e4650;
+  --sub: #56606b;
+  --faint: #6a737e;
+  --card: #ffffff;
+  --card2: #f6f7f9;
+  --border: #d8dce2;
+  --border2: #b9c0ca;
+  --chip: #dde1e6;
+  --hud: rgba(236, 238, 241, 0.9);
+  --shadow: 0 18px 48px rgba(20, 30, 45, 0.16);
+  --warn: #9a5b13;
+  --fog-rgb: 64, 74, 88;
+  --item-rgb: 24, 28, 34;
+  color-scheme: light;
 }
 
 @theme inline {
   --color-bg: var(--bg);
-  --color-fg: var(--fg);
-  --color-muted: var(--muted);
-  --color-line: var(--line);
+  --color-rail: var(--rail);
+  --color-text: var(--text);
+  --color-label: var(--label);
+  --color-sub: var(--sub);
+  --color-faint: var(--faint);
+  --color-card: var(--card);
+  --color-card2: var(--card2);
+  --color-border: var(--border);
+  --color-border2: var(--border2);
+  --color-chip: var(--chip);
+  --color-hud: var(--hud);
+  --color-warn: var(--warn);
   --color-accent: var(--accent);
-  --font-sans: var(--font-stack);
+  --shadow-panel: var(--shadow);
 }
 
-body {
-  @apply bg-bg font-sans text-fg;
-  margin: 0;
+@theme {
+  --font-sans: "Geist Variable", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", "Noto Sans SC", "PingFang SC", monospace;
+
+  /* 字号 / 行高 */
+  --text-display: 56px;
+  --text-display--line-height: 64px;
+  --text-big: 36px;
+  --text-big--line-height: 44px;
+  --text-title: 22px;
+  --text-title--line-height: 30px;
+  --text-name: 20px;
+  --text-name--line-height: 28px;
+  --text-panel: 19px;
+  --text-panel--line-height: 27px;
+  --text-lede: 16px;
+  --text-lede--line-height: 26px;
+  --text-section: 15px;
+  --text-section--line-height: 22px;
+  --text-body: 14px;
+  --text-body--line-height: 22px;
+  --text-note: 13px;
+  --text-note--line-height: 20px;
+  --text-small: 12px;
+  --text-small--line-height: 18px;
+  --text-tag: 12px;
+  --text-tag--line-height: 16px;
+  --text-tiny: 11px;
+  --text-tiny--line-height: 16px;
+
+  /* 圆角 */
+  --radius-chip: 6px;
+  --radius-sm: 8px;
+  --radius-btn: 10px;
+  --radius-input: 12px;
+  --radius-card: 14px;
+
+  /* 控件高度和布局宽度，用作 h-ctl、w-rail、pl-content 这类工具类 */
+  --spacing-ctl-xs: 28px;
+  --spacing-ctl-tight: 32px;
+  --spacing-ctl-sm: 36px;
+  --spacing-ctl: 40px;
+  --spacing-field: 44px;
+  --spacing-rail: 248px;
+  --spacing-content: 288px;
+  --spacing-gutter: 40px;
+  --spacing-main: 832px;
+  --spacing-aside: 360px;
+
+  /* 动效 */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --duration-press: 120ms;
+  --duration-hover: 150ms;
+  --duration-enter: 240ms;
+  --animate-rise: rise 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  --animate-fade: fade 160ms ease both;
 }
 
-.app-header {
-  @apply flex items-center gap-4 border-b border-line px-4 py-2;
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
-.app-header nav {
-  @apply flex gap-4;
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
-.app-header a[aria-current="page"] {
-  @apply font-semibold;
+/* 悬停那一行字从点那边滑出来 4px；方向由 --from 给。 */
+@keyframes tag {
+  from {
+    opacity: 0;
+    transform: translateX(var(--from, -4px));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
-.app-main {
-  @apply mx-auto max-w-3xl p-4;
+
+/* 按下缩到 0.98。 */
+@utility press {
+  transition:
+    transform var(--duration-press) var(--ease-out),
+    background-color var(--duration-hover) ease,
+    border-color var(--duration-hover) ease,
+    color var(--duration-hover) ease,
+    opacity var(--duration-hover) ease;
+  /* React Aria 的按钮带 data-pressed；路由的链接没有，用 :active。 */
+  &[data-pressed],
+  &:is(a):active {
+    transform: scale(0.98);
+  }
 }
-h1 {
-  @apply mb-3 text-xl font-semibold;
+
+/* 等宽的数字、时间、路径。 */
+@utility mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
-.muted {
-  @apply text-sm text-muted;
+
+/* 只给读屏看的字。 */
+@utility sr-only-text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
-.row {
-  @apply flex items-end gap-2;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 22px;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+  ::placeholder {
+    color: var(--faint);
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  input:focus-visible,
+  textarea:focus-visible {
+    outline: none;
+  }
 }
-.field {
-  @apply flex flex-1 flex-col gap-1;
-}
-.field input,
-button {
-  @apply rounded border border-line bg-bg px-2 py-1;
-}
-.list-scroll {
-  @apply h-[60vh] overflow-auto;
-}
-.list {
-  @apply relative m-0 list-none p-0;
-}
-.list-row {
-  @apply absolute inset-x-0 top-0 flex flex-col justify-center border-b border-line;
-}
-.results {
-  @apply m-0 mt-3 flex list-none flex-col gap-3 p-0;
-}
-.text-column {
-  @apply max-w-prose whitespace-pre-wrap leading-relaxed;
-}
-a {
-  color: var(--accent);
+
+/* 减少动效：去掉位移和缩放，只留淡入淡出。 */
+@media (prefers-reduced-motion: reduce) {
+  .press[data-pressed],
+  a.press:active {
+    transform: none;
+  }
+  .animate-rise {
+    animation: var(--animate-fade);
+  }
 }
