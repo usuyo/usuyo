@@ -24,13 +24,20 @@
 
 ## 技术栈（已定，不要擅自更换）
 
-- 语言：Go 1.27.3+（MyGo 的要求；内核、CLI、MCP 服务、守护进程）。2026-11-04 和 Rust 比过后确认，见 ADR-001。
-- 桌面壳：MyGo（https://mygo.egoist.dev），系统 webview 跑 web 前端，前端 TypeScript。只做桌面三系统，手机以后原生重写。MyGo 出问题按 ADR-001 的换壳信号换 Wails v3；壳的代码只放一处，前端只经本机 HTTP 找内核。
-- 前端：TypeScript + Vite；包管理 pnpm；画布库待定（见 docs/features）
-- 存储：文件为真相源（Markdown + 媒体 + JSON），索引用可重建的本地索引（bleve，纯 Go）
-- 重计算：ffmpeg、OCR、ASR 作为独立 sidecar 进程，永不 import 进内核
-- 插件（获取、转换、导出）：独立进程，按插件协议（`docs/plugin-protocol.md`）对接，永不 import 进内核
+- 语言：Rust，最新稳定版（内核、CLI、MCP 服务、守护进程），一个 cargo 工作区，代码在 `crates/`。2026-11-11 从 Go 换过来，见 ADR-004。
+- 桌面壳：Tauri 2，系统 webview 跑 web 前端。壳只做窗口、托盘、快捷键、登录用的网页窗口；守护进程是独立进程，前端只经本机 HTTP 找内核。只做桌面三系统，手机以后原生重写。
+- 前端：TypeScript + React + Vite，包管理 pnpm，见 ADR-002；画布库待定
+- 存储：文件为真相源（Markdown + 媒体 + JSON），索引用可重建的本地索引（tantivy）
+- 重计算：ffmpeg、OCR、ASR 作为独立进程（转换插件），不进内核
+- 插件（获取、转换、导出）：独立进程，按插件协议（`docs/plugin-protocol.md`）对接，不进内核
 - 同步：跑在用户自己的 Cloudflare 账号里（Worker + D1，媒体以后放 R2），离开本机前端到端加密，没有本产品的服务器；以后加 WebDAV 等后端。设计见 `docs/research/14-sync-like-hatoba.md`
+
+## 和用户怎么分工（2026-11-11）
+
+- 用户管想法、产品和效果；技术栈、架构、代码质量由 Claude 全权定，朝好扩展、好维护的方向做，重写不心疼。
+- 跟用户说话讲概念和效果，不讲技术细节；不拿 PRD、规格表让用户批。用户用过做出来的东西，才知道哪里要改。
+- 写代码按难度交给 Opus 5.5 或 Sonnet，主持的会话验收。
+- 底层保持小，其余都做成能换的零件；不为兼容做冗余和防御性的设计（「删除就是删除」）。
 
 ## 不可动摇的原则
 
@@ -43,20 +50,20 @@
 
 ## 开发流程：feature-dev
 
-每个功能走同一条流程，不跳步：
+每个功能走同一条流程：
 
 1. **写 feature doc**：在 `docs/features/NNN-<slug>.md` 新建，用模板 `docs/features/TEMPLATE.md`。写清：目标、用户故事、范围内/外、数据契约变更、接口变更、验收标准、测试方案。
-2. **评审**：把 feature doc 的要点贴给用户确认（或用户自己改）。没确认不写代码。
+2. **不等批**：feature doc 写给实现的模型和以后查，不贴给用户批。只有产品上拿不准、用过也回答不了的才问用户（2026-11-11）。
 3. **实现**：按 feature doc 实现，附带测试。契约变更要同步改 `docs/SPEC.md`。
-4. **验证**：跑 `make check`（lint + test），手动跑验收标准里的命令。
+4. **验证**：`just check`（lint + test），再跑验收标准里的命令。可以交给 CI，不必每次在本地全跑；推送攒成批，不要太频繁（2026-11-11）。
 5. **收尾**：feature doc 顶部状态改为 `done`，有架构级决定就补一条 ADR。
 
-一个 feature 一个分支，一个 PR。PR 描述引用 feature doc。
+开发期直接在 `main` 上写，提交以后再整理（2026-11-11）；公开以后再回到一个 feature 一个分支、一个 PR。
 
 ## 代码约定
 
-- Go：标准布局 `cmd/`、`internal/`、`pkg/`；错误用 `fmt.Errorf("...: %w", err)` 包装；对外接口先写 interface。
-- 测试：`go test ./...`；适配器契约用 `testdata/` 里的固定样例校验。
+- Rust：库用 `thiserror` 定义自己的错误类型，可执行文件入口用 `anyhow` 收口，错误只在边界处理一次；不用 `unsafe`，不压警告。
+- 测试：`cargo test --workspace`；契约用 `crates/usuyo-contract/testdata/` 里的固定样例校验。
 - 前端：`apps/desktop/web`，pnpm workspace；组件按功能分目录。
 - 提交信息：`<scope>: <summary>`，例如 `core: add content package writer`。
 - 文案：中文为主；产品内用"收下 / 存着 / 回头看"，不用"收藏 / 待办 / 未读"。
@@ -65,18 +72,18 @@
 ## 常用命令
 
 ```
-make init     # 安装依赖（go mod、pnpm install、sidecar 检查）
-make dev      # 启动内核守护进程 + 桌面壳开发模式
-make check    # lint + test
-make build    # 打包
-usuyo --help # CLI
+just init     # 装前端依赖
+just dev      # 启动内核守护进程
+just check    # lint + test
+just build    # 产出 target/release/usuyo
+usuyo --help  # CLI
 ```
 
 ## 第一版范围
 
 不分 M0–M3 那样的里程碑；先做主要功能，用起来以后按 PRD 一项项补（2026-11-04）。第一版包括：
 
-1. 收下（粘贴、拖入、快捷键）和十个平台的取内容：先做完、测完不用账号的，再接扫码登录、列收藏、按关键词和创作者主页列。
+1. 收下（粘贴、拖入、快捷键）和十个平台的取内容：先小红书和微信视频号，再 B 站和其余（2026-11-11）；登录、导入收藏、按关键词和创作者主页列都要。
 2. 变成文字（口播、图里的字、正文）和全文加拼音搜索。
 3. 点阵迷雾地图、关注主题、主题页和记一句（先做画布原型）。
 4. MCP、命令行、导出到 Obsidian 并读回。

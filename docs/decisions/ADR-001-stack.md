@@ -1,6 +1,6 @@
 # ADR-001 技术栈：Go 内核 + MyGo 壳 + TS 前端
 
-日期：2026-10-21 · 状态：accepted
+日期：2026-10-21 · 状态：superseded（2026-11-11 被 [ADR-004](ADR-004-rust-tauri.md) 取代：内核换成 Rust，壳换成 Tauri 2）
 
 2026-11-04：重新讨论后确认本 ADR：Go 内核加 MyGo 壳。只做桌面三系统，手机以后原生重写，不要求共用内核（「其实就桌面端吧，手机端其实可以考虑native去重写，不用考虑手机上的跨平台，所以go感觉也是够的」；[open-decisions §1.8](../open-decisions.md#18-grill-回答)，对比见 [调研 12](../research/12-shell-and-core-language.md#0-结论)）。
 

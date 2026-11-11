@@ -65,14 +65,14 @@
 - [ ] 11-06 不留删除记录、「彻底忘掉」并进删掉（[open-decisions §1.8](open-decisions.md#18-grill-回答)），跟着改别的文档：[product-model §3](product-model.md#3-词汇表)（删除记录那条去掉）、[§5.2](product-model.md#52-六个动作)（「删掉」去掉「留下删除记录」；「彻底忘掉」那行去掉）、[§5.4](product-model.md#54-边界情况)（跟着收又遇到同一条：按这个订阅列过的跳过，不查删除记录，也不写「10 月 20 日删掉过」那行；「被主题页引用的来源被删掉并清除」：原话、标题留着，链接换成「已删掉」，引用处写「来源已删掉」，不带日期，照 [SPEC §1.4.3](SPEC.md#143-引用)；「回收站到期清除」：删掉的条目和主题、卡片、成稿整个移除时，改动记录里留的那行不写是哪一条；只留文字、合并这些照旧）、[§7.1](product-model.md#71-条目)（存在那行去掉「留删除记录」）、[§7.3](product-model.md#73-其他对象)（回收站那行结束时留下的改成「无」，删除记录那行去掉；「立即清除」照到期办，没有「彻底忘掉」了，见 [SPEC §1.7](SPEC.md#17-删掉)）、[§10](product-model.md#10-界面地图)（「回收站与删掉过的」只剩回收站一个列表，动作是恢复、立即清除）；[调研 14 §0](research/14-sync-like-hatoba.md#0-结论)（第 40 行「彻底忘掉」改成删掉到期或立即清除）、[§2](research/14-sync-like-hatoba.md#2-本产品要同步什么)、[§3](research/14-sync-like-hatoba.md#3-存在哪和花多少)（要同步的东西和 D1 `records` 里去掉删除记录）、[§5](research/14-sync-like-hatoba.md#5-改动和冲突)（第 176 行元数据去掉删除记录；第 186 行到期只推墓碑，不写删除记录；第 188 行去掉；第 189 行「彻底忘掉」改成到期和立即清除：推条目记录的墓碑，各台改自己手上的改动记录）；[discussion 第 4 条](discussion.md#4-删掉以后留下什么)「已答」那句补「11-06 改：不留删除记录，「彻底忘掉」并进删掉」，选项表照旧 — 文档会话 · 小 · 不挡
 - [ ] [插件协议 §13](plugin-protocol.md#13-待定) 第 29–34 项：资料库 v1 带来的协议改动（web 身份、`version:`、时间带偏移、评论、`usuyo.` 文件名、`skipped`、导出读回带主题 id 和卡片、成稿；第 34 项 11-05 照资料库的新形状重写，11-06 照读回的新做法又改写：readback 交回 `run` 的用户层键，宿主照 [SPEC §1.8](SPEC.md#18-同步) 合并，划线不读回，见 [open-decisions §1.8](open-decisions.md#18-grill-回答)） — 文档会话 · 小 · 挡插件运行器和导出
 - [x] [overview §5](overview.md#5-接口做到哪了) 表上面那句（「18 处对不上」）和插件协议那行的待定项数跟着改（11-05）
-- [ ] feature 001 时把 manifest、changeset、journal-entry 和 topic、card、draft、notes 的 schema 写进 `pkg/contract`，类型和 `testdata/` 照 [SPEC §1.9](SPEC.md#19-schema-和-pkgcontract) 改 — 主会话 · 中 · 挡资料库读写
-- [ ] 代码里引 SPEC 节号的注释跟着改：`cmd/usuyo/main.go`、`main_test.go`、`internal/*/doc.go`、`pkg/contract/*.go` 还按 v0 的节号写（`SPEC §9`、`SPEC §3` 一类），`pkg/contract/README.md`、`adapters/README.md` 的链接文字同理；引 v0 [§8](SPEC.md#8-适配器协议-v0) 的改指[插件协议](plugin-protocol.md)，引 [§12](SPEC.md#12-m0-范围) 的去掉，其余改成 [SPEC §1](SPEC.md#1-资料库-v1第-1-层)、[§2](SPEC.md#2-留着的-v0第-2-层重写前保留) 里新的节号 — 主会话 · 小 · 随 feature 001
+- [ ] feature 001 时把 manifest、changeset、journal-entry 和 topic、card、draft、notes 的 schema 写进 `crates/usuyo-contract`，类型和 `testdata/` 照 [SPEC §1.9](SPEC.md#19-schema-和-pkgcontract) 改 — 主会话 · 中 · 挡资料库读写
+- [x] 代码里引 SPEC 节号的注释：Go 代码 11-11 整个换掉了（[ADR-004](decisions/ADR-004-rust-tauri.md)），不用改了
 
 <a id="3-原型和量测"></a>
 ## 3. 原型和量测
 
 - [ ] 迷雾画布原型：点阵雾、口子、所有变化走一个时钟；顺带试壳 — 主会话做，你看 · 大 · 挡地图界面
-- [ ] `go.mod` 从 Go 1.26.0 升到 MyGo 要求的 1.27.3 以上（CLAUDE.md 已写 1.27.3+） — 主会话 · 小 · 挡接壳
+- [x] 内核和壳的技术栈：11-11 换成 Rust 加 Tauri 2（[ADR-004](decisions/ADR-004-rust-tauri.md)），原来升 Go 版本那条不用做了
 - [ ] 可选：agent-desktop 给 Mac 微信收藏页拍只读快照（[10 §6 第 1 条](research/10-desktop-and-android-agents.md#6-待核实清单)），要你同意并给终端授辅助功能 — 主会话 · 十分钟 · 让 P10 有实测
 - [ ] 补 [06 §18](research/06-platform-access-and-account-risk.md#18-待核实清单) 里首批平台的事实（抖音、小红书、元宝、视频号） — 文档会话 · 中 · 挡对应插件
 
@@ -81,10 +81,17 @@
 
 第一版的范围（11-04 定）：收下和取内容、变成文字和搜索、地图和主题页、Agent 和导出、文字同步，见 [PRD §12](PRD.md#12-开发顺序)。
 
-- [ ] 定开工从哪一段开始（[open-decisions §15.1 第 2 条](open-decisions.md#151-挡住开工m0)），建议无界面的最小闭环；这是第一段代码，不是一期发布（O8 不分期） — 你 · 一句 · 挡 feature 001 的范围
-- [ ] 重写 [feature 001](features/001-m0-core-loop.md) 为 `draft`：获取协议的子集、预装的通用网页获取插件、`pkg/contract` 迁 v1、验收用不属于任何平台的网页 — 文档会话 · 中 · 挡下一条
-- [ ] 你过目 feature 001 的要点，没确认不写代码 — 你 · 十几分钟 · 挡写代码
-- [ ] 开工：先资料库读写和身份，再索引和改动记录，再运行器和预装插件，最后 MCP — 主会话 · 大 · 无
+- [x] 定开工从哪一段开始：11-11 你说先做出来再改，先小红书和微信视频号，再 B 站和其余；怎么排由文档会话定（[open-decisions §1.8](open-decisions.md#18-grill-回答)）
+- [x] 重写 [feature 001](features/001-m0-core-loop.md)：第一条线，收下、存好、变成字、搜到、在窗口里看到（11-11）
+- [x] feature doc 不等你批，你看做出来的东西（11-11，[CLAUDE.md](../CLAUDE.md) 开发流程）
+- [ ] 001 第一条线（[feature 001](features/001-m0-core-loop.md)） — 文档会话带 Opus 5.5、Sonnet 做 · 大 · 挡后面全部
+- [ ] 002 小红书和微信视频号：登录、导入收藏、取内容；再 B 站和其余平台 — 同上 · 大 · 挡你用自己的收藏试
+- [ ] 003 转换：口播转文字、图里的字、画面 — 同上 · 中
+- [ ] 004 把收藏拼成思路：主题、地图、多角度分析，每一步指得回原样 — 同上 · 大
+- [ ] 005 你写的那层：笔记、划线、主题页、卡片、成稿和引用 — 同上 · 大
+- [ ] 006 Agent（MCP、命令行）、007 导出和读回、008 文字同步 — 同上 · 大
+- [ ] 插件开发指引和官方插件仓库（11-11 你说后面弄好） — 同上 · 中 · 挡别人写插件
+- [ ] 跟着 [ADR-004](decisions/ADR-004-rust-tauri.md) 改写死 Go、MyGo、bleve、`pkg/contract` 的文档：[overview](overview.md)、[SPEC §1.9](SPEC.md#19-schema-和-pkgcontract) 和留着的 v0 各节、[插件协议 §8.3](plugin-protocol.md#83-校验与来源证明) 和 [§10](plugin-protocol.md#10-契约测试与-plugin-kit)、[ADR-002](decisions/ADR-002-frontend-stack.md)、[discussion 第 6、7 条](discussion.md#6-桌面壳) — 文档会话 · 小 · 不挡
 
 <a id="5-发布之前"></a>
 ## 5. 发布之前
