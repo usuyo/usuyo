@@ -1,0 +1,26 @@
+# 预装的通用网页获取插件（协议 §8.4）：只读公开网页，不登录，没有站点专用规则。
+protocol: 1
+id: builtin/web
+kind: fetch
+name: 网页
+description: 取公开网页的正文、图片和元数据
+version: 0.0.0
+license: MIT
+maintainers: [usuyo]
+platforms: [web]
+match: ["*"]
+access: public-web
+login: none
+capabilities:
+  fetch:
+    access: public-web
+    login: none
+    outputs: [text, html, images, meta]
+permissions:
+  fs:
+    write: ["${OUT}"]
+  network:
+    mode: allowlist
+    hosts: ["*"]
+run:
+  command: ["${PLUGIN_DIR}/usuyo-plugin-web"]

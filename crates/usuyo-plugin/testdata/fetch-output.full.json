@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "identity": {"platform": "douyin", "contentId": "7431234567890123456", "url": "https://www.douyin.com/video/7431234567890123456"},
+  "kind": "video",
+  "title": "手冲咖啡：三段式注水",
+  "author": {"name": "咖啡日常", "platformId": "MS4wLjABAAAAsample", "url": "https://www.douyin.com/user/MS4wLjABAAAAsample"},
+  "publishedAt": "2026-10-01T20:00:00+08:00",
+  "text": "三段式注水：第一段 40 克闷蒸 30 秒……",
+  "textFormat": "plain",
+  "html": "page.html",
+  "images": ["images/001.jpg"],
+  "media": [
+    {"path": "media/video.mp4", "kind": "video", "mime": "video/mp4", "durationSec": 183},
+    {"path": "media/subtitle.zh.vtt", "kind": "subtitle", "lang": "zh"}
+  ],
+  "platformTags": ["手冲", "咖啡日常"],
+  "comments": "comments.json",
+  "completeness": "full",
+  "missing": [],
+  "evidence": {"fetchedAt": "2026-11-01T03:00:01Z", "access": "public-web", "status": 200}
+}

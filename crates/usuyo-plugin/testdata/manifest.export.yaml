@@ -1,0 +1,17 @@
+# 协议 §2.10、§4.4 的 Obsidian 导出。
+protocol: 1
+id: usuyo/export-obsidian
+kind: export
+name: Obsidian
+version: 0.1.0
+license: MIT
+maintainers: [usuyo]
+target: obsidian
+writes: files
+readback: true
+permissions:
+  fs:
+    read: ["${INPUT}", "${TARGET}"]
+    write: ["${OUT}"]
+run:
+  command: ["${PLUGIN_DIR}/export-obsidian"]

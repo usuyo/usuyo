@@ -1,0 +1,31 @@
+# 协议 §3.9：读用户已经导出的文件，复用 list 和 fetch <ref>。
+protocol: 1
+id: usuyo-fetch/takeout
+kind: fetch
+name: Google Takeout
+version: 1.0.0
+license: MIT
+maintainers: [someone]
+platforms: [youtube]
+access: official-export
+login: none
+capabilities:
+  list:
+    access: official-export
+    login: none
+    order: unordered
+    files: ["takeout-*.zip"]
+  fetch:
+    access: official-export
+    login: none
+    input: [ref]
+    outputs: [text, meta]
+permissions:
+  fs:
+    read: ["${INPUT}"]
+    write: ["${OUT}"]
+  network: {mode: none}
+run:
+  command: ["node", "${PLUGIN_DIR}/dist/main.js"]
+requires:
+  runtime: ["node>=22"]

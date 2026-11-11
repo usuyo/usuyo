@@ -1,0 +1,1036 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PluginManifest",
+  "description": "清单的线上形状，也是 `manifest.schema.json` 的来源。种类专属的字段都可选，语义检查再判。",
+  "type": "object",
+  "properties": {
+    "access": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Access"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "capabilities": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WireCapabilities"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "consumes": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": null,
+      "items": {
+        "$ref": "#/$defs/WireConsume"
+      }
+    },
+    "description": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "homepage": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "id": {
+      "$ref": "#/$defs/PluginId"
+    },
+    "install": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Install"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "kind": {
+      "$ref": "#/$defs/PluginKindTag"
+    },
+    "license": {
+      "type": "string"
+    },
+    "login": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Login"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "maintainers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "match": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": null,
+      "items": {
+        "type": "string"
+      }
+    },
+    "models": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": null,
+      "items": {
+        "$ref": "#/$defs/ModelSpec"
+      }
+    },
+    "name": {
+      "type": "string"
+    },
+    "pacing": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "default": null,
+      "patternProperties": {
+        "^[a-z0-9][a-z0-9-]*$": {
+          "$ref": "#/$defs/Pacing"
+        }
+      }
+    },
+    "permissions": {
+      "$ref": "#/$defs/WirePermissions"
+    },
+    "platforms": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": null,
+      "items": {
+        "$ref": "#/$defs/PlatformId"
+      }
+    },
+    "produces": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": null,
+      "items": {
+        "$ref": "#/$defs/Produce"
+      }
+    },
+    "protocol": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "provider": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ProviderNeed"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "readback": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "default": null
+    },
+    "requires": {
+      "$ref": "#/$defs/WireRequires",
+      "default": {
+        "runtime": []
+      }
+    },
+    "run": {
+      "$ref": "#/$defs/Run"
+    },
+    "settings": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Setting"
+      }
+    },
+    "sites": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": null,
+      "items": {
+        "$ref": "#/$defs/Site"
+      }
+    },
+    "target": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "upstream": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Upstream"
+      }
+    },
+    "version": {
+      "type": "string"
+    },
+    "writes": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ExportWrites"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "protocol",
+    "id",
+    "kind",
+    "name",
+    "version",
+    "license",
+    "maintainers",
+    "permissions",
+    "run"
+  ],
+  "$defs": {
+    "Access": {
+      "description": "七层取法，从低到高（协议 §2.4）。只是给用户挑选用的标签，宿主不据此拦截。",
+      "type": "string",
+      "enum": [
+        "official-export",
+        "public-web",
+        "vision-ui",
+        "browser-session",
+        "session-api",
+        "private-api",
+        "client-hook"
+      ]
+    },
+    "Asset": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "sha256"
+      ]
+    },
+    "ByteSize": {
+      "type": "string",
+      "pattern": "^[0-9]+(B|KiB|MiB|GiB|TiB)$"
+    },
+    "ConsumeKind": {
+      "description": "转换插件吃的东西（协议 §2.9）。",
+      "type": "string",
+      "enum": [
+        "media:video",
+        "media:audio",
+        "image",
+        "html",
+        "text",
+        "subtitle",
+        "derived:asr",
+        "derived:ocr",
+        "derived:vision",
+        "derived:keyframes"
+      ]
+    },
+    "Credential": {
+      "type": "string",
+      "enum": [
+        "cookies",
+        "browser-profile",
+        "app"
+      ]
+    },
+    "Device": {
+      "type": "string",
+      "enum": [
+        "adb",
+        "ios-device",
+        "screen-capture",
+        "accessibility",
+        "audio-capture",
+        "clipboard"
+      ]
+    },
+    "Duration": {
+      "type": "string",
+      "pattern": "^[0-9]+(ms|s|m|h)$"
+    },
+    "ExportWrites": {
+      "type": "string",
+      "enum": [
+        "files",
+        "api"
+      ]
+    },
+    "FetchInputKind": {
+      "type": "string",
+      "enum": [
+        "url",
+        "ref"
+      ]
+    },
+    "FsPermissions": {
+      "type": "object",
+      "properties": {
+        "read": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "write": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "Inject": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "type": "string"
+        },
+        "header": {
+          "type": "string"
+        },
+        "host": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "host",
+        "header",
+        "format"
+      ]
+    },
+    "Install": {
+      "type": "object",
+      "properties": {
+        "assets": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Asset"
+          }
+        }
+      },
+      "required": [
+        "assets"
+      ]
+    },
+    "Interaction": {
+      "type": "string",
+      "enum": [
+        "background",
+        "foreground"
+      ]
+    },
+    "Limits": {
+      "type": "object",
+      "properties": {
+        "memory": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ByteSize"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "timeout": {
+          "description": "转换、导出插件单次 `run` 的总时长；获取插件用能力里的 `timeout`。",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Duration"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      }
+    },
+    "ListAction": {
+      "description": "平台上的动作。",
+      "type": "string",
+      "enum": [
+        "favorite",
+        "like",
+        "share",
+        "view",
+        "unknown"
+      ]
+    },
+    "ListOrder": {
+      "type": "string",
+      "enum": [
+        "newest-first",
+        "unordered"
+      ]
+    },
+    "Login": {
+      "type": "string",
+      "enum": [
+        "none",
+        "optional",
+        "required"
+      ]
+    },
+    "ModelSpec": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "setting": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "url": {
+          "type": "string"
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "name",
+        "url",
+        "sha256",
+        "size"
+      ]
+    },
+    "NetworkMode": {
+      "type": "string",
+      "enum": [
+        "none",
+        "allowlist"
+      ]
+    },
+    "NetworkPermissions": {
+      "type": "object",
+      "properties": {
+        "hosts": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "mode": {
+          "$ref": "#/$defs/NetworkMode",
+          "default": "none"
+        }
+      }
+    },
+    "OutputKind": {
+      "description": "`outputs` 的固定词表（协议 §2.3；`comments` 照 §13 第 31 项）。",
+      "type": "string",
+      "enum": [
+        "text",
+        "html",
+        "images",
+        "media:video",
+        "media:audio",
+        "subtitle",
+        "meta",
+        "comments"
+      ]
+    },
+    "Pacing": {
+      "type": "object",
+      "properties": {
+        "batch": {
+          "description": "`false` 表示只接受用户一条条收下。",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "daily": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "default": null,
+          "minimum": 0
+        },
+        "interval": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Duration"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      }
+    },
+    "PlatformId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "PluginId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,38}/[a-z0-9_-][a-z0-9._-]{0,99}$"
+    },
+    "PluginKindTag": {
+      "type": "string",
+      "enum": [
+        "fetch",
+        "transform",
+        "export"
+      ]
+    },
+    "Produce": {
+      "description": "转换插件产出的文件（协议 §2.9、SPEC §1.2.2）。",
+      "type": "string",
+      "enum": [
+        "derived/readable.md",
+        "derived/asr.vtt",
+        "derived/ocr/*.json",
+        "derived/vision.md",
+        "derived/summary.md",
+        "derived/embeddings.bin",
+        "derived/keyframes/",
+        "derived/audio/"
+      ]
+    },
+    "ProviderNeed": {
+      "type": "string",
+      "enum": [
+        "none",
+        "optional",
+        "required"
+      ]
+    },
+    "Run": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "serve": {
+          "description": "支不支持常驻模式（§3.12，宿主还没用它）。",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "command"
+      ]
+    },
+    "Setting": {
+      "description": "插件设置（协议 §2.11）。",
+      "type": "object",
+      "properties": {
+        "default": {
+          "default": null
+        },
+        "inject": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Inject"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "key": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "options": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "secret": {
+          "type": "boolean",
+          "default": false
+        },
+        "type": {
+          "$ref": "#/$defs/SettingType"
+        }
+      },
+      "required": [
+        "key",
+        "label",
+        "type"
+      ]
+    },
+    "SettingType": {
+      "type": "string",
+      "enum": [
+        "string",
+        "bool",
+        "int",
+        "enum"
+      ]
+    },
+    "Site": {
+      "description": "会用到哪个站点的账号（协议 §2.5）。",
+      "type": "object",
+      "properties": {
+        "cookies": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "credential": {
+          "$ref": "#/$defs/Credential"
+        },
+        "domains": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "loginUrl": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "name": {
+          "type": "string"
+        },
+        "site": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "site",
+        "name",
+        "credential"
+      ]
+    },
+    "SourceInfo": {
+      "description": "一个用户能选的列表来源（`sources` 的输出，也用在清单的 `list.sources`）。",
+      "type": "object",
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ListAction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "source": {
+          "description": "插件自己定，建议 `<platform>:<kind>[:<id>]`；`file:` 开头的留给导入。",
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "title"
+      ]
+    },
+    "Upstream": {
+      "type": "object",
+      "properties": {
+        "license": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "paid": {
+          "type": "boolean",
+          "default": false
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "url",
+        "license"
+      ]
+    },
+    "WireCapabilities": {
+      "type": "object",
+      "properties": {
+        "fetch": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WireCapability"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "list": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WireCapability"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "unfavorite": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WireCapability"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      }
+    },
+    "WireCapability": {
+      "description": "能力声明的线上形状：三种能力共用一个结构，哪些字段属于哪种能力在语义检查里判。",
+      "type": "object",
+      "properties": {
+        "access": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Access"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "files": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "input": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "$ref": "#/$defs/FetchInputKind"
+          }
+        },
+        "interaction": {
+          "$ref": "#/$defs/Interaction",
+          "default": "background"
+        },
+        "login": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Login"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "order": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ListOrder"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "outputs": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "$ref": "#/$defs/OutputKind"
+          }
+        },
+        "perPlatform": {
+          "type": "object",
+          "additionalProperties": false,
+          "default": {},
+          "patternProperties": {
+            "^[a-z0-9][a-z0-9-]*$": {
+              "$ref": "#/$defs/WirePlatformUse"
+            }
+          }
+        },
+        "provider": {
+          "$ref": "#/$defs/ProviderNeed",
+          "default": "none"
+        },
+        "sites": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "sources": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "$ref": "#/$defs/SourceInfo"
+          }
+        },
+        "timeout": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Duration"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      }
+    },
+    "WireConsume": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ConsumeKind"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "$ref": "#/$defs/ConsumeKind"
+            },
+            "mime": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "mime"
+          ]
+        }
+      ]
+    },
+    "WirePermissions": {
+      "type": "object",
+      "properties": {
+        "devices": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Device"
+          }
+        },
+        "env": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "exec": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "fs": {
+          "$ref": "#/$defs/FsPermissions",
+          "default": {
+            "read": [],
+            "write": []
+          }
+        },
+        "gpu": {
+          "type": "boolean",
+          "default": false
+        },
+        "limits": {
+          "$ref": "#/$defs/Limits",
+          "default": {
+            "memory": null,
+            "timeout": null
+          }
+        },
+        "network": {
+          "$ref": "#/$defs/NetworkPermissions",
+          "default": {
+            "hosts": [],
+            "mode": "none"
+          }
+        }
+      }
+    },
+    "WirePlatformUse": {
+      "type": "object",
+      "properties": {
+        "access": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Access"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "login": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Login"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "sites": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "WireRequires": {
+      "type": "object",
+      "properties": {
+        "runtime": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

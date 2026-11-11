@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "identity": {"platform": "web", "url": "https://example.com/post/42"},
+  "kind": "article",
+  "text": "正文",
+  "images": [],
+  "media": [],
+  "platformTags": [],
+  "completeness": "partial",
+  "missing": ["html"],
+  "missingReason": "页面没有给出原始 HTML",
+  "evidence": {"fetchedAt": "2026-10-20T03:00:01Z", "access": "public-web"}
+}

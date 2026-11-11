@@ -1,0 +1,31 @@
+# 协议 §2.9 的转写插件。
+protocol: 1
+id: usuyo/transform-asr-sherpa
+kind: transform
+name: 口播转文字
+version: 0.1.0
+license: Apache-2.0
+maintainers: [usuyo]
+consumes: [{kind: media:audio, mime: [audio/wav]}, media:video]
+produces: [derived/asr.vtt]
+provider: none
+settings:
+  - key: model
+    label: 模型
+    type: enum
+    options: [sensevoice-small]
+models:
+  - name: sensevoice-small
+    url: https://example.com/models/sensevoice-small.onnx
+    sha256: 2c624232cdd221771294dfbb310aca000a0df6ac8b66b696d90ef06fdefb64a3
+    size: 234881024
+    setting: model
+    value: sensevoice-small
+permissions:
+  fs:
+    read: ["${INPUT}", "${MODELS}"]
+    write: ["${OUT}"]
+  gpu: true
+  limits: {memory: 4GiB, timeout: 1800s}
+run:
+  command: ["${PLUGIN_DIR}/transform-asr-sherpa"]

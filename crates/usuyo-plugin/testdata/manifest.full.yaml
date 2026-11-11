@@ -1,0 +1,74 @@
+# 协议 §2.3 的抖音例子：列表走登录侧，单条走公开页（混合路径）。
+protocol: 1
+id: someone/usuyo-fetch-douyin
+kind: fetch
+name: 抖音
+description: 列出我的抖音收藏夹，按分享页取单条
+version: 0.3.1
+license: MIT
+homepage: https://github.com/someone/usuyo-fetch-douyin
+maintainers: [someone]
+upstream:
+  - name: parse-video
+    url: https://github.com/wujunwei928/parse-video
+    license: MIT
+platforms: [douyin]
+match: ["v.douyin.com/*", "www.douyin.com/video/*", "www.iesdouyin.com/share/video/*"]
+access: browser-session
+login: required
+sites:
+  - site: www.douyin.com
+    name: 抖音
+    credential: browser-profile
+    loginUrl: https://www.douyin.com/
+    cookies: [sessionid]
+    domains: [".douyin.com"]
+capabilities:
+  fetch:
+    access: public-web
+    login: none
+    timeout: 10m
+    outputs: [text, images, media:video, meta, comments]
+  list:
+    access: browser-session
+    login: required
+    sites: [www.douyin.com]
+    order: newest-first
+    interaction: background
+    sources:
+      - {source: "douyin:favorites", title: 我的收藏夹, action: favorite}
+  unfavorite:
+    access: browser-session
+    login: required
+    sites: [www.douyin.com]
+pacing:
+  douyin: {batch: true, interval: 8s, daily: 300}
+settings:
+  - key: quality
+    label: 画质
+    type: enum
+    options: [best, 1080p, 720p]
+    default: 1080p
+permissions:
+  fs:
+    write: ["${OUT}"]
+  network:
+    mode: allowlist
+    hosts: ["*.douyin.com", "*.douyinvod.com", "*.douyinpic.com", "*.iesdouyin.com"]
+  env: [LANG]
+  devices: []
+  gpu: false
+  limits: {memory: 1GiB}
+requires:
+  runtime: ["chrome>=136"]
+install:
+  assets:
+    darwin-arm64:
+      name: usuyo-fetch-douyin_0.3.1_darwin-arm64.tar.gz
+      sha256: 4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a
+    linux-amd64:
+      name: usuyo-fetch-douyin_0.3.1_linux-amd64.tar.gz
+      sha256: ef2d127de37b942baad06145e54b0c619a1f22327b2ebbcfbec78f5564afe39d
+run:
+  command: ["${PLUGIN_DIR}/usuyo-fetch-douyin"]
+  serve: true

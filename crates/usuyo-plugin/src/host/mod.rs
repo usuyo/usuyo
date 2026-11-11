@@ -1,0 +1,861 @@
+//! 获取插件的宿主：发现、挑选、调用、校验（协议 §2.8、§3）。
+//!
+//! 宿主只负责「调一次」：起进程、管时长和环境、把插件交回的每个字节校验一遍。
+//! 按用户排的顺序换插件、平台节奏、暂停和各种锁由调用方（内核的编排）做，
+//! 判断需要的信息都在返回值里：错误码的 `tries_next`、`retryable`、`pause`，清单的 `pacing`。
+
+mod outdir;
+mod process;
+
+use std::collections::{BTreeMap, BTreeSet};
+use std::ffi::{OsStr, OsString};
+use std::path::{Path, PathBuf};
+use std::time::Duration;
+
+use serde::de::DeserializeOwned;
+use serde_json::Value;
+use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
+
+pub use outdir::OutFile;
+use process::{Ending, Finished, Spawn};
+
+use crate::PluginError;
+use crate::protocol::{
+    CallFailure, Canonicalized, Completeness, ErrorCode, FetchInputKind, FetchOutput, FetchSpec,
+    Identity, ListPage, MANIFEST_FILE, OutputKind, PLUGIN_DIR_PLACEHOLDER, PluginEvent,
+    PluginHeader, PluginId, PluginKind, PluginManifest, Rfc3339, SourceInfo, SourcesOutput,
+};
+
+/// 每次调用的上限。默认值照协议 §3.2、§3.4、§3.6；用户的「调用超时加长」「输出大小上限」改这里。
+#[derive(Debug, Clone)]
+pub struct CallLimits {
+    pub canonicalize: Duration,
+    /// 能力没写 `timeout` 时 fetch 的总时长。
+    pub fetch: Duration,
+    pub sources: Duration,
+    /// list 每页的总时长。
+    pub list: Duration,
+    /// 发过 progress 之后，多久没有新的 progress 算卡住。
+    pub idle: Duration,
+    /// 发出 waiting 之后最长等多久。
+    pub waiting: Duration,
+    /// SIGTERM 到 SIGKILL 的宽限。
+    pub grace: Duration,
+    pub stdout_bytes: u64,
+    pub stderr_lines: usize,
+    /// fetch 输出目录的总大小上限。
+    pub fetch_dir_bytes: u64,
+}
+
+impl Default for CallLimits {
+    fn default() -> Self {
+        Self {
+            canonicalize: Duration::from_secs(10),
+            fetch: Duration::from_secs(300),
+            sources: Duration::from_secs(30),
+            list: Duration::from_secs(60),
+            idle: Duration::from_secs(120),
+            waiting: Duration::from_secs(600),
+            grace: Duration::from_secs(5),
+            stdout_bytes: 32 << 20,
+            stderr_lines: 200,
+            fetch_dir_bytes: 8 << 30,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct HostConfig {
+    /// 每次调用的暂存目录建在这里；和资料库在同一个文件系统上，移进 `raw/` 才是改名。
+    pub work_dir: PathBuf,
+    /// `${CACHE}` 的上级，按插件 id 分子目录。
+    pub cache_dir: PathBuf,
+    /// 用户界面语言，例如 `zh-CN`，插件按它写 `hint`。
+    pub locale: String,
+    pub limits: CallLimits,
+}
+
+/// 一个装好的获取插件。
+#[derive(Debug, Clone)]
+pub struct FetchPlugin {
+    pub header: PluginHeader,
+    pub spec: FetchSpec,
+    /// 安装目录 `${PLUGIN_DIR}`，绝对路径。
+    pub dir: PathBuf,
+}
+
+impl FetchPlugin {
+    pub fn id(&self) -> &PluginId {
+        &self.header.id
+    }
+}
+
+/// 装好的转换、导出插件；宿主现在只列出它们，不调用。
+#[derive(Debug, Clone)]
+pub struct InstalledPlugin {
+    pub manifest: PluginManifest,
+    pub dir: PathBuf,
+}
+
+/// 没加载的插件和原因，显示在插件列表里（§0.1）。
+#[derive(Debug)]
+pub struct Rejected {
+    pub dir: PathBuf,
+    pub error: PluginError,
+}
+
+#[derive(Debug, Default)]
+pub struct Discovery {
+    pub fetch: Vec<FetchPlugin>,
+    pub other: Vec<InstalledPlugin>,
+    pub rejected: Vec<Rejected>,
+}
+
+/// 找出装在 `root` 下的插件：`<root>/<owner>/<repo>/<version>/usuyo-plugin.yaml`（§2.8）。
+///
+/// 每个插件只看版本号最高的那个目录；它不合规就整个不加载，不退回旧版本。
+/// 签名和来源证明（§8.3）在安装时核，这里信任已经装进来的目录。
+pub fn discover(root: &Path) -> Result<Discovery, PluginError> {
+    let io = |path: &Path| {
+        let path = path.to_owned();
+        move |source| PluginError::Io { path, source }
+    };
+    let root = root.canonicalize().map_err(io(root))?;
+    let mut found = Discovery::default();
+    for owner in sorted_dirs(&root).map_err(io(&root))? {
+        for repo in sorted_dirs(&owner).map_err(io(&owner))? {
+            let mut versions = Vec::new();
+            for dir in sorted_dirs(&repo).map_err(io(&repo))? {
+                let name = dir.file_name().and_then(OsStr::to_str).unwrap_or_default();
+                match semver::Version::parse(name) {
+                    Ok(v) => versions.push((v, dir)),
+                    Err(e) => found.rejected.push(Rejected {
+                        error: PluginError::Manifest {
+                            field: "version".into(),
+                            message: format!("install directory `{name}` is not a version: {e}"),
+                        },
+                        dir,
+                    }),
+                }
+            }
+            let Some((version, dir)) = versions.into_iter().max_by(|a, b| a.0.cmp(&b.0)) else {
+                continue;
+            };
+            let expected_id = format!(
+                "{}/{}",
+                owner
+                    .file_name()
+                    .and_then(OsStr::to_str)
+                    .unwrap_or_default(),
+                repo.file_name().and_then(OsStr::to_str).unwrap_or_default()
+            );
+            match load(&dir, &expected_id, &version) {
+                Ok(manifest) => match manifest.kind {
+                    PluginKind::Fetch(spec) => found.fetch.push(FetchPlugin {
+                        header: manifest.header,
+                        spec: *spec,
+                        dir,
+                    }),
+                    kind => found.other.push(InstalledPlugin {
+                        manifest: PluginManifest {
+                            header: manifest.header,
+                            kind,
+                        },
+                        dir,
+                    }),
+                },
+                Err(error) => found.rejected.push(Rejected { dir, error }),
+            }
+        }
+    }
+    Ok(found)
+}
+
+fn sorted_dirs(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
+    let mut dirs = Vec::new();
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        if entry.file_type()?.is_dir() {
+            dirs.push(entry.path());
+        }
+    }
+    dirs.sort();
+    Ok(dirs)
+}
+
+fn load(
+    dir: &Path,
+    expected_id: &str,
+    version: &semver::Version,
+) -> Result<PluginManifest, PluginError> {
+    let path = dir.join(MANIFEST_FILE);
+    let text = std::fs::read_to_string(&path).map_err(|source| PluginError::Io { path, source })?;
+    let parsed = PluginManifest::from_yaml(&text)?;
+    for field in &parsed.unknown_fields {
+        tracing::warn!(dir = %dir.display(), "unknown manifest field `{field}` ignored");
+    }
+    let manifest = parsed.value;
+    if manifest.header.id.as_str() != expected_id {
+        return Err(PluginError::Manifest {
+            field: "id".into(),
+            message: format!(
+                "`{}` does not match its install directory `{expected_id}`",
+                manifest.header.id
+            ),
+        });
+    }
+    if &manifest.header.version != version {
+        return Err(PluginError::Manifest {
+            field: "version".into(),
+            message: format!(
+                "`{}` does not match its install directory `{version}`",
+                manifest.header.version
+            ),
+        });
+    }
+    Ok(manifest)
+}
+
+/// 一次调用的选项。
+#[derive(Debug, Clone, Default)]
+pub struct CallOptions {
+    /// 取消：先 SIGTERM，宽限后杀整个进程组，记 `cancelled`。
+    pub cancel: Option<CancellationToken>,
+    /// 插件的 progress、waiting 事件转到这里。
+    pub events: Option<mpsc::UnboundedSender<PluginEvent>>,
+}
+
+/// fetch 的第一个参数（§3.6）：收下时的原链接（有 `resolvedUrl` 时用它），或 list 给的 `ref`。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FetchInput {
+    Url(url::Url),
+    Ref(String),
+}
+
+#[derive(Debug, Clone)]
+pub struct FetchRequest {
+    pub input: FetchInput,
+    /// 想要的输出，`outputs` 的子集；`None` 是全要。
+    pub want: Option<BTreeSet<OutputKind>>,
+    /// 导入文件的副本（§3.9），传成 `USUYO_INPUT`。
+    pub input_file: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ListRequest {
+    pub source: String,
+    pub cursor: Option<String>,
+    /// 这个来源上次跟着收跑完的时间。
+    pub since: Option<jiff::Timestamp>,
+    /// 导入文件的副本（§3.9），传成 `USUYO_INPUT`。
+    pub input_file: Option<PathBuf>,
+}
+
+/// 一次成功的 fetch：校验过的输出和它的目录。
+///
+/// 调用方把 [`out_dir`](Self::out_dir) 整个改名移进 `raw/<snapshotId>/`；
+/// 这个值丢掉时，暂存目录里剩下的（没移走的输出、`${TMP}`）一起删掉。
+#[derive(Debug)]
+pub struct FetchedSnapshot {
+    /// `completeness`、`missing` 已按实际输出改正（§3.1）。
+    pub output: FetchOutput,
+    /// 实际拿到的输出集合；比完整度只比它。
+    pub obtained: BTreeSet<OutputKind>,
+    /// 输出目录里的全部文件，按路径排好。
+    pub files: Vec<OutFile>,
+    call_dir: tempfile::TempDir,
+}
+
+impl FetchedSnapshot {
+    pub fn out_dir(&self) -> PathBuf {
+        self.call_dir.path().join("out")
+    }
+}
+
+pub struct PluginHost {
+    config: HostConfig,
+    plugins: Vec<FetchPlugin>,
+}
+
+impl PluginHost {
+    /// `plugins` 的顺序就是用户排的顺序（§3.1）。
+    pub fn new(config: HostConfig, plugins: Vec<FetchPlugin>) -> Self {
+        Self { config, plugins }
+    }
+
+    pub fn plugins(&self) -> &[FetchPlugin] {
+        &self.plugins
+    }
+
+    /// `match` 命中这条链接的插件：平台插件按顺序在前，`web` 一类排在最后（§3.1）。
+    pub fn candidates(&self, url: &url::Url) -> Vec<&FetchPlugin> {
+        let (web, platform): (Vec<_>, Vec<_>) = self
+            .plugins
+            .iter()
+            .filter(|p| p.spec.matches(url))
+            .partition(|p| p.spec.is_web());
+        platform.into_iter().chain(web).collect()
+    }
+
+    /// 认出这条链接的身份（§3.5）。`NoMatch` 不是错误。
+    pub async fn canonicalize(
+        &self,
+        plugin: &FetchPlugin,
+        url: &url::Url,
+        opts: &CallOptions,
+    ) -> Result<Canonicalized, PluginError> {
+        let call = self.start_call(plugin, false)?;
+        let args = vec!["canonicalize".into(), url.as_str().into()];
+        let finished = self
+            .run(
+                plugin,
+                &call,
+                args,
+                None,
+                self.config.limits.canonicalize,
+                opts,
+            )
+            .await?;
+        let result: Canonicalized = call.decode(plugin, finished)?;
+        if let Canonicalized::Match { identity, .. } = &result {
+            check_identity(plugin, identity)
+                .map_err(|m| call.failed(plugin, ErrorCode::InvalidOutput, m))?;
+        }
+        Ok(result)
+    }
+
+    /// 取一条（§3.6、§3.7）。
+    pub async fn fetch(
+        &self,
+        plugin: &FetchPlugin,
+        request: FetchRequest,
+        opts: &CallOptions,
+    ) -> Result<FetchedSnapshot, PluginError> {
+        let unsupported = |message: String| PluginError::Unsupported {
+            plugin: plugin.id().clone(),
+            message,
+        };
+        let cap = plugin
+            .spec
+            .capabilities
+            .fetch
+            .as_ref()
+            .ok_or_else(|| unsupported("no `fetch` capability".into()))?;
+        let (kind, input) = match &request.input {
+            FetchInput::Url(u) => (FetchInputKind::Url, u.as_str().to_owned()),
+            FetchInput::Ref(r) => (FetchInputKind::Ref, r.clone()),
+        };
+        if !cap.input.contains(&kind) {
+            return Err(unsupported(format!("`fetch` does not take {kind:?} input")));
+        }
+        if let Some(want) = &request.want {
+            if want.is_empty() {
+                return Err(unsupported("`want` is empty".into()));
+            }
+            if let Some(extra) = want.iter().find(|w| !cap.outputs.contains(w)) {
+                return Err(unsupported(format!("`{extra}` is not among its `outputs`")));
+            }
+        }
+        let wanted = request.want.clone().unwrap_or_else(|| cap.outputs.clone());
+
+        let call = self.start_call(plugin, true)?;
+        let out = call.dir.path().join("out");
+        let mut args: Vec<OsString> = vec![
+            "fetch".into(),
+            input.into(),
+            "--out".into(),
+            out.clone().into(),
+        ];
+        if let Some(want) = &request.want {
+            let joined: Vec<&str> = want.iter().map(|w| w.as_str()).collect();
+            args.extend(["--want".into(), joined.join(",").into()]);
+        }
+        let total = cap
+            .uses
+            .timeout
+            .map_or(self.config.limits.fetch, |t| t.get());
+        let finished = self
+            .run(
+                plugin,
+                &call,
+                args,
+                request.input_file.as_deref(),
+                total,
+                opts,
+            )
+            .await?;
+        let mut output: FetchOutput = call.decode(plugin, finished)?;
+        let invalid = |m: String| call.failed(plugin, ErrorCode::InvalidOutput, m);
+
+        if let Some(identity) = &output.identity {
+            check_identity(plugin, identity).map_err(invalid)?;
+        }
+        if let Some(c) = &output.comments
+            && c.as_str() != FetchOutput::COMMENTS_FILE
+        {
+            return Err(invalid(format!(
+                "`comments` must be `{}`",
+                FetchOutput::COMMENTS_FILE
+            )));
+        }
+        let max = self.config.limits.fetch_dir_bytes;
+        let dir = out.clone();
+        let files = tokio::task::spawn_blocking(move || outdir::inspect(&dir, max))
+            .await
+            .map_err(|e| invalid(format!("inspect output directory: {e}")))?
+            .map_err(invalid)?;
+        let present: BTreeSet<_> = files.iter().map(|f| &f.path).collect();
+        if let Some(missing) = output.referenced_files().find(|p| !present.contains(p)) {
+            return Err(invalid(format!(
+                "`{missing}` is referenced but is not a file in the output"
+            )));
+        }
+
+        // 完整度以宿主算的为准（§3.1）：缺的 = 想要的 − 实际拿到的；一样都没拿到算只认出了链接
+        let obtained = output.obtained();
+        let missing: Vec<OutputKind> = wanted.difference(&obtained).copied().collect();
+        let completeness = if obtained.is_disjoint(&wanted) {
+            Completeness::Link
+        } else if missing.is_empty() {
+            Completeness::Full
+        } else {
+            Completeness::Partial
+        };
+        if completeness != output.completeness || missing != output.missing {
+            tracing::warn!(
+                plugin = %plugin.id(),
+                claimed = ?output.completeness,
+                actual = ?completeness,
+                "plugin completeness does not match its output; using the actual one"
+            );
+        }
+        if completeness == Completeness::Link {
+            return Err(call.failed(
+                plugin,
+                ErrorCode::UnsupportedInput,
+                "plugin returned none of the wanted outputs (completeness: link)".into(),
+            ));
+        }
+        output.completeness = completeness;
+        output.missing = missing;
+
+        Ok(FetchedSnapshot {
+            output,
+            obtained,
+            files,
+            call_dir: call.dir,
+        })
+    }
+
+    /// 列出用户能选的来源（§3.8）。
+    pub async fn sources(
+        &self,
+        plugin: &FetchPlugin,
+        opts: &CallOptions,
+    ) -> Result<Vec<SourceInfo>, PluginError> {
+        let cap =
+            plugin
+                .spec
+                .capabilities
+                .list
+                .as_ref()
+                .ok_or_else(|| PluginError::Unsupported {
+                    plugin: plugin.id().clone(),
+                    message: "no `list` capability".into(),
+                })?;
+        let call = self.start_call(plugin, false)?;
+        let total = cap
+            .uses
+            .timeout
+            .map_or(self.config.limits.sources, |t| t.get());
+        let finished = self
+            .run(plugin, &call, vec!["sources".into()], None, total, opts)
+            .await?;
+        let out: SourcesOutput = call.decode(plugin, finished)?;
+        Ok(out.sources)
+    }
+
+    /// 列一页（§3.8）。翻页和节奏由调用方管，这里只调一次。
+    pub async fn list(
+        &self,
+        plugin: &FetchPlugin,
+        request: ListRequest,
+        opts: &CallOptions,
+    ) -> Result<ListPage, PluginError> {
+        let cap =
+            plugin
+                .spec
+                .capabilities
+                .list
+                .as_ref()
+                .ok_or_else(|| PluginError::Unsupported {
+                    plugin: plugin.id().clone(),
+                    message: "no `list` capability".into(),
+                })?;
+        let call = self.start_call(plugin, false)?;
+        let mut args: Vec<OsString> = vec!["list".into(), request.source.into()];
+        if let Some(c) = request.cursor {
+            args.extend(["--cursor".into(), c.into()]);
+        }
+        if let Some(since) = request.since {
+            args.extend([
+                "--since".into(),
+                Rfc3339::from_timestamp(since).as_str().into(),
+            ]);
+        }
+        let total = cap
+            .uses
+            .timeout
+            .map_or(self.config.limits.list, |t| t.get());
+        let finished = self
+            .run(
+                plugin,
+                &call,
+                args,
+                request.input_file.as_deref(),
+                total,
+                opts,
+            )
+            .await?;
+        let page: ListPage = call.decode(plugin, finished)?;
+        for (i, item) in page.items.iter().enumerate() {
+            let check = || -> Result<(), String> {
+                match (&item.url, &item.reference) {
+                    (None, None) => return Err("has neither `url` nor `ref`".into()),
+                    (Some(u), _) => {
+                        crate::protocol::check_http_url(u)?;
+                    }
+                    _ => {}
+                }
+                if let Some(identity) = &item.identity {
+                    check_identity(plugin, identity)?;
+                }
+                Ok(())
+            };
+            check().map_err(|m| {
+                call.failed(plugin, ErrorCode::InvalidOutput, format!("items[{i}]: {m}"))
+            })?;
+        }
+        Ok(page)
+    }
+
+    fn start_call(&self, plugin: &FetchPlugin, with_out: bool) -> Result<Call, PluginError> {
+        let io = |path: &Path| {
+            let path = path.to_owned();
+            move |source| PluginError::Io { path, source }
+        };
+        let id = uuid::Uuid::now_v7().to_string();
+        std::fs::create_dir_all(&self.config.work_dir).map_err(io(&self.config.work_dir))?;
+        let dir = tempfile::Builder::new()
+            .prefix(&format!("usuyo-call-{id}-"))
+            .tempdir_in(&self.config.work_dir)
+            .map_err(io(&self.config.work_dir))?;
+        let mut make = vec!["tmp/home/.config", "tmp/bin"];
+        if with_out {
+            make.push("out");
+        }
+        for sub in make {
+            let p = dir.path().join(sub);
+            std::fs::create_dir_all(&p).map_err(io(&p))?;
+        }
+        let cache = self
+            .config
+            .cache_dir
+            .join(plugin.id().owner())
+            .join(plugin.id().repo());
+        std::fs::create_dir_all(&cache).map_err(io(&cache))?;
+        Ok(Call { id, dir, cache })
+    }
+
+    async fn run(
+        &self,
+        plugin: &FetchPlugin,
+        call: &Call,
+        args: Vec<OsString>,
+        input_file: Option<&Path>,
+        total: Duration,
+        opts: &CallOptions,
+    ) -> Result<Finished, PluginError> {
+        let (program, mut command_args) =
+            resolve_command(plugin).map_err(|failure| call.fail(plugin, failure, Vec::new()))?;
+        command_args.extend(args);
+        let spawn = Spawn {
+            program,
+            args: command_args,
+            env: call_env(&self.config, plugin, call, input_file),
+            cwd: call.dir.path().join("tmp"),
+        };
+        process::run(spawn, total, &self.config.limits, opts)
+            .await
+            .map_err(|e| {
+                call.failed(
+                    plugin,
+                    ErrorCode::Crashed,
+                    format!("could not run the plugin: {e}"),
+                )
+            })
+    }
+}
+
+/// 一次调用的 id、暂存目录和缓存目录。
+struct Call {
+    id: String,
+    dir: tempfile::TempDir,
+    cache: PathBuf,
+}
+
+impl Call {
+    fn fail(&self, plugin: &FetchPlugin, failure: CallFailure, stderr: Vec<String>) -> PluginError {
+        PluginError::Call {
+            plugin: plugin.id().clone(),
+            call_id: self.id.clone(),
+            failure: Box::new(failure),
+            stderr,
+        }
+    }
+
+    fn failed(&self, plugin: &FetchPlugin, code: ErrorCode, message: String) -> PluginError {
+        self.fail(plugin, CallFailure::new(code, message), Vec::new())
+    }
+
+    /// 把进程的结局和 stdout 变成结果（§3.2、§3.3）：成败以信封为准，退出码只是兜底。
+    fn decode<T: DeserializeOwned>(
+        &self,
+        plugin: &FetchPlugin,
+        finished: Finished,
+    ) -> Result<T, PluginError> {
+        let Finished {
+            ending,
+            stdout,
+            stderr,
+        } = finished;
+        let host = |code: ErrorCode, message: String| CallFailure::new(code, message);
+        let status = match ending {
+            Ending::TimedOut => {
+                return Err(self.fail(
+                    plugin,
+                    host(ErrorCode::Timeout, "timed out and was killed".into()),
+                    stderr,
+                ));
+            }
+            Ending::Cancelled => {
+                return Err(self.fail(
+                    plugin,
+                    host(ErrorCode::Cancelled, "cancelled".into()),
+                    stderr,
+                ));
+            }
+            Ending::StdoutOverflow => {
+                return Err(self.fail(
+                    plugin,
+                    host(
+                        ErrorCode::InvalidOutput,
+                        "stdout exceeded its size limit".into(),
+                    ),
+                    stderr,
+                ));
+            }
+            Ending::Exited(status) => status,
+        };
+        let value: Value = match serde_json::from_slice(&stdout) {
+            Ok(v) => v,
+            Err(e) => {
+                let failure = if status.code() == Some(2) {
+                    host(
+                        ErrorCode::InvalidArgs,
+                        "usage error: exit status 2 without an envelope".into(),
+                    )
+                } else {
+                    host(
+                        ErrorCode::Crashed,
+                        format!("{status} without a parseable envelope: {e}"),
+                    )
+                };
+                return Err(self.fail(plugin, failure, stderr));
+            }
+        };
+        let Value::Object(mut map) = value else {
+            return Err(self.fail(
+                plugin,
+                host(
+                    ErrorCode::InvalidOutput,
+                    "stdout is not a JSON object".into(),
+                ),
+                stderr,
+            ));
+        };
+        let ok = map.remove("ok");
+        let mut unknown = Vec::new();
+        let invalid = |(field, message): (String, String)| {
+            host(
+                ErrorCode::InvalidOutput,
+                format!("envelope at `{field}`: {message}"),
+            )
+        };
+        let result = match ok {
+            Some(Value::Bool(true)) => {
+                crate::protocol::deserialize_tracked::<T>(Value::Object(map), &mut unknown)
+                    .map_err(invalid)
+            }
+            Some(Value::Bool(false)) => {
+                #[derive(serde::Deserialize)]
+                struct Failed {
+                    error: CallFailure,
+                }
+                match crate::protocol::deserialize_tracked::<Failed>(
+                    Value::Object(map),
+                    &mut unknown,
+                ) {
+                    Ok(Failed { error }) => Err(match error.check_from_plugin() {
+                        Ok(()) => error,
+                        Err(why) => host(ErrorCode::InvalidOutput, why),
+                    }),
+                    Err(e) => Err(invalid(e)),
+                }
+            }
+            _ => Err(host(
+                ErrorCode::InvalidOutput,
+                "envelope has no boolean `ok`".into(),
+            )),
+        };
+        for field in unknown {
+            tracing::warn!(plugin = %plugin.id(), call = %self.id, "unknown output field `{field}` ignored");
+        }
+        result.map_err(|failure| self.fail(plugin, failure, stderr))
+    }
+}
+
+/// 身份的平台要是这个插件声明过的；`file` 总是可以（§3.7）。
+fn check_identity(plugin: &FetchPlugin, identity: &Identity) -> Result<(), String> {
+    match identity {
+        Identity::File => Ok(()),
+        other
+            if plugin
+                .spec
+                .platforms
+                .iter()
+                .any(|p| p.as_str() == other.platform()) =>
+        {
+            Ok(())
+        }
+        other => Err(format!(
+            "identity platform `{}` is not among the plugin's `platforms`",
+            other.platform()
+        )),
+    }
+}
+
+/// 展开 `run.command`：`${PLUGIN_DIR}` 换成安装目录；不在安装目录里的第一项按运行时名字找。
+fn resolve_command(plugin: &FetchPlugin) -> Result<(OsString, Vec<OsString>), CallFailure> {
+    let dir = plugin.dir.to_string_lossy();
+    let mut parts = plugin
+        .header
+        .run
+        .command
+        .iter()
+        .map(|part| OsString::from(part.replace(PLUGIN_DIR_PLACEHOLDER, &dir)));
+    let first = parts.next().unwrap_or_default();
+    let program = if plugin.header.run.command[0].starts_with(PLUGIN_DIR_PLACEHOLDER) {
+        first
+    } else {
+        find_runtime(&first).ok_or_else(|| {
+            let mut f = CallFailure::new(
+                ErrorCode::DependencyMissing,
+                format!("runtime `{}` was not found", first.to_string_lossy()),
+            );
+            if let Ok(need) =
+                crate::protocol::Need::try_from(format!("runtime:{}", first.to_string_lossy()))
+            {
+                f.needs.push(need);
+            }
+            f
+        })?
+    };
+    Ok((program, parts.collect()))
+}
+
+/// 按 §2.13 的顺序找运行时：宿主的 `PATH`，再加 Homebrew 和 `~/.local/bin`。
+/// 用户指定路径、运行时表、版本检查和 `${TMP}/bin` 的链接还没做。
+fn find_runtime(name: &OsStr) -> Option<OsString> {
+    let mut dirs: Vec<PathBuf> = std::env::var_os("PATH")
+        .map(|p| std::env::split_paths(&p).collect())
+        .unwrap_or_default();
+    dirs.extend([
+        PathBuf::from("/opt/homebrew/bin"),
+        PathBuf::from("/usr/local/bin"),
+    ]);
+    if let Some(home) = std::env::var_os("HOME") {
+        dirs.push(PathBuf::from(home).join(".local/bin"));
+    }
+    dirs.into_iter()
+        .map(|d| d.join(name))
+        .find(|p| is_executable(p))
+        .map(PathBuf::into_os_string)
+}
+
+fn is_executable(path: &Path) -> bool {
+    let Ok(meta) = std::fs::metadata(path) else {
+        return false;
+    };
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        meta.is_file() && meta.permissions().mode() & 0o111 != 0
+    }
+    #[cfg(not(unix))]
+    {
+        meta.is_file()
+    }
+}
+
+/// 清空后只传这些（§3.2）。凭据（§6）、设置文件、本机代理（§3.2 网络出口）、设备变量接在这里。
+fn call_env(
+    config: &HostConfig,
+    plugin: &FetchPlugin,
+    call: &Call,
+    input_file: Option<&Path>,
+) -> Vec<(OsString, OsString)> {
+    let tmp = call.dir.path().join("tmp");
+    let home = tmp.join("home");
+    let mut env: BTreeMap<OsString, OsString> = BTreeMap::new();
+    let mut set = |k: &str, v: OsString| {
+        env.insert(k.into(), v);
+    };
+    set("USUYO_PROTOCOL", "1".into());
+    set("USUYO_PLUGIN_DIR", plugin.dir.clone().into());
+    set("USUYO_CACHE_DIR", call.cache.clone().into());
+    set("USUYO_CALL_ID", call.id.clone().into());
+    set("USUYO_LOCALE", config.locale.clone().into());
+    if let Some(input) = input_file {
+        set("USUYO_INPUT", input.into());
+    }
+    set("HOME", home.clone().into());
+    set("XDG_CONFIG_HOME", home.join(".config").into());
+    set("XDG_CACHE_HOME", call.cache.clone().into());
+    for k in ["TMPDIR", "TMP", "TEMP"] {
+        set(k, tmp.clone().into());
+    }
+    let mut path = vec![tmp.join("bin")];
+    #[cfg(unix)]
+    path.extend(["/usr/bin", "/bin", "/usr/sbin", "/sbin"].map(PathBuf::from));
+    #[cfg(windows)]
+    {
+        for k in ["SystemRoot", "windir"] {
+            if let Some(v) = std::env::var_os(k) {
+                set(k, v.clone());
+                path.push(PathBuf::from(v).join("System32"));
+            }
+        }
+    }
+    match std::env::join_paths(path) {
+        Ok(joined) => set("PATH", joined),
+        Err(e) => tracing::warn!("plugin PATH not set: {e}"),
+    }
+    for name in &plugin.header.permissions.env {
+        if let Some(v) = std::env::var_os(name) {
+            set(name, v);
+        }
+    }
+    env.into_iter().collect()
+}

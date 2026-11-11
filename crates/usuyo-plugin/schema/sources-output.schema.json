@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SourcesOutput",
+  "type": "object",
+  "properties": {
+    "ok": {
+      "const": true
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SourceInfo"
+      }
+    }
+  },
+  "required": [
+    "ok",
+    "sources"
+  ],
+  "$defs": {
+    "ListAction": {
+      "description": "平台上的动作。",
+      "type": "string",
+      "enum": [
+        "favorite",
+        "like",
+        "share",
+        "view",
+        "unknown"
+      ]
+    },
+    "SourceInfo": {
+      "description": "一个用户能选的列表来源（`sources` 的输出，也用在清单的 `list.sources`）。",
+      "type": "object",
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ListAction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "source": {
+          "description": "插件自己定，建议 `<platform>:<kind>[:<id>]`；`file:` 开头的留给导入。",
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "title"
+      ]
+    }
+  }
+}

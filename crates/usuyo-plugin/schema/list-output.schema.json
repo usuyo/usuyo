@@ -1,0 +1,246 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ListOutput",
+  "description": "list 的一页（协议 §3.8）。`nextCursor: null` 是最后一页。",
+  "type": "object",
+  "properties": {
+    "evidence": {
+      "$ref": "#/$defs/Evidence"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ListItem"
+      }
+    },
+    "nextCursor": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "ok": {
+      "const": true
+    }
+  },
+  "required": [
+    "ok",
+    "items",
+    "evidence"
+  ],
+  "$defs": {
+    "Access": {
+      "description": "七层取法，从低到高（协议 §2.4）。只是给用户挑选用的标签，宿主不据此拦截。",
+      "type": "string",
+      "enum": [
+        "official-export",
+        "public-web",
+        "vision-ui",
+        "browser-session",
+        "session-api",
+        "private-api",
+        "client-hook"
+      ]
+    },
+    "Author": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "platformId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "Evidence": {
+      "description": "这次调用实际怎么拿到的。",
+      "type": "object",
+      "properties": {
+        "access": {
+          "description": "这次实际用到的那一层。",
+          "$ref": "#/$defs/Access"
+        },
+        "fetchedAt": {
+          "$ref": "#/$defs/Rfc3339"
+        },
+        "site": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "description": "只在 HTTP 类请求时填。",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "upstream": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UpstreamVersion"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "fetchedAt",
+        "access"
+      ]
+    },
+    "Identity": {
+      "description": "线上的形状：`{platform, contentId?, url?}`。",
+      "type": "object",
+      "properties": {
+        "contentId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "platform": {
+          "$ref": "#/$defs/PlatformId"
+        },
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "platform"
+      ]
+    },
+    "ListAction": {
+      "description": "平台上的动作。",
+      "type": "string",
+      "enum": [
+        "favorite",
+        "like",
+        "share",
+        "view",
+        "unknown"
+      ]
+    },
+    "ListItem": {
+      "description": "list 的一条。`url` 或 `ref` 至少一个。",
+      "type": "object",
+      "properties": {
+        "actedAt": {
+          "description": "拿不到加入时间就留空，不用抓取时间冒充。",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Rfc3339"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ListAction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "author": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Author"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "identity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Identity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "publishedAt": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Rfc3339"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ref": {
+          "description": "插件私有、对宿主不透明；宿主回到这个插件调 `fetch <ref>`。",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "PlatformId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "Rfc3339": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "UpstreamVersion": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ]
+    }
+  }
+}

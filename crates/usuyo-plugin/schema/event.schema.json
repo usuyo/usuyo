@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PluginEvent",
+  "description": "stderr 上以 `@usuyo ` 开头的结构化事件（协议 §3.2）。",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "done": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "event": {
+          "type": "string",
+          "const": "progress"
+        },
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "total": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "unit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "event"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "event": {
+          "type": "string",
+          "const": "waiting"
+        },
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "$ref": "#/$defs/WaitReason"
+        }
+      },
+      "required": [
+        "event",
+        "reason"
+      ]
+    }
+  ],
+  "$defs": {
+    "WaitReason": {
+      "type": "string",
+      "enum": [
+        "user-action",
+        "device-locked",
+        "device-disconnected",
+        "device-unauthorized",
+        "user-active"
+      ]
+    }
+  }
+}

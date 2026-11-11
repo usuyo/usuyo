@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CanonicalizeOutput",
+  "type": "object",
+  "properties": {
+    "identity": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Identity"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "match": {
+      "type": "boolean"
+    },
+    "ok": {
+      "const": true
+    },
+    "resolvedUrl": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "ok",
+    "match"
+  ],
+  "$defs": {
+    "Identity": {
+      "description": "线上的形状：`{platform, contentId?, url?}`。",
+      "type": "object",
+      "properties": {
+        "contentId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "platform": {
+          "$ref": "#/$defs/PlatformId"
+        },
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "platform"
+      ]
+    },
+    "PlatformId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    }
+  }
+}

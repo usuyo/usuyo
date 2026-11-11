@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "items": [
+    {"url": "https://www.bilibili.com/video/BV1xx411c7mD", "identity": {"platform": "bilibili", "contentId": "BV1xx411c7mD"}, "title": "手冲咖啡入门", "action": "favorite", "actedAt": "2026-10-31T22:14:00+08:00"},
+    {"ref": "bookmarks/1849000000000000001", "action": "favorite"}
+  ],
+  "nextCursor": "eyJwbiI6M30",
+  "evidence": {"fetchedAt": "2026-11-01T03:00:01Z", "access": "browser-session", "site": "www.bilibili.com"}
+}
