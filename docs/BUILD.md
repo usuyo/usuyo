@@ -63,26 +63,22 @@ flowchart LR
 - **内核守护进程**：资料库唯一的写方；索引删了能重建。
 - **界面壳**：webview 里跑前端，只经本机 HTTP 和事件找内核（[ADR-002](decisions/ADR-002-frontend-stack.md#和内核的接口)）。
 
-11-11 先写了代码，文档照代码补：实现替草案定下的地方写回了 SPEC 和插件协议，标「11-11 代码」；还没做到的标「11-11 还没做」。接口都还不算定稿。
+接口做到哪（都还不算定稿）：
 
-| 接口 | 状态（11-11） | 缺什么 |
+| 接口 | 状态 | 缺什么 |
 |---|---|---|
-| [插件协议](plugin-protocol.md#01-读者与状态) | v1 草案；宿主和 plugin-kit 有了第一版（[§3.13](plugin-protocol.md#313-宿主和-plugin-kit-现在做到的11-11)、[§10.1](plugin-protocol.md#101-plugin-kit-的-http-客户端11-11)） | [待定](plugin-protocol.md#13-待定) 39 项里 29–32 答了；凭据、沙箱、本机代理、`serve`、schema 文件、`usuyo plugin check` |
-| 资料库格式（[SPEC §1](SPEC.md#1-资料库-v1第-1-层)） | v1 草案，`crates/usuyo-contract`、`crates/usuyo-library` 照它实现 | 联网后并身份、到期移除没接上；同步 |
-| 改动提议、改动记录（[SPEC §1.5](SPEC.md#15-改动提议)、[§1.6](SPEC.md#16-改动记录)） | v1 草案，资料库层能写能撤 | 接受提议的流程、界面 |
+| [插件协议](plugin-protocol.md#01-读者与状态) | v1 草案；宿主和 plugin-kit 有了第一版（[§3.13](plugin-protocol.md#313-宿主和-plugin-kit-现在做到的11-11)、[§10.1](plugin-protocol.md#101-plugin-kit-的-http-客户端11-11)） | [待定](plugin-protocol.md#13-待定) ；凭据、沙箱、本机代理、`serve`、schema 文件 |
+| 资料库格式（[SPEC §1](SPEC.md#1-资料库-v1第-1-层)） | v1 草案，`crates/usuyo-contract`、`crates/usuyo-library` 照它实现 | 联网后并身份；同步（[008](#008-文字同步)） |
+| 改动提议、改动记录（[SPEC §1.5](SPEC.md#15-改动提议)、[§1.6](SPEC.md#16-改动记录)） | v1 草案，资料库层能写能撤 | 接受提议的流程、界面（[006](#006-agent)） |
 | 宿主 ↔ 界面（[SPEC 本机接口](SPEC.md#本机接口第-2-层11-11-照代码)） | 照代码写了；契约文件是 `apps/desktop/web/src/api/endpoints.ts` | 窗口用的路径还不带 `/v1/`、分页、OpenAPI 描述 |
 | 内核推的事件 | server-sent events，八种事件（同上） | 补发、信封 |
 | [MCP 工具](SPEC.md#10-mcp-工具m0) | v0 草案，没实现 | 全部 |
-| [命令行](SPEC.md#9-clim0) | `init`、`add`、`get`、`search`、`reindex`、`daemon` | 输出形状、其余子命令 |
+| [命令行](SPEC.md#9-clim0) | `init`、`add`、`get`、`search`、`reindex`、`daemon` | 不再加命令 |
 | [搜索语法](SPEC.md#11-索引) | tantivy 索引能搜；语法没写 | 查询串、筛选、分页 |
-| [投递接口](plugin-protocol.md#5-投递接口) | `/v1/ping`、`/v1/deliver`（只收链接）、`/v1/batches` 和按投递端发的令牌做了（[feature 002](features/002-platforms.md)），和窗口用的路由同一个监听口 | 已取到的内容（multipart）、批次查询、给 Safari 的预检 |
-| [导出与读回](plugin-protocol.md#44-导出的-run-与-readback) | 草案 | 笔记库里的文件形状 |
-| 配置、版本策略（[SPEC §0.2](SPEC.md#02-版本与兼容)、[§1.1](SPEC.md#11-目录树)） | v1 草案 | 设置的完整清单 |
-| 订阅源 | 没有 | 你填的地址、订阅对象 |
-
-设计分五层（11-04 定）：0 占位规则、版本、错误模型、ID；1 资料库 v1，加改动提议和改动记录的格式（[SPEC §0](SPEC.md#0-约定第-0-层)、[§1](SPEC.md#1-资料库-v1第-1-层)）；2 一份内核服务契约，派生 HTTP、MCP、命令行；3 plugin-kit；4 投递、导出、分发、订阅。
-
-内核是 Rust，壳是 Tauri 2（11-11，[ADR-004](decisions/ADR-004-rust-tauri.md)）：守护进程是独立进程，壳找到或起它，前端只经本机 HTTP 找它；界面端口只认 Tauri webview 的 `Origin`。
+| [投递接口](plugin-protocol.md#5-投递接口) | `/v1/ping`、`/v1/deliver`（只收链接）、`/v1/batches` 和按投递端发的令牌做了（[feature 002](features/002-platforms.md)），和窗口用的路由同一个监听口 | 已取到的内容（multipart）、批次查询 |
+| [导出与读回](plugin-protocol.md#44-导出的-run-与-readback) | 草案 | 笔记库里的文件形状（[007](#007-导出读回和别的工具的导出)） |
+| 配置、版本策略（[SPEC §0.2](SPEC.md#02-版本与兼容)、[§1.1](SPEC.md#11-目录树)） | v1 草案 | 设置的完整清单（[010](#010-设置第一次打开收下浮层)） |
+| 订阅源 | 没有 | 你填的地址、订阅对象（[009](#009-跟着收)） |
 
 已经做完的两条线：[001 收下一条](features/001-m0-core-loop.md)、[002 平台](features/002-platforms.md)。它们剩下的、不归哪条线的：
 
@@ -177,9 +173,7 @@ flowchart LR
 还没做的：
 
 - 私密条目回 `skipped`：本机接口的 `POST /items` 现在一律记成窗口里收的（`via: app`），私密的照收；命令行也从不跳过。投递接口里扩展、手机、`api` 令牌的已经会跳过（[SPEC 本机接口](SPEC.md#本机接口第-2-层11-11-照代码)）。
-- 写 MCP 之前先写内核服务契约：一份描述派生本机 HTTP（OpenAPI 3.2）和 MCP，含搜索语法、事件、端口。界面用的那一半已经照代码写进 [SPEC 本机接口](SPEC.md#本机接口第-2-层11-11-照代码)，契约文件是 `apps/desktop/web/src/api/endpoints.ts`。一起定：Agent 连接名从哪来、MCP 收下工具的 `pickedBy`、撤销工具（能撤哪些已定，[SPEC §1.10 第 18 条](SPEC.md#110-要你看一眼)）、错误和输出 schema 怎么配、游标有效期、各处的间隔、上限和文案。写好以后替换 [SPEC §2](SPEC.md#2-留着的-v0第-2-层重写前保留) 留着的 v0。
-- 本机接口用 REST 加 [OpenAPI 3.2](https://github.com/OAI/OpenAPI-Specification/releases)（3.2.1，2026-09-10）：投递接口已是 `/v1/*`，一份描述生成客户端和文档。
-- 搜索用自己的小语法（`字段:值`、引号、`-`、`after:`）：不把索引实现绑进接口。
+- 写 MCP 之前先写内核服务契约：一份描述（[OpenAPI 3.2](https://github.com/OAI/OpenAPI-Specification/releases)）派生本机 HTTP 和 MCP，生成客户端和文档；含搜索语法（自己的小语法：`字段:值`、引号、`-`、`after:`，不把索引实现绑进接口）、事件、端口。界面用的那一半已经照代码写进 [SPEC 本机接口](SPEC.md#本机接口第-2-层11-11-照代码)，契约文件是 `apps/desktop/web/src/api/endpoints.ts`。一起定：Agent 连接名从哪来、MCP 收下工具的 `pickedBy`、撤销工具（能撤哪些已定，[SPEC §1.10 第 18 条](SPEC.md#110-要你看一眼)）、错误和输出 schema 怎么配、游标有效期、各处的间隔、上限和文案。写好以后替换 [SPEC §2](SPEC.md#2-留着的-v0第-2-层重写前保留) 留着的 v0。
 
 <a id="007-导出读回和别的工具的导出"></a>
 ### 007 导出、读回和别的工具的导出
