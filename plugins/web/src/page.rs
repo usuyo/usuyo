@@ -375,10 +375,11 @@ fn download_images(
             failed.push(url.to_string());
             continue;
         }
-        let got = client
-            .get(url)
-            .header("Referer", page.as_str())
-            .header("Accept", "image/*")
+        let mut request = client.get(url).header("Accept", "image/*");
+        if let Some(referer) = image_referer(page, url) {
+            request = request.header("Referer", &referer);
+        }
+        let got = request
             .timeout(IMAGE_TIMEOUT)
             .follow_redirects(MAX_REDIRECTS)
             .send()
@@ -406,6 +407,15 @@ fn download_images(
         saved.push((rel(&name)?, url.to_string()));
     }
     Ok(saved)
+}
+
+/// 照浏览器跨源取图的默认做法：只带页面的源，不带路径和查询（分享链接的令牌常在查询里）；
+/// 页面是 https、图片是 http 时什么都不带。跳转后的那几跳由 kit 决定带不带。
+fn image_referer(page: &url::Url, image: &url::Url) -> Option<String> {
+    if page.scheme() == "https" && image.scheme() == "http" {
+        return None;
+    }
+    Some(format!("{}/", page.origin().ascii_serialization()))
 }
 
 fn image_extension(mime: &str) -> Option<&'static str> {
@@ -461,24 +471,35 @@ mod tests {
         )
     }
 
+    /// 每个请求的路径（不含查询）和带的 Referer。
+    type Seen = std::sync::Arc<std::sync::Mutex<Vec<(String, Option<String>)>>>;
+
     /// 本机 HTTP 服务：`/hop/N` 跳 N 次到正文，`/img/r.png` 跳到 `/img/b.png`。
-    fn serve() -> u16 {
+    fn serve() -> (u16, Seen) {
         use std::io::{BufRead, BufReader, Write};
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
+        let seen = Seen::default();
+        let log = seen.clone();
         std::thread::spawn(move || {
             for stream in listener.incoming() {
                 let Ok(mut stream) = stream else { continue };
                 let mut reader = BufReader::new(stream.try_clone().unwrap());
                 let mut line = String::new();
                 reader.read_line(&mut line).unwrap();
-                let path = line.split_whitespace().nth(1).unwrap_or("/").to_owned();
+                let target = line.split_whitespace().nth(1).unwrap_or("/");
+                let path = target.split('?').next().unwrap_or_default().to_owned();
+                let mut referer = None;
                 loop {
                     let mut header = String::new();
                     if reader.read_line(&mut header).unwrap_or(0) == 0 || header == "\r\n" {
                         break;
                     }
+                    if let Some(v) = header.to_ascii_lowercase().strip_prefix("referer:") {
+                        referer = Some(v.trim().to_owned());
+                    }
                 }
+                log.lock().unwrap().push((path.clone(), referer));
                 let redirect = |to: String| ("302 Found", "text/plain", Vec::new(), to);
                 let (status, ctype, body, location) = match path.as_str() {
                     "/hop/0" => (
@@ -515,12 +536,12 @@ mod tests {
                 stream.write_all(&body).ok();
             }
         });
-        port
+        (port, seen)
     }
 
     #[test]
     fn follows_redirects_and_downloads_images() {
-        let port = serve();
+        let (port, _) = serve();
         let out = tempfile::tempdir().unwrap();
         let input = format!("http://site.test:{port}/hop/3");
         let output = fetch(&input, out.path(), None, false, &local_policy()).unwrap();
@@ -562,7 +583,7 @@ mod tests {
 
     #[test]
     fn redirect_limit_still_applies() {
-        let port = serve();
+        let (port, _) = serve();
         let out = tempfile::tempdir().unwrap();
         let policy = local_policy();
         let at_limit = format!("http://site.test:{port}/hop/{MAX_REDIRECTS}");
@@ -589,6 +610,38 @@ mod tests {
         let Fail(failure) = err.downcast::<Fail>().unwrap();
         assert_eq!(failure.code, ErrorCode::UnsupportedInput);
         assert!(failure.message.contains("redirects"), "{}", failure.message);
+    }
+
+    /// 取图只带页面的源当 Referer：页面地址里的路径和分享令牌不发给图片主机。
+    #[test]
+    fn images_get_only_the_page_origin_as_referer() {
+        let (port, seen) = serve();
+        let out = tempfile::tempdir().unwrap();
+        let input = format!("http://site.test:{port}/hop/0?share_token=s3cret");
+        fetch(&input, out.path(), None, false, &local_policy()).unwrap();
+        let log = seen.lock().unwrap().clone();
+        let images: Vec<_> = log.iter().filter(|(p, _)| p.starts_with("/img/")).collect();
+        assert!(!images.is_empty());
+        let origin = format!("http://site.test:{port}/");
+        for (path, referer) in images {
+            assert_eq!(referer.as_deref(), Some(origin.as_str()), "{path}");
+        }
+    }
+
+    #[test]
+    fn referer_rule() {
+        let url = |s: &str| url::Url::parse(s).unwrap();
+        let page = url("https://a.example/post/1?token=t");
+        assert_eq!(
+            image_referer(&page, &url("https://cdn.example/x.png")).as_deref(),
+            Some("https://a.example/")
+        );
+        assert_eq!(image_referer(&page, &url("http://cdn.example/x.png")), None);
+        let plain = url("http://a.example:8080/post?token=t");
+        assert_eq!(
+            image_referer(&plain, &url("http://cdn.example/x.png")).as_deref(),
+            Some("http://a.example:8080/")
+        );
     }
 
     #[test]

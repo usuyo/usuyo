@@ -230,7 +230,8 @@ pub struct Request<'c> {
 }
 
 impl Request<'_> {
-    /// 每一跳都带的请求头。cookie 不能从这里带，见 [`Request::cookie`]。
+    /// 请求头。跟跳转时只在和第一跳同一个主机、没有从 https 降到 http 的那几跳全带，
+    /// 别的跳只带 `Accept` 和 `Accept-Language`。cookie 不能从这里带，见 [`Request::cookie`]。
     pub fn header(mut self, name: &str, value: &str) -> Self {
         self.headers.push((name.to_owned(), value.to_owned()));
         self
@@ -270,6 +271,17 @@ impl Request<'_> {
             return Err(Error::CookieHeader);
         }
         let deadline = Instant::now() + self.timeout;
+        let first_url = self.url.clone();
+        let hop_safe: Vec<(String, String)> = self
+            .headers
+            .iter()
+            .filter(|(name, _)| {
+                HOP_SAFE_HEADERS
+                    .iter()
+                    .any(|s| name.eq_ignore_ascii_case(s))
+            })
+            .cloned()
+            .collect();
         let mut url = self.url;
         let mut body = self.body;
         for hop in 0..=self.max_redirects {
@@ -294,10 +306,16 @@ impl Request<'_> {
                 .as_ref()
                 .filter(|c| encrypted && c.hosts.allows(host))
                 .map(|c| c.value.as_str());
+            let headers = if keeps_caller_headers(&first_url, &url) {
+                &self.headers
+            } else {
+                &hop_safe
+            };
             let response = match &body {
-                None => with_headers(agent.get(url.as_str()), &self.headers, cookie).call(),
-                Some(bytes) => with_headers(agent.post(url.as_str()), &self.headers, cookie)
-                    .send(bytes.as_slice()),
+                None => with_headers(agent.get(url.as_str()), headers, cookie).call(),
+                Some(bytes) => {
+                    with_headers(agent.post(url.as_str()), headers, cookie).send(bytes.as_slice())
+                }
             }
             .map_err(transport)?;
             let status = response.status().as_u16();
@@ -322,6 +340,15 @@ impl Request<'_> {
         Err(Error::TooManyRedirects(self.max_redirects))
     }
 }
+
+/// 跳转里，调用方给的请求头还能不能全带：还在第一跳的主机上，而且没有从 https 降到 http。
+/// 别的跳只带 [`HOP_SAFE_HEADERS`]，免得 Referer、令牌一类的头跟着跳到别的主机或明文上。
+fn keeps_caller_headers(first: &Url, hop: &Url) -> bool {
+    hop.host_str() == first.host_str() && !(first.scheme() == "https" && hop.scheme() == "http")
+}
+
+/// 换了主机或降到明文的那一跳也照带的请求头：只说要什么格式，不带来历和凭据。
+const HOP_SAFE_HEADERS: [&str; 2] = ["accept", "accept-language"];
 
 fn with_headers<B>(
     mut request: ureq::RequestBuilder<B>,
@@ -409,50 +436,58 @@ impl Response {
         self.inner.headers().get(name).and_then(|v| v.to_str().ok())
     }
 
-    /// 读完整个响应体，超过 `limit` 字节回 [`Error::TooLarge`]。
+    /// 读完整个响应体，解压后超过 `limit` 字节回 [`Error::TooLarge`]，读到上限就停。
     pub fn read_to_vec(&mut self, limit: u64) -> Result<Vec<u8>, Error> {
-        // ureq 读满上限就报错，哪怕正好读完：多给一个字节，自己比
-        let bytes = self
-            .inner
-            .body_mut()
-            .with_config()
-            .limit(limit.saturating_add(1))
-            .read_to_vec()
-            .map_err(|e| match e {
-                ureq::Error::BodyExceedsLimit(_) => Error::TooLarge(limit),
-                other => transport(other),
-            })?;
-        if bytes.len() as u64 > limit {
-            return Err(Error::TooLarge(limit));
-        }
+        let mut reader = Capped::new(self.inner.body_mut().with_config().reader(), limit);
+        let mut bytes = Vec::new();
+        reader.read_to_end(&mut bytes).map_err(|e| {
+            let kind = e.kind();
+            if kind == std::io::ErrorKind::FileTooLarge {
+                return Error::TooLarge(limit);
+            }
+            // ureq 把读体时的错误包在 io::Error 里，拆出来按发请求时的规则分
+            match e.into_inner().map(|inner| inner.downcast::<ureq::Error>()) {
+                Some(Ok(ureq)) => transport(*ureq),
+                _ if kind == std::io::ErrorKind::TimedOut => Error::Timeout,
+                Some(Err(other)) => Error::Network(other.to_string()),
+                None => Error::Network(format!("reading the body: {kind}")),
+            }
+        })?;
         Ok(bytes)
     }
 
-    /// 边读边处理大文件；读出的字节超过 `limit` 时报读错误，错误的类别是
+    /// 边读边处理大文件；解压后读出的字节超过 `limit` 时报读错误，错误的类别是
     /// `io::ErrorKind::FileTooLarge`，调用方凭它和网络中断分开。
     pub fn into_reader(self, limit: u64) -> impl Read + Send + 'static {
-        Capped {
-            inner: self
-                .inner
-                .into_body()
-                .into_with_config()
-                .limit(limit.saturating_add(1))
-                .reader(),
-            left: limit,
-            limit,
-        }
+        Capped::new(self.inner.into_body().into_with_config().reader(), limit)
     }
 }
 
+/// 读响应体的唯一途径：按解压后的字节数计，到上限就报错，不再往下读。
+/// ureq 自己的上限数的是压缩前的字节，挡不住一小段 gzip 解出几个 GiB，所以这里不用它。
 struct Capped<R> {
     inner: R,
     left: u64,
     limit: u64,
 }
 
+impl<R> Capped<R> {
+    fn new(inner: R, limit: u64) -> Self {
+        Capped {
+            inner,
+            left: limit,
+            limit,
+        }
+    }
+}
+
 impl<R: Read> Read for Capped<R> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let n = self.inner.read(buf)?;
+        // 最多比剩下的多读一个字节：够看出超了，又不多解压
+        let room = usize::try_from(self.left.saturating_add(1))
+            .unwrap_or(usize::MAX)
+            .min(buf.len());
+        let n = self.inner.read(&mut buf[..room])?;
         self.left = self.left.checked_sub(n as u64).ok_or_else(|| {
             std::io::Error::new(
                 std::io::ErrorKind::FileTooLarge,
@@ -473,8 +508,8 @@ mod tests {
 
     const UA: &str = "usuyo-plugin-kit-test";
 
-    /// 收到的请求：方法、路径、Cookie 头。
-    type Seen = Arc<Mutex<Vec<(String, String, Option<String>)>>>;
+    /// 收到的请求：方法、路径、Cookie 头、全部请求头（小写、去掉行尾）。
+    type Seen = Arc<Mutex<Vec<(String, String, Option<String>, Vec<String>)>>>;
 
     /// 本机 HTTP 服务。`/to/<地址>` 回 302 到那个地址，`/see-other` 回 303 到 `/end`，
     /// `/big` 回 1 KiB，其余回 200。
@@ -494,12 +529,14 @@ mod tests {
                 let path = parts.next().unwrap_or("/").to_owned();
                 let mut cookie = None;
                 let mut length = 0usize;
+                let mut headers = Vec::new();
                 loop {
                     let mut header = String::new();
                     if reader.read_line(&mut header).unwrap_or(0) == 0 || header == "\r\n" {
                         break;
                     }
                     let lower = header.to_ascii_lowercase();
+                    headers.push(lower.trim_end().to_owned());
                     if let Some(v) = lower.strip_prefix("cookie:") {
                         cookie = Some(v.trim().to_owned());
                     }
@@ -509,7 +546,9 @@ mod tests {
                 }
                 let mut body = vec![0u8; length];
                 reader.read_exact(&mut body).ok();
-                log.lock().unwrap().push((method, path.clone(), cookie));
+                log.lock()
+                    .unwrap()
+                    .push((method, path.clone(), cookie, headers));
                 let (status, location, body) = if let Some(to) = path.strip_prefix("/to/") {
                     ("302 Found", to.to_owned(), Vec::new())
                 } else if path == "/see-other" {
@@ -840,5 +879,105 @@ mod tests {
         assert_eq!(err.kind(), io::ErrorKind::FileTooLarge);
         let mut reader = client.get(&big).send().unwrap().into_reader(1024);
         assert_eq!(io::copy(&mut reader, &mut io::sink()).unwrap(), 1024);
+    }
+
+    /// 回 gzip 压缩的 4 MiB 零：去掉结尾几十字节后停住不再发，连接也不关。
+    fn serve_gzip_bomb() -> u16 {
+        const BOMB: &[u8] = include_bytes!("testdata/zeros-4mib.gz");
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { continue };
+                std::thread::spawn(move || {
+                    let mut reader = BufReader::new(stream.try_clone().unwrap());
+                    loop {
+                        let mut line = String::new();
+                        if reader.read_line(&mut line).unwrap_or(0) == 0 || line == "\r\n" {
+                            break;
+                        }
+                    }
+                    let head =
+                        "HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nConnection: close\r\n\r\n";
+                    stream.write_all(head.as_bytes()).ok();
+                    stream.write_all(&BOMB[..BOMB.len() - 64]).ok();
+                    stream.flush().ok();
+                    std::thread::sleep(Duration::from_secs(10));
+                });
+            }
+        });
+        port
+    }
+
+    /// 上限按解压后的字节算，读到上限就停：不先把整个压缩包解开，也不等服务器发完。
+    #[test]
+    fn body_limits_count_decoded_bytes() {
+        let port = serve_gzip_bomb();
+        let client = Client::new(UA, Hosts::any()).with_policy(local_policy());
+        let bomb = url(&format!("http://site.test:{port}/"));
+        let limit = 64 << 10;
+        let send = || {
+            client
+                .get(&bomb)
+                .timeout(Duration::from_secs(3))
+                .send()
+                .unwrap()
+        };
+
+        let started = Instant::now();
+        let err = send().read_to_vec(limit).unwrap_err();
+        assert!(matches!(err, Error::TooLarge(l) if l == limit), "{err:?}");
+        assert!(started.elapsed() < Duration::from_secs(2));
+
+        let started = Instant::now();
+        let err = io::copy(&mut send().into_reader(limit), &mut io::sink()).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::FileTooLarge, "{err:?}");
+        assert!(started.elapsed() < Duration::from_secs(2));
+    }
+
+    /// 调用方给的请求头只跟到同一个主机的那几跳；换了主机只留 Accept 和 Accept-Language。
+    #[test]
+    fn caller_headers_stay_on_the_first_host() {
+        let (port, seen) = serve();
+        let client = Client::new(UA, Hosts::any()).with_policy(local_policy());
+        let start = url(&format!(
+            "http://a.site.test:{port}/to/http://a.site.test:{port}/to/http://other.test:{port}/end"
+        ));
+        client
+            .get(&start)
+            .header("X-Secret", "s3cret")
+            .header("Referer", "http://a.site.test/page?token=t")
+            .header("Accept", "image/*")
+            .follow_redirects(2)
+            .send()
+            .unwrap();
+        let log = seen.lock().unwrap().clone();
+        assert_eq!(log.len(), 3);
+        for hop in &log[..2] {
+            assert!(hop.3.iter().any(|h| h == "x-secret: s3cret"), "{hop:?}");
+            assert!(hop.3.iter().any(|h| h.starts_with("referer:")), "{hop:?}");
+        }
+        let last = &log[2];
+        assert_eq!(last.1, "/end");
+        assert!(
+            !last
+                .3
+                .iter()
+                .any(|h| h.starts_with("x-secret") || h.starts_with("referer")),
+            "{last:?}"
+        );
+        assert!(last.3.iter().any(|h| h == "accept: image/*"), "{last:?}");
+    }
+
+    /// 本机测试服务只有明文 http，降级那一条按规则本身测。
+    #[test]
+    fn caller_headers_rule() {
+        let first = url("https://a.site.test/x");
+        assert!(keeps_caller_headers(&first, &url("https://a.site.test/y")));
+        assert!(!keeps_caller_headers(&first, &url("http://a.site.test/y")));
+        assert!(!keeps_caller_headers(&first, &url("https://b.site.test/y")));
+        let plain = url("http://a.site.test/x");
+        assert!(keeps_caller_headers(&plain, &url("https://a.site.test/y")));
+        assert!(keeps_caller_headers(&plain, &url("http://a.site.test/y")));
     }
 }
