@@ -57,4 +57,31 @@ export async function openExternal(url: string): Promise<boolean> {
   }
 }
 
-// 以后放在这里：托盘、全局快捷键、登录窗口（见 src-tauri/src/main.rs）。
+/**
+ * 开一个站点的登录窗口（src-tauri/src/login.rs）。只交站点名：登录页、要等的 cookie 由壳自己问内核，
+ * cookie 由壳直接交给内核，前端从内核的 `plugins-updated` 事件知道登录好了。
+ * 不在桌面壳里时回 false（浏览器标签页里开不了这种窗口）。壳回的错是给人看的一句话。
+ */
+export async function openLogin(site: string): Promise<boolean> {
+  if (!isDesktopShell()) return false;
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("open_login", { site });
+  return true;
+}
+
+/** 开取访客身份的窗口：不登录，页面自己生成的访客 cookie 由壳存成这个插件的密钥设置。 */
+export async function openVisitor(pluginId: string): Promise<boolean> {
+  if (!isDesktopShell()) return false;
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("open_visitor", { plugin: pluginId });
+  return true;
+}
+
+/** 退出登录以后清掉这个站点那份网页数据（登录窗口的 cookie、缓存），下次登录从头来。 */
+export async function clearLoginData(site: string): Promise<void> {
+  if (!isDesktopShell()) return;
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("clear_login", { site });
+}
+
+// 以后放在这里：托盘、全局快捷键。

@@ -5,15 +5,20 @@ import { useUiStore, type ThemePreference } from "../store/ui";
 import { Button } from "../ui/Button";
 import { TakeField } from "./TakeField";
 
-const LATER: { page: string; label: string; icon: ReactNode }[] = [
-  { page: "follow", label: "跟着收", icon: <Rss size={16} aria-hidden="true" /> },
-  { page: "import", label: "导入", icon: <FolderInput size={16} aria-hidden="true" /> },
-  { page: "export", label: "导出", icon: <FolderOutput size={16} aria-hidden="true" /> },
-  { page: "changes", label: "改动记录", icon: <History size={16} aria-hidden="true" /> },
-  { page: "trash", label: "回收站", icon: <Trash2 size={16} aria-hidden="true" /> },
-  { page: "plugins", label: "获取插件", icon: <Plug size={16} aria-hidden="true" /> },
-  { page: "settings", label: "设置", icon: <Settings size={16} aria-hidden="true" /> },
+/** 底下去别的页：做好了的有自己的路由，还没做的进 `/later/$page`。 */
+const PAGES: ({ label: string; icon: ReactNode } & ({ to: "/import" | "/plugins" } | { later: string }))[] = [
+  { later: "follow", label: "跟着收", icon: <Rss size={16} aria-hidden="true" /> },
+  { to: "/import", label: "导入", icon: <FolderInput size={16} aria-hidden="true" /> },
+  { later: "export", label: "导出", icon: <FolderOutput size={16} aria-hidden="true" /> },
+  { later: "changes", label: "改动记录", icon: <History size={16} aria-hidden="true" /> },
+  { later: "trash", label: "回收站", icon: <Trash2 size={16} aria-hidden="true" /> },
+  { to: "/plugins", label: "获取插件", icon: <Plug size={16} aria-hidden="true" /> },
+  { later: "settings", label: "设置", icon: <Settings size={16} aria-hidden="true" /> },
 ];
+
+// 路由给当前页的链接标 `data-status="active"`。
+const PAGE_LINK =
+  "press flex h-ctl-sm items-center gap-2.5 rounded-btn px-2.5 text-note text-sub no-underline hover:bg-chip/60 hover:text-label data-[status=active]:bg-chip data-[status=active]:font-semibold data-[status=active]:text-text";
 
 const NEXT_THEME: Record<ThemePreference, ThemePreference> = { system: "dark", dark: "light", light: "system" };
 const THEME_LABEL: Record<ThemePreference, string> = { system: "外观跟系统", dark: "深色", light: "浅色" };
@@ -49,17 +54,19 @@ export function Rail({ label, children }: { label: string; children?: ReactNode 
       <TakeField />
       {children}
       <div className="flex-1" />
-      {LATER.map((l) => (
-        <Link
-          key={l.page}
-          to="/later/$page"
-          params={{ page: l.page }}
-          className="press flex h-ctl-sm items-center gap-2.5 rounded-btn px-2.5 text-note text-sub no-underline hover:bg-chip/60 hover:text-label"
-        >
-          {l.icon}
-          <span>{l.label}</span>
-        </Link>
-      ))}
+      {PAGES.map((l) =>
+        "to" in l ? (
+          <Link key={l.to} to={l.to} className={PAGE_LINK}>
+            {l.icon}
+            <span>{l.label}</span>
+          </Link>
+        ) : (
+          <Link key={l.later} to="/later/$page" params={{ page: l.later }} className={PAGE_LINK}>
+            {l.icon}
+            <span>{l.label}</span>
+          </Link>
+        ),
+      )}
     </nav>
   );
 }

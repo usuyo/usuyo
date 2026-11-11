@@ -43,8 +43,17 @@ pnpm typecheck && pnpm lint && pnpm test && pnpm build
 - 「打开原帖」只开 `http`、`https`：前端先查（`src/shell/`），打包的应用里经 opener 插件交给系统浏览器，`capabilities/default.json` 也只放行这两种。
 - 窗口的 CSP 在 `src-tauri/tauri.conf.json`：只许自己的资源和 `http://127.0.0.1:47615`。脚本只许自己的文件；样式另外放行行内的（`style-src` 带 `'unsafe-inline'`），因为 React Aria 这类组件库运行时会往页面里插 `<style>`，不放行会被挡掉。平台来的字只当文字显示，不会变成样式。
 
+## 登录窗口
+
+- 「获取插件」页点「登录」，前端只把站点名交给壳（`src/shell/` 的 `openLogin`）。壳自己问内核 `GET /sites`，开一个只装那个站点的窗口：上面一条是我们的页面（`login-bar.html`），下面是站点的登录页。每个站点自己一份网页数据：macOS 上是按站点名算的数据仓库标识（要 macOS 14 以上），Windows、Linux 上是按机器目录下 `webviews/<标识>/`。
+- 你在窗口里自己登录。声明的 cookie 名都出现了（没声明名字的站点等你点上面那条的「登录好了」），壳在后台线程读出这个站点的 cookie（含 HttpOnly），只留属于这个站点的，自己 `PUT /sites/{site}/login` 交给内核，关窗口。前端从内核的 `plugins-updated` 事件知道登录好了；cookie 的值不经过前端，壳不写日志。
+- 「退出登录」：前端 `DELETE /sites/{site}/login`，再让壳关掉那个站点的窗口、删掉它那份网页数据。
+- 小红书的访客身份用同一套窗口，不登录：开首页，等页面自己生成的 cookie 稳定下来，整行存成插件的密钥设置 `visitor-cookie`。哪个插件去哪个首页，暂时写在 `src-tauri/src/login.rs` 的表里（插件清单还写不出这件事）。
+- 站点的网页拿不到壳的命令：Tauri 只让本地页面调自定义命令。
+- 调试版对着本机测试页试：`USUYO_HOME=<临时目录> USUYO_PORT=<别的端口>` 起内核和壳，`USUYO_OPEN_LOGIN=<站点>` 一启动就开那个站点的登录窗口，`USUYO_CLEAR_LOGIN=<站点>` 清掉它的网页数据。
+
 ## 还没做
 
-- 登录窗口、托盘、全局快捷键：`src-tauri/src/main.rs` 里留了 TODO。
+- 托盘、全局快捷键。
 - Windows 上退出时直接强停内核（还没有 SIGTERM 那样的收尾）。
 - 没接 Paraglide、CodeMirror、画布、Playwright；图标是灰色占位图。

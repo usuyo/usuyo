@@ -54,7 +54,13 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 
 impl Daemon {
     pub fn new(plugins: PathBuf) -> Result<Daemon> {
-        Ok(Daemon::at(machine_root()?, plugins, PORT))
+        Ok(Daemon::at(machine_root()?, plugins, port()))
+    }
+
+    /// 按机器的目录：登录窗口在 Windows、Linux 上的网页数据也放这下面。
+    #[cfg(not(target_vendor = "apple"))]
+    pub fn machine_dir(&self) -> &Path {
+        &self.root
     }
 
     fn at(root: PathBuf, plugins: PathBuf, port: u16) -> Daemon {
@@ -174,6 +180,19 @@ impl Daemon {
             stop_child(child);
         }
     }
+}
+
+/// 调试版可以用 `USUYO_PORT` 换端口（配一个另外的 `USUYO_HOME` 试东西）；
+/// 开发时窗口经 Vite 的代理连内核，不受 CSP 的端口限制。发布版只用 47615。
+fn port() -> u16 {
+    if cfg!(debug_assertions)
+        && let Some(p) = std::env::var("USUYO_PORT")
+            .ok()
+            .and_then(|v| v.parse().ok())
+    {
+        return p;
+    }
+    PORT
 }
 
 fn port_taken(port: u16) -> Plain {

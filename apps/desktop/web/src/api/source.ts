@@ -1,6 +1,17 @@
 import { DaemonUnreachableError, request } from "./client";
 import {
   paths,
+  type ConfirmImportRequest,
+  type CreateDeliverTokenRequest,
+  type DeliverToken,
+  type FetchPlugin,
+  type ImportEntry,
+  type ImportView,
+  type NewDeliverToken,
+  type PluginSource,
+  type PluginsView,
+  type SiteLogin,
+  type StartImportRequest,
   type Health,
   type Item,
   type MapView,
@@ -30,7 +41,38 @@ export interface Library {
   refetch(id: string): Promise<Item>;
 }
 
-const daemon: Library = {
+/**
+ * 「获取插件」「导入」两页要的读写。登录的 cookie 不经这里：壳的登录窗口直接交给内核（src/shell/）。
+ */
+export interface Platforms {
+  plugins(): Promise<PluginsView>;
+  sources(pluginId: string): Promise<PluginSource[]>;
+  tryNow(pluginId: string): Promise<FetchPlugin>;
+  hold(pluginId: string): Promise<FetchPlugin>;
+  forgetSecret(pluginId: string, key: string): Promise<FetchPlugin>;
+  sites(): Promise<SiteLogin[]>;
+  forgetLogin(site: string): Promise<void>;
+  imports(): Promise<ImportView[]>;
+  startImport(body: StartImportRequest): Promise<ImportView>;
+  import(id: string): Promise<ImportView>;
+  importEntries(id: string, standing: ImportEntry["standing"], offset: number, limit: number): Promise<ImportEntry[]>;
+  confirmImport(id: string, body: ConfirmImportRequest): Promise<ImportView>;
+  holdImport(id: string): Promise<ImportView>;
+  resumeImport(id: string): Promise<ImportView>;
+  deleteImport(id: string): Promise<void>;
+  deliverTokens(): Promise<DeliverToken[]>;
+  createDeliverToken(body: CreateDeliverTokenRequest): Promise<NewDeliverToken>;
+  revokeDeliverToken(id: string): Promise<void>;
+  inbox(): Promise<{ path: string }>;
+}
+
+/** 内核和样例库都实现的全部读写。 */
+export type Source = Library & Platforms;
+
+/** 列来源要调插件，内核最多等一分钟多一点。 */
+const SOURCES_TIMEOUT_MS = 75_000;
+
+const daemon: Source = {
   health: () => request<Health>(paths.health),
   map: () => request<MapView>(paths.map),
   topics: () => request<Topic[]>(paths.topics),
@@ -46,6 +88,29 @@ const daemon: Library = {
   restoreMedia: (id) => request<Item>(paths.itemRestoreMedia(id), { method: "POST" }),
   textOnly: (id) => request<Item>(paths.itemTextOnly(id), { method: "POST" }),
   refetch: (id) => request<Item>(paths.itemRefetch(id), { method: "POST" }),
+
+  plugins: () => request<PluginsView>(paths.plugins),
+  sources: (id) => request<PluginSource[]>(paths.pluginSources(id), { timeoutMs: SOURCES_TIMEOUT_MS }),
+  tryNow: (id) => request<FetchPlugin>(paths.pluginTryNow(id), { method: "POST" }),
+  hold: (id) => request<FetchPlugin>(paths.pluginHold(id), { method: "POST" }),
+  forgetSecret: (id, key) => request<FetchPlugin>(paths.pluginSecret(id, key), { method: "DELETE" }),
+  sites: () => request<SiteLogin[]>(paths.sites),
+  forgetLogin: (site) => request<void>(paths.siteLogin(site), { method: "DELETE" }),
+  imports: () => request<ImportView[]>(paths.imports),
+  startImport: (body) => request<ImportView>(paths.imports, { method: "POST", body }),
+  import: (id) => request<ImportView>(paths.import(id)),
+  importEntries: (id, standing, offset, limit) =>
+    request<ImportEntry[]>(paths.importEntries(id), {
+      query: { standing, offset: String(offset), limit: String(limit) },
+    }),
+  confirmImport: (id, body) => request<ImportView>(paths.importConfirm(id), { method: "POST", body }),
+  holdImport: (id) => request<ImportView>(paths.importHold(id), { method: "POST" }),
+  resumeImport: (id) => request<ImportView>(paths.importResume(id), { method: "POST" }),
+  deleteImport: (id) => request<void>(paths.import(id), { method: "DELETE" }),
+  deliverTokens: () => request<DeliverToken[]>(paths.deliverTokens),
+  createDeliverToken: (body) => request<NewDeliverToken>(paths.deliverTokens, { method: "POST", body }),
+  revokeDeliverToken: (id) => request<void>(paths.deliverToken(id), { method: "DELETE" }),
+  inbox: () => request<{ path: string }>(paths.inbox),
 };
 
 // 样例库只在 VITE_USUYO_MOCK=1 或开发服务器里用；生产构建里这两个条件都是常量 false，样例库不进包。
@@ -56,7 +121,7 @@ const MOCK_FALLBACK = import.meta.env.MODE === "development";
 const MOCK_EMPTY =
   (MOCK_FORCED || MOCK_FALLBACK) && typeof location !== "undefined" && new URLSearchParams(location.search).get("mock") === "empty";
 
-let mockLibrary: Promise<Library> | null = null;
+let mockLibrary: Promise<Source> | null = null;
 let usingMock = MOCK_FORCED;
 
 /** 已经换成样例库了：事件流不用再连。 */
@@ -64,13 +129,16 @@ export function usingMockLibrary(): boolean {
   return usingMock;
 }
 
-function mock(): Promise<Library> {
-  mockLibrary ??= import("../mock/library").then((m) => m.createMockLibrary(MOCK_EMPTY));
+function mock(): Promise<Source> {
+  mockLibrary ??= Promise.all([import("../mock/library"), import("../mock/platforms")]).then(([l, p]) => ({
+    ...l.createMockLibrary(MOCK_EMPTY),
+    ...p.createMockPlatforms(MOCK_EMPTY),
+  }));
   return mockLibrary;
 }
 
 /** 走内核；开发时连不上内核就换成样例库，换过以后一直用它。 */
-export async function call<T>(run: (library: Library) => Promise<T>): Promise<T> {
+export async function call<T>(run: (source: Source) => Promise<T>): Promise<T> {
   if ((MOCK_FORCED || MOCK_FALLBACK) && usingMock) return run(await mock());
   try {
     return await run(daemon);

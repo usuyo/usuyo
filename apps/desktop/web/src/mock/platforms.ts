@@ -1,44 +1,13 @@
 // 样例：获取插件、登录站点、导入、投递令牌。和内核同一套接口（见 api/endpoints.ts），数据在内存里。
-// 页面接上以后放进 api/source.ts 的 Library；这里先单独给出，「获取插件」「导入」两页照它搭。
+// 导入照时间往前走：新开的一次过几秒列完，确认以后隔一会儿收下一条，页面不用真的内核也能看到「来了」。
 import type {
-  ConfirmImportRequest,
-  CreateDeliverTokenRequest,
   DeliverToken,
   FetchPlugin,
   ImportEntry,
   ImportView,
-  NewDeliverToken,
-  PluginSource,
-  PluginsView,
   SiteLogin,
-  StartImportRequest,
-  StorageState,
 } from "../api/endpoints";
-
-/** 「获取插件」「导入」两页要的读写。真的内核照 `paths` 的同名路由实现。 */
-export interface Platforms {
-  plugins(): Promise<PluginsView>;
-  sources(pluginId: string): Promise<PluginSource[]>;
-  tryNow(pluginId: string): Promise<FetchPlugin>;
-  hold(pluginId: string): Promise<FetchPlugin>;
-  setSecret(pluginId: string, key: string, value: string): Promise<FetchPlugin>;
-  forgetSecret(pluginId: string, key: string): Promise<FetchPlugin>;
-  sites(): Promise<SiteLogin[]>;
-  saveLogin(site: string, state: StorageState): Promise<SiteLogin>;
-  forgetLogin(site: string): Promise<void>;
-  imports(): Promise<ImportView[]>;
-  startImport(body: StartImportRequest): Promise<ImportView>;
-  import(id: string): Promise<ImportView>;
-  importEntries(id: string, standing?: ImportEntry["standing"]): Promise<ImportEntry[]>;
-  confirmImport(id: string, body: ConfirmImportRequest): Promise<ImportView>;
-  holdImport(id: string): Promise<ImportView>;
-  resumeImport(id: string): Promise<ImportView>;
-  deleteImport(id: string): Promise<void>;
-  deliverTokens(): Promise<DeliverToken[]>;
-  createDeliverToken(body: CreateDeliverTokenRequest): Promise<NewDeliverToken>;
-  revokeDeliverToken(id: string): Promise<void>;
-  inbox(): Promise<{ path: string }>;
-}
+import type { Platforms } from "../api/source";
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const inMinutes = (m: number) => new Date(Date.now() + m * 60_000).toISOString();
@@ -141,7 +110,16 @@ function entriesFor(n: number, stored: number, trashed: number): ImportEntry[] {
 
 interface MockImport {
   view: ImportView;
+  /** 已经列出来的。 */
   entries: ImportEntry[];
+  /** 还没列到的（在列的时候一页页挪进 `entries`）。 */
+  later: ImportEntry[];
+  /** 收下一条要隔多久（毫秒），照插件的节奏，样例里缩短了。 */
+  everyMs: number;
+  /** 上次动过的时间。 */
+  at: number;
+  /** 确认时勾了「回收站里的也拿回来」。 */
+  alsoTrashed: boolean;
 }
 
 function counts(entries: ImportEntry[]): ImportView["preview"] {
@@ -149,51 +127,103 @@ function counts(entries: ImportEntry[]): ImportView["preview"] {
   return { new: n("new"), stored: n("stored"), trashed: n("trashed") };
 }
 
-export function createMockPlatforms(): Platforms {
-  const plugins = basePlugins();
-  const sites = baseSites();
-  const imports = new Map<string, MockImport>();
-  const tokens: (DeliverToken & { token: string })[] = [
-    { id: "6f1c0a9e2b7d4c31", name: "小红书油猴脚本", kind: "extension", createdAt: "2026-11-09T08:00:00.000Z", token: "" },
-  ];
+const PAGE = 6;
+const LIST_EVERY_MS = 1200;
 
-  const ready = entriesFor(24, 5, 1);
-  imports.set("0193f2b0-0001-7f3a-8b4c-5d6e7f8a9b0c", {
-    entries: ready,
-    view: {
-      id: "0193f2b0-0001-7f3a-8b4c-5d6e7f8a9b0c",
-      kind: "source",
-      title: "稍后再看",
-      pluginId: "usuyo-fetch/bilibili",
-      source: "bilibili:toview",
-      createdAt: "2026-11-11T09:00:00.000Z",
-      state: "ready",
-      pages: 2,
-      preview: counts(ready),
-      taken: 0,
-      notStored: 0,
-      skipped: 0,
-    },
-  });
-  const taking = entriesFor(40, 3, 0).map((e, i) => ({ ...e, url: e.url.replace("bilibili.com/video", "xiaohongshu.com/explore"), taken: i >= 3 && i < 15 }));
-  imports.set("0193f2b0-0002-7f3a-8b4c-5d6e7f8a9b0c", {
-    entries: taking,
-    view: {
-      id: "0193f2b0-0002-7f3a-8b4c-5d6e7f8a9b0c",
-      kind: "delivered",
-      title: "小红书收藏夹 2026-11-10",
-      client: "小红书油猴脚本",
-      createdAt: "2026-11-10T21:00:00.000Z",
-      state: "taking",
-      pages: 0,
-      preview: counts(taking),
-      taken: 12,
-      notStored: 1,
-      skipped: 0,
-      nextAt: inMinutes(0.25),
-      waiting: { code: "pacing", until: inMinutes(0.25) },
-    },
-  });
+/** 照时间往前走一步：在列的翻页，在收的收下轮到的。 */
+function advance(i: MockImport, now: number): void {
+  const v = i.view;
+  if (v.state === "listing") {
+    while (now - i.at >= LIST_EVERY_MS && i.later.length > 0) {
+      i.entries.push(...i.later.splice(0, PAGE));
+      i.at += LIST_EVERY_MS;
+      i.view = { ...i.view, pages: i.view.pages + 1, preview: counts(i.entries) };
+    }
+    if (i.later.length === 0) i.view = { ...i.view, state: "ready", preview: counts(i.entries) };
+    return;
+  }
+  if (v.state !== "taking") return;
+  const { alsoTrashed } = i;
+  while (now - i.at >= i.everyMs) {
+    const next = i.entries.find((e) => !e.taken && (e.standing === "new" || (alsoTrashed && e.standing === "trashed")));
+    if (!next) break;
+    next.taken = true;
+    i.at += i.everyMs;
+    i.view = { ...i.view, taken: i.view.taken + 1 };
+  }
+  const left = i.entries.some((e) => !e.taken && (e.standing === "new" || (alsoTrashed && e.standing === "trashed")));
+  if (!left) {
+    const { nextAt: _n, waiting: _w, ...rest } = i.view;
+    i.view = { ...rest, state: "done" };
+  } else {
+    const nextAt = new Date(i.at + i.everyMs).toISOString();
+    i.view = { ...i.view, nextAt, waiting: { code: "pacing", until: nextAt } };
+  }
+}
+
+export function createMockPlatforms(empty = false): Platforms {
+  const plugins = empty ? [] : basePlugins();
+  const sites = empty ? [] : baseSites();
+  const imports = new Map<string, MockImport>();
+  const tokens: (DeliverToken & { token: string })[] = empty
+    ? []
+    : [{ id: "6f1c0a9e2b7d4c31", name: "小红书油猴脚本", kind: "extension", createdAt: "2026-11-09T08:00:00.000Z", token: "" }];
+  const now = Date.now();
+
+  if (!empty) {
+    const ready = entriesFor(24, 5, 1);
+    imports.set("0193f2b0-0001-7f3a-8b4c-5d6e7f8a9b0c", {
+      entries: ready,
+      later: [],
+      everyMs: 4000,
+      at: now,
+      alsoTrashed: false,
+      view: {
+        id: "0193f2b0-0001-7f3a-8b4c-5d6e7f8a9b0c",
+        kind: "source",
+        title: "稍后再看",
+        pluginId: "usuyo-fetch/bilibili",
+        source: "bilibili:toview",
+        createdAt: "2026-11-11T09:00:00.000Z",
+        state: "ready",
+        pages: 2,
+        preview: counts(ready),
+        taken: 0,
+        notStored: 0,
+        skipped: 0,
+      },
+    });
+    // 交进来的一批小红书：收下的几条指向样例库里真有的条目，取不到视频的那条在条目页写着原因。
+    const linked = ["c2", "c7", "f2", "j5", "f7", "w1", "w4", "k3", "e4", "r4", "r5", "c1"];
+    const taking = entriesFor(40, 3, 0).map((e, i) => ({
+      ...e,
+      url: e.url.replace("bilibili.com/video", "xiaohongshu.com/explore"),
+      taken: i >= 3 && i < 15,
+      ...(i >= 3 && i < 15 ? { itemId: linked[i - 3] ?? `xhs-mock${i}` } : {}),
+    }));
+    imports.set("0193f2b0-0002-7f3a-8b4c-5d6e7f8a9b0c", {
+      entries: taking,
+      later: [],
+      everyMs: 15_000,
+      at: now,
+      alsoTrashed: false,
+      view: {
+        id: "0193f2b0-0002-7f3a-8b4c-5d6e7f8a9b0c",
+        kind: "delivered",
+        title: "小红书收藏夹 2026-11-10",
+        client: "小红书油猴脚本",
+        createdAt: "2026-11-10T21:00:00.000Z",
+        state: "taking",
+        pages: 0,
+        preview: counts(taking),
+        taken: 12,
+        notStored: 1,
+        skipped: 0,
+        nextAt: new Date(now + 15_000).toISOString(),
+        waiting: { code: "pacing", until: new Date(now + 15_000).toISOString() },
+      },
+    });
+  }
 
   const plugin = (id: string): FetchPlugin => {
     const p = plugins.find((x) => x.id === id);
@@ -203,6 +233,7 @@ export function createMockPlatforms(): Platforms {
   const getImport = (id: string): MockImport => {
     const i = imports.get(id);
     if (!i) throw new Error(`样例里没有导入 ${id}`);
+    advance(i, Date.now());
     return i;
   };
   const setSecret = (pluginId: string, key: string, filled: boolean): FetchPlugin => {
@@ -217,10 +248,14 @@ export function createMockPlatforms(): Platforms {
       return { plugins: plugins.map((p) => ({ ...p })), notLoaded: [] };
     },
     async sources(pluginId) {
-      await wait(300);
+      await wait(600);
       const p = plugin(pluginId);
       if (!p.canList) throw new Error(`${p.name} 不能列出你存过的`);
-      return [...p.sources, { source: "bilibili:fav:50948568", title: "默认收藏夹", action: "favorite", count: 128 }];
+      return [
+        ...p.sources,
+        { source: "bilibili:fav:50948568", title: "默认收藏夹", action: "favorite", count: 128 },
+        { source: "bilibili:fav:50948571", title: "做饭", action: "favorite", count: 36 },
+      ];
     },
     async tryNow(pluginId) {
       await wait(40);
@@ -234,10 +269,6 @@ export function createMockPlatforms(): Platforms {
       p.pauses = [{ scope: "*", byYou: true }];
       return { ...p };
     },
-    async setSecret(pluginId, key, value) {
-      await wait(40);
-      return setSecret(pluginId, key, value.trim() !== "");
-    },
     async forgetSecret(pluginId, key) {
       await wait(40);
       return setSecret(pluginId, key, false);
@@ -245,16 +276,6 @@ export function createMockPlatforms(): Platforms {
     async sites() {
       await wait(40);
       return sites.map((s) => ({ ...s }));
-    },
-    async saveLogin(site, state) {
-      await wait(120);
-      const s = sites.find((x) => x.site === site);
-      if (!s) throw new Error(`没有插件用到 ${site}`);
-      const names = new Set(state.cookies.map((c) => c.name));
-      const ok = s.cookies.length === 0 ? names.size > 0 : s.cookies.every((c) => names.has(c));
-      s.login = ok ? "present" : "missing";
-      s.capturedAt = new Date().toISOString();
-      return { ...s };
     },
     async forgetLogin(site) {
       await wait(40);
@@ -266,16 +287,21 @@ export function createMockPlatforms(): Platforms {
     },
     async imports() {
       await wait(40);
-      return [...imports.values()].map((i) => ({ ...i.view })).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      return [...imports.keys()]
+        .map((id) => ({ ...getImport(id).view }))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     },
     async startImport(body) {
       await wait(80);
       const p = plugin(body.pluginId);
       const id = `0193f2b0-${(imports.size + 1).toString().padStart(4, "0")}-7f3a-8b4c-5d6e7f8a9b0c`;
-      const entries = entriesFor(18, 2, 0);
-      // 样例不真的翻页：建出来就是列完、等你看的样子
+      const all = entriesFor(18, 2, 1);
       imports.set(id, {
-        entries,
+        entries: [],
+        later: all,
+        everyMs: Math.max(p.pacing[0]?.intervalSec ?? 5, 1) * 1000,
+        at: Date.now(),
+        alsoTrashed: false,
         view: {
           id,
           kind: "source",
@@ -283,9 +309,9 @@ export function createMockPlatforms(): Platforms {
           pluginId: body.pluginId,
           source: body.source,
           createdAt: new Date().toISOString(),
-          state: "ready",
-          pages: 1,
-          preview: counts(entries),
+          state: "listing",
+          pages: 0,
+          preview: { new: 0, stored: 0, trashed: 0 },
           taken: 0,
           notStored: 0,
           skipped: 0,
@@ -297,16 +323,22 @@ export function createMockPlatforms(): Platforms {
       await wait(40);
       return { ...getImport(id).view };
     },
-    async importEntries(id, standing) {
+    async importEntries(id, standing, offset, limit) {
       await wait(40);
-      return getImport(id).entries.filter((e) => standing === undefined || e.standing === standing);
+      return getImport(id)
+        .entries.filter((e) => e.standing === standing)
+        .slice(offset, offset + limit)
+        .map((e) => ({ ...e }));
     },
     async confirmImport(id, body) {
       await wait(80);
       const i = getImport(id);
       if (i.view.state !== "ready") throw new Error("这次导入不在等确认");
       const wanted = i.entries.filter((e) => e.standing === "new" || (body.alsoTrashed === true && e.standing === "trashed"));
-      i.view = { ...i.view, state: wanted.length > 0 ? "taking" : "done", nextAt: inMinutes(0.1) };
+      i.at = Date.now();
+      i.alsoTrashed = body.alsoTrashed === true;
+      i.view = { ...i.view, state: wanted.length > 0 ? "taking" : "done" };
+      advance(i, i.at);
       return { ...i.view };
     },
     async holdImport(id) {
@@ -319,7 +351,9 @@ export function createMockPlatforms(): Platforms {
     async resumeImport(id) {
       await wait(40);
       const i = getImport(id);
-      i.view = { ...i.view, state: "taking", nextAt: inMinutes(0.1) };
+      i.at = Date.now();
+      i.view = { ...i.view, state: "taking" };
+      advance(i, i.at);
       return { ...i.view };
     },
     async deleteImport(id) {

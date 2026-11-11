@@ -17,7 +17,7 @@ interface Drop {
   sub: string;
 }
 
-/** 空资料库：只有雾和名字。收下的落进雾里，同一个站的落在一起，文件落在放手的地方。 */
+/** 空资料库：只有雾和名字。收下的落进雾里，同一个站的落在一起。内核还不收文件，这里只收链接。 */
 export function EmptyPage({ onLanded }: { onLanded: () => void }) {
   const root = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -53,21 +53,16 @@ export function EmptyPage({ onLanded }: { onLanded: () => void }) {
     return () => clearTimeout(id);
   }, [toast]);
 
-  function land(raw: string, kind: "link" | "file") {
+  function land(raw: string) {
     const input = raw.trim();
     if (input === "") return;
     const site = /https?:\/\/[^\s/]+/i.exec(input)?.[0].replace(/^https?:\/\//i, "").replace(/^www\./i, "");
-    const label = kind === "file" ? input : (site ?? (input.length > 18 ? `${input.slice(0, 18)}…` : input));
+    const label = site ?? (input.length > 18 ? `${input.slice(0, 18)}…` : input);
     const hs = strHash(site ?? input);
     const hj = strHash(`${input}:${drops.length}`);
-    let x: number;
-    let y: number;
-    if (kind === "file" && pointer.current) ({ x, y } = pointer.current);
-    else {
-      const a = ((hs % 3600) / 3600) * Math.PI * 2;
-      x = cx + Math.cos(a) * 470;
-      y = cy + Math.sin(a) * 300;
-    }
+    const a = ((hs % 3600) / 3600) * Math.PI * 2;
+    let x = cx + Math.cos(a) * 470;
+    let y = cy + Math.sin(a) * 300;
     x += ((hj & 255) / 255 - 0.5) * 90;
     y += (((hj >>> 8) & 255) / 255 - 0.5) * 70;
     x = clamp(x, 90, size.width - 140);
@@ -75,10 +70,10 @@ export function EmptyPage({ onLanded }: { onLanded: () => void }) {
     // 不落在中间那块字上。
     if (Math.abs(x - cx) < 290 && Math.abs(y - cy) < 165) y = y < cy ? cy - 185 : cy + 185;
     take.mutate(
-      { input, kind },
+      { input, kind: "link" },
       {
         onSuccess: (res) => {
-          setDrops((d) => [...d, { id: res.id, x, y, label, sub: kind === "file" ? "文件" : "只有链接" }]);
+          setDrops((d) => [...d, { id: res.id, x, y, label, sub: "只有链接" }]);
           setToast((n) => n + 1);
           onLanded();
         },
@@ -107,10 +102,7 @@ export function EmptyPage({ onLanded }: { onLanded: () => void }) {
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e: DragEvent) => {
         e.preventDefault();
-        pointer.current = locate(e);
-        const files = [...e.dataTransfer.files].slice(0, 8);
-        if (files.length > 0) for (const f of files) land(f.name, "file");
-        else land(e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text"), "link");
+        land(e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text"));
       }}
     >
       <canvas ref={canvas} aria-hidden="true" className="absolute inset-0 size-full" />
@@ -145,7 +137,7 @@ export function EmptyPage({ onLanded }: { onLanded: () => void }) {
             收下的会落进雾里，以后从哪一片进去都行。
           </p>
         </div>
-        <p className="m-0 mt-1 text-body text-sub">复制一条分享链接，粘贴到下面；文件可以直接拖进来。</p>
+        <p className="m-0 mt-1 text-body text-sub">复制一条分享链接，粘贴到下面，或者把链接拖进来。</p>
         <TextField value={value} onChange={setValue} aria-label="收下一条链接" className="mt-[22px] w-[420px]">
           <Label className="flex h-field items-center gap-2 rounded-input border border-border2 bg-hud pr-1.5 pl-3.5 text-sub">
             <Link2 size={16} aria-hidden="true" className="shrink-0" />
@@ -157,12 +149,12 @@ export function EmptyPage({ onLanded }: { onLanded: () => void }) {
                 const text = e.clipboardData.getData("text");
                 if (!text) return;
                 e.preventDefault();
-                land(text, "link");
+                land(text);
                 setValue("");
               }}
               onKeyDown={(e) => {
                 if (e.key !== "Enter") return;
-                land(value, "link");
+                land(value);
                 setValue("");
               }}
             />
@@ -170,7 +162,7 @@ export function EmptyPage({ onLanded }: { onLanded: () => void }) {
               variant="soft"
               size="tight"
               onPress={() => {
-                land(value, "link");
+                land(value);
                 setValue("");
               }}
             >
@@ -187,7 +179,7 @@ export function EmptyPage({ onLanded }: { onLanded: () => void }) {
         {take.error ? <ErrorLine error={take.error} /> : null}
       </div>
       <div className="absolute bottom-4 left-5 z-10 text-tag whitespace-pre text-sub">
-        移动鼠标拨开雾　·　粘贴或拖进来，就收下了
+        移动鼠标拨开雾　·　粘贴或把链接拖进来，就收下了
       </div>
       {library ? (
         <div className="absolute right-5 bottom-4 z-10 max-w-[60%] truncate text-tag text-sub select-text" title={library}>

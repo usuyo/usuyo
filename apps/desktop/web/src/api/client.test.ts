@@ -49,6 +49,14 @@ describe("request", () => {
     expect(connection()).not.toBe(second);
   });
 
+  it("sends PUT and DELETE, and reads a 204 as no content", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(() => Promise.resolve(new Response(null, { status: 204 })));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(request<void>("/sites/a/login", { method: "DELETE" })).resolves.toBeUndefined();
+    await request<void>("/plugins/o/r/secrets/k", { method: "PUT", body: { value: "v" } });
+    expect(fetchMock.mock.calls.map((c) => c[1]?.method)).toEqual(["DELETE", "PUT"]);
+  });
+
   it("keeps the shell's reason for the user", () => {
     const e = new DaemonUnreachableError("x", "端口 47615 被别的程序占着，usuyo 的后台没能启动");
     expect(e.reason).toBe("端口 47615 被别的程序占着，usuyo 的后台没能启动");

@@ -2,7 +2,7 @@
 // 事件流要带令牌，EventSource 带不了请求头，所以用 fetch 读流。
 import type { QueryClient } from "@tanstack/react-query";
 import { authHeaders, connection, forgetConnection, unreachable, urlOf } from "./client";
-import { paths, type LibraryEvent } from "./endpoints";
+import { paths, type LibraryEvent, type PlatformEvent } from "./endpoints";
 import { queryKeys } from "./hooks";
 import { usingMockLibrary } from "./source";
 import { SseParser } from "./sse";
@@ -10,9 +10,21 @@ import { SseParser } from "./sse";
 const RETRY_MIN_MS = 1000;
 const RETRY_MAX_MS = 30_000;
 
-export function applyEvent(queryClient: QueryClient, e: LibraryEvent): void {
+type DaemonEvent = LibraryEvent | PlatformEvent;
+
+export function applyEvent(queryClient: QueryClient, e: DaemonEvent): void {
   const refresh = (queryKey: readonly unknown[]) => void queryClient.invalidateQueries({ queryKey });
   switch (e.type) {
+    case "plugins-updated":
+      refresh(queryKeys.plugins);
+      refresh(queryKeys.sites);
+      return;
+    case "import-updated":
+      // 列了一页、收下了一条：这一次、记录栏和预览里的条目都重拉。
+      refresh(queryKeys.imports);
+      refresh(queryKeys.import(e.id));
+      refresh(queryKeys.importEntries(e.id));
+      return;
     case "topic-updated":
       refresh(queryKeys.topics);
       refresh(queryKeys.map);
@@ -58,28 +70,23 @@ export function startLiveUpdates(queryClient: QueryClient): () => void {
   return () => stop.abort();
 }
 
-const EVENT_TYPES: ReadonlySet<string> = new Set<LibraryEvent["type"]>([
+const EVENT_TYPES: ReadonlySet<string> = new Set<DaemonEvent["type"]>([
   "item-added",
   "item-updated",
   "item-fetch-failed",
   "item-trashed",
   "topic-updated",
+  "import-updated",
 ]);
 
-/** 只看刷新要用的 `type` 和 `id`；别的字段照 endpoints.ts。 */
-function isLibraryEvent(v: unknown): v is LibraryEvent {
-  return (
-    typeof v === "object" &&
-    v !== null &&
-    "type" in v &&
-    "id" in v &&
-    typeof v.type === "string" &&
-    EVENT_TYPES.has(v.type) &&
-    typeof v.id === "string"
-  );
+/** 只看刷新要用的 `type` 和 `id`；别的字段照 endpoints.ts。`plugins-updated` 不带 id。 */
+export function isDaemonEvent(v: unknown): v is DaemonEvent {
+  if (typeof v !== "object" || v === null || !("type" in v) || typeof v.type !== "string") return false;
+  if (v.type === "plugins-updated") return true;
+  return EVENT_TYPES.has(v.type) && "id" in v && typeof v.id === "string";
 }
 
-async function read(body: ReadableStream<Uint8Array>, on: (e: LibraryEvent) => void): Promise<void> {
+async function read(body: ReadableStream<Uint8Array>, on: (e: DaemonEvent) => void): Promise<void> {
   const parser = new SseParser();
   const decoder = new TextDecoder();
   const reader = body.getReader();
@@ -88,7 +95,7 @@ async function read(body: ReadableStream<Uint8Array>, on: (e: LibraryEvent) => v
     if (done) return;
     for (const m of parser.push(decoder.decode(value, { stream: true }))) {
       const e: unknown = JSON.parse(m.data);
-      if (isLibraryEvent(e)) on(e);
+      if (isDaemonEvent(e)) on(e);
       else console.info("usuyo: 不认识的事件", m.event);
     }
   }

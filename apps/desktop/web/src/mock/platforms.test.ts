@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMockPlatforms } from "./platforms";
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe("mock platforms", () => {
   it("lists the three plugins with labels and a pause with its reason", async () => {
@@ -16,21 +20,31 @@ describe("mock platforms", () => {
     expect((await m.tryNow("usuyo-fetch/bilibili")).pauses).toEqual([]);
   });
 
-  it("marks a site logged in once its named cookies arrive, never echoing values", async () => {
-    const m = createMockPlatforms();
-    const s = await m.saveLogin("www.bilibili.com", { cookies: [{ name: "SESSDATA", value: "secret", domain: ".bilibili.com" }] });
-    expect(s.login).toBe("present");
-    expect(JSON.stringify(s)).not.toContain("secret");
+  it("starts empty when asked, with nothing installed", async () => {
+    const m = createMockPlatforms(true);
+    expect((await m.plugins()).plugins).toEqual([]);
+    expect(await m.sites()).toEqual([]);
+    expect(await m.imports()).toEqual([]);
   });
 
-  it("previews an import, then takes it after you confirm", async () => {
+  it("lists page by page, previews, then takes at the plugin's pace after you confirm", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
     const m = createMockPlatforms();
     const started = await m.startImport({ pluginId: "usuyo-fetch/bilibili", source: "bilibili:toview" });
-    expect(started).toMatchObject({ state: "ready", title: "稍后再看", preview: { new: 16, stored: 2, trashed: 0 } });
-    expect(await m.importEntries(started.id, "new")).toHaveLength(16);
-    const confirmed = await m.confirmImport(started.id, {});
-    expect(confirmed.state).toBe("taking");
-    expect((await m.holdImport(started.id)).state).toBe("held");
+    expect(started).toMatchObject({ state: "listing", title: "稍后再看", pages: 0 });
+    vi.advanceTimersByTime(1300);
+    expect(await m.import(started.id)).toMatchObject({ state: "listing", pages: 1 });
+    vi.advanceTimersByTime(4000);
+    const ready = await m.import(started.id);
+    expect(ready).toMatchObject({ state: "ready", preview: { new: 15, stored: 2, trashed: 1 } });
+    expect(await m.importEntries(started.id, "new", 0, 100)).toHaveLength(15);
+    expect(await m.importEntries(started.id, "new", 10, 100)).toHaveLength(5);
+    expect((await m.confirmImport(started.id, {})).state).toBe("taking");
+    vi.advanceTimersByTime(5100);
+    expect((await m.import(started.id)).taken).toBe(1);
+    const held = await m.holdImport(started.id);
+    expect(held.state).toBe("held");
+    expect(held.waiting).toBeUndefined();
   });
 
   it("shows a new deliver token once and lists it without the secret", async () => {

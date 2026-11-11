@@ -6,7 +6,7 @@ import { ErrorLine } from "../components/ErrorLine";
 import { useUiStore } from "../store/ui";
 
 /** 左栏顶上的「粘贴链接，收下」：粘贴或回车就收下，下面那行字换成「收下了」一秒。 */
-export function TakeField({ note = "也可以把文件拖到地图上" }: { note?: string }) {
+export function TakeField({ note = "也可以把链接拖到地图上" }: { note?: string }) {
   const [value, setValue] = useState("");
   const [toast, setToast] = useState<{ text: string; n: number } | null>(null);
   const take = useTake();

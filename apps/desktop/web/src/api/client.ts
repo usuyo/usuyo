@@ -75,7 +75,13 @@ export function unreachable(response: Response): boolean {
 
 export async function request<T>(
   path: string,
-  init: { method?: "GET" | "POST"; body?: unknown; query?: Record<string, string> } = {},
+  init: {
+    method?: "GET" | "POST" | "PUT" | "DELETE";
+    body?: unknown;
+    query?: Record<string, string>;
+    /** 调插件的慢请求（列来源）要等得久一些。 */
+    timeoutMs?: number;
+  } = {},
 ): Promise<T> {
   const c = await connection();
   const url = urlOf(c, path);
@@ -92,7 +98,7 @@ export async function request<T>(
         ...(init.body === undefined ? {} : { "Content-Type": "application/json" }),
       },
       body: init.body === undefined ? undefined : JSON.stringify(init.body),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(init.timeoutMs ?? REQUEST_TIMEOUT_MS),
     });
   } catch (error) {
     forgetConnection();
@@ -104,6 +110,8 @@ export async function request<T>(
   if (!response.ok) {
     throw new ApiError(response.status, (await response.text()) || response.statusText);
   }
+  // 204（退出登录、撤销令牌、不要这次导入）没有内容；调用处的类型写 `void`。
+  if (response.status === 204) return undefined as T;
   // 响应形状由 endpoints.ts 的类型声明负责，这里不再校验。
   const body: unknown = await response.json();
   return body as T;
