@@ -1,32 +1,27 @@
-//! 连出去之前的地址检查：链接和页面里的图片地址都不可信，只连公网地址，
+//! 连出去之前的地址检查：链接和平台回答里的地址都不可信，只连公网地址，
 //! 不让它们摸到本机、路由器、内网设备和云元数据。
 
 use std::io;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs};
-use std::sync::mpsc;
-use std::time::Duration;
 
 use url::{Host, Url};
 
 /// 查域名：给主机名和端口，回所有解析出的地址。测试换成固定的表。
-pub(crate) type Lookup = fn(&str, u16) -> io::Result<Vec<SocketAddr>>;
+pub type Lookup = fn(&str, u16) -> io::Result<Vec<SocketAddr>>;
 
-/// 地址策略：怎么查域名、哪些地址算公网、要取的链接本身能不能是内网。
-/// 程序里只用 `Policy::strict`；测试换成能连本机测试服务的策略。
+/// 地址策略：怎么查域名、哪些地址算公网。
+/// 程序里只用 `Policy::strict`；测试自己拼一个值，让本机测试服务算「公网」。
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct Policy {
-    pub(crate) lookup: Lookup,
-    pub(crate) public: fn(IpAddr) -> bool,
-    /// 来自插件设置，只给第一跳。
-    pub(crate) private_page: bool,
+pub struct Policy {
+    pub lookup: Lookup,
+    pub public: fn(IpAddr) -> bool,
 }
 
 impl Policy {
-    pub(crate) fn strict(private_page: bool) -> Self {
+    pub fn strict() -> Self {
         Policy {
             lookup: system_lookup,
             public: is_public,
-            private_page,
         }
     }
 }
@@ -68,7 +63,7 @@ fn in_v6(bits: u128, (net, len): (u128, u32)) -> bool {
 
 /// 是不是可以连的公网地址。IPv6 只放行 2000::/3 里的全球单播；
 /// IPv4 映射（::ffff:0:0/96）和 NAT64（64:ff9b::/96）按里面的 IPv4 判断。
-pub(crate) fn is_public(ip: IpAddr) -> bool {
+fn is_public(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(v4) => v4_public(v4),
         IpAddr::V6(v6) => v6_public(v6),
@@ -142,17 +137,9 @@ pub(crate) fn admit(
     Ok(addrs)
 }
 
-const LOOKUP_TIMEOUT: Duration = Duration::from_secs(15);
-
-/// 系统 DNS，带超时：查询放在线程里，超时就不等了。
-pub(crate) fn system_lookup(host: &str, port: u16) -> io::Result<Vec<SocketAddr>> {
-    let (tx, rx) = mpsc::sync_channel(1);
-    let target = (host.to_owned(), port);
-    std::thread::spawn(move || {
-        tx.send(target.to_socket_addrs().map(Vec::from_iter)).ok();
-    });
-    rx.recv_timeout(LOOKUP_TIMEOUT)
-        .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "DNS lookup timed out"))?
+/// 系统 DNS。超时由调用方管：检查放在线程里，等不到就不等了。
+fn system_lookup(host: &str, port: u16) -> io::Result<Vec<SocketAddr>> {
+    (host, port).to_socket_addrs().map(Vec::from_iter)
 }
 
 #[cfg(test)]
@@ -245,7 +232,7 @@ mod tests {
     fn check(input: &str, private_ok: bool) -> Result<Vec<SocketAddr>, Refusal> {
         let policy = Policy {
             lookup: table,
-            ..Policy::strict(false)
+            ..Policy::strict()
         };
         admit(&Url::parse(input).unwrap(), private_ok, &policy)
     }

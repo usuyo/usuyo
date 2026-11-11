@@ -2,25 +2,19 @@
 
 use std::collections::BTreeSet;
 use std::fs;
-use std::io;
-use std::net::SocketAddr;
 use std::path::Path;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use dom_smoothie::{Article, Config, Readability, TextMode};
 use encoding_rs::Encoding;
 use serde_json::json;
-use ureq::config::Config as AgentConfig;
-use ureq::http::Uri;
-use ureq::unversioned::resolver::{ResolvedSocketAddrs, Resolver};
-use ureq::unversioned::transport::{DefaultConnector, NextTimeout};
-use usuyo_plugin::protocol::{
+use usuyo_plugin_kit::http::{self, Client, Hosts, Policy};
+use usuyo_plugin_kit::protocol::{
     Access, Author, CallFailure, Completeness, ErrorCode, Evidence, FetchOutput, ItemKind,
     NotFoundReason, OutputKind, RelPath, Rfc3339, TextFormat,
 };
 
-use crate::address::{self, Policy, Refusal};
 use crate::{Fail, fail, web_identity};
 
 /// 普通桌面浏览器的 UA：有的站点对不认识的 UA 只给空壳页面。
@@ -31,7 +25,6 @@ const IMAGES_TOTAL_BYTES: u64 = 256 << 20;
 const MAX_IMAGES: usize = 64;
 const MAX_REDIRECTS: u32 = 10;
 const PAGE_TIMEOUT: Duration = Duration::from_secs(60);
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 /// 单张图片的总时长，和所有图片加起来的时长：图片慢不能拖到宿主的 fetch 超时，丢掉已经抽好的正文。
 const IMAGE_TIMEOUT: Duration = Duration::from_secs(15);
 const IMAGES_BUDGET: Duration = Duration::from_secs(90);
@@ -44,111 +37,11 @@ const OUTPUTS: [OutputKind; 4] = [
     OutputKind::Meta,
 ];
 
-/// 给一跳用的客户端：只连检查过的地址，不自己跟跳转，不走环境变量里的代理。
-fn agent(host: &str, addrs: Vec<SocketAddr>, timeout: Duration) -> ureq::Agent {
-    let config = ureq::Agent::config_builder()
-        .timeout_global(Some(timeout))
-        .timeout_connect(Some(CONNECT_TIMEOUT.min(timeout)))
-        .max_redirects(0)
-        .user_agent(USER_AGENT)
-        .http_status_as_error(false)
-        .proxy(None)
-        .build();
-    let pinned = Pinned {
-        host: host.to_owned(),
-        addrs,
-    };
-    ureq::Agent::with_parts(config, DefaultConnector::default(), pinned)
-}
-
-/// 钉住地址的解析器：只认这一跳的主机，回的就是检查过的那些地址，不再查第二次 DNS。
-#[derive(Debug)]
-struct Pinned {
-    host: String,
-    addrs: Vec<SocketAddr>,
-}
-
-impl Resolver for Pinned {
-    fn resolve(
-        &self,
-        uri: &Uri,
-        _: &AgentConfig,
-        _: NextTimeout,
-    ) -> Result<ResolvedSocketAddrs, ureq::Error> {
-        if uri.host() != Some(self.host.as_str()) {
-            return Err(ureq::Error::HostNotFound);
-        }
-        // ureq 最多收 16 个地址，多出来的不要
-        let mut out = self.empty();
-        for addr in &self.addrs {
-            if out.try_push(*addr).is_err() {
-                break;
-            }
-        }
-        Ok(out)
-    }
-}
-
-#[derive(Debug)]
-enum GetError {
-    Invalid(String),
-    /// 地址不是公网；`first` 表示是要取的那条链接本身，不是跳转目标。
-    NotPublic {
-        why: String,
-        first: bool,
-    },
-    Lookup(io::Error),
-    TooManyRedirects,
-    BadLocation(String),
-    Http(ureq::Error),
-}
-
-/// GET 一个地址，自己跟跳转。每一跳先过地址检查，再钉住检查过的地址去连；
-/// `private_ok` 只给第一跳，跳转目标总要过策略的公网检查。回响应和最后一跳的地址。
-fn get(
-    start: &url::Url,
-    private_ok: bool,
-    timeout: Duration,
-    headers: &[(&str, &str)],
-    policy: &Policy,
-) -> Result<(ureq::http::Response<ureq::Body>, url::Url), GetError> {
-    let deadline = Instant::now() + timeout;
-    let mut url = start.clone();
-    for hop in 0..=MAX_REDIRECTS {
-        let first = hop == 0;
-        let addrs = address::admit(&url, private_ok && first, policy).map_err(|r| match r {
-            Refusal::Invalid(why) => GetError::Invalid(why),
-            Refusal::NotPublic(why) => GetError::NotPublic { why, first },
-            Refusal::Lookup(e) => GetError::Lookup(e),
-        })?;
-        let left = deadline.saturating_duration_since(Instant::now());
-        if left.is_zero() {
-            return Err(GetError::Http(ureq::Error::Timeout(ureq::Timeout::Global)));
-        }
-        let mut request = agent(url.host_str().unwrap_or_default(), addrs, left).get(url.as_str());
-        for (name, value) in headers {
-            request = request.header(*name, *value);
-        }
-        let response = request.call().map_err(GetError::Http)?;
-        let redirect = matches!(response.status().as_u16(), 301 | 302 | 303 | 307 | 308);
-        let Some(location) = response.headers().get("location").filter(|_| redirect) else {
-            return Ok((response, url));
-        };
-        let next = location
-            .to_str()
-            .ok()
-            .and_then(|l| url.join(l).ok())
-            .ok_or_else(|| GetError::BadLocation(format!("{location:?}")))?;
-        url = next;
-    }
-    Err(GetError::TooManyRedirects)
-}
-
 /// 要取的页面取不了时报的错。地址不是公网算「不是这个插件取的链接」（unsupported-input）：
 /// 换别的获取方式也许能取，重试没用。
-fn page_failure(e: GetError) -> anyhow::Error {
+fn page_failure(e: http::Error) -> anyhow::Error {
     match e {
-        GetError::NotPublic { why, first: true } => Fail(CallFailure {
+        http::Error::NotPublic { why, first: true } => Fail(CallFailure {
             hint: Some(
                 "这个链接指向本机或内网地址，没有去取。要收下自己内网里的网页，在「网页」获取方式的设置里打开「允许取内网网页」。"
                     .into(),
@@ -156,29 +49,33 @@ fn page_failure(e: GetError) -> anyhow::Error {
             ..CallFailure::new(ErrorCode::UnsupportedInput, why)
         })
         .into(),
-        GetError::NotPublic { why, first: false } => fail(
+        http::Error::NotPublic { why, first: false } => fail(
             ErrorCode::UnsupportedInput,
             format!("redirect refused: {why}"),
         ),
-        GetError::Invalid(why) => fail(ErrorCode::UnsupportedInput, why),
-        GetError::Lookup(e) => fail(ErrorCode::Network, format!("DNS lookup: {e}")),
-        GetError::TooManyRedirects => fail(
+        http::Error::TooLarge(limit) => fail(
             ErrorCode::UnsupportedInput,
-            format!("more than {MAX_REDIRECTS} redirects"),
+            format!("page is larger than {limit} bytes"),
         ),
-        GetError::BadLocation(location) => fail(
-            ErrorCode::UnsupportedInput,
-            format!("bad redirect location {location}"),
-        ),
-        GetError::Http(e) => network(e),
+        e @ (http::Error::Invalid(_)
+        | http::Error::TooManyRedirects(_)
+        | http::Error::BadLocation(_)) => fail(ErrorCode::UnsupportedInput, e.to_string()),
+        e @ (http::Error::Lookup(_) | http::Error::Timeout | http::Error::Network(_)) => {
+            fail(ErrorCode::Network, e.to_string())
+        }
+        // 不限主机、不带 cookie，走不到这两种
+        e @ (http::Error::NotAllowed { .. } | http::Error::CookieHeader) => {
+            fail(ErrorCode::Internal, e.to_string())
+        }
     }
 }
 
-/// 取一个网页。`policy.private_page` 来自插件设置，只放开这条链接本身，图片和跳转目标不放开。
+/// 取一个网页。`private_page` 来自插件设置，只放开这条链接本身，图片和跳转目标不放开。
 pub(crate) fn fetch(
     input: &str,
     out: &Path,
     want: Option<&Vec<OutputKind>>,
+    private_page: bool,
     policy: &Policy,
 ) -> Result<FetchOutput> {
     let identity = web_identity(input).ok_or_else(|| {
@@ -196,36 +93,25 @@ pub(crate) fn fetch(
         ));
     }
 
+    let client = Client::new(USER_AGENT, Hosts::any()).with_policy(*policy);
     let start = url::Url::parse(input).context("parse input URL")?;
     let fetched_at = Rfc3339::from_timestamp(jiff::Timestamp::now());
-    let (mut response, base) = get(
-        &start,
-        policy.private_page,
-        PAGE_TIMEOUT,
-        &[("Accept", "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5")],
-        policy,
-    )
-    .map_err(page_failure)?;
-    let status = response.status().as_u16();
-    check_status(status, response.headers().get("retry-after"))?;
+    let mut response = client
+        .get(&start)
+        .header("Accept", "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5")
+        .timeout(PAGE_TIMEOUT)
+        .follow_redirects(MAX_REDIRECTS)
+        .allow_private_first_hop(private_page)
+        .send()
+        .map_err(page_failure)?;
+    let base = response.url().clone();
+    let status = response.status();
+    check_status(status, response.header("retry-after"))?;
     let content_type = response
-        .headers()
-        .get("content-type")
-        .and_then(|v| v.to_str().ok())
+        .header("content-type")
         .unwrap_or_default()
         .to_owned();
-    let bytes = response
-        .body_mut()
-        .with_config()
-        .limit(PAGE_BYTES)
-        .read_to_vec()
-        .map_err(|e| match e {
-            ureq::Error::BodyExceedsLimit(_) => fail(
-                ErrorCode::UnsupportedInput,
-                format!("page is larger than {PAGE_BYTES} bytes"),
-            ),
-            other => network(other),
-        })?;
+    let bytes = response.read_to_vec(PAGE_BYTES).map_err(page_failure)?;
     if !is_html(&content_type, &bytes) {
         return Err(fail(
             ErrorCode::UnsupportedInput,
@@ -317,7 +203,7 @@ pub(crate) fn fetch(
             .as_ref()
             .map(|a| image_sources(&a.content, &base))
             .unwrap_or_default();
-        let downloaded = download_images(&sources, &base, out, &mut failed_images, policy)?;
+        let downloaded = download_images(&sources, &base, out, &mut failed_images, &client)?;
         if downloaded.is_empty() && !sources.is_empty() {
             output.missing.push(OutputKind::Images);
             reasons.push("正文里的图片没有下载下来");
@@ -377,15 +263,7 @@ fn rel(path: &str) -> Result<RelPath> {
     RelPath::try_from(path).map_err(anyhow::Error::msg)
 }
 
-fn network(e: ureq::Error) -> anyhow::Error {
-    let code = match &e {
-        ureq::Error::BadUri(_) => ErrorCode::UnsupportedInput,
-        _ => ErrorCode::Network,
-    };
-    fail(code, e.to_string())
-}
-
-fn check_status(status: u16, retry_after: Option<&ureq::http::HeaderValue>) -> Result<()> {
+fn check_status(status: u16, retry_after: Option<&str>) -> Result<()> {
     let failure = |code: ErrorCode| CallFailure::new(code, format!("HTTP {status}"));
     let f = match status {
         200..=299 => return Ok(()),
@@ -400,9 +278,7 @@ fn check_status(status: u16, retry_after: Option<&ureq::http::HeaderValue>) -> R
             ..failure(ErrorCode::NotFound)
         },
         429 => CallFailure {
-            retry_after: retry_after
-                .and_then(|v| v.to_str().ok())
-                .and_then(|v| v.trim().parse().ok()),
+            retry_after: retry_after.and_then(|v| v.trim().parse().ok()),
             ..failure(ErrorCode::RateLimited)
         },
         500..=599 => failure(ErrorCode::Network),
@@ -483,7 +359,7 @@ fn download_images(
     page: &url::Url,
     out: &Path,
     failed: &mut Vec<String>,
-    policy: &Policy,
+    client: &Client,
 ) -> Result<Vec<(RelPath, String)>> {
     let started = std::time::Instant::now();
     let mut saved = Vec::new();
@@ -493,20 +369,18 @@ fn download_images(
             failed.push(url.to_string());
             continue;
         }
-        let headers = [("Referer", page.as_str()), ("Accept", "image/*")];
-        let got = get(url, false, IMAGE_TIMEOUT, &headers, policy)
+        let got = client
+            .get(url)
+            .header("Referer", page.as_str())
+            .header("Accept", "image/*")
+            .timeout(IMAGE_TIMEOUT)
+            .follow_redirects(MAX_REDIRECTS)
+            .send()
             .ok()
-            .map(|(r, _)| r)
-            .filter(|r| r.status().is_success())
+            .filter(|r| (200..300).contains(&r.status()))
             .and_then(|mut r| {
-                let mime = r.headers().get("content-type")?.to_str().ok()?.to_owned();
-                let ext = image_extension(&mime)?;
-                let bytes = r
-                    .body_mut()
-                    .with_config()
-                    .limit(IMAGE_BYTES)
-                    .read_to_vec()
-                    .ok()?;
+                let ext = image_extension(r.header("content-type")?)?;
+                let bytes = r.read_to_vec(IMAGE_BYTES).ok()?;
                 Some((ext, bytes))
             });
         let Some((ext, bytes)) = got else {
@@ -544,6 +418,9 @@ fn image_extension(mime: &str) -> Option<&'static str> {
 
 #[cfg(test)]
 mod tests {
+    use std::io;
+    use std::net::SocketAddr;
+
     use super::*;
 
     /// 测试用的策略：只有 127.0.0.1 算「公网」，`site.test` 解析到它。
@@ -558,7 +435,6 @@ mod tests {
         Policy {
             lookup,
             public: |ip| ip == std::net::IpAddr::from([127, 0, 0, 1]),
-            private_page: false,
         }
     }
 
@@ -639,7 +515,7 @@ mod tests {
         let port = serve();
         let out = tempfile::tempdir().unwrap();
         let input = format!("http://site.test:{port}/hop/3");
-        let output = fetch(&input, out.path(), None, &local_policy()).unwrap();
+        let output = fetch(&input, out.path(), None, false, &local_policy()).unwrap();
 
         let meta: serde_json::Value =
             serde_json::from_slice(&fs::read(out.path().join("meta.json")).unwrap()).unwrap();
@@ -682,13 +558,21 @@ mod tests {
                 &at_limit,
                 out.path(),
                 Some(&vec![OutputKind::Text]),
+                false,
                 &policy
             )
             .is_ok()
         );
 
         let over = format!("http://site.test:{port}/hop/{}", MAX_REDIRECTS + 1);
-        let err = fetch(&over, out.path(), Some(&vec![OutputKind::Text]), &policy).unwrap_err();
+        let err = fetch(
+            &over,
+            out.path(),
+            Some(&vec![OutputKind::Text]),
+            false,
+            &policy,
+        )
+        .unwrap_err();
         let Fail(failure) = err.downcast::<Fail>().unwrap();
         assert_eq!(failure.code, ErrorCode::UnsupportedInput);
         assert!(failure.message.contains("redirects"), "{}", failure.message);
@@ -701,50 +585,6 @@ mod tests {
         assert!(decode("text/html", &gbk).contains("手冲咖啡"));
         assert!(decode("text/html; charset=GBK", &gbk).contains("手冲咖啡"));
         assert!(decode("text/html", "<p>中文</p>".as_bytes()).contains("中文"));
-    }
-
-    /// 连的是检查过的那个地址：`pinned.test` 在真 DNS 里查不到，能拿到 200 就说明没有再查一次。
-    #[test]
-    fn connects_to_the_vetted_address() {
-        use std::io::{BufRead, BufReader, Write};
-        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = listener.local_addr().unwrap().port();
-        let server = std::thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
-            let mut reader = BufReader::new(stream.try_clone().unwrap());
-            let mut host = String::new();
-            loop {
-                let mut line = String::new();
-                if reader.read_line(&mut line).unwrap() == 0 || line == "\r\n" {
-                    break;
-                }
-                if let Some(v) = line.to_ascii_lowercase().strip_prefix("host:") {
-                    host = v.trim().to_owned();
-                }
-            }
-            stream
-                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
-                .unwrap();
-            host
-        });
-        fn lookup(host: &str, port: u16) -> io::Result<Vec<SocketAddr>> {
-            assert_eq!(host, "pinned.test");
-            Ok(vec![SocketAddr::from(([127, 0, 0, 1], port))])
-        }
-        let url = url::Url::parse(&format!("http://pinned.test:{port}/")).unwrap();
-        let policy = Policy {
-            lookup,
-            ..Policy::strict(true)
-        };
-        let (response, last) = get(&url, true, Duration::from_secs(5), &[], &policy).unwrap();
-        assert_eq!(response.status().as_u16(), 200);
-        assert_eq!(last, url);
-        assert_eq!(server.join().unwrap(), format!("pinned.test:{port}"));
-        // 没有设置放开时，同样的名字因为解析到回环被拒
-        assert!(matches!(
-            get(&url, false, Duration::from_secs(5), &[], &policy),
-            Err(GetError::NotPublic { first: true, .. })
-        ));
     }
 
     #[test]

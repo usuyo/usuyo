@@ -1,7 +1,6 @@
 //! 预装的通用网页获取插件 `builtin/web`（协议 §8.4）：只读公开网页，不登录，
 //! 没有任何站点专用的规则。子命令照协议 §3.2：`canonicalize`、`fetch`、`health`。
 
-mod address;
 mod page;
 
 use std::fmt;
@@ -9,7 +8,8 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use serde::{Deserialize, Serialize};
-use usuyo_plugin::protocol::{
+use usuyo_plugin_kit::http::Policy;
+use usuyo_plugin_kit::protocol::{
     CallFailure, Canonicalized, Envelope, ErrorCode, Identity, OutputKind,
 };
 
@@ -41,7 +41,8 @@ fn main() -> ExitCode {
                     &url,
                     &out,
                     want.as_ref(),
-                    &address::Policy::strict(s.allow_private_network),
+                    s.allow_private_network,
+                    &Policy::strict(),
                 )
             })),
             None => usage(),
