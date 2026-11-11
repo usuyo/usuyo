@@ -1,0 +1,159 @@
+//! 出错时回 RFC 9457 的 problem+json（SPEC §0.3）。
+
+use axum::http::{HeaderValue, StatusCode, header};
+use axum::response::{IntoResponse, Response};
+use serde::Serialize;
+
+/// 一个错误：码、状态、给人看的一句话；`type`、`title`、`instance` 在写出时补上。
+#[derive(Debug, Clone)]
+pub struct Problem {
+    pub code: &'static str,
+    pub status: u16,
+    pub detail: String,
+    pub plugin: Option<String>,
+}
+
+#[derive(Serialize)]
+struct Wire<'a> {
+    #[serde(rename = "type")]
+    kind: String,
+    title: &'static str,
+    status: u16,
+    detail: &'a str,
+    instance: String,
+    /// 客户端只按它分支。
+    code: &'a str,
+    retryable: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    plugin: Option<&'a str>,
+}
+
+impl Problem {
+    pub fn new(code: &'static str, detail: impl Into<String>) -> Problem {
+        Problem {
+            code,
+            status: status_of(code).as_u16(),
+            detail: detail.into(),
+            plugin: None,
+        }
+    }
+
+    fn retryable(&self) -> bool {
+        matches!(
+            self.code,
+            "rate-limited"
+                | "network"
+                | "library-busy"
+                | "unavailable"
+                | "profile-busy"
+                | "timeout"
+        )
+    }
+}
+
+impl From<usuyo_core::Error> for Problem {
+    fn from(e: usuyo_core::Error) -> Problem {
+        let code = e.code();
+        if code == "internal" {
+            tracing::error!(error = %e, "request failed");
+        }
+        let detail = e.hint().map_or_else(|| e.to_string(), str::to_owned);
+        let mut p = Problem::new(code, detail);
+        // 插件报的错一律 502、带插件 id，免得平台的 login-required 像令牌不对。
+        if let Some(plugin) = e.plugin() {
+            p.status = 502;
+            p.plugin = Some(plugin.to_owned());
+        }
+        p
+    }
+}
+
+impl IntoResponse for Problem {
+    fn into_response(self) -> Response {
+        let status = StatusCode::from_u16(self.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+        let retryable = self.retryable();
+        let wire = Wire {
+            kind: format!("urn:usuyo:problem:{}", self.code),
+            title: title_of(self.code),
+            status: self.status,
+            detail: &self.detail,
+            instance: format!("urn:uuid:{}", call_id()),
+            code: self.code,
+            retryable,
+            plugin: self.plugin.as_deref(),
+        };
+        let body = serde_json::to_vec(&wire).unwrap_or_default();
+        let mut res = (status, body).into_response();
+        res.headers_mut().insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/problem+json"),
+        );
+        if retryable {
+            res.headers_mut()
+                .insert(header::RETRY_AFTER, HeaderValue::from_static("5"));
+        }
+        res
+    }
+}
+
+fn status_of(code: &str) -> StatusCode {
+    match code {
+        "invalid-args" | "cursor-invalid" => StatusCode::BAD_REQUEST,
+        "unauthorized" => StatusCode::UNAUTHORIZED,
+        "forbidden" => StatusCode::FORBIDDEN,
+        "not-found" => StatusCode::NOT_FOUND,
+        "gone" => StatusCode::GONE,
+        "conflict" | "cancelled" | "library-version" => StatusCode::CONFLICT,
+        "too-large" => StatusCode::PAYLOAD_TOO_LARGE,
+        "unsupported-input" => StatusCode::UNPROCESSABLE_ENTITY,
+        "dependency-missing" => StatusCode::FAILED_DEPENDENCY,
+        "rate-limited" => StatusCode::TOO_MANY_REQUESTS,
+        "library-busy" | "unavailable" | "profile-busy" => StatusCode::SERVICE_UNAVAILABLE,
+        "timeout" => StatusCode::GATEWAY_TIMEOUT,
+        "internal" => StatusCode::INTERNAL_SERVER_ERROR,
+        // crashed、invalid-output 和只由插件报的码
+        _ => StatusCode::BAD_GATEWAY,
+    }
+}
+
+fn title_of(code: &str) -> &'static str {
+    match code {
+        "invalid-args" => "Invalid arguments",
+        "cursor-invalid" => "Invalid cursor",
+        "unauthorized" => "Unauthorized",
+        "forbidden" => "Forbidden",
+        "not-found" => "Not found",
+        "gone" => "Gone",
+        "conflict" => "Conflict",
+        "cancelled" => "Cancelled",
+        "library-version" => "Library version not supported",
+        "too-large" => "Too large",
+        "unsupported-input" => "Unsupported input",
+        "dependency-missing" => "Dependency missing",
+        "rate-limited" => "Rate limited",
+        "library-busy" => "Library busy",
+        "unavailable" => "Unavailable",
+        "timeout" => "Timeout",
+        "internal" => "Internal error",
+        _ => "Plugin error",
+    }
+}
+
+/// UUIDv4 形状的随机 id，只用来在日志里对上一次请求。
+fn call_id() -> String {
+    let mut b = [0u8; 16];
+    if getrandom::fill(&mut b).is_err() {
+        return "00000000-0000-4000-8000-000000000000".into();
+    }
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    let h: String = b.iter().map(|x| format!("{x:02x}")).collect();
+    format!(
+        "{}-{}-{}-{}-{}",
+        &h[0..8],
+        &h[8..12],
+        &h[12..16],
+        &h[16..20],
+        &h[20..32]
+    )
+}

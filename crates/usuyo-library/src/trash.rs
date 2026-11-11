@@ -73,6 +73,18 @@ impl Library {
         }))
     }
 
+    /// 整条在回收站里的这一条：回收站项、它的 manifest 和它现在所在的文件夹。
+    pub fn trashed_item(&self, id: &ItemId) -> Result<Option<(TrashEntry, Manifest, PathBuf)>> {
+        match self.find_trashed_item(id)? {
+            Some(e) => {
+                let m = self.trashed_manifest(&e)?;
+                let dir = self.trash_path(&e.id)?;
+                Ok(Some((e, m, dir)))
+            }
+            None => Ok(None),
+        }
+    }
+
     pub(crate) fn trashed_manifest(&self, e: &TrashEntry) -> Result<Manifest> {
         fsx::read_json(&self.trash_path(&e.id)?.join("manifest.json"))
     }

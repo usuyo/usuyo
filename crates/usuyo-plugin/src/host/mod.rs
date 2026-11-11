@@ -276,12 +276,24 @@ impl FetchedSnapshot {
 pub struct PluginHost {
     config: HostConfig,
     plugins: Vec<FetchPlugin>,
+    /// 插件 id → 用户给它的非密钥设置（§2.11），调用时写成 `USUYO_SETTINGS` 指的文件。
+    settings: BTreeMap<String, Value>,
 }
 
 impl PluginHost {
     /// `plugins` 的顺序就是用户排的顺序（§3.1）。
     pub fn new(config: HostConfig, plugins: Vec<FetchPlugin>) -> Self {
-        Self { config, plugins }
+        Self {
+            config,
+            plugins,
+            settings: BTreeMap::new(),
+        }
+    }
+
+    /// 带上各插件的设置（插件 id → JSON 对象）。没有设置的插件不传 `USUYO_SETTINGS`。
+    pub fn with_settings(mut self, settings: BTreeMap<String, Value>) -> Self {
+        self.settings = settings;
+        self
     }
 
     pub fn plugins(&self) -> &[FetchPlugin] {
@@ -580,10 +592,19 @@ impl PluginHost {
         let (program, mut command_args) =
             resolve_command(plugin).map_err(|failure| call.fail(plugin, failure, Vec::new()))?;
         command_args.extend(args);
+        let mut env = call_env(&self.config, plugin, call, input_file);
+        if let Some(settings) = self.settings.get(plugin.id().as_str()) {
+            let path = call.dir.path().join("settings.json");
+            std::fs::write(&path, settings.to_string()).map_err(|e| PluginError::Io {
+                path: path.clone(),
+                source: e,
+            })?;
+            env.push(("USUYO_SETTINGS".into(), path.into()));
+        }
         let spawn = Spawn {
             program,
             args: command_args,
-            env: call_env(&self.config, plugin, call, input_file),
+            env,
             cwd: call.dir.path().join("tmp"),
         };
         process::run(spawn, total, &self.config.limits, opts)

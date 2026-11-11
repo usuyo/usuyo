@@ -16,6 +16,13 @@ capabilities:
     access: public-web
     login: none
     outputs: [text, html, images, meta]
+# 关着时（默认）只取公网网页；打开后，要取的那条链接本身可以是本机或内网地址，
+# 例如自己的 NAS、内网 wiki、本机开发服务。页面里的图片和跳转去的地址仍然只取公网的。
+settings:
+  - key: allow-private-network
+    label: 允许取内网网页
+    type: bool
+    default: false
 permissions:
   fs:
     write: ["${OUT}"]

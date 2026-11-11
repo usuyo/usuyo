@@ -1,0 +1,454 @@
+//! 引擎对着假插件（sh 脚本）跑：收下 → 存好 → 搜到、同一链接两次、插件失败后重试、换下一个插件、重建索引。
+//! 不碰真网络：假插件不发请求。
+#![cfg(unix)]
+
+use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
+use std::time::Duration;
+
+use tempfile::TempDir;
+use usuyo_core::view::{Event, Facet, HitLayer, Stored};
+use usuyo_core::{Engine, EngineConfig, Links, RetryPolicy, Via};
+
+/// 取到的网页：两段正文，一张「图」（不是真的 PNG，量不出尺寸）。
+const FETCH_OK: &str = r#"
+printf '<html>hi</html>' > "$out/page.html"
+mkdir -p "$out/images" && printf '0123456789' > "$out/images/001.png"
+cat <<JSON
+{"ok": true, "identity": {"platform": "web", "url": "$2"}, "kind": "article",
+ "title": "手冲咖啡：三段式注水", "author": {"name": "咖啡日常"},
+ "publishedAt": "2026-10-01T20:00:00+08:00",
+ "text": "第一段用四十克水闷蒸三十秒。\n\n第二段注水到一百五十克。",
+ "html": "page.html", "images": ["images/001.png"], "media": [], "platformTags": [],
+ "completeness": "full", "missing": [],
+ "evidence": {"fetchedAt": "2026-11-01T03:00:01Z", "access": "public-web"}}
+JSON
+"#;
+
+const NO_MATCH: &str =
+    r#"if [ "$1" = canonicalize ]; then echo '{"ok": true, "match": false}'; exit 0; fi"#;
+
+struct Fixture {
+    tmp: TempDir,
+    library: PathBuf,
+}
+
+impl Fixture {
+    fn new() -> Fixture {
+        let tmp = tempfile::tempdir().unwrap();
+        let library =
+            Engine::init_library(&tmp.path().join("lib"), &tmp.path().join("machine")).unwrap();
+        Fixture { tmp, library }
+    }
+
+    fn machine(&self) -> PathBuf {
+        self.tmp.path().join("machine")
+    }
+
+    /// 装一个假插件：`script` 是 sh 正文，`$1` 是子命令，fetch 时 `$out` 是输出目录。
+    fn install(&self, id: &str, platforms: &str, matches: &str, script: &str) {
+        let dir = self.machine().join("plugins").join(id).join("1.0.0");
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest = format!(
+            r#"protocol: 1
+id: {id}
+kind: fetch
+name: 假的
+version: 1.0.0
+license: MIT
+maintainers: [someone]
+platforms: [{platforms}]
+match: ["{matches}"]
+access: public-web
+login: none
+capabilities:
+  fetch:
+    access: public-web
+    login: none
+    outputs: [text, html, images, meta]
+permissions:
+  fs: {{write: ["${{OUT}}"]}}
+run:
+  command: ["${{PLUGIN_DIR}}/plugin.sh"]
+"#
+        );
+        std::fs::write(dir.join("usuyo-plugin.yaml"), manifest).unwrap();
+        let path = dir.join("plugin.sh");
+        let body = format!(
+            "#!/bin/sh\nout=\"\"\nif [ \"$1\" = fetch ]; then out=\"$4\"; fi\n{NO_MATCH}\n{script}\n"
+        );
+        std::fs::write(&path, body).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    fn engine(&self) -> Engine {
+        let mut config = EngineConfig::new(&self.library, self.machine());
+        config.retry = RetryPolicy {
+            base: Duration::ZERO,
+            max_attempts: 3,
+        };
+        Engine::open(config).unwrap()
+    }
+
+    fn item_dir(&self, id: &str) -> PathBuf {
+        let platform = id.rsplit_once('-').unwrap().0;
+        self.library.join("items").join(platform).join(id)
+    }
+}
+
+fn manifest(dir: &Path) -> serde_json::Value {
+    serde_json::from_slice(&std::fs::read(dir.join("manifest.json")).unwrap()).unwrap()
+}
+
+fn hit_ids(engine: &Engine, q: &str) -> Vec<String> {
+    engine
+        .search(q, 20)
+        .unwrap()
+        .into_iter()
+        .map(|h| h.item_id)
+        .collect()
+}
+
+#[tokio::test]
+async fn take_stores_and_finds_it() {
+    let f = Fixture::new();
+    f.install("fake/web", "web", "*", FETCH_OK);
+    let engine = f.engine();
+    let mut events = engine.subscribe();
+
+    let taken = engine
+        .take(
+            "【三段式注水】 https://example.test/pour?utm_source=x 复制打开",
+            "link",
+            Via::Cli,
+        )
+        .await
+        .unwrap();
+    assert!(!taken.seen);
+    assert!(taken.id.starts_with("web-"));
+    // 马上有条目，只有链接
+    let view = engine.item(&taken.id, &Links::default()).unwrap();
+    assert_eq!(view.stored, Stored::Link);
+    assert_eq!(view.missing, None);
+    assert!(matches!(
+        events.recv().await.unwrap(),
+        Event::ItemAdded { .. }
+    ));
+
+    assert_eq!(engine.run_due().await.unwrap(), 1);
+    let dir = f.item_dir(&taken.id);
+    let m = manifest(&dir);
+    let snap = m["primarySnapshot"].as_str().unwrap();
+    assert!(dir.join("raw").join(snap).join("page.html").is_file());
+    assert!(
+        dir.join("raw")
+            .join(snap)
+            .join("usuyo.fetch.json")
+            .is_file()
+    );
+    let content = std::fs::read_to_string(dir.join("content.md")).unwrap();
+    assert!(content.starts_with("# 手冲咖啡：三段式注水\n"), "{content}");
+    assert!(content.contains("闷蒸"));
+    assert_eq!(m["publishedAt"], "2026-10-01T12:00:00.000Z");
+    assert_eq!(m["publishedAtOriginal"], "2026-10-01T20:00:00+08:00");
+
+    let view = engine
+        .item(
+            &taken.id,
+            &Links {
+                base: "http://127.0.0.1:1".into(),
+                key: Some("k".into()),
+            },
+        )
+        .unwrap();
+    assert_eq!(view.stored, Stored::Complete);
+    assert_eq!(view.summary.title, "手冲咖啡：三段式注水");
+    assert_eq!(view.summary.author.as_deref(), Some("咖啡日常"));
+    let Some(Facet::Image { images }) = view.facets.first() else {
+        panic!("{:?}", view.facets)
+    };
+    assert_eq!(
+        images[0].url,
+        format!(
+            "http://127.0.0.1:1/media/{}/image/{}?k=k",
+            taken.id, images[0].key
+        )
+    );
+    let Some(Facet::Text { segments }) = view.facets.get(1) else {
+        panic!("{:?}", view.facets)
+    };
+    assert_eq!(segments.len(), 2);
+    let media = engine
+        .media(&taken.id, &format!("image/{}", images[0].key))
+        .unwrap();
+    assert_eq!(std::fs::read(media).unwrap(), b"0123456789");
+    assert!(engine.media(&taken.id, "notes").is_err(), "只给媒体层");
+
+    let hits = engine.search("闷蒸", 20).unwrap();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].layer, HitLayer::Text);
+    let h = &hits[0];
+    let marked: Vec<u16> = h.snippet.encode_utf16().collect();
+    assert_eq!(
+        String::from_utf16(&marked[h.matched[0]..h.matched[1]]).unwrap(),
+        "闷蒸"
+    );
+    assert_eq!(hit_ids(&engine, "shouchong"), [taken.id.as_str()], "拼音");
+    assert_eq!(
+        engine.search("咖啡日常", 20).unwrap()[0].layer,
+        HitLayer::Author
+    );
+
+    // 记一句也能搜到，改动经 op 记下
+    let v = engine
+        .set_note(&taken.id, "下次磨粗一点", Via::Cli, &Links::default())
+        .unwrap();
+    assert_eq!(v.note.as_deref(), Some("下次磨粗一点"));
+    assert_eq!(engine.search("磨粗", 20).unwrap()[0].layer, HitLayer::Note);
+
+    // 删掉：搜不到，读得到 trashedAt；拿回来又搜得到
+    let v = engine
+        .trash(&taken.id, Via::Cli, &Links::default())
+        .unwrap();
+    assert!(v.trashed_at.is_some());
+    assert!(
+        matches!(v.facets.as_slice(), [Facet::Text { .. }]),
+        "在回收站里也看得到字，图不经媒体地址给：{:?}",
+        v.facets
+    );
+    assert_eq!(v.note.as_deref(), Some("下次磨粗一点"));
+    assert!(hit_ids(&engine, "闷蒸").is_empty());
+    let v = engine
+        .restore(&taken.id, Via::Cli, &Links::default())
+        .unwrap();
+    assert!(v.trashed_at.is_none());
+    assert_eq!(hit_ids(&engine, "闷蒸"), [taken.id.as_str()]);
+
+    let map = engine.map().unwrap();
+    assert_eq!(map.points.len(), 1);
+}
+
+#[tokio::test]
+async fn passes_plugin_settings() {
+    let f = Fixture::new();
+    let script = format!(
+        r#"grep -q '"allow-private-network":true' "$USUYO_SETTINGS" || exit 3
+{FETCH_OK}"#
+    );
+    f.install("fake/web", "web", "*", &script);
+    let mut config = EngineConfig::new(&f.library, f.machine());
+    config.plugin_settings.insert(
+        "fake/web".into(),
+        serde_json::json!({"allow-private-network": true}),
+    );
+    let engine = Engine::open(config).unwrap();
+    let t = engine
+        .take("http://127.0.0.1:9/a", "link", Via::Cli)
+        .await
+        .unwrap();
+    engine.run_due().await.unwrap();
+    assert_eq!(
+        engine.item(&t.id, &Links::default()).unwrap().stored,
+        Stored::Complete
+    );
+}
+
+#[tokio::test]
+async fn same_link_twice_is_one_item() {
+    let f = Fixture::new();
+    f.install("fake/web", "web", "*", FETCH_OK);
+    let engine = f.engine();
+    let a = engine
+        .take("https://example.test/pour", "link", Via::App)
+        .await
+        .unwrap();
+    engine.run_due().await.unwrap();
+    let b = engine
+        .take("https://EXAMPLE.test/pour#top", "link", Via::App)
+        .await
+        .unwrap();
+    assert_eq!(a.id, b.id);
+    assert!(b.seen);
+    engine.run_due().await.unwrap();
+    let m = manifest(&f.item_dir(&a.id));
+    assert_eq!(m["origins"].as_array().unwrap().len(), 2);
+    // 第二次取到的和第一次一模一样：不多一份快照
+    assert_eq!(m["snapshots"].as_array().unwrap().len(), 1);
+    assert_eq!(engine.map().unwrap().points.len(), 1);
+
+    // 在回收站里的再收一次：拿回来，不是第二条
+    engine.trash(&a.id, Via::App, &Links::default()).unwrap();
+    let c = engine
+        .take("https://example.test/pour", "link", Via::App)
+        .await
+        .unwrap();
+    assert_eq!(c.id, a.id);
+    assert!(c.seen);
+    assert!(
+        engine
+            .item(&a.id, &Links::default())
+            .unwrap()
+            .trashed_at
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn retries_after_a_failing_plugin() {
+    let f = Fixture::new();
+    // 第一次断网，第二次取到。
+    let script = format!(
+        r#"if [ ! -f "$USUYO_CACHE_DIR/tried" ]; then
+  touch "$USUYO_CACHE_DIR/tried"
+  echo '{{"ok": false, "error": {{"code": "network", "message": "offline"}}}}'
+  exit 1
+fi
+{FETCH_OK}"#
+    );
+    f.install("fake/web", "web", "*", &script);
+    let engine = f.engine();
+    let mut events = engine.subscribe();
+    let t = engine
+        .take("https://example.test/pour", "link", Via::Cli)
+        .await
+        .unwrap();
+    engine.run_due().await.unwrap();
+    let mut saw_retry = false;
+    while let Ok(e) = events.try_recv() {
+        if let Event::ItemFetchFailed { code, retry, .. } = e {
+            assert_eq!(code, "network");
+            saw_retry = retry;
+        }
+    }
+    assert!(saw_retry, "失败过一次，标了会重试");
+    let v = engine.item(&t.id, &Links::default()).unwrap();
+    assert_eq!(v.stored, Stored::Complete);
+}
+
+#[tokio::test]
+async fn gives_up_and_says_why() {
+    let f = Fixture::new();
+    f.install(
+        "fake/web",
+        "web",
+        "*",
+        r#"echo '{"ok": false, "error": {"code": "not-found", "message": "gone", "hint": "原帖删了"}}'; exit 1"#,
+    );
+    let engine = f.engine();
+    let t = engine
+        .take("https://example.test/gone", "link", Via::Cli)
+        .await
+        .unwrap();
+    engine.run_due().await.unwrap();
+    let v = engine.item(&t.id, &Links::default()).unwrap();
+    assert_eq!(v.stored, Stored::Link);
+    assert_eq!(v.missing.as_deref(), Some("取不到内容：原帖删了"));
+}
+
+#[tokio::test]
+async fn blocked_plugin_pauses_and_the_next_one_takes_over() {
+    let f = Fixture::new();
+    f.install(
+        "fake/platform",
+        "example",
+        "example.test/*",
+        r#"if [ "$1" = fetch ]; then echo x >> "$USUYO_CACHE_DIR/calls"; fi
+echo '{"ok": false, "error": {"code": "blocked", "message": "captcha"}}'; exit 1"#,
+    );
+    f.install("fake/web", "web", "*", FETCH_OK);
+    let engine = f.engine();
+    for path in ["a", "b"] {
+        let t = engine
+            .take(&format!("https://example.test/{path}"), "link", Via::Cli)
+            .await
+            .unwrap();
+        engine.run_due().await.unwrap();
+        let v = engine.item(&t.id, &Links::default()).unwrap();
+        assert_eq!(v.stored, Stored::Complete, "通用网页插件接着取到了");
+    }
+    let calls = std::fs::read_to_string(f.machine().join("cache/plugins/fake/platform/calls"))
+        .unwrap_or_default();
+    assert_eq!(calls.lines().count(), 1, "被拦以后这个平台暂停，不再调它");
+}
+
+#[tokio::test]
+async fn deleting_the_index_and_reindexing_gives_the_same_results() {
+    let f = Fixture::new();
+    f.install("fake/web", "web", "*", FETCH_OK);
+    let queries = ["闷蒸", "shouchong", "咖啡", "注水 克"];
+    let before: Vec<Vec<String>> = {
+        let engine = f.engine();
+        for p in ["a", "b", "c"] {
+            engine
+                .take(&format!("https://example.test/{p}"), "link", Via::Cli)
+                .await
+                .unwrap();
+        }
+        engine.run_due().await.unwrap();
+        queries.iter().map(|q| hit_ids(&engine, q)).collect()
+    };
+    assert_eq!(before[0].len(), 3);
+    let machine_dir = std::fs::read_dir(f.machine().join("libraries"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    std::fs::remove_dir_all(machine_dir.join("index")).unwrap();
+    let engine = f.engine();
+    let after: Vec<Vec<String>> = queries.iter().map(|q| hit_ids(&engine, q)).collect();
+    assert_eq!(before, after);
+    assert_eq!(engine.reindex().unwrap(), 3);
+    let again: Vec<Vec<String>> = queries.iter().map(|q| hit_ids(&engine, q)).collect();
+    assert_eq!(before, again);
+}
+
+#[tokio::test]
+async fn follow_and_membership_shape_the_map() {
+    let f = Fixture::new();
+    f.install("fake/web", "web", "*", FETCH_OK);
+    // 主题现在没有接口能建，先经资料库建一个。
+    let topic = {
+        let mut lib = usuyo_library::Library::open(&f.library, &f.machine()).unwrap();
+        let b = usuyo_library::Batch::new("user", "cli").unwrap();
+        lib.apply(
+            &b,
+            &usuyo_contract::OpTarget {
+                kind: "topic".into(),
+                id: String::new(),
+            },
+            usuyo_contract::Op::CreateTopic {
+                title: "手冲咖啡".into(),
+                keywords: vec![],
+                match_: vec!["keywords".into()],
+            },
+        )
+        .unwrap()
+        .id
+    };
+    let engine = f.engine();
+    assert!(!engine.topics().unwrap()[0].followed);
+    let t = engine
+        .take("https://example.test/pour", "link", Via::App)
+        .await
+        .unwrap();
+    assert!(engine.map().unwrap().regions.is_empty());
+    let v = engine
+        .set_topic(&t.id, &topic, true, Via::App, &Links::default())
+        .unwrap();
+    assert_eq!(v.summary.topic_ids, [topic.as_str()]);
+    let followed = engine.follow(&topic, true, Via::App).unwrap();
+    assert!(followed.followed);
+    let map = engine.map().unwrap();
+    assert_eq!(map.regions.len(), 1);
+    assert_eq!(map.regions[0].count, 1);
+    assert!(
+        engine
+            .set_topic(&t.id, "no-such-topic", true, Via::App, &Links::default())
+            .is_err()
+    );
+    let v = engine
+        .set_topic(&t.id, &topic, false, Via::App, &Links::default())
+        .unwrap();
+    assert!(v.summary.topic_ids.is_empty());
+}
