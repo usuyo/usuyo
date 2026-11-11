@@ -1,33 +1,38 @@
 import { useState } from "react";
 import { Button as AriaButton } from "react-aria-components";
-import type { FetchPlugin, PluginsView, SiteLogin } from "../api/endpoints";
-import { usePlugins, useSites } from "../api/hooks";
+import type { FetchPlugin, PluginsView, SiteLogin, VisitorIdentity as Visitor } from "../api/endpoints";
+import { usePlugins, useSites, useVisitors } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
 import { Rail } from "../frame/Rail";
 import { PluginCard } from "./PluginCard";
 import { SiteLoginRow } from "./SiteLoginRow";
-import { VISITOR_KEY, VisitorIdentity } from "./VisitorIdentity";
+import { VisitorIdentity } from "./VisitorIdentity";
 import { timeText } from "./words";
 
-/** 左边一栏的一个平台：用到它的插件和要登录的站点。 */
+/** 左边一栏的一个平台：用到它的插件、要登录的站点和访客身份。 */
 interface PlatformGroup {
   key: string;
   name: string;
   plugins: FetchPlugin[];
   sites: SiteLogin[];
+  visitors: Visitor[];
 }
 
 /** 按平台分：一个插件管几个平台就在几个平台下面；不认平台的（通用网页）自己一组。 */
-function groups(view: PluginsView, sites: SiteLogin[]): PlatformGroup[] {
+function groups(view: PluginsView, sites: SiteLogin[], visitors: Visitor[]): PlatformGroup[] {
   const out = new Map<string, PlatformGroup>();
   for (const p of view.plugins) {
     const targets = p.platforms.length > 0 ? p.platforms : [{ id: p.id, name: p.name }];
     for (const t of targets) {
-      const g = out.get(t.id) ?? { key: t.id, name: t.name, plugins: [], sites: [] };
+      const g = out.get(t.id) ?? { key: t.id, name: t.name, plugins: [], sites: [], visitors: [] };
       g.plugins.push(p);
       for (const s of p.sites) {
         const site = sites.find((x) => x.site === s);
         if (site && !g.sites.includes(site)) g.sites.push(site);
+      }
+      for (const s of p.visitors) {
+        const visitor = visitors.find((x) => x.site === s);
+        if (visitor && !g.visitors.includes(visitor)) g.visitors.push(visitor);
       }
       out.set(t.id, g);
     }
@@ -53,7 +58,8 @@ function groupSub(g: PlatformGroup): { text: string; warn: boolean } {
 export function PluginsPage() {
   const plugins = usePlugins();
   const sites = useSites();
-  const all = plugins.data ? groups(plugins.data, sites.data ?? []) : [];
+  const visitors = useVisitors();
+  const all = plugins.data ? groups(plugins.data, sites.data ?? [], visitors.data ?? []) : [];
   const [picked, setPicked] = useState<string | null>(null);
   const current = all.find((g) => g.key === picked) ?? all[0];
   const notLoaded = plugins.data?.notLoaded ?? [];
@@ -101,7 +107,6 @@ export function PluginsPage() {
 
 function PlatformDetail({ group }: { group: PlatformGroup }) {
   const owners = [...new Set(group.plugins.map((p) => p.id.split("/")[0] ?? p.id))];
-  const visitor = group.plugins.find((p) => p.settings.some((s) => s.key === VISITOR_KEY && s.secret));
   const pacing = group.plugins.flatMap((p) => p.pacing).find((x) => x.platform === group.key);
   return (
     <section
@@ -130,7 +135,9 @@ function PlatformDetail({ group }: { group: PlatformGroup }) {
           </>
         ) : null}
 
-        {visitor ? <VisitorIdentity plugin={visitor} /> : null}
+        {group.visitors.map((v) => (
+          <VisitorIdentity key={v.site} visitor={v} />
+        ))}
 
         <h3 className="m-0 mt-8 text-section font-semibold text-text">获取方式</h3>
         <p className="m-0 mt-1.5 text-note text-sub">每个插件怎么取、要不要你的账号。标签只是给你挑的，不拦什么。</p>

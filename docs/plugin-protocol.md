@@ -122,6 +122,7 @@ upstream:
 | `access` | 枚举 | 是 | 所有能力里最高的一层，见 [§2.4](#24-access-与-login) | `browser-session` |
 | `login` | 枚举 | 是 | 所有能力里最高的一档：`none` < `optional` < `required` | `required` |
 | `sites` | 对象数组 | 有登录时必填 | 会用到哪些账号，见 [§2.5](#25-登录站点-sites) | |
+| `visitors` | 对象数组 | 否 | 会用到哪些站点的访客身份（不是账号），见 [§2.5.1](#251-访客身份-visitors) | |
 | `capabilities` | 对象 | 是 | 能力名到能力声明的映射，见下表 | |
 | `pacing` | 对象 | 否 | 按平台给的节奏建议：`batch`（`false` 表示只接受用户一条条收下）、`interval`（同一平台上两次调用的最短间隔）、`daily`（每天的调用次数上限）。宿主取同平台所有已装插件里最严的作默认值，用户可以改；计哪些调用见 [§3.1](#31-运行器与节奏) | `{douyin: {batch: true, interval: 8s, daily: 300}}` |
 
@@ -132,6 +133,7 @@ upstream:
 | `access` | 全部 | 是 | 这个能力实际用到的那一层 | `public-web` |
 | `login` | 全部 | 是 | `none`、`optional`、`required` | `none` |
 | `sites` | 全部 | 有登录时必填 | 用到 `sites` 里的哪几个，写 `site` 值 | `[www.douyin.com]` |
+| `visitors` | 全部 | 否 | 用到 `visitors` 里的哪几个，写 `site` 值；和 `login` 无关，`login: none` 也可以写（[§2.5.1](#251-访客身份-visitors)） | `[www.example.com]` |
 | `timeout` | 全部 | 否 | 覆盖 [§3.4](#34-超时与取消) 的默认总时长；获取插件只用这一处，不用 `permissions.limits.timeout` | `2h` |
 | `perPlatform` | 全部 | 否 | 多平台插件里某个平台走的路不同时，按平台覆盖 `access`、`login`、`sites` | `{bilibili: {access: private-api, login: optional}}` |
 | `outputs` | `fetch` | 是 | 能取到哪些东西，固定词表：`text`、`html`、`images`、`media:video`、`media:audio`、`subtitle`、`meta`、`comments`（11-11 照 [§13](#13-待定) 第 31 项加了 `comments`） | `[text, images, media:video]` |
@@ -219,7 +221,7 @@ run:
 - **按实际默认路径填，不按宣传填。** 一条路径用到多层时取最高的一层；上游工具有不同模式时，按插件实际调用的模式填。
 - **读界面的插件怎么填。** 只读无障碍树、控件树或截图，动作走无障碍接口或系统输入的，填 `vision-ui`：读用户日常浏览器里渲染出来的网页、经 ADB 或手机上的程序读安卓控件树再发输入，都算；开后台虚拟屏、以 shell 身份起助手进程不改变层级。经 CDP、远程调试、扩展或页面脚本读 DOM 或请求的，填 `browser-session`。带调试端口重启官方客户端、在它的渲染进程里执行脚本（例如对抖音、B站这类 Electron 客户端用 agent-desktop 的 `launch --cdp`），或注入、Hook 目标 App 的进程、读它的私有数据，填 `client-hook`（[调研 10](research/10-desktop-and-android-agents.md)）。
 - **它们是给用户挑选用的标签，不是闸门。** 宿主不据此推风险档、不拦截、不弹单独的确认；运行器只按用户排的顺序试（[§3.1](#31-运行器与节奏)）。
-- **`login: none` 的能力拿不到任何平台账号凭据**：宿主不传 cookie、站点存储和浏览器资料目录（[§6](#6-凭据)）。插件自己的密钥设置照 [§2.11](#211-插件设置-settings) 另行传入，和 `login` 无关。`optional` 表示没有凭据也能跑；用户登录过时带不带上，由宿主按用户的设置决定（默认见 [§13](#13-待定) 第 11 项）。
+- **`login: none` 的能力拿不到任何平台账号凭据**：宿主不传 cookie、站点存储和浏览器资料目录（[§6](#6-凭据)）。插件自己的密钥设置照 [§2.11](#211-插件设置-settings) 另行传入，访客身份照 [§2.5.1](#251-访客身份-visitors) 另行传入，都和 `login` 无关。`optional` 表示没有凭据也能跑；用户登录过时带不带上，由宿主按用户的设置决定（默认见 [§13](#13-待定) 第 11 项）。
 - **新版本调高 `access` 或 `login`** 时，客户端在更新说明里标出，不停用这个版本（[§8.5](#85-添加来源更新与权限扩大)）。
 
 <a id="25-登录站点-sites"></a>
@@ -259,6 +261,39 @@ requires:
 ```
 
 一个能力最多声明一个 `credential: browser-profile` 的站点，因为一次调用只交出一个资料目录。这个目录（`${PROFILE}`）不用在 `permissions.fs` 里声明：`sites` 本身就是声明，宿主只在用到这个站点的那次调用（或那个常驻进程，[§3.12](#312-常驻模式-serve)）里放行读写。
+
+<a id="251-访客身份-visitors"></a>
+### 2.5.1 访客身份 visitors
+
+有的站点不登录也要一份访客身份才取得稳：任何没登录的访客打开一页，站点都会给一组 cookie。它不是账号，所以不写在 `sites` 里：宿主另开一个不登录的窗口，打开 `url`，存下页面自己生成的 cookie，经 `USUYO_VISITOR` 交给列了它的能力（[§3.2](#32-调用约定)、[§6](#6-凭据)）。
+
+| 字段 | 类型 | 必填 | 含义 | 例子 |
+|---|---|---|---|---|
+| `site` | 字符串 | 是 | 主机名，小写；一个清单里不重复 | `www.example.com` |
+| `name` | 字符串 | 是 | 界面上写「开一次 X 首页」的 X | `例子` |
+| `url` | URL | 是 | 宿主打开的页面，只能是 https | `https://www.example.com/` |
+| `cookies` | 字符串数组 | 否 | 这些名字都出现了就算取到；不写时等名字连着几秒不再变 | `["<访客 cookie 名>"]` |
+| `domains` | 字符串数组 | 否 | 和 [§2.5](#25-登录站点-sites) 的 `domains` 同一套规则：和 `site` 同一个可注册域名，不能是公共后缀 | `[".example.com"]` |
+
+```yaml
+access: public-web
+login: none
+visitors:
+  - site: www.example.com
+    name: 例子
+    url: https://www.example.com/
+capabilities:
+  fetch:
+    access: public-web
+    login: none
+    visitors: [www.example.com]
+    outputs: [text, images, meta]
+```
+
+- **和同一主机的账号是两回事。** 访客身份和账号各存一份（钥匙串里分开的两项），登录窗口和访客窗口各用一份网页数据；以后登录这个主机，不会和访客身份混在一起。只列了访客身份的调用拿不到账号的 cookie，只列了 `sites` 的调用拿不到访客身份。
+- **能力里的每一项都要在顶层 `visitors` 里声明**，否则清单不合格。`login: none` 的能力可以列访客身份，照样不能列 `sites`。
+- 访客身份只存 cookie，不存 localStorage；`credentialsUpdate` 只写回账号站点（[§6](#6-凭据)），不改访客身份。
+- 界面只说有没有、什么时候存下的、最早哪个 cookie 什么时候过期；不出现在登录站点的列表里，也不算「还没登录」。
 
 <a id="26-账号写操作"></a>
 ### 2.6 账号写操作
@@ -526,6 +561,7 @@ SPEC v0 的适配器协议（[SPEC 附](SPEC.md#附v0-各节和-18-处的去向)
 | `USUYO_INPUT` | 导入调用（[§3.9](#39-从文件导入)） | `${INPUT}`，导入文件的副本 |
 | `USUYO_CREDENTIALS` | 这次调用要带账号、且用户已登录时（[§2.4](#24-access-与-login)） | 凭据 JSON 文件路径（[§6](#6-凭据)） |
 | `USUYO_COOKIES_TXT` | 同上，`credential: cookies` | 同一批 cookie 的 Netscape 格式文件，给 yt-dlp 一类工具的 `--cookies` 用；可写，调用结束后丢弃 |
+| `USUYO_VISITOR` | 这次的能力列了 `visitors`、且存着那份访客身份时，和 `login` 无关（[§2.5.1](#251-访客身份-visitors)） | 访客身份的 JSON 文件路径，形状和 `USUYO_CREDENTIALS` 一样，`source` 是 `visitor-window`、没有 localStorage；0600，调用结束即删 |
 | `USUYO_BROWSER_PROFILE` | `credential: browser-profile` | `${PROFILE}` |
 | `USUYO_PROVIDER` | 能力的 `provider` 不是 `none`、用户配了模型时（[§4.3](#43-模型与密钥由宿主代发)） | 这次调用的代发参数，JSON 文件路径，内容是 `{baseUrl, token, model}` |
 | `ADB_SERVER_SOCKET` | 声明了 `devices: [adb]` | 宿主管的 adb 服务，`tcp:127.0.0.1:<端口>`（[§7](#7-权限与隔离)）；adb 认这个变量 |
@@ -895,7 +931,8 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip"
 - **`USUYO_SETTINGS`**：按机器 `settings.json` 里 `plugins.<插件 id>.settings` 有值时，宿主把它写成这次调用文件夹里的 `settings.json`，变量指向它；没有就不设。
 - **`USUYO_NETWORK`**：宿主查 `example.com`、`example.org` 两个名字（两秒内），两个都有回答、回答全在 `198.18.0.0/15` 里时设成 `fake-ip`，结果缓存一分钟；查不到、超时都算不是。不看要取的那个域名自己的回答。
 - **节奏还没做**：[§3.1](#31-运行器与节奏) 的 `interval`、`daily`、每平台一个调用的锁、整机锁和设备锁都还没有；任务一次只跑一个。
-- **还没传的**：`USUYO_SECRETS`、`USUYO_CREDENTIALS`、`USUYO_COOKIES_TXT`、`USUYO_BROWSER_PROFILE`、`USUYO_PROVIDER`、`ADB_SERVER_SOCKET`、`ANDROID_SERIAL`、各个代理变量。凭据、密钥、本机代理和沙箱（[§6](#6-凭据)、[§7](#7-权限与隔离)）都还没做；插件的出站现在靠 plugin-kit 的客户端自己把关（[§10.1](#101-plugin-kit-的-http-客户端11-11)）。
+- **凭据和密钥**：`credential: cookies` 的站点经 `USUYO_CREDENTIALS`、`USUYO_COOKIES_TXT`，密钥设置经 `USUYO_SECRETS`，访客身份经 `USUYO_VISITOR`（[§2.5.1](#251-访客身份-visitors)）。值在系统钥匙串里（没有钥匙串的系统上是按机器目录的 0600 文件），按机器目录的 `logins.json` 只记名字、域名和过期时间；文件放在按机器目录 `run/` 下这次调用自己的 0700 目录里，0600，进程结束就删；交出去的值从 stderr、插件的错误和宿主拼的错误里洗掉（包括 JSON、Debug 转义过的写法）。plugin-kit 的 `http::Cookie::visitor` 把访客身份读成只发给给定主机、只走 https 的 Cookie。
+- **还没传的**：`USUYO_BROWSER_PROFILE`、`USUYO_PROVIDER`、`ADB_SERVER_SOCKET`、`ANDROID_SERIAL`、各个代理变量。本机代理和沙箱（[§7](#7-权限与隔离)）都还没做；插件的出站现在靠 plugin-kit 的客户端自己把关（[§10.1](#101-plugin-kit-的-http-客户端11-11)）。
 - **调用文件夹**：资料库的 `.usuyo/tmp/usuyo-call-<UUIDv7>-<随机>/`，里面 `tmp/`、`tmp/home/`、`tmp/bin/`，`fetch` 另有 `out/`；用完整个删掉，崩溃留下的在下次打开库时清掉。
 - **时长**：`canonicalize` 10 s、`fetch` 300 s、`sources` 30 s、`list` 每页 60 s；发过 `progress` 以后 120 s 没有新的算卡住；一次调用里 `waiting` 加起来最多 600 s，等的时候另两个时钟停；能力的 `timeout` 最多按 2 小时算。超时或取消先给进程组 SIGTERM，5 秒后 SIGKILL；正常退出后也给进程组发一次 SIGKILL，留下的子进程一起结束。Windows 上只结束这一个进程（还没有 Job Object）。
 - **stdout、stderr**：stdout 最多 32 MiB，超了 `invalid-output`；stderr 留最后 200 行，每行最多 8 KiB；解析不了的 `@usuyo ` 行忽略。
@@ -912,7 +949,7 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip"
 
 - stdio 上换行分隔的 JSON-RPC 2.0：一行一条消息，消息里不能有换行；stdout 只放协议消息，日志写 stderr；分帧和 MCP stdio 相同（[03 无状态模型与 stdio](research/03-agent-protocols.md#无状态模型与-stdio)）。
 - 宿主用 `run.command` 启动进程，先调 `describe`，核对 `protocol` 和 `version`；可以常驻，模型加载一次处理多条。宿主同一时间向一个进程只发一个 `run`；`gpu: true` 的插件同一时间只开一个进程，其余的按「同时处理几个」的设置并行开进程。
-- [§3.2](#32-调用约定) 的环境变量表同样适用于转换、导出插件，只有 `USUYO_SETTINGS`、`USUYO_SECRETS`、`USUYO_INPUT`、`USUYO_CREDENTIALS`、`USUYO_COOKIES_TXT`、`USUYO_BROWSER_PROFILE` 不给：这两类插件的非密钥设置只经 `run` 的 `options` 传，密钥只经宿主代发。标准流按本节。进程能看到哪些路径见 [§7.1](#71-常驻进程的路径)。
+- [§3.2](#32-调用约定) 的环境变量表同样适用于转换、导出插件，只有 `USUYO_SETTINGS`、`USUYO_SECRETS`、`USUYO_INPUT`、`USUYO_CREDENTIALS`、`USUYO_COOKIES_TXT`、`USUYO_VISITOR`、`USUYO_BROWSER_PROFILE` 不给：这两类插件的非密钥设置只经 `run` 的 `options` 传，密钥只经宿主代发。标准流按本节。进程能看到哪些路径见 [§7.1](#71-常驻进程的路径)。
 - 退出：宿主关闭 stdin，插件 5 秒内退出；否则 SIGTERM，再 5 秒后杀进程组。
 - 错误：协议错误用 JSON-RPC 标准码（`-32700`、`-32600`、`-32601`、`-32602`）；插件自己的失败用 `-32000`，`data` 是错误对象，`code` 取 [§3.3](#33-信封与错误码) 里适用的值（多是 `unsupported-input`、`dependency-missing`、`network`、`cancelled`、`internal`）。
 
@@ -1113,9 +1150,10 @@ curl -X POST http://127.0.0.1:47821/v1/deliver \
 <a id="6-凭据"></a>
 ## 6. 凭据
 
-11-11 还没做：宿主还不给插件传任何凭据和密钥（[§3.13](#313-宿主和-plugin-kit-现在做到的11-11)）；`credentialsUpdate` 存进 `usuyo.fetch.json` 前去掉。
+11-11 做到的见 [§3.13](#313-宿主和-plugin-kit-现在做到的11-11)：只有登录窗口这一种来源、只传 `credential: cookies` 的站点；`credentialsUpdate` 写回这次交出去的站点，存进 `usuyo.fetch.json` 前去掉。
 
 - **只由宿主在调用时传入**，只传清单 `sites` 里声明、这个能力用到的站点；`login: none` 的能力不传任何平台账号凭据。插件自己的密钥设置不算平台凭据，另经 `USUYO_SECRETS` 传（[§2.11](#211-插件设置-settings)）。
+- **访客身份不是账号凭据**（[§2.5.1](#251-访客身份-visitors)）：只传给列了它的能力，经 `USUYO_VISITOR`，文件和 `USUYO_CREDENTIALS` 同一个形状、同样 0600、调用结束即删；和同一主机的账号分开存、分开传，`credentialsUpdate` 不写回它。
 - **这些限制靠沙箱的文件读权限落实。** 在文件读取只能「仅告知」的平台上（Windows，以及 Linux 上 bubblewrap 和 Landlock 都不可用时），任何插件都可能读到别的调用的凭据文件、别的站点的资料目录和日常浏览器的 cookie 库，这几条只是约定，不是隔离；界面的权限页按 [§7](#7-权限与隔离) 的三档如实标出。
 - **形式**：`USUYO_CREDENTIALS` 指向一个临时 JSON 文件（权限 0600，放在这次调用的临时目录里，调用结束即删除）；`credential: cookies` 时另有 `USUYO_COOKIES_TXT`，内容相同、格式是 Netscape cookies.txt。常驻模式下路径放在每个请求的 `context` 里。
 
@@ -1751,7 +1789,7 @@ usuyo plugin pack --version 0.3.1 dist/*
     - `readback` 返回 `run` 的用户层键，宿主照 [SPEC §1.4](SPEC.md#14-你写的那一层)、[§1.8](SPEC.md#18-同步) 合并，照 [§1.5.1](SPEC.md#151-op-词表) 记 op，`actor: external`、`via: readback:<插件 id>`（11-06 定，[§4.4](#44-导出的-run-与-readback)）。
 
 35. 一类输出只拿到一部分（2026-11-11 两个插件作者写插件时报的，35–39 同）：`outputs`、`missing` 只说一类有没有，没有字段说「这一类拿到了一部分」；web 插件现在写进 `missingReason`。
-36. 访客凭据：有的平台不登录也要一份访客 cookie 才取得到，[§6](#6-凭据) 的凭据里没有这一种；小红书插件现在做成插件设置，让你自己粘。
+36. 访客凭据：有的平台不登录也要一份访客 cookie 才取得到，[§6](#6-凭据) 的凭据里没有这一种；小红书插件现在做成插件设置，让你自己粘。**11-11 已答**：加了顶层 `visitors` 和能力的 `visitors`（[§2.5.1](#251-访客身份-visitors)），宿主开不登录的窗口取，经 `USUYO_VISITOR` 交；小红书插件改用它，去掉了手填的设置。
 37. 短码的别名：同一条内容的短码没有地方记成身份的别名（推断的后果：用短码和用完整 id 收下的会成两条）。
 38. 音频和视频分开给：`media[]` 说不出两个文件是同一段的音轨和画面、要合起来看。
 39. 按语言的提示：`hint` 一次只按 `USUYO_LOCALE` 写一种语言，没有按语言分开给的写法。

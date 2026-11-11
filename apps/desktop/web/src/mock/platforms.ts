@@ -1,4 +1,4 @@
-// 样例：获取插件、登录站点、导入、投递令牌。和内核同一套接口（见 api/endpoints.ts），数据在内存里。
+// 样例：获取插件、登录站点、访客身份、导入、投递令牌。和内核同一套接口（见 api/endpoints.ts），数据在内存里。
 // 导入照时间往前走：新开的一次过几秒列完，确认以后隔一会儿收下一条，页面不用真的内核也能看到「来了」。
 import type {
   DeliverToken,
@@ -6,6 +6,7 @@ import type {
   ImportEntry,
   ImportView,
   SiteLogin,
+  VisitorIdentity,
 } from "../api/endpoints";
 import type { Platforms } from "../api/source";
 
@@ -25,9 +26,8 @@ function basePlugins(): FetchPlugin[] {
       canList: false,
       sources: [],
       sites: [],
-      settings: [
-        { key: "visitor-cookie", label: "访客 cookie（可选，不是你的账号）", type: "string", secret: true, filled: false },
-      ],
+      visitors: ["www.xiaohongshu.com"],
+      settings: [],
       pacing: [{ platform: "xiaohongshu", batch: true, intervalSec: 15, daily: 100 }],
       pauses: [],
     },
@@ -42,6 +42,7 @@ function basePlugins(): FetchPlugin[] {
       canList: false,
       sources: [],
       sites: ["yuanbao.tencent.com"],
+      visitors: [],
       settings: [],
       pacing: [{ platform: "wechat-channels", batch: true, intervalSec: 30, daily: 50 }],
       pauses: [],
@@ -57,10 +58,25 @@ function basePlugins(): FetchPlugin[] {
       canList: true,
       sources: [{ source: "bilibili:toview", title: "稍后再看", action: "favorite" }],
       sites: ["www.bilibili.com"],
+      visitors: [],
       settings: [],
       pacing: [{ platform: "bilibili", batch: true, intervalSec: 5, daily: 500 }],
       // 样例里 B站 刚被限流：页面上写原因和什么时候再试
       pauses: [{ scope: "bilibili", byYou: false, until: inMinutes(12), code: "rate-limited", hint: "B站说请求太频繁，过一会儿再试" }],
+    },
+  ];
+}
+
+function baseVisitors(): VisitorIdentity[] {
+  return [
+    {
+      site: "www.xiaohongshu.com",
+      name: "小红书",
+      url: "https://www.xiaohongshu.com/",
+      cookies: [],
+      domains: [],
+      state: "missing",
+      plugins: ["usuyo-fetch/xiaohongshu"],
     },
   ];
 }
@@ -118,8 +134,8 @@ interface MockImport {
   everyMs: number;
   /** 上次动过的时间。 */
   at: number;
-  /** 确认时勾了「回收站里的也拿回来」。 */
-  alsoTrashed: boolean;
+  /** 确认时挑了要收的条目（`seq`）。 */
+  chosen: Set<number>;
 }
 
 function counts(entries: ImportEntry[]): ImportView["preview"] {
@@ -143,15 +159,14 @@ function advance(i: MockImport, now: number): void {
     return;
   }
   if (v.state !== "taking") return;
-  const { alsoTrashed } = i;
   while (now - i.at >= i.everyMs) {
-    const next = i.entries.find((e) => !e.taken && (e.standing === "new" || (alsoTrashed && e.standing === "trashed")));
+    const next = i.entries.find((e) => !e.taken && i.chosen.has(e.seq));
     if (!next) break;
     next.taken = true;
     i.at += i.everyMs;
     i.view = { ...i.view, taken: i.view.taken + 1 };
   }
-  const left = i.entries.some((e) => !e.taken && (e.standing === "new" || (alsoTrashed && e.standing === "trashed")));
+  const left = i.entries.some((e) => !e.taken && i.chosen.has(e.seq));
   if (!left) {
     const { nextAt: _n, waiting: _w, ...rest } = i.view;
     i.view = { ...rest, state: "done" };
@@ -164,6 +179,7 @@ function advance(i: MockImport, now: number): void {
 export function createMockPlatforms(empty = false): Platforms {
   const plugins = empty ? [] : basePlugins();
   const sites = empty ? [] : baseSites();
+  const visitors = empty ? [] : baseVisitors();
   const imports = new Map<string, MockImport>();
   const tokens: (DeliverToken & { token: string })[] = empty
     ? []
@@ -177,7 +193,7 @@ export function createMockPlatforms(empty = false): Platforms {
       later: [],
       everyMs: 4000,
       at: now,
-      alsoTrashed: false,
+      chosen: new Set(),
       view: {
         id: "0193f2b0-0001-7f3a-8b4c-5d6e7f8a9b0c",
         kind: "source",
@@ -206,7 +222,7 @@ export function createMockPlatforms(empty = false): Platforms {
       later: [],
       everyMs: 15_000,
       at: now,
-      alsoTrashed: false,
+      chosen: new Set(taking.filter((e) => e.standing === "new").map((e) => e.seq)),
       view: {
         id: "0193f2b0-0002-7f3a-8b4c-5d6e7f8a9b0c",
         kind: "delivered",
@@ -236,11 +252,6 @@ export function createMockPlatforms(empty = false): Platforms {
     advance(i, Date.now());
     return i;
   };
-  const setSecret = (pluginId: string, key: string, filled: boolean): FetchPlugin => {
-    const p = plugin(pluginId);
-    p.settings = p.settings.map((s) => (s.key === key && s.secret ? { ...s, filled } : s));
-    return { ...p };
-  };
 
   return {
     async plugins() {
@@ -269,10 +280,6 @@ export function createMockPlatforms(empty = false): Platforms {
       p.pauses = [{ scope: "*", byYou: true }];
       return { ...p };
     },
-    async forgetSecret(pluginId, key) {
-      await wait(40);
-      return setSecret(pluginId, key, false);
-    },
     async sites() {
       await wait(40);
       return sites.map((s) => ({ ...s }));
@@ -283,6 +290,19 @@ export function createMockPlatforms(empty = false): Platforms {
       if (s) {
         s.login = "missing";
         delete s.capturedAt;
+      }
+    },
+    async visitors() {
+      await wait(40);
+      return visitors.map((v) => ({ ...v }));
+    },
+    async forgetVisitor(site) {
+      await wait(40);
+      const v = visitors.find((x) => x.site === site);
+      if (v) {
+        v.state = "missing";
+        delete v.capturedAt;
+        delete v.expiresAt;
       }
     },
     async imports() {
@@ -301,7 +321,7 @@ export function createMockPlatforms(empty = false): Platforms {
         later: all,
         everyMs: Math.max(p.pacing[0]?.intervalSec ?? 5, 1) * 1000,
         at: Date.now(),
-        alsoTrashed: false,
+        chosen: new Set(),
         view: {
           id,
           kind: "source",
@@ -334,10 +354,14 @@ export function createMockPlatforms(empty = false): Platforms {
       await wait(80);
       const i = getImport(id);
       if (i.view.state !== "ready") throw new Error("这次导入不在等确认");
-      const wanted = i.entries.filter((e) => e.standing === "new" || (body.alsoTrashed === true && e.standing === "trashed"));
+      const except = new Set(body.except ?? []);
+      const group = (e: ImportEntry) => (e.standing === "new" ? body.new : e.standing === "trashed" ? body.trashed : null);
+      if ([...except].some((seq) => { const e = i.entries.find((x) => x.seq === seq); return !e || group(e) === null; })) {
+        throw new Error("except 里有不是新的、也不在回收站里的条目");
+      }
+      i.chosen = new Set(i.entries.filter((e) => { const g = group(e); return g !== null && g !== except.has(e.seq); }).map((e) => e.seq));
       i.at = Date.now();
-      i.alsoTrashed = body.alsoTrashed === true;
-      i.view = { ...i.view, state: wanted.length > 0 ? "taking" : "done" };
+      i.view = { ...i.view, state: i.chosen.size > 0 ? "taking" : "done" };
       advance(i, i.at);
       return { ...i.view };
     },

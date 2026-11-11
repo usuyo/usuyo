@@ -1,4 +1,4 @@
-//! 登录窗口里读到的 cookie：哪些属于这个站点、什么时候算登录好了、每个站点的网页数据放哪。
+//! 登录窗口和访客窗口里读到的 cookie：哪些属于这个站点、什么时候算登录好了、每个站点的网页数据放哪。
 //! 规则和内核一致（`usuyo-plugin` 的 `belongs`）：内核收到以后还会再筛一遍。
 //!
 //! 值是秘密：`Debug` 只写名字和域名。
@@ -17,6 +17,19 @@ pub struct SiteSpec {
     #[serde(default)]
     pub login_url: Option<String>,
     /// 登录后才有的 cookie 名；空的要等你点「登录好了」。
+    #[serde(default)]
+    pub cookies: Vec<String>,
+    #[serde(default)]
+    pub domains: Vec<String>,
+}
+
+/// `GET /visitors` 里的一项（访客身份，不是账号），只取访客窗口要的。
+#[derive(Debug, Clone, Deserialize)]
+pub struct VisitorSpec {
+    pub site: String,
+    pub name: String,
+    pub url: String,
+    /// 这些名字都有了就算取到；空的时候等名字不再变。
     #[serde(default)]
     pub cookies: Vec<String>,
     #[serde(default)]
@@ -84,20 +97,6 @@ pub fn logged_in(names: &[String], selected: &[Jar]) -> bool {
         && names
             .iter()
             .all(|n| selected.iter().any(|c| &c.name == n && !c.value.is_empty()))
-}
-
-/// 请求头里 `Cookie:` 后面那一行：`a=1; b=2`。同名的只留第一个。
-pub fn cookie_line(selected: &[Jar]) -> String {
-    let mut seen = Vec::new();
-    let mut parts = Vec::new();
-    for c in selected {
-        if c.value.is_empty() || seen.contains(&c.name.as_str()) {
-            continue;
-        }
-        seen.push(c.name.as_str());
-        parts.push(format!("{}={}", c.name, c.value));
-    }
-    parts.join("; ")
 }
 
 /// 每个站点自己一份网页数据：macOS 上是数据仓库的标识，别的系统上是目录名。按名字算，下次还是同一份。
@@ -194,17 +193,6 @@ mod tests {
     }
 
     #[test]
-    fn cookie_line_joins_pairs_once() {
-        let v = vec![
-            jar("a1", "x", ".xiaohongshu.com"),
-            jar("webId", "y", ".xiaohongshu.com"),
-            jar("a1", "z", "www.xiaohongshu.com"),
-            jar("blank", "", ".xiaohongshu.com"),
-        ];
-        assert_eq!(cookie_line(&v), "a1=x; webId=y");
-    }
-
-    #[test]
     fn values_stay_out_of_debug() {
         let c = jar("SESSDATA", "secret-value", ".bilibili.com");
         assert!(!format!("{c:?}").contains("secret-value"));
@@ -222,7 +210,8 @@ mod tests {
         );
         assert_ne!(
             store_id("www.xiaohongshu.com"),
-            store_id("visitor:usuyo-fetch/xiaohongshu")
+            store_id("visitor:www.xiaohongshu.com"),
+            "访客身份和同一主机的账号各一份网页数据"
         );
         #[cfg(not(target_vendor = "apple"))]
         assert_eq!(store_dir_name("www.bilibili.com").len(), 32);

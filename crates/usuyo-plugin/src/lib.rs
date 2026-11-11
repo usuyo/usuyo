@@ -15,9 +15,9 @@ pub use error::PluginError;
 
 #[cfg(feature = "host")]
 pub use host::{
-    CallLimits, CallOptions, DeclaredSite, Discovery, FetchInput, FetchPlugin, FetchRequest,
-    FetchedSnapshot, HostConfig, InstalledPlugin, ListRequest, LoginState, OutFile, PluginHost,
-    Rejected, Vault, discover,
+    CallLimits, CallOptions, DeclaredSite, DeclaredVisitor, Discovery, FetchInput, FetchPlugin,
+    FetchRequest, FetchedSnapshot, HostConfig, InstalledPlugin, ListRequest, LoginState, OutFile,
+    PluginHost, Rejected, Vault, discover,
 };
 #[cfg(feature = "host")]
 pub use tokio_util::sync::CancellationToken;

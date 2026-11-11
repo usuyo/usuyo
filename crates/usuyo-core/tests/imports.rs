@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use tempfile::TempDir;
 use usuyo_core::view::ImportState;
-use usuyo_core::{DeliveredLink, Engine, EngineConfig, Links, RetryPolicy, Via};
+use usuyo_core::{DeliveredLink, Engine, EngineConfig, ImportChoice, Links, RetryPolicy, Via};
 
 /// 假的「列出你存过的」：两页，第二页里有一条和第一页重复。
 /// `canonicalize` 认 `example.test/<id>`，`fetch` 取到一段正文。
@@ -149,6 +149,21 @@ run:
     }
 }
 
+fn only_new() -> ImportChoice {
+    ImportChoice {
+        new: true,
+        ..ImportChoice::default()
+    }
+}
+
+fn both() -> ImportChoice {
+    ImportChoice {
+        new: true,
+        trashed: true,
+        ..ImportChoice::default()
+    }
+}
+
 async fn list_all(engine: &Engine, id: &str) {
     for _ in 0..10 {
         if engine.import(id).unwrap().state != ImportState::Listing {
@@ -207,7 +222,7 @@ async fn pages_through_and_previews_without_creating_anything() {
         .unwrap();
     assert_eq!(stored[0].item_id.as_deref(), Some(b.id.as_str()));
 
-    engine.confirm_import(&imp.id, false).unwrap();
+    engine.confirm_import(&imp.id, &only_new()).unwrap();
     assert_eq!(engine.run_due().await.unwrap(), 2);
     let v = engine.import(&imp.id).unwrap();
     assert_eq!(v.state, ImportState::Done);
@@ -249,7 +264,7 @@ async fn bringing_trashed_ones_back_only_when_asked() {
         .start_import("fake/saved", "example:fav", "")
         .unwrap();
     list_all(&engine, &imp.id).await;
-    engine.confirm_import(&imp.id, true).unwrap();
+    engine.confirm_import(&imp.id, &both()).unwrap();
     engine.run_due().await.unwrap();
     assert!(
         engine
@@ -259,6 +274,90 @@ async fn bringing_trashed_ones_back_only_when_asked() {
             .is_none()
     );
     assert_eq!(engine.import(&imp.id).unwrap().taken, 4);
+}
+
+#[tokio::test]
+async fn takes_only_what_you_chose_entry_by_entry() {
+    let f = Fixture::new("");
+    let engine = f.engine();
+    let c = engine
+        .take("https://example.test/c", "link", Via::Cli)
+        .await
+        .unwrap();
+    engine.run_due().await.unwrap();
+    engine.trash(&c.id, Via::App, &Links::default()).unwrap();
+    let imp = engine
+        .start_import("fake/saved", "example:fav", "")
+        .unwrap();
+    list_all(&engine, &imp.id).await;
+    let new = engine.import_entries(&imp.id, Some("new"), 0, 50).unwrap();
+    let trashed = engine
+        .import_entries(&imp.id, Some("trashed"), 0, 50)
+        .unwrap();
+    let skip_a = new
+        .iter()
+        .find(|e| e.title.as_deref() == Some("A"))
+        .unwrap();
+
+    // 认不出的条目、已经存着的不能出现在例外里：什么都不排
+    let stray = ImportChoice {
+        except: [9999].into(),
+        ..both()
+    };
+    assert!(engine.confirm_import(&imp.id, &stray).is_err());
+
+    // 新的整组收、A 不收；回收站那组整组不收、C 例外收
+    let choice = ImportChoice {
+        new: true,
+        trashed: false,
+        except: [skip_a.seq, trashed[0].seq].into(),
+    };
+    engine.confirm_import(&imp.id, &choice).unwrap();
+    engine.run_due().await.unwrap();
+    let after = engine.import_entries(&imp.id, None, 0, 50).unwrap();
+    let taken: Vec<&str> = after
+        .iter()
+        .filter(|e| e.taken)
+        .map(|e| e.title.as_deref().unwrap())
+        .collect();
+    assert_eq!(taken, ["B", "C", "D"], "{after:?}");
+    assert!(
+        engine
+            .item(&c.id, &Links::default())
+            .unwrap()
+            .trashed_at
+            .is_none(),
+        "挑了的那条从回收站拿回来"
+    );
+    assert_eq!(engine.import(&imp.id).unwrap().taken, 3);
+}
+
+#[tokio::test]
+async fn skipping_the_trashed_group_leaves_it_in_the_trash() {
+    let f = Fixture::new("");
+    let engine = f.engine();
+    let c = engine
+        .take("https://example.test/c", "link", Via::Cli)
+        .await
+        .unwrap();
+    engine.run_due().await.unwrap();
+    engine.trash(&c.id, Via::App, &Links::default()).unwrap();
+    let imp = engine
+        .start_import("fake/saved", "example:fav", "")
+        .unwrap();
+    list_all(&engine, &imp.id).await;
+    let none = ImportChoice::default();
+    engine.confirm_import(&imp.id, &none).unwrap();
+    assert_eq!(engine.run_due().await.unwrap(), 0);
+    let v = engine.import(&imp.id).unwrap();
+    assert_eq!((v.state, v.taken), (ImportState::Done, 0));
+    assert!(
+        engine
+            .item(&c.id, &Links::default())
+            .unwrap()
+            .trashed_at
+            .is_some()
+    );
 }
 
 #[tokio::test]
@@ -281,7 +380,7 @@ async fn stops_and_resumes_across_a_restart() {
     list_all(&engine, &id).await;
     assert_eq!(f.cache("cursors"), "\np2\n", "从停的那一页接着列");
 
-    engine.confirm_import(&id, false).unwrap();
+    engine.confirm_import(&id, &only_new()).unwrap();
     engine.hold_import(&id).unwrap();
     assert_eq!(engine.run_due().await.unwrap(), 0, "停着的不收");
     drop(engine);
@@ -304,7 +403,7 @@ async fn takes_at_the_platforms_pace() {
     let (_, wake) = engine.advance_imports().await.unwrap();
     assert!(wake.is_some(), "还有一页，下一页按间隔再列");
     list_all(&engine, &imp.id).await;
-    engine.confirm_import(&imp.id, false).unwrap();
+    engine.confirm_import(&imp.id, &only_new()).unwrap();
 
     // 两页 list 已经算了 2 次批量调用；今天还能取 1 条
     assert_eq!(engine.run_due().await.unwrap(), 0, "上一次调用刚结束");
@@ -480,7 +579,7 @@ async fn a_delivered_batch_goes_through_the_same_preview() {
         (1, 1),
         "身份由宿主重新算，同一条只算一次"
     );
-    engine.confirm_import(&imp.id, false).unwrap();
+    engine.confirm_import(&imp.id, &only_new()).unwrap();
     engine.run_due().await.unwrap();
     assert_eq!(engine.import(&imp.id).unwrap().taken, 1);
     assert_eq!(

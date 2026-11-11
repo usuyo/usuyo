@@ -37,10 +37,18 @@ const SCRIPT: &str = r#"
 seen="$USUYO_CACHE_DIR/seen-$1.json"
 c=null; [ -n "$USUYO_CREDENTIALS" ] && c=$(cat "$USUYO_CREDENTIALS")
 k=null; [ -n "$USUYO_SECRETS" ] && k=$(cat "$USUYO_SECRETS")
-printf '{"credentials": %s, "secrets": %s, "path": "%s", "txt": "%s"}' \
-  "$c" "$k" "$USUYO_CREDENTIALS" "$USUYO_COOKIES_TXT" > "$seen.tmp"
+w=null; [ -n "$USUYO_VISITOR" ] && w=$(cat "$USUYO_VISITOR")
+printf '{"credentials": %s, "secrets": %s, "visitor": %s, "path": "%s", "txt": "%s", "vpath": "%s"}' \
+  "$c" "$k" "$w" "$USUYO_CREDENTIALS" "$USUYO_COOKIES_TXT" "$USUYO_VISITOR" > "$seen.tmp"
 mv "$seen.tmp" "$seen"
 if [ -n "$USUYO_CREDENTIALS" ]; then echo "debug: $(cat "$USUYO_CREDENTIALS")" >&2; fi
+if [ -n "$USUYO_VISITOR" ]; then echo "debug: $(cat "$USUYO_VISITOR")" >&2; fi
+case "$1:$2" in
+  fetch:*fail*)
+    v=$(sed -n 's/.*"value":"\([^"]*\)".*/\1/p' "$USUYO_VISITOR" | head -1)
+    printf '{"ok": false, "error": {"code": "login-required", "message": "visitor %s rejected", "hint": "换一份 %s"}}' "$v" "$v"
+    exit 1 ;;
+esac
 case "$1" in
   canonicalize) echo '{"ok": true, "match": false}' ;;
   sources)
@@ -109,6 +117,40 @@ run:
     )
 }
 
+/// 不登录、只用访客身份的插件：`fetch` 列了访客身份，`list` 没列。访客身份和 fake/a 的账号是同一个主机。
+const VISITOR_MANIFEST: &str = r#"protocol: 1
+id: fake/visitor
+kind: fetch
+name: Fake visitor
+version: 1.0.0
+license: MIT
+maintainers: [someone]
+platforms: [example]
+match: ["example.com/*"]
+access: public-web
+login: none
+visitors:
+  - site: www.example.com
+    name: 站点
+    url: https://www.example.com/
+    cookies: [vid]
+    domains: [".example.com"]
+capabilities:
+  fetch:
+    access: public-web
+    login: none
+    visitors: [www.example.com]
+    outputs: [text, meta]
+  list:
+    access: public-web
+    login: none
+    order: newest-first
+permissions:
+  fs: {write: ["${OUT}"]}
+run:
+  command: ["${PLUGIN_DIR}/plugin.sh"]
+"#;
+
 struct Fixture {
     tmp: TempDir,
     host: PluginHost,
@@ -147,6 +189,7 @@ fn fixture() -> Fixture {
         "fake/none",
         &manifest("fake/none", "www.example.com", "none", ""),
     );
+    install(&plugins, "fake/visitor", VISITOR_MANIFEST);
     let found = discover(&plugins).unwrap();
     assert!(found.rejected.is_empty(), "{:?}", found.rejected);
     let vault = Arc::new(FakeVault::default());
@@ -195,6 +238,23 @@ impl Fixture {
             {"name": "sid", "value": "b-site-value-7", "domain": ".other.test", "path": "/"}]}))
         .unwrap();
         self.host.save_site("www.other.test", &other).unwrap();
+    }
+}
+
+impl Fixture {
+    fn visit(&self) {
+        let state: StorageState = serde_json::from_value(json!({
+            "cookies": [
+                {"name": "vid", "value": "visitor-vid-value", "domain": ".example.com", "path": "/", "expires": 4102444800i64},
+                {"name": "late", "value": "visitor-late-value", "domain": "www.example.com", "path": "/"},
+                {"name": "other", "value": "foreign-value-9", "domain": ".other.test", "path": "/"}
+            ],
+            "origins": [{"origin": "https://www.example.com", "localStorage": [{"name": "k", "value": "visitor-local-1"}]}]
+        }))
+        .unwrap();
+        let v = self.host.save_visitor("www.example.com", &state).unwrap();
+        assert_eq!(v.state, LoginState::Present);
+        assert_eq!(v.expires, Some(4102444800.0));
     }
 }
 
@@ -453,4 +513,161 @@ async fn saving_and_forgetting_a_site() {
             .unwrap()
             .contains_key("site:www.example.com")
     );
+}
+
+#[tokio::test]
+async fn the_visitor_reaches_only_calls_that_list_it() {
+    let f = fixture();
+    f.login();
+    f.visit();
+    // 列了访客身份的 fetch：拿到 USUYO_VISITOR，没有账号
+    f.host
+        .fetch(
+            f.plugin("fake/visitor"),
+            fetch_request(),
+            &CallOptions::default(),
+        )
+        .await
+        .unwrap();
+    let seen = f.seen("fake/visitor", "fetch");
+    assert_eq!(seen["credentials"], Value::Null, "访客身份的调用不带账号");
+    assert_eq!(
+        seen["visitor"]["sites"],
+        json!([{"site": "www.example.com", "source": "visitor-window"}])
+    );
+    let names: Vec<&str> = seen["visitor"]["storageState"]["cookies"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, ["vid", "late"]);
+    assert_eq!(seen["visitor"]["storageState"]["origins"], json!([]));
+    let path = PathBuf::from(seen["vpath"].as_str().unwrap());
+    assert!(
+        path.starts_with(f.tmp.path().join("machine/run")),
+        "{path:?}"
+    );
+    assert!(!path.exists(), "调用结束就删");
+
+    // 没列访客身份的 list：什么都不交
+    f.host
+        .list(
+            f.plugin("fake/visitor"),
+            ListRequest {
+                source: "example:favorites".into(),
+                cursor: None,
+                since: None,
+                input_file: None,
+            },
+            &CallOptions::default(),
+        )
+        .await
+        .unwrap_err();
+    let seen = f.seen("fake/visitor", "list");
+    assert_eq!(seen["visitor"], Value::Null);
+    assert_eq!(seen["vpath"], "");
+
+    // 同一主机的账号调用拿不到访客身份
+    f.host
+        .fetch(f.plugin("fake/a"), fetch_request(), &CallOptions::default())
+        .await
+        .unwrap();
+    let seen = f.seen("fake/a", "fetch");
+    assert_eq!(seen["visitor"], Value::Null);
+    assert!(
+        !seen["credentials"]
+            .to_string()
+            .contains("visitor-vid-value")
+    );
+}
+
+#[tokio::test]
+async fn a_visitor_and_an_account_for_the_same_host_stay_apart() {
+    let f = fixture();
+    f.visit();
+    // 访客身份不是登录：/sites 里这个主机还是没登录
+    let site = f
+        .host
+        .sites()
+        .unwrap()
+        .into_iter()
+        .find(|s| s.site.site == "www.example.com")
+        .unwrap();
+    assert_eq!(site.login, LoginState::Missing);
+    // 只有访客身份的调用交回 credentialsUpdate，也不建账号那份
+    f.host
+        .fetch(
+            f.plugin("fake/visitor"),
+            fetch_request(),
+            &CallOptions::default(),
+        )
+        .await
+        .unwrap();
+    {
+        let vault = f.vault.0.lock().unwrap();
+        assert!(!vault.contains_key("site:www.example.com"));
+        let stored = &vault["visitor:www.example.com"];
+        assert!(stored.contains("visitor-vid-value") && !stored.contains("rotated-value-1"));
+        assert!(
+            !stored.contains("visitor-local-1"),
+            "访客身份不存 localStorage"
+        );
+    }
+    // 登录以后两份各在各的；去掉访客身份不动账号
+    f.login();
+    f.host.forget_visitor("www.example.com").unwrap();
+    let vault = f.vault.0.lock().unwrap();
+    assert!(vault.contains_key("site:www.example.com"));
+    assert!(!vault.contains_key("visitor:www.example.com"));
+    drop(vault);
+    let v = &f.host.visitors().unwrap()[0];
+    assert_eq!((v.state, v.expires), (LoginState::Missing, None));
+    assert_eq!(v.plugins.len(), 1);
+    // 索引里只有名字
+    let index = std::fs::read_to_string(f.tmp.path().join("machine/logins.json")).unwrap();
+    assert!(!index.contains("visitor-vid-value"));
+}
+
+#[tokio::test]
+async fn visitor_values_are_scrubbed_and_foreign_cookies_refused() {
+    let f = fixture();
+    let foreign: StorageState = serde_json::from_value(json!({"cookies": [
+        {"name": "x", "value": "v-v-v-v", "domain": ".nowhere.test"}]}))
+    .unwrap();
+    assert!(f.host.save_visitor("www.example.com", &foreign).is_err());
+    assert!(
+        f.host
+            .save_visitor("www.undeclared.test", &foreign)
+            .is_err()
+    );
+    f.visit();
+    let e = f
+        .host
+        .fetch(
+            f.plugin("fake/visitor"),
+            FetchRequest {
+                input: FetchInput::Url(url::Url::parse("https://example.com/fail").unwrap()),
+                want: None,
+                input_file: None,
+            },
+            &CallOptions::default(),
+        )
+        .await
+        .unwrap_err();
+    let PluginError::Call {
+        failure, stderr, ..
+    } = &e
+    else {
+        panic!("{e:?}")
+    };
+    let all = format!(
+        "{e} {e:?} {} {:?} {}",
+        failure.message,
+        failure.hint,
+        stderr.join("\n")
+    );
+    assert!(!all.contains("visitor-vid-value"), "{all}");
+    assert!(!all.contains("visitor-late-value"), "{all}");
+    assert!(all.contains("[redacted]"), "{all}");
 }

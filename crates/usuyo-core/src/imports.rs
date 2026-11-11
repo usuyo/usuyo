@@ -5,7 +5,7 @@
 //! 1. **列**（`listing`）：`source` 类按插件的节奏一页页调 `list`；`delivered` 类一条条认身份。
 //!    每条按身份分成新的、库里已经有的、在回收站里的；这一步什么都不建。
 //! 2. **看一眼**（`ready`）：列完了，等你确认。
-//! 3. **收**（`taking`）：你确认以后，新的（你说要的话加上回收站里的）各排一个任务，按节奏一条条来：
+//! 3. **收**（`taking`）：你确认以后，你挑的（新的、回收站里的各一个整组的选择，加上逐条改过的）各排一个任务，按节奏一条条来：
 //!    轮到时先收下（`origins[].entry: import`，同一批共用 `importBatch`），再取内容。
 //! 4. **停下**（`held`）随时可以，接着导入从停的地方继续；**收完**（`done`）以后只剩几条事实。
 //!
@@ -26,6 +26,19 @@ use crate::view::{
     Event, ImportEntryView, ImportKind, ImportState, ImportView, PreviewCounts, Waiting,
 };
 use crate::{Error, Result};
+
+/// 确认导入时你挑的：两组各一个整组的选择，`except` 是和自己那组选得不一样的条目（`seq`）。
+/// 只交例外，不交整张清单：预览按页看，没翻到的条目跟着整组走。
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ImportChoice {
+    /// 新的整组收不收。
+    pub new: bool,
+    /// 回收站里的整组收不收（收下就是拿回来）。
+    pub trashed: bool,
+    #[serde(default)]
+    pub except: std::collections::BTreeSet<i64>,
+}
 
 /// 导入那一路每轮最多睡多久。
 const IDLE: Duration = Duration::from_secs(30);
@@ -208,8 +221,9 @@ impl Engine {
             .collect())
     }
 
-    /// 你看过了：新的（`also_trashed` 时加上回收站里的）按节奏去收。
-    pub fn confirm_import(&self, id: &str, also_trashed: bool) -> Result<ImportView> {
+    /// 你看过了：按你挑的去收。新的、回收站里的各按整组的选择，`except` 里的条目和它那组反着来；
+    /// 回收站里的收下就是拿回来。已经存着的、认不出的不收。
+    pub fn confirm_import(&self, id: &str, choice: &ImportChoice) -> Result<ImportView> {
         let row = self.import_row(id)?;
         if !row.listed {
             return Err(Error::InvalidArgs("this import is still listing".into()));
@@ -221,6 +235,8 @@ impl Engine {
         }
         let now = now_ms();
         let mut offset = 0;
+        let mut wanted = Vec::new();
+        let mut except_seen = 0;
         loop {
             let page = self.inner.jobs.entries(id, None, offset, 500)?;
             if page.is_empty() {
@@ -228,10 +244,28 @@ impl Engine {
             }
             offset += 500;
             for e in page {
-                let wanted = e.standing == "new" || (also_trashed && e.standing == "trashed");
-                if let (true, Some(item)) = (wanted, &e.item_id) {
-                    self.inner.jobs.enqueue_import(item, &e.url, id, now)?;
+                let group = match e.standing.as_str() {
+                    "new" => choice.new,
+                    "trashed" => choice.trashed,
+                    _ => continue,
+                };
+                let flipped = choice.except.contains(&e.seq);
+                except_seen += usize::from(flipped);
+                if group != flipped {
+                    wanted.push(e);
                 }
+            }
+        }
+        if except_seen != choice.except.len() {
+            return Err(Error::InvalidArgs(
+                "`except` names entries that are neither new nor in the trash".into(),
+            ));
+        }
+        // 挑了回收站里的，轮到时就拿回来；一条都没挑，轮到时已经进了回收站的照旧不收。
+        let also_trashed = wanted.iter().any(|e| e.standing == "trashed");
+        for e in &wanted {
+            if let Some(item) = &e.item_id {
+                self.inner.jobs.enqueue_import(item, &e.url, id, now)?;
             }
         }
         self.inner.jobs.confirm_import(id, now, also_trashed)?;

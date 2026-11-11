@@ -42,10 +42,15 @@ platforms: [web]
 match: ["*"]
 access: public-web
 login: none
+visitors:
+  - site: www.example.com
+    name: 例子
+    url: https://www.example.com/
 capabilities:
   fetch:
     access: public-web
     login: none
+    visitors: [www.example.com]
     outputs: [text, html, images, meta]
 permissions:
   fs: {write: ["${OUT}"]}
@@ -617,4 +622,62 @@ async fn purge_now_removes_a_trash_entry() {
         "not-found",
     )
     .await;
+}
+
+#[tokio::test]
+async fn visitors_are_listed_stored_and_cleared_apart_from_logins() {
+    let f = fixture();
+    let v = json_of(send(&f.app, authed("/visitors")).await).await;
+    assert_eq!(v[0]["site"], "www.example.com");
+    assert_eq!(v[0]["state"], "missing");
+    assert_eq!(v[0]["plugins"], json!(["fake/web"]));
+    // 访客身份不是账号：不出现在 /sites 里
+    assert_eq!(
+        json_of(send(&f.app, authed("/sites")).await).await,
+        json!([])
+    );
+    let plugins = json_of(send(&f.app, authed("/plugins")).await).await;
+    assert_eq!(
+        plugins["plugins"][0]["visitors"],
+        json!(["www.example.com"])
+    );
+
+    let put = |body: String| {
+        get("/visitors/www.example.com")
+            .method("PUT")
+            .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body))
+            .unwrap()
+    };
+    // 形状不对时回的错误里没有值
+    let bad = json!({"cookies": [{"name": "vid", "value": ["visitor-secret-1"], "domain": ".example.com"}]});
+    let res = send(&f.app, put(bad.to_string())).await;
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    let text = json_of(res).await.to_string();
+    assert!(!text.contains("visitor-secret-1"), "{text}");
+
+    let good = json!({"cookies": [
+        {"name": "vid", "value": "visitor-secret-1", "domain": ".example.com", "expires": 4102444800i64}]});
+    let res = send(&f.app, put(good.to_string())).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let saved = json_of(res).await;
+    assert_eq!(saved["state"], "present");
+    assert_eq!(saved["expiresAt"], "2100-01-01T00:00:00.000Z");
+    assert!(!saved.to_string().contains("visitor-secret-1"));
+    let listed = json_of(send(&f.app, authed("/visitors")).await).await;
+    assert!(!listed.to_string().contains("visitor-secret-1"));
+    assert_eq!(
+        json_of(send(&f.app, authed("/sites")).await).await,
+        json!([])
+    );
+
+    let delete = get("/visitors/www.example.com")
+        .method("DELETE")
+        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+        .body(Body::empty())
+        .unwrap();
+    assert_eq!(send(&f.app, delete).await.status(), StatusCode::NO_CONTENT);
+    let v = json_of(send(&f.app, authed("/visitors")).await).await;
+    assert_eq!(v[0]["state"], "missing");
 }

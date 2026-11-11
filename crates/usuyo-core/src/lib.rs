@@ -19,7 +19,7 @@ pub mod view;
 
 pub use engine::{Engine, EngineConfig, Links, RetryPolicy, Via};
 pub use error::{Error, Result};
-pub use imports::{BATCH_MAX, DeliveredLink};
+pub use imports::{BATCH_MAX, DeliveredLink, ImportChoice};
 pub use inbox::InboxReport;
 pub use layout::{HashLayout, Layout, LayoutItem, Placed};
 pub use trash::{ClockGuard, Expiry};

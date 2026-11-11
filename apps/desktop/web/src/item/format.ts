@@ -83,3 +83,6 @@ export function snippetParts(hit: SearchHit): { pre: string; mid: string; post: 
     post: hit.snippet.slice(end),
   };
 }
+
+/** 开着的这一条从资料库里没了（回收站里到期、或清掉了）：条目页和地图旁的详情都说这句。 */
+export const GONE_TEXT = "这一条已经不在资料库里了。";

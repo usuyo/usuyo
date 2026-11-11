@@ -276,7 +276,7 @@ impl fmt::Display for PluginId {
 
 string_schema!(PluginId, "PluginId", {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,38}/[a-z0-9_-][a-z0-9._-]{0,99}$"});
 
-/// 平台 id，例如 `douyin`、`wechat-mp`、`web`（协议 §2.3）。
+/// 平台 id，例如 `web`（协议 §2.3）。
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub struct PlatformId(pub(crate) String);

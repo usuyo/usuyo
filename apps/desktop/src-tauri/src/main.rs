@@ -42,15 +42,15 @@ async fn open_login(
         .map_err(|e| plain("打开登录窗口", &e))
 }
 
-/// 开取访客身份的窗口（不登录）。
+/// 开取访客身份的窗口（不登录）。前端只给站点名，打开哪一页、等哪些 cookie 由壳自己问内核。
 #[tauri::command]
 async fn open_visitor(
     app: tauri::AppHandle,
     logins: tauri::State<'_, Arc<Logins>>,
-    plugin: String,
+    site: String,
 ) -> Result<(), String> {
     let logins = Arc::clone(&logins);
-    tauri::async_runtime::spawn_blocking(move || logins.open_visitor(&app, &plugin))
+    tauri::async_runtime::spawn_blocking(move || logins.open_visitor(&app, &site))
         .await
         .map_err(|e| e.to_string())?
         .map_err(|e| plain("打开访客身份的窗口", &e))

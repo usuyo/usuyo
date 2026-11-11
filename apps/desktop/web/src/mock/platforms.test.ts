@@ -39,9 +39,11 @@ describe("mock platforms", () => {
     expect(ready).toMatchObject({ state: "ready", preview: { new: 15, stored: 2, trashed: 1 } });
     expect(await m.importEntries(started.id, "new", 0, 100)).toHaveLength(15);
     expect(await m.importEntries(started.id, "new", 10, 100)).toHaveLength(5);
-    expect((await m.confirmImport(started.id, {})).state).toBe("taking");
+    const [first] = await m.importEntries(started.id, "new", 0, 1);
+    expect((await m.confirmImport(started.id, { new: true, trashed: false, except: [first?.seq ?? -1] })).state).toBe("taking");
     vi.advanceTimersByTime(5100);
     expect((await m.import(started.id)).taken).toBe(1);
+    expect((await m.importEntries(started.id, "new", 0, 2)).map((e) => e.taken)).toEqual([false, true]);
     const held = await m.holdImport(started.id);
     expect(held.state).toBe("held");
     expect(held.waiting).toBeUndefined();

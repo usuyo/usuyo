@@ -1,13 +1,15 @@
 //! 获取插件的登记：装了哪些、各自的标签、停着没有；登录站点和它们的登录状态。
-//! 「现在再试」「先别试」、存下和忘掉登录、填密钥设置也在这里。
+//! 访客身份（不是账号）和它们有没有存着。
+//! 「现在再试」「先别试」、存下和忘掉登录和访客身份、填密钥设置也在这里。
 
 use usuyo_plugin::protocol::StorageState;
-use usuyo_plugin::{DeclaredSite, FetchPlugin};
+use usuyo_plugin::{DeclaredSite, DeclaredVisitor, FetchPlugin};
 
 use crate::engine::Engine;
 use crate::fetch::now_ms;
 use crate::view::{
     Event, NotLoaded, PacingView, PauseView, PluginView, PluginsView, SettingView, SiteView,
+    VisitorView,
 };
 use crate::{Error, Result};
 
@@ -20,6 +22,24 @@ fn site_view(d: DeclaredSite) -> SiteView {
         domains: d.site.domains,
         login: d.login,
         captured_at: d.captured_at,
+        plugins: d.plugins.into_iter().map(|p| p.to_string()).collect(),
+    }
+}
+
+fn visitor_view(d: DeclaredVisitor) -> VisitorView {
+    VisitorView {
+        site: d.visitor.site,
+        name: d.visitor.name,
+        url: d.visitor.url,
+        cookies: d.visitor.cookies,
+        domains: d.visitor.domains,
+        state: d.state,
+        captured_at: d.captured_at,
+        expires_at: d.expires.and_then(|t| {
+            jiff::Timestamp::from_second(t as i64)
+                .ok()
+                .map(usuyo_library::time::format)
+        }),
         plugins: d.plugins.into_iter().map(|p| p.to_string()).collect(),
     }
 }
@@ -104,6 +124,7 @@ impl Engine {
                 .map(|l| l.sources.clone())
                 .unwrap_or_default(),
             sites,
+            visitors: p.spec.visitors.iter().map(|v| v.site.clone()).collect(),
             settings: p
                 .header
                 .settings
@@ -176,6 +197,33 @@ impl Engine {
     /// 忘掉一个站点的登录。会阻塞。
     pub fn forget_site(&self, site: &str) -> Result<()> {
         self.inner.host.forget_site(site)?;
+        self.emit(Event::PluginsUpdated);
+        Ok(())
+    }
+
+    /// 访客身份和有没有存着。只读本机的索引，不碰钥匙串。
+    pub fn visitors(&self) -> Result<Vec<VisitorView>> {
+        Ok(self
+            .inner
+            .host
+            .visitors()?
+            .into_iter()
+            .map(visitor_view)
+            .collect())
+    }
+
+    /// 存下访客窗口读出的 cookie：只留属于这个访客身份的，存进钥匙串。会阻塞。
+    pub fn save_visitor(&self, site: &str, state: &StorageState) -> Result<VisitorView> {
+        let d = self.inner.host.save_visitor(site, state)?;
+        self.inner.wake.notify_one();
+        self.inner.imports_wake.notify_one();
+        self.emit(Event::PluginsUpdated);
+        Ok(visitor_view(d))
+    }
+
+    /// 去掉一个访客身份。同一主机的账号不动。会阻塞。
+    pub fn forget_visitor(&self, site: &str) -> Result<()> {
+        self.inner.host.forget_visitor(site)?;
         self.emit(Event::PluginsUpdated);
         Ok(())
     }

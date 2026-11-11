@@ -98,7 +98,7 @@ pub struct CredentialSite {
     pub source: String,
 }
 
-/// `USUYO_CREDENTIALS` 指的文件。
+/// `USUYO_CREDENTIALS` 指的文件；`USUYO_VISITOR` 指的访客身份文件也是这个形状。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Credentials {
@@ -106,9 +106,34 @@ pub struct Credentials {
     pub storage_state: StorageState,
 }
 
+impl Credentials {
+    /// 解析凭据文件。出错时只说是哪一类错、在哪一行哪一列：解析器的原话会引用值。
+    pub fn from_json(bytes: &[u8]) -> Result<Credentials, String> {
+        serde_json::from_slice(bytes).map_err(|e| {
+            format!(
+                "not a credentials file ({:?} error at line {} column {})",
+                e.classify(),
+                e.line(),
+                e.column()
+            )
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_errors_do_not_quote_values() {
+        let err = Credentials::from_json(
+            br#"{"sites": [], "storageState": {"cookies": [{"name": "a", "value": 7}]}}"#,
+        )
+        .unwrap_err();
+        assert!(err.contains("Data error"), "{err}");
+        let err = Credentials::from_json(br#"{"sites": "very-secret"}"#).unwrap_err();
+        assert!(!err.contains("very-secret"), "{err}");
+    }
 
     #[test]
     fn debug_never_shows_values() {

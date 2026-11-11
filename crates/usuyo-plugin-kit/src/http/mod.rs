@@ -4,6 +4,7 @@
 //! cookie 只发给调用方指定的主机。
 
 mod address;
+mod visitor;
 
 use std::fmt;
 use std::io::Read;
@@ -19,6 +20,7 @@ use url::Url;
 
 use address::Refusal;
 pub use address::{Lookup, Policy};
+pub use visitor::VisitorError;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const LOOKUP_TIMEOUT: Duration = Duration::from_secs(15);

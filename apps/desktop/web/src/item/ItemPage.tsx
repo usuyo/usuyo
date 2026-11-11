@@ -1,7 +1,7 @@
 import { getRouteApi, Link } from "@tanstack/react-router";
 import { ArrowLeft, ExternalLink, Map as MapIcon } from "lucide-react";
 import type { Item, Topic } from "../api/endpoints";
-import { useItem, useItemChange, useTopics } from "../api/hooks";
+import { isGone, useItem, useItemChange, useTopics } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
 import { Rail } from "../frame/Rail";
 import { openExternal, webUrl } from "../shell";
@@ -9,7 +9,7 @@ import { Button } from "../ui/Button";
 import { PlatformChip, SectionLabel } from "../ui/Chip";
 import { FlashLine, useFlash } from "../ui/Flash";
 import { FacetColumn } from "./FacetColumn";
-import { dayText, facetOf, STORED_TEXT } from "./format";
+import { dayText, facetOf, GONE_TEXT, STORED_TEXT } from "./format";
 import { ItemActions, ItemMeta } from "./ItemDetails";
 import { NoteBlock } from "./NoteBlock";
 import { usePlayer } from "./usePlayer";
@@ -57,7 +57,13 @@ export function ItemPage() {
           <ArrowLeft size={16} aria-hidden="true" />
           <span>回到地图</span>
         </Link>
-        {error ? <ErrorLine error={error} className="mt-4" /> : null}
+        {isGone(item.error) ? (
+          <p role="status" className="m-0 mt-4 text-small text-sub">
+            {GONE_TEXT}
+          </p>
+        ) : error ? (
+          <ErrorLine error={error} className="mt-4" />
+        ) : null}
         {item.data && topics.data ? <ItemBody key={item.data.id} item={item.data} topics={topics.data} /> : null}
       </main>
     </div>

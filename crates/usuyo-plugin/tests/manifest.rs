@@ -266,3 +266,64 @@ fn capability_timeout_has_a_ceiling() {
         "{t:?}"
     );
 }
+
+#[test]
+fn visitors_are_declared_apart_from_sites_and_work_without_login() {
+    let with = replace(
+        &web(),
+        "capabilities:\n  fetch:\n    access: public-web\n    login: none\n",
+        "visitors:\n  - site: www.example.com\n    name: 例子\n    url: https://www.example.com/\n    cookies: [vid]\n    domains: [\".example.com\"]\ncapabilities:\n  fetch:\n    access: public-web\n    login: none\n    visitors: [www.example.com]\n",
+    );
+    let m = parse(&with).unwrap();
+    let spec = m.fetch().unwrap();
+    assert!(spec.sites.is_empty());
+    assert_eq!(spec.visitors[0].cookies, ["vid"]);
+    let fetch = spec.capabilities.fetch.as_ref().unwrap();
+    assert_eq!(fetch.uses.visitors, ["www.example.com"]);
+
+    rejects(
+        &replace(
+            &with,
+            "visitors: [www.example.com]",
+            "visitors: [www.other.test]",
+        ),
+        "capabilities.fetch.visitors",
+    );
+    rejects(
+        &replace(&with, "url: https://", "url: http://"),
+        "visitors[0].url",
+    );
+    rejects(
+        &replace(
+            &with,
+            "url: https://www.example.com/",
+            "url: www.example.com",
+        ),
+        "visitors[0].url",
+    );
+    rejects(
+        &replace(&with, "\".example.com\"", "\".evil.test\""),
+        "visitors[0].domains[0]",
+    );
+    rejects(
+        &replace(
+            &with,
+            "  - site: www.example.com",
+            "  - site: WWW.example.com",
+        ),
+        "visitors[0].site",
+    );
+    // 访客身份不让 `login: none` 的能力用上账号站点
+    rejects(
+        &replace(
+            &with,
+            "    visitors: [www.example.com]\n",
+            "    visitors: [www.example.com]\n    sites: [www.example.com]\n",
+        ),
+        "capabilities.fetch.sites",
+    );
+    rejects(
+        &format!("{}visitors: []\n", testdata("manifest.transform.yaml")),
+        "visitors",
+    );
+}

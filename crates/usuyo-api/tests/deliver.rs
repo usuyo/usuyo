@@ -228,6 +228,16 @@ async fn a_deliver_token_hands_in_links_and_reads_nothing() {
     );
     assert_eq!(imp["state"], "listing");
 
+    // 确认要说清两组各收不收；例外按 `seq` 给
+    let confirm = format!("/imports/{batch}/confirm");
+    let res = send(&f.app, req("POST", &confirm, Some(TOKEN), Some(json!({})))).await;
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    assert!(json_of(res).await.to_string().contains("new"));
+    let choice = json!({"new": true, "trashed": false, "except": [1]});
+    let res = send(&f.app, req("POST", &confirm, Some(TOKEN), Some(choice))).await;
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    assert!(json_of(res).await.to_string().contains("still listing"));
+
     // 坏的一批整个不收
     let res = send(
         &f.app,

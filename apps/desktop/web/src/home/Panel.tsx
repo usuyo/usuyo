@@ -3,10 +3,10 @@ import { ChevronLeft, Ellipsis, ExternalLink, X } from "lucide-react";
 import { useState, type CSSProperties } from "react";
 import { Button as AriaButton, Label, TextArea, TextField } from "react-aria-components";
 import type { Item, SearchHit, Topic } from "../api/endpoints";
-import { useItem, useItemChange } from "../api/hooks";
+import { isGone, useItem, useItemChange } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
 import { FacetPreview } from "../item/FacetPreview";
-import { dayText, LAYER_NAME, positionText, snippetParts, STORED_TEXT } from "../item/format";
+import { dayText, GONE_TEXT, LAYER_NAME, positionText, snippetParts, STORED_TEXT } from "../item/format";
 import { openExternal, webUrl } from "../shell";
 import { Button } from "../ui/Button";
 import { PlatformChip, TopicPill } from "../ui/Chip";
@@ -103,6 +103,13 @@ function Results({ hits, searchError, hover, onSelect, onClearQuery, onRowHover 
 
 function Detail({ id, q, topics, onClose }: PanelProps & { id: string }) {
   const item = useItem(id);
+  if (isGone(item.error)) {
+    return (
+      <p role="status" className="m-0 text-small text-sub">
+        {GONE_TEXT}
+      </p>
+    );
+  }
   if (item.error) return <ErrorLine error={item.error} />;
   if (!item.data) return null;
   return <DetailBody key={item.data.id} item={item.data} hasQ={q.trim() !== ""} topics={topics} onClose={onClose} />;

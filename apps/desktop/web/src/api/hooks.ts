@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ConfirmImportRequest, CreateDeliverTokenRequest, ImportEntry, ImportView, Item, StartImportRequest, TakeRequest } from "./endpoints";
+import { ApiError, DaemonUnreachableError } from "./client";
 import { call } from "./source";
 
 export const queryKeys = {
@@ -10,6 +11,7 @@ export const queryKeys = {
   search: (q: string) => ["search", q] as const,
   plugins: ["plugins"] as const,
   sites: ["sites"] as const,
+  visitors: ["visitors"] as const,
   sources: (pluginId: string) => ["sources", pluginId] as const,
   imports: ["imports"] as const,
   import: (id: string) => ["imports", id] as const,
@@ -40,7 +42,14 @@ export function useItem(id: string | null) {
     queryKey: queryKeys.item(id ?? ""),
     queryFn: () => call((l) => l.item(id ?? "")),
     enabled: id !== null,
+    // 404 是这一条已经不在了（例如从回收站清掉了），再试也不会有。
+    retry: (count, error) => !(error instanceof DaemonUnreachableError) && !isGone(error) && count < 2,
   });
+}
+
+/** 这一条已经不在资料库里了：内核回 404。 */
+export function isGone(error: Error | null): boolean {
+  return error instanceof ApiError && error.status === 404;
 }
 
 export function useSearch(q: string) {
@@ -135,7 +144,11 @@ export function useSources(pluginId: string | null) {
   });
 }
 
-type PluginChange = { kind: "try-now" } | { kind: "hold" } | { kind: "forget-secret"; key: string };
+export function useVisitors() {
+  return useQuery({ queryKey: queryKeys.visitors, queryFn: () => call((s) => s.visitors()) });
+}
+
+type PluginChange = { kind: "try-now" } | { kind: "hold" };
 
 export function usePluginChange(pluginId: string) {
   const queryClient = useQueryClient();
@@ -145,10 +158,8 @@ export function usePluginChange(pluginId: string) {
         switch (change.kind) {
           case "try-now":
             return s.tryNow(pluginId);
-          case "hold":
-            return s.hold(pluginId);
           default:
-            return s.forgetSecret(pluginId, change.key);
+            return s.hold(pluginId);
         }
       }),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.plugins }),
@@ -160,6 +171,14 @@ export function useForgetLogin() {
   return useMutation({
     mutationFn: (site: string) => call((s) => s.forgetLogin(site)),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.sites }),
+  });
+}
+
+export function useForgetVisitor() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (site: string) => call((s) => s.forgetVisitor(site)),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.visitors }),
   });
 }
 

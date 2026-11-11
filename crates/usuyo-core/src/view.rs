@@ -307,6 +307,8 @@ pub struct PluginView {
     pub sources: Vec<usuyo_plugin::protocol::SourceInfo>,
     /// 会用到哪些站点的账号；登录状态见 `/sites`。
     pub sites: Vec<String>,
+    /// 会用到哪些站点的访客身份（不是账号）；有没有见 `/visitors`。
+    pub visitors: Vec<String>,
     pub settings: Vec<SettingView>,
     pub pacing: Vec<PacingView>,
     /// 现在停着的地方和原因。
@@ -380,6 +382,27 @@ pub struct SiteView {
     pub login: usuyo_plugin::LoginState,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub captured_at: Option<String>,
+    pub plugins: Vec<String>,
+}
+
+/// 一个访客身份（`/visitors`）：站点给没登录的访客的 cookie，不是账号。访客窗口照它开、照它判断取到没有。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VisitorView {
+    pub site: String,
+    pub name: String,
+    /// 访客窗口打开的那一页。
+    pub url: String,
+    /// 这些名字都有了就算取到；空的时候等名字不再变。
+    pub cookies: Vec<String>,
+    pub domains: Vec<String>,
+    /// `present`、`missing`、`expired`。
+    pub state: usuyo_plugin::LoginState,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub captured_at: Option<String>,
+    /// 最早过期的那个 cookie 什么时候过期；都是会话 cookie 时没有。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<String>,
     pub plugins: Vec<String>,
 }
 

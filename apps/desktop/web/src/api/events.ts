@@ -18,6 +18,7 @@ export function applyEvent(queryClient: QueryClient, e: DaemonEvent): void {
     case "plugins-updated":
       refresh(queryKeys.plugins);
       refresh(queryKeys.sites);
+      refresh(queryKeys.visitors);
       return;
     case "import-updated":
       // 列了一页、收下了一条：这一次、记录栏和预览里的条目都重拉。
@@ -33,7 +34,8 @@ export function applyEvent(queryClient: QueryClient, e: DaemonEvent): void {
       refresh(queryKeys.item(e.id));
       return;
     default:
-      // 收下、取到内容、改了、删掉：地图、搜索结果和这一条都可能变了。
+      // 收下、取到内容、改了、删掉、从回收站清掉：地图、搜索结果和这一条都可能变了；
+      // 清掉的那条再拉是 404，开着它的地方照 `isGone` 说一句它不在了。
       refresh(queryKeys.map);
       refresh(["search"]);
       refresh(queryKeys.item(e.id));
@@ -75,6 +77,7 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<DaemonEvent["type"]>([
   "item-updated",
   "item-fetch-failed",
   "item-trashed",
+  "item-removed",
   "topic-updated",
   "import-updated",
 ]);

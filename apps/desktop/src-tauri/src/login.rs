@@ -4,8 +4,9 @@
 //! 壳读出这个站点的 cookie（含 HttpOnly），自己交给内核 `PUT /sites/{site}/login`，关窗口。
 //! cookie 的值只经过壳和内核：不进前端、不写日志、不落盘。
 //!
-//! 小红书的访客身份用同一套窗口，不登录：打开首页，等页面自己生成的 cookie 稳定下来，
-//! 整行交给内核存成插件的密钥设置。
+//! 访客身份（插件清单的 `visitors`，不是账号）用同一套窗口，不登录：打开清单写的那一页，
+//! 等声明的 cookie 都出现（没声明名字的等名字不再变），交给内核 `PUT /visitors/{site}`。
+//! 访客身份的网页数据是 `visitor:<站点>` 那一份，和同一主机的账号分开。
 
 use std::collections::HashMap;
 #[cfg(not(target_vendor = "apple"))]
@@ -23,7 +24,7 @@ use tauri::{
 };
 
 use crate::daemon::Daemon;
-use crate::site_cookies::{self, Jar, SiteSpec};
+use crate::site_cookies::{self, Jar, SiteSpec, VisitorSpec};
 
 /// 上面那条我们自己的页面有多高。
 const BAR_HEIGHT: f64 = 52.0;
@@ -32,30 +33,11 @@ const POLL: Duration = Duration::from_secs(1);
 const VISITOR_SETTLED_POLLS: u32 = 3;
 const API_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// 不登录、只取访客身份的插件。插件清单还写不出「不是账号的 cookie」（协议 §13 待定），先列在壳里。
-struct Visitor {
-    plugin: &'static str,
-    key: &'static str,
-    name: &'static str,
-    url: &'static str,
-}
-
-const VISITORS: &[Visitor] = &[Visitor {
-    plugin: "usuyo-fetch/xiaohongshu",
-    key: "visitor-cookie",
-    name: "小红书",
-    url: "https://www.xiaohongshu.com/",
-}];
-
 /// 窗口在等什么。
 #[derive(Clone)]
 enum Goal {
     Login(SiteSpec),
-    Visitor {
-        plugin: String,
-        key: String,
-        host: String,
-    },
+    Visitor(VisitorSpec),
 }
 
 struct Session {
@@ -69,7 +51,7 @@ pub struct Logins {
     /// Windows、Linux 上每个站点的网页数据目录放在这下面（macOS 用数据仓库的标识，不要目录）。
     #[cfg(not(target_vendor = "apple"))]
     data_root: PathBuf,
-    /// 站点（或 `visitor:<插件>`）→ 开着的窗口。
+    /// 站点（或 `visitor:<站点>`）→ 开着的窗口。
     open: Mutex<HashMap<String, Session>>,
     next: AtomicU32,
 }
@@ -215,26 +197,22 @@ impl Logins {
         self.open_window(app, site.to_owned(), &title, url, bar, Goal::Login(spec))
     }
 
-    /// 开访客身份的窗口：不登录，取到就关。
-    pub fn open_visitor(self: &Arc<Self>, app: &AppHandle, plugin: &str) -> Result<()> {
-        let v = VISITORS
-            .iter()
-            .find(|v| v.plugin == plugin)
-            .ok_or_else(|| anyhow!("{plugin} has no visitor identity"))?;
-        let store = format!("visitor:{plugin}");
+    /// 开访客身份的窗口：不登录，取到就关。打开哪一页、等哪些 cookie 由内核照插件清单给。
+    pub fn open_visitor(self: &Arc<Self>, app: &AppHandle, site: &str) -> Result<()> {
+        let store = format!("visitor:{site}");
         if self.focus(app, &store) {
             return Ok(());
         }
-        let url = page_url(v.url)?;
-        let host = url.host_str().unwrap_or_default().to_owned();
+        let visitors: Vec<VisitorSpec> =
+            serde_json::from_value(self.api("GET", &["visitors"], None)?)?;
+        let v = visitors
+            .into_iter()
+            .find(|v| v.site == site)
+            .ok_or_else(|| anyhow!("no installed plugin uses a visitor identity for {site}"))?;
+        let url = page_url(&v.url)?;
         let bar = json!({ "mode": "visitor", "name": v.name });
         let title = format!("取{}的访客身份 · usuyo", v.name);
-        let goal = Goal::Visitor {
-            plugin: v.plugin.to_owned(),
-            key: v.key.to_owned(),
-            host,
-        };
-        self.open_window(app, store, &title, url, bar, goal)
+        self.open_window(app, store, &title, url, bar, Goal::Visitor(v))
     }
 
     fn focus(&self, app: &AppHandle, store: &str) -> bool {
@@ -383,18 +361,20 @@ impl Logins {
                         Some(json!({ "cookies": selected })),
                     )
                 }
-                Goal::Visitor { plugin, key, host } => {
-                    let selected = site_cookies::select(host, &[], all, now_secs());
-                    if !settle.see(&selected) {
+                Goal::Visitor(v) => {
+                    let selected = site_cookies::select(&v.site, &v.domains, all, now_secs());
+                    let ready = if v.cookies.is_empty() {
+                        settle.see(&selected)
+                    } else {
+                        site_cookies::logged_in(&v.cookies, &selected)
+                    };
+                    if !ready {
                         continue;
                     }
-                    let mut path: Vec<&str> = vec!["plugins"];
-                    path.extend(plugin.split('/'));
-                    path.extend(["secrets", key.as_str()]);
                     self.api(
                         "PUT",
-                        &path,
-                        Some(json!({ "value": site_cookies::cookie_line(&selected) })),
+                        &["visitors", &v.site],
+                        Some(json!({ "cookies": selected })),
                     )
                 }
             };
@@ -493,12 +473,5 @@ mod tests {
         assert!(page_url("http://passport.bilibili.com/login").is_err());
         assert!(page_url("file:///etc/passwd").is_err());
         assert!(page_url("javascript:alert(1)").is_err());
-    }
-
-    #[test]
-    fn the_visitor_table_only_opens_https() {
-        for v in VISITORS {
-            assert!(page_url(v.url).unwrap().scheme() == "https", "{}", v.plugin);
-        }
     }
 }

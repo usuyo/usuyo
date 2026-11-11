@@ -19,6 +19,7 @@ import {
   type TakeRequest,
   type TakeResponse,
   type Topic,
+  type VisitorIdentity,
 } from "./endpoints";
 
 /** 页面要的全部读写。真的内核和开发用的样例库都实现它。 */
@@ -42,16 +43,17 @@ export interface Library {
 }
 
 /**
- * 「获取插件」「导入」两页要的读写。登录的 cookie 不经这里：壳的登录窗口直接交给内核（src/shell/）。
+ * 「获取插件」「导入」两页要的读写。登录和访客身份的 cookie 不经这里：壳的窗口直接交给内核（src/shell/）。
  */
 export interface Platforms {
   plugins(): Promise<PluginsView>;
   sources(pluginId: string): Promise<PluginSource[]>;
   tryNow(pluginId: string): Promise<FetchPlugin>;
   hold(pluginId: string): Promise<FetchPlugin>;
-  forgetSecret(pluginId: string, key: string): Promise<FetchPlugin>;
   sites(): Promise<SiteLogin[]>;
   forgetLogin(site: string): Promise<void>;
+  visitors(): Promise<VisitorIdentity[]>;
+  forgetVisitor(site: string): Promise<void>;
   imports(): Promise<ImportView[]>;
   startImport(body: StartImportRequest): Promise<ImportView>;
   import(id: string): Promise<ImportView>;
@@ -93,9 +95,10 @@ const daemon: Source = {
   sources: (id) => request<PluginSource[]>(paths.pluginSources(id), { timeoutMs: SOURCES_TIMEOUT_MS }),
   tryNow: (id) => request<FetchPlugin>(paths.pluginTryNow(id), { method: "POST" }),
   hold: (id) => request<FetchPlugin>(paths.pluginHold(id), { method: "POST" }),
-  forgetSecret: (id, key) => request<FetchPlugin>(paths.pluginSecret(id, key), { method: "DELETE" }),
   sites: () => request<SiteLogin[]>(paths.sites),
   forgetLogin: (site) => request<void>(paths.siteLogin(site), { method: "DELETE" }),
+  visitors: () => request<VisitorIdentity[]>(paths.visitors),
+  forgetVisitor: (site) => request<void>(paths.visitor(site), { method: "DELETE" }),
   imports: () => request<ImportView[]>(paths.imports),
   startImport: (body) => request<ImportView>(paths.imports, { method: "POST", body }),
   import: (id) => request<ImportView>(paths.import(id)),

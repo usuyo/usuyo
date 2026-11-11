@@ -27,7 +27,7 @@ pub use manifest::{
     Install, Interaction, Limits, ListCapability, ListOrder, Login, MANIFEST_FILE, MatchPattern,
     ModelSpec, NetworkMode, NetworkPermissions, Pacing, Permissions, PlatformUse, PluginHeader,
     PluginKind, PluginKindTag, PluginManifest, Produce, ProviderNeed, Run, RuntimeRequirement,
-    SUPPORTED_PROTOCOLS, Setting, SettingType, Site, TransformSpec, Upstream,
+    SUPPORTED_PROTOCOLS, Setting, SettingType, Site, TransformSpec, Upstream, Visitor,
 };
 pub use schema::schemas;
 pub use values::{ByteSize, DurationSpec, PlatformId, PluginId, RelPath, Rfc3339};

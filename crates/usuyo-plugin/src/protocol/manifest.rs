@@ -251,6 +251,21 @@ pub struct Site {
     pub domains: Vec<String>,
 }
 
+/// 访客身份（协议 §2.5.1）：站点给任何没登录的访客的 cookie，不是账号。
+/// 和同一主机的账号分开存、分开交。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Visitor {
+    pub site: String,
+    pub name: String,
+    /// 打开哪一页来取，只能是 https。
+    pub url: String,
+    /// 这些名字都有了才算取到；空的时候等名字不再变。
+    #[serde(default)]
+    pub cookies: Vec<String>,
+    #[serde(default)]
+    pub domains: Vec<String>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct FsPermissions {
     #[serde(default)]
@@ -386,6 +401,8 @@ struct WireCapability {
     #[serde(default)]
     sites: Vec<String>,
     #[serde(default)]
+    visitors: Vec<String>,
+    #[serde(default)]
     timeout: Option<DurationSpec>,
     #[serde(default)]
     per_platform: BTreeMap<PlatformId, WirePlatformUse>,
@@ -464,6 +481,8 @@ pub(crate) struct WireManifest {
     #[serde(default)]
     sites: Option<Vec<Site>>,
     #[serde(default)]
+    visitors: Option<Vec<Visitor>>,
+    #[serde(default)]
     capabilities: Option<WireCapabilities>,
     #[serde(default)]
     pacing: Option<BTreeMap<PlatformId, Pacing>>,
@@ -526,6 +545,7 @@ pub struct FetchSpec {
     pub access: Access,
     pub login: Login,
     pub sites: Vec<Site>,
+    pub visitors: Vec<Visitor>,
     pub capabilities: Capabilities,
     pub pacing: BTreeMap<PlatformId, Pacing>,
 }
@@ -555,6 +575,8 @@ pub struct CapabilityUse {
     pub access: Access,
     pub login: Login,
     pub sites: Vec<String>,
+    /// 交哪些访客身份；和 `login` 无关，`login: none` 也可以有。
+    pub visitors: Vec<String>,
     pub timeout: Option<DurationSpec>,
     pub per_platform: BTreeMap<PlatformId, PlatformUse>,
     pub interaction: Interaction,
@@ -1068,12 +1090,13 @@ fn check_sha256(field: &str, value: &str) -> Check<()> {
 
 /// 种类专属的字段出现在别的种类里就报错，免得写错种类没人发现。
 fn reject_foreign(w: &WireManifest) -> Check<()> {
-    let present: [(&str, bool, PluginKindTag); 14] = [
+    let present: [(&str, bool, PluginKindTag); 15] = [
         ("platforms", w.platforms.is_some(), PluginKindTag::Fetch),
         ("match", w.match_patterns.is_some(), PluginKindTag::Fetch),
         ("access", w.access.is_some(), PluginKindTag::Fetch),
         ("login", w.login.is_some(), PluginKindTag::Fetch),
         ("sites", w.sites.is_some(), PluginKindTag::Fetch),
+        ("visitors", w.visitors.is_some(), PluginKindTag::Fetch),
         (
             "capabilities",
             w.capabilities.is_some(),
@@ -1126,6 +1149,8 @@ fn fetch_spec(w: &WireManifest) -> Check<FetchSpec> {
             "plugins that log in must declare their sites",
         ));
     }
+    let visitors = w.visitors.clone().unwrap_or_default();
+    check_visitors(&visitors)?;
 
     let caps = required("capabilities", &w.capabilities)?;
     if caps.fetch.is_none() && caps.list.is_none() {
@@ -1134,6 +1159,7 @@ fn fetch_spec(w: &WireManifest) -> Check<FetchSpec> {
     let ctx = CapabilityContext {
         platforms: &platforms,
         sites: &sites,
+        visitors: &visitors,
     };
     let fetch = caps
         .fetch
@@ -1222,6 +1248,7 @@ fn fetch_spec(w: &WireManifest) -> Check<FetchSpec> {
         access,
         login,
         sites,
+        visitors,
         capabilities: Capabilities {
             fetch,
             list,
@@ -1266,23 +1293,54 @@ fn check_sites(sites: &[Site]) -> Check<()> {
             }
             (None, Credential::App) => {}
         }
-        let registrable = psl::domain_str(&s.site);
-        for (j, d) in s.domains.iter().enumerate() {
-            let bare = d.strip_prefix('.').unwrap_or(d);
-            let same = is_host_name(bare)
-                && psl::suffix_str(bare) != Some(bare)
-                && registrable.is_some()
-                && psl::domain_str(bare) == registrable;
-            if !same {
-                return Err(invalid(
-                    format!("sites[{i}].domains[{j}]"),
-                    format!(
-                        "`{d}` must share the registrable domain of `{}` and not be a public suffix",
-                        s.site
-                    ),
-                ));
-            }
+        check_domains(&format!("sites[{i}].domains"), &s.site, &s.domains)?;
+    }
+    Ok(())
+}
+
+/// `domains` 里的每一项都要和站点同一个可注册域名，不能是公共后缀。
+fn check_domains(field: &str, site: &str, domains: &[String]) -> Check<()> {
+    let registrable = psl::domain_str(site);
+    for (j, d) in domains.iter().enumerate() {
+        let bare = d.strip_prefix('.').unwrap_or(d);
+        let same = is_host_name(bare)
+            && psl::suffix_str(bare) != Some(bare)
+            && registrable.is_some()
+            && psl::domain_str(bare) == registrable;
+        if !same {
+            return Err(invalid(
+                format!("{field}[{j}]"),
+                format!(
+                    "`{d}` must share the registrable domain of `{site}` and not be a public suffix"
+                ),
+            ));
         }
+    }
+    Ok(())
+}
+
+fn check_visitors(visitors: &[Visitor]) -> Check<()> {
+    let mut seen = BTreeSet::new();
+    for (i, v) in visitors.iter().enumerate() {
+        let f = |name: &str| format!("visitors[{i}].{name}");
+        if !is_host_name(&v.site) {
+            return Err(invalid(
+                f("site"),
+                format!("`{}` is not a lowercase host name", v.site),
+            ));
+        }
+        if !seen.insert(v.site.as_str()) {
+            return Err(invalid(
+                f("site"),
+                format!("`{}` is declared twice", v.site),
+            ));
+        }
+        non_empty(&f("name"), &v.name)?;
+        let url = check_http_url(&v.url).map_err(|e| invalid(f("url"), e))?;
+        if url.scheme() != "https" {
+            return Err(invalid(f("url"), "must be an https address"));
+        }
+        check_domains(&f("domains"), &v.site, &v.domains)?;
     }
     Ok(())
 }
@@ -1300,6 +1358,7 @@ fn is_host_name(h: &str) -> bool {
 struct CapabilityContext<'a> {
     platforms: &'a [PlatformId],
     sites: &'a [Site],
+    visitors: &'a [Visitor],
 }
 
 /// 能力字段属于哪种能力：`allowed` 之外的专属字段出现了就报错。
@@ -1334,6 +1393,14 @@ fn capability_use(
         .login
         .ok_or_else(|| invalid(format!("{path}.login"), "is required"))?;
     check_capability_sites(&format!("{path}.sites"), login, &c.sites, ctx.sites)?;
+    for name in &c.visitors {
+        if !ctx.visitors.iter().any(|v| &v.site == name) {
+            return Err(invalid(
+                format!("{path}.visitors"),
+                format!("`{name}` is not declared in top-level `visitors`"),
+            ));
+        }
+    }
     let mut per_platform = BTreeMap::new();
     for (platform, o) in &c.per_platform {
         let p = format!("{path}.perPlatform.{platform}");
@@ -1352,6 +1419,7 @@ fn capability_use(
         access,
         login,
         sites: c.sites.clone(),
+        visitors: c.visitors.clone(),
         timeout: c.timeout.map(|t| t.at_most(CAPABILITY_TIMEOUT_MAX)),
         per_platform,
         interaction: c.interaction,

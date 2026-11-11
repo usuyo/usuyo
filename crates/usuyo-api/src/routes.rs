@@ -23,9 +23,9 @@ use tower_http::services::ServeFile;
 use tower_http::set_header::SetResponseHeaderLayer;
 use usuyo_core::view::{
     ImportEntryView, ImportView, ItemView, MapView, PluginView, PluginsView, SearchHit, SiteView,
-    TakeResponse, Topic,
+    TakeResponse, Topic, VisitorView,
 };
-use usuyo_core::{DeliveredLink, Engine, Links, Via};
+use usuyo_core::{DeliveredLink, Engine, ImportChoice, Links, Via};
 use usuyo_plugin::protocol::{SourceInfo, StorageState};
 
 use crate::clients::{Client, ClientKind};
@@ -103,6 +103,8 @@ pub(crate) fn build(engine: Engine, gate: Arc<Gate>, origins: &[String]) -> Rout
             put(plugin_secret_set).delete(plugin_secret_forget),
         )
         .route("/sites", get(sites))
+        .route("/visitors", get(visitors))
+        .route("/visitors/{site}", put(visitor_save).delete(visitor_forget))
         .route(
             "/sites/{site}/login",
             put(site_login)
@@ -476,13 +478,27 @@ async fn sites(State(s): State<AppState>) -> ApiResult<Vec<SiteView>> {
     Ok(Json(blocking(move || s.engine.sites()).await?))
 }
 
+/// 交来的 cookie。解析不了时只说形状不对：解析器的原话会引用值。
+fn cookies_body(r: Result<Json<StorageState>, JsonRejection>) -> Result<StorageState, Problem> {
+    match r {
+        Ok(Json(v)) => Ok(v),
+        Err(e) if e.status() == StatusCode::PAYLOAD_TOO_LARGE => {
+            Err(Problem::new("too-large", e.body_text()))
+        }
+        Err(_) => Err(Problem::new(
+            "invalid-args",
+            "the body is not a storageState with cookies",
+        )),
+    }
+}
+
 /// 壳的登录窗口读出 cookie 以后交到这里：只留属于这个站点的，存进钥匙串。回的里面没有值。
 async fn site_login(
     State(s): State<AppState>,
     Path(site): Path<String>,
     req: Result<Json<StorageState>, JsonRejection>,
 ) -> ApiResult<SiteView> {
-    let state = body(req)?;
+    let state = cookies_body(req)?;
     Ok(Json(
         blocking(move || s.engine.save_site(&site, &state)).await?,
     ))
@@ -493,6 +509,30 @@ async fn site_forget(
     Path(site): Path<String>,
 ) -> Result<StatusCode, Problem> {
     blocking(move || s.engine.forget_site(&site)).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn visitors(State(s): State<AppState>) -> ApiResult<Vec<VisitorView>> {
+    Ok(Json(blocking(move || s.engine.visitors()).await?))
+}
+
+/// 壳的访客窗口读出 cookie 以后交到这里：只留属于这个访客身份的，和同一主机的账号分开存。回的里面没有值。
+async fn visitor_save(
+    State(s): State<AppState>,
+    Path(site): Path<String>,
+    req: Result<Json<StorageState>, JsonRejection>,
+) -> ApiResult<VisitorView> {
+    let state = cookies_body(req)?;
+    Ok(Json(
+        blocking(move || s.engine.save_visitor(&site, &state)).await?,
+    ))
+}
+
+async fn visitor_forget(
+    State(s): State<AppState>,
+    Path(site): Path<String>,
+) -> Result<StatusCode, Problem> {
+    blocking(move || s.engine.forget_visitor(&site)).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -560,24 +600,15 @@ async fn import_entries(
     ))
 }
 
-#[derive(Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-struct ConfirmRequest {
-    #[serde(default)]
-    also_trashed: bool,
-}
-
+/// `{new, trashed, except}`：两组各一个整组的选择，加上和自己那组选得不一样的条目。
 async fn confirm_import(
     State(s): State<AppState>,
     Path(id): Path<String>,
-    req: Result<Json<ConfirmRequest>, JsonRejection>,
+    req: Result<Json<ImportChoice>, JsonRejection>,
 ) -> ApiResult<ImportView> {
-    let req = match req {
-        Err(JsonRejection::MissingJsonContentType(_)) => ConfirmRequest::default(),
-        other => body(other)?,
-    };
+    let choice = body(req)?;
     Ok(Json(
-        blocking(move || s.engine.confirm_import(&id, req.also_trashed)).await?,
+        blocking(move || s.engine.confirm_import(&id, &choice)).await?,
     ))
 }
 

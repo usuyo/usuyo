@@ -21,7 +21,7 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
-pub use credentials::{DeclaredSite, LoginState, Vault};
+pub use credentials::{DeclaredSite, DeclaredVisitor, LoginState, Vault};
 pub use outdir::OutFile;
 use process::{Ending, Finished, Spawn};
 
@@ -329,6 +329,25 @@ impl PluginHost {
     /// 忘掉一个站点的登录。
     pub fn forget_site(&self, site: &str) -> Result<(), PluginError> {
         self.logins.forget(site)
+    }
+
+    /// 装着的插件声明过的访客身份和有没有存着（§2.5.1）。只读索引，不碰钥匙串。
+    pub fn visitors(&self) -> Result<Vec<DeclaredVisitor>, PluginError> {
+        self.logins.visitors(&self.plugins)
+    }
+
+    /// 存下访客窗口读出的 cookie（只留属于这个访客身份的）。写钥匙串，会阻塞。
+    pub fn save_visitor(
+        &self,
+        site: &str,
+        state: &StorageState,
+    ) -> Result<DeclaredVisitor, PluginError> {
+        self.logins.save_visitor(&self.plugins, site, state)
+    }
+
+    /// 去掉一个访客身份。同一主机的账号不动。
+    pub fn forget_visitor(&self, site: &str) -> Result<(), PluginError> {
+        self.logins.forget_visitor(site)
     }
 
     /// 填（或用空值去掉）一个插件的密钥设置（§2.11）。

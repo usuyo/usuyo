@@ -69,11 +69,14 @@ export async function openLogin(site: string): Promise<boolean> {
   return true;
 }
 
-/** 开取访客身份的窗口：不登录，页面自己生成的访客 cookie 由壳存成这个插件的密钥设置。 */
-export async function openVisitor(pluginId: string): Promise<boolean> {
+/**
+ * 开取访客身份的窗口：不登录。只交站点名，打开哪一页、等哪些 cookie 由壳自己问内核；
+ * 页面自己生成的访客 cookie 由壳直接交给内核，和同一主机的账号分开存。
+ */
+export async function openVisitor(site: string): Promise<boolean> {
   if (!isDesktopShell()) return false;
   const { invoke } = await import("@tauri-apps/api/core");
-  await invoke("open_visitor", { plugin: pluginId });
+  await invoke("open_visitor", { site });
   return true;
 }
 

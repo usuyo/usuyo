@@ -1,7 +1,8 @@
 //! 凭据和密钥（协议 §2.11、§6）：存在钥匙串里，每次调用只把这个能力声明过的站点的交出去。
 //!
-//! - 值只在 [`Vault`] 里：键 `site:<站点>` 是那个站点的 storageState，`secret:<插件>:<设置>` 是一个密钥设置。
-//! - 按机器的目录里另有一份索引 `logins.json`：站点的 cookie 名、域名、过期时间和登录的时间，
+//! - 值只在 [`Vault`] 里：键 `site:<站点>` 是那个站点的 storageState，`visitor:<站点>` 是那个站点的访客身份
+//!   （不是账号，和同一主机的账号分开），`secret:<插件>:<设置>` 是一个密钥设置。
+//! - 按机器的目录里另有一份索引 `logins.json`：站点和访客身份的 cookie 名、域名、过期时间和存下的时间，
 //!   哪些密钥设置填了。没有值，看登录状态不用碰钥匙串。
 //! - 交给插件的文件放在按机器目录的 `run/` 下、这次调用自己的 0700 目录里，文件 0600，
 //!   进程一结束整个目录删掉；不放在资料库的暂存目录里。
@@ -16,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use crate::PluginError;
 use crate::protocol::{
     CapabilityUse, Cookie, Credential, CredentialSite, Credentials, Login, OriginState, PluginId,
-    Site, StorageState,
+    Site, StorageState, Visitor,
 };
 
 use super::FetchPlugin;
@@ -57,6 +58,9 @@ struct SiteRecord {
 struct Index {
     #[serde(default)]
     sites: BTreeMap<String, SiteRecord>,
+    /// 访客身份，按站点；和 `sites` 是两回事。
+    #[serde(default)]
+    visitors: BTreeMap<String, SiteRecord>,
     /// 插件 id → 填了值的密钥设置。
     #[serde(default)]
     secrets: BTreeMap<String, BTreeSet<String>>,
@@ -73,8 +77,56 @@ pub struct DeclaredSite {
     pub captured_at: Option<String>,
 }
 
+/// 装着的插件声明过的一个访客身份，合起来看。
+#[derive(Debug, Clone)]
+pub struct DeclaredVisitor {
+    /// 第一个声明它的插件写的那份；`domains`、`cookies` 是所有插件声明的合起来。
+    pub visitor: Visitor,
+    pub plugins: Vec<PluginId>,
+    pub state: LoginState,
+    /// 上次存下的时间（RFC 3339）。
+    pub captured_at: Option<String>,
+    /// 最早过期的那个 cookie 什么时候过期（Unix 秒）；都是会话 cookie 时没有。
+    pub expires: Option<f64>,
+}
+
 fn site_key(site: &str) -> String {
     format!("site:{site}")
+}
+
+fn visitor_key(site: &str) -> String {
+    format!("visitor:{site}")
+}
+
+/// 一份 cookie 属于谁：主机、额外的域名、算数的 cookie 名。账号站点和访客身份都按它判断。
+pub(crate) trait CookieScope {
+    fn host(&self) -> &str;
+    fn domains(&self) -> &[String];
+    fn names(&self) -> &[String];
+}
+
+impl CookieScope for Site {
+    fn host(&self) -> &str {
+        &self.site
+    }
+    fn domains(&self) -> &[String] {
+        &self.domains
+    }
+    fn names(&self) -> &[String] {
+        &self.cookies
+    }
+}
+
+impl CookieScope for Visitor {
+    fn host(&self) -> &str {
+        &self.site
+    }
+    fn domains(&self) -> &[String] {
+        &self.domains
+    }
+    fn names(&self) -> &[String] {
+        &self.cookies
+    }
 }
 
 fn secret_key(plugin: &PluginId, key: &str) -> String {
@@ -87,24 +139,24 @@ pub(crate) fn now_secs() -> f64 {
 
 /// 一个 cookie 的域名属不属于这个站点（协议 §6）：站点本身和它的上级域名（不含公共后缀），
 /// 加上 `domains` 显式列出的及其子域。
-pub(crate) fn belongs(site: &Site, domain: &str) -> bool {
+pub(crate) fn belongs(site: &impl CookieScope, domain: &str) -> bool {
     let d = domain.trim_start_matches('.').to_ascii_lowercase();
     if d.is_empty() {
         return false;
     }
-    let host = site.site.to_ascii_lowercase();
+    let host = site.host().to_ascii_lowercase();
     let public_suffix = psl::suffix_str(&d) == Some(d.as_str());
     if !public_suffix && (host == d || host.ends_with(&format!(".{d}"))) {
         return true;
     }
-    site.domains.iter().any(|x| {
+    site.domains().iter().any(|x| {
         let x = x.trim_start_matches('.').to_ascii_lowercase();
         d == x || d.ends_with(&format!(".{x}"))
     })
 }
 
 /// 只留属于这个站点、没过期的 cookie 和 localStorage。
-pub(crate) fn restrict(site: &Site, state: &StorageState, now: f64) -> StorageState {
+pub(crate) fn restrict(site: &impl CookieScope, state: &StorageState, now: f64) -> StorageState {
     StorageState {
         cookies: state
             .cookies
@@ -126,21 +178,23 @@ pub(crate) fn restrict(site: &Site, state: &StorageState, now: f64) -> StorageSt
     }
 }
 
-fn login_of(site: &Site, record: Option<&SiteRecord>, now: f64) -> LoginState {
+/// 算数的那几个 cookie：声明了名字就是那几个（缺一个就是 `None`），没声明就是全部。
+fn counted<'r>(site: &impl CookieScope, r: &'r SiteRecord) -> Option<Vec<&'r CookieName>> {
+    if site.names().is_empty() {
+        return Some(r.cookies.iter().collect());
+    }
+    site.names()
+        .iter()
+        .map(|name| r.cookies.iter().find(|c| &c.name == name))
+        .collect()
+}
+
+fn login_of(site: &impl CookieScope, record: Option<&SiteRecord>, now: f64) -> LoginState {
     let Some(r) = record else {
         return LoginState::Missing;
     };
-    let found: Vec<&CookieName> = if site.cookies.is_empty() {
-        r.cookies.iter().collect()
-    } else {
-        let mut found = Vec::new();
-        for name in &site.cookies {
-            match r.cookies.iter().find(|c| &c.name == name) {
-                Some(c) => found.push(c),
-                None => return LoginState::Missing,
-            }
-        }
-        found
+    let Some(found) = counted(site, r) else {
+        return LoginState::Missing;
     };
     if found.is_empty() {
         LoginState::Missing
@@ -368,22 +422,107 @@ impl Logins {
         let json = serde_json::to_string(state).map_err(|e| PluginError::Vault(e.to_string()))?;
         self.vault()?.write(&site_key(site), &json)?;
         let mut index = self.read_index()?;
-        index.sites.insert(
-            site.into(),
-            SiteRecord {
-                captured_at: jiff::Timestamp::now().to_string(),
-                cookies: state
-                    .cookies
-                    .iter()
-                    .map(|c| CookieName {
-                        name: c.name.clone(),
-                        domain: c.domain.clone(),
-                        expires: c.expires,
-                    })
-                    .collect(),
-            },
-        );
+        index.sites.insert(site.into(), record(state));
         self.write_index(&index)
+    }
+
+    /// 装着的插件声明过的访客身份，合起来，带有没有、什么时候过期。
+    pub fn visitors(&self, plugins: &[FetchPlugin]) -> Result<Vec<DeclaredVisitor>, PluginError> {
+        let index = self.read_index()?;
+        let now = now_secs();
+        let mut out: Vec<DeclaredVisitor> = Vec::new();
+        for p in plugins {
+            for v in &p.spec.visitors {
+                match out.iter_mut().find(|d| d.visitor.site == v.site) {
+                    Some(d) => {
+                        d.plugins.push(p.id().clone());
+                        for dom in &v.domains {
+                            if !d.visitor.domains.contains(dom) {
+                                d.visitor.domains.push(dom.clone());
+                            }
+                        }
+                        for name in &v.cookies {
+                            if !d.visitor.cookies.contains(name) {
+                                d.visitor.cookies.push(name.clone());
+                            }
+                        }
+                    }
+                    None => out.push(DeclaredVisitor {
+                        visitor: v.clone(),
+                        plugins: vec![p.id().clone()],
+                        state: LoginState::Missing,
+                        captured_at: None,
+                        expires: None,
+                    }),
+                }
+            }
+        }
+        for d in &mut out {
+            let record = index.visitors.get(&d.visitor.site);
+            d.state = login_of(&d.visitor, record, now);
+            d.captured_at = record.map(|r| r.captured_at.clone());
+            d.expires = record
+                .and_then(|r| counted(&d.visitor, r))
+                .and_then(|found| {
+                    found
+                        .iter()
+                        .map(|c| c.expires)
+                        .filter(|t| *t > 0.0)
+                        .reduce(f64::min)
+                });
+        }
+        Ok(out)
+    }
+
+    /// 存下访客窗口交来的 cookie：只留属于这个访客身份（合起所有插件的声明）的。不碰同一主机的账号。
+    pub fn save_visitor(
+        &self,
+        plugins: &[FetchPlugin],
+        site: &str,
+        state: &StorageState,
+    ) -> Result<DeclaredVisitor, PluginError> {
+        let find = |list: Vec<DeclaredVisitor>| list.into_iter().find(|d| d.visitor.site == site);
+        let declared = find(self.visitors(plugins)?).ok_or_else(|| PluginError::Credentials {
+            target: format!("visitor:{site}"),
+            message: "no installed plugin declares this visitor identity".into(),
+        })?;
+        // 访客身份只要 cookie，不要 localStorage。
+        let kept = StorageState {
+            cookies: restrict(&declared.visitor, state, now_secs()).cookies,
+            origins: Vec::new(),
+        };
+        if kept.cookies.is_empty() {
+            return Err(PluginError::Credentials {
+                target: format!("visitor:{site}"),
+                message: "none of the cookies belong to this visitor identity".into(),
+            });
+        }
+        let json = serde_json::to_string(&kept).map_err(|e| PluginError::Vault(e.to_string()))?;
+        {
+            let _guard = self
+                .lock
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            self.vault()?.write(&visitor_key(site), &json)?;
+            let mut index = self.read_index()?;
+            index.visitors.insert(site.into(), record(&kept));
+            self.write_index(&index)?;
+        }
+        find(self.visitors(plugins)?)
+            .ok_or_else(|| PluginError::Vault("visitor identity vanished while saving".into()))
+    }
+
+    pub fn forget_visitor(&self, site: &str) -> Result<(), PluginError> {
+        let _guard = self
+            .lock
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        self.vault()?.remove(&visitor_key(site))?;
+        let mut index = self.read_index()?;
+        if index.visitors.remove(site).is_some() {
+            self.write_index(&index)?;
+        }
+        Ok(())
     }
 
     pub fn forget(&self, site: &str) -> Result<(), PluginError> {
@@ -486,6 +625,32 @@ impl Logins {
                 }
             }
         }
+        // 访客身份和 `login` 无关：能力列了、存着，就交。只读 `visitor:` 那份，不碰账号。
+        let mut visitors: Vec<(Visitor, StorageState)> = Vec::new();
+        for name in cap.map(|c| c.visitors.as_slice()).unwrap_or_default() {
+            let Some(v) = plugin.spec.visitors.iter().find(|v| &v.site == name) else {
+                continue;
+            };
+            if !index.visitors.contains_key(&v.site)
+                || visitors.iter().any(|(x, _)| x.site == v.site)
+            {
+                continue;
+            }
+            let Some(json) = self.vault()?.read(&visitor_key(&v.site))? else {
+                continue;
+            };
+            let state: StorageState = serde_json::from_str(&json).map_err(|e| {
+                PluginError::Vault(format!(
+                    "stored visitor identity for {} is not readable ({:?} error)",
+                    v.site,
+                    e.classify()
+                ))
+            })?;
+            let kept = restrict(v, &state, now);
+            if !kept.cookies.is_empty() {
+                visitors.push((v.clone(), kept));
+            }
+        }
         let secret_keys = index.secrets.get(plugin.id().as_str());
         let mut secrets = serde_json::Map::new();
         for s in plugin.header.settings.iter().filter(|s| s.secret) {
@@ -496,7 +661,7 @@ impl Logins {
                 secrets.insert(s.key.clone(), serde_json::Value::String(v));
             }
         }
-        if sites.is_empty() && secrets.is_empty() {
+        if sites.is_empty() && visitors.is_empty() && secrets.is_empty() {
             return Ok(Handover::none());
         }
 
@@ -543,6 +708,30 @@ impl Logins {
             let txt = dir.path().join("cookies.txt");
             write_private(&txt, netscape(&all.cookies).as_bytes())?;
             env.push(("USUYO_COOKIES_TXT".into(), txt.into()));
+        }
+        if !visitors.is_empty() {
+            let mut cookies = Vec::new();
+            for (_, s) in &visitors {
+                cookies.extend(s.cookies.iter().cloned());
+            }
+            values.extend(cookies.iter().map(|c| c.value.clone()));
+            let file = Credentials {
+                sites: visitors
+                    .iter()
+                    .map(|(v, _)| CredentialSite {
+                        site: v.site.clone(),
+                        source: "visitor-window".into(),
+                    })
+                    .collect(),
+                storage_state: StorageState {
+                    cookies,
+                    origins: Vec::new(),
+                },
+            };
+            let path = dir.path().join("visitor.json");
+            let bytes = serde_json::to_vec(&file).map_err(|e| PluginError::Vault(e.to_string()))?;
+            write_private(&path, &bytes)?;
+            env.push(("USUYO_VISITOR".into(), path.into()));
         }
         if !secrets.is_empty() {
             values.extend(
@@ -603,6 +792,22 @@ impl Logins {
 }
 
 const RUN_PREFIX: &str = "usuyo-cred-";
+
+/// 索引里的一条：名字、域名、过期时间，没有值。
+fn record(state: &StorageState) -> SiteRecord {
+    SiteRecord {
+        captured_at: jiff::Timestamp::now().to_string(),
+        cookies: state
+            .cookies
+            .iter()
+            .map(|c| CookieName {
+                name: c.name.clone(),
+                domain: c.domain.clone(),
+                expires: c.expires,
+            })
+            .collect(),
+    }
+}
 
 fn io(path: &Path, source: std::io::Error) -> PluginError {
     PluginError::Io {

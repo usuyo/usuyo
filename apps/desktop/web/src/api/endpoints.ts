@@ -39,12 +39,16 @@ export const paths = {
   pluginTryNow: (id: string) => `/plugins/${pluginPath(id)}/try-now`,
   /** POST：「先别试」，到你点「现在再试」为止哪儿都不调它。 */
   pluginHold: (id: string) => `/plugins/${pluginPath(id)}/hold`,
-  /** PUT `{value}` 填一个密钥设置（例如小红书的访客 cookie），DELETE 去掉。值从不回出来。 */
+  /** PUT `{value}` 填一个密钥设置（协议 §2.11），DELETE 去掉。值从不回出来。 */
   pluginSecret: (id: string, key: string) => `/plugins/${pluginPath(id)}/secrets/${encodeURIComponent(key)}`,
   /** GET：装着的插件会用到的账号站点和登录状态。登录窗口照它开。 */
   sites: "/sites",
   /** PUT `StorageState`：壳的登录窗口读出 cookie 以后交到这里（存进钥匙串）；DELETE 忘掉这个站点的登录。 */
   siteLogin: (site: string) => `/sites/${encodeURIComponent(site)}/login`,
+  /** GET：装着的插件会用到的访客身份（不是账号）和有没有存着。访客窗口照它开；不出现在 `paths.sites` 里。 */
+  visitors: "/visitors",
+  /** PUT `StorageState`：壳的访客窗口读出 cookie 以后交到这里（存进钥匙串，和同一主机的账号分开）；DELETE 去掉。 */
+  visitor: (site: string) => `/visitors/${encodeURIComponent(site)}`,
 
   // —— 导入（「导入」页）——
   /** GET 全部（新的在前）；POST `StartImportRequest` 从一个插件的来源开始列。 */
@@ -53,7 +57,7 @@ export const paths = {
   import: (id: string) => `/imports/${encodeURIComponent(id)}`,
   /** GET 预览里的条目，`?standing=new|stored|trashed|unresolved&offset=&limit=`。 */
   importEntries: (id: string) => `/imports/${encodeURIComponent(id)}/entries`,
-  /** POST `ConfirmImportRequest`：看过了，按节奏去收新的。 */
+  /** POST `ConfirmImportRequest`：看过了，按节奏去收你挑的。 */
   importConfirm: (id: string) => `/imports/${encodeURIComponent(id)}/confirm`,
   /** POST：先停下。 */
   importHold: (id: string) => `/imports/${encodeURIComponent(id)}/hold`,
@@ -100,20 +104,22 @@ export type LibraryEvent =
   | { type: "item-updated"; id: string }
   | { type: "item-fetch-failed"; id: string; code: string; hint?: string; retry: boolean }
   | { type: "item-trashed"; id: string }
+  /** 回收站里的到期了、或你点了「现在就清掉」：这一条从资料库里没了，再拉是 404。 */
+  | { type: "item-removed"; id: string }
   | { type: "topic-updated"; id: string };
 
 /** 获取插件、导入的事件，和 `LibraryEvent` 走同一条事件流。 */
 export type PlatformEvent =
   /** 一次导入变了：列了一页、收下了一条、停下了。重新拉 `paths.import(id)`。 */
   | { type: "import-updated"; id: string }
-  /** 插件的暂停、站点的登录变了。重新拉 `paths.plugins`、`paths.sites`。 */
+  /** 插件的暂停、站点的登录、访客身份变了。重新拉 `paths.plugins`、`paths.sites`、`paths.visitors`。 */
   | { type: "plugins-updated" };
 
 /** 平台的显示名由获取插件给，内核不认识具体平台。 */
 export interface Platform {
-  /** 插件给的 id，例如 `bilibili`。 */
+  /** 插件给的 id，例如 `web`。 */
   id: string;
-  /** 显示名，例如「B站」。 */
+  /** 显示名，例如「网页」。 */
   name: string;
 }
 
@@ -339,6 +345,8 @@ export interface FetchPlugin {
   sources: PluginSource[];
   /** 会用到哪些站点的账号，登录状态见 `paths.sites`。 */
   sites: string[];
+  /** 会用到哪些站点的访客身份（不是账号），有没有见 `paths.visitors`。 */
+  visitors: string[];
   settings: PluginSetting[];
   pacing: PluginPacing[];
   pauses: PluginPause[];
@@ -356,7 +364,7 @@ export interface SecretRequest {
 
 /** 一个账号站点。登录窗口：只开 `loginUrl`，每个站点自己一份网页数据；`cookies` 里的名字都出现了（没有名字时有任何 cookie）就算登录好了，读出 cookie 交给 `paths.siteLogin`，关窗口。 */
 export interface SiteLogin {
-  /** 主机名，例如 `www.bilibili.com`。 */
+  /** 主机名，例如 `www.example.com`。 */
   site: string;
   /** 界面上写「会用到你的 X 账号」的 X。 */
   name: string;
@@ -372,7 +380,27 @@ export interface SiteLogin {
   plugins: string[];
 }
 
-/** 壳交给 `paths.siteLogin` 的：Playwright storageState 的形状（协议 §6）。 */
+/**
+ * 一个访客身份：站点给任何没登录的访客的 cookie，不是账号。访客窗口：只开 `url`，网页数据和同一主机的账号分开；
+ * `cookies` 里的名字都出现了（没有名字时名字不再变）就算取到，读出 cookie 交给 `paths.visitor`，关窗口。
+ */
+export interface VisitorIdentity {
+  site: string;
+  /** 界面上写「X 首页」的 X。 */
+  name: string;
+  url: string;
+  cookies: string[];
+  domains: string[];
+  state: "missing" | "present" | "expired";
+  /** 上次存下的时间，RFC 3339。 */
+  capturedAt?: string;
+  /** 最早过期的那个 cookie 什么时候过期，RFC 3339；都是会话 cookie 时没有。 */
+  expiresAt?: string;
+  /** 用到它的插件 id。 */
+  plugins: string[];
+}
+
+/** 壳交给 `paths.siteLogin`、`paths.visitor` 的：Playwright storageState 的形状（协议 §6）。 */
 export interface StorageState {
   cookies: StoredCookie[];
   origins?: { origin: string; localStorage: { name: string; value: string }[] }[];
@@ -453,9 +481,15 @@ export interface StartImportRequest {
   title?: string;
 }
 
+/**
+ * 确认导入时你挑的：新的、回收站里的各一个整组的选择（回收站里的收下就是拿回来），
+ * `except` 是和自己那组选得不一样的条目 `seq`。只交例外：预览按页看，没翻到的条目跟着整组走。
+ * 已经存着的、认不出的不收，也不能出现在 `except` 里。
+ */
 export interface ConfirmImportRequest {
-  /** 回收站里的也拿回来；默认不。 */
-  alsoTrashed?: boolean;
+  new: boolean;
+  trashed: boolean;
+  except?: number[];
 }
 
 // —— 投递 ——

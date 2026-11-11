@@ -212,6 +212,16 @@
     "version": {
       "type": "string"
     },
+    "visitors": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": null,
+      "items": {
+        "$ref": "#/$defs/Visitor"
+      }
+    },
     "writes": {
       "anyOf": [
         {
@@ -753,6 +763,42 @@
         "license"
       ]
     },
+    "Visitor": {
+      "description": "访客身份（协议 §2.5.1）：站点给任何没登录的访客的 cookie，不是账号。\n和同一主机的账号分开存、分开交。",
+      "type": "object",
+      "properties": {
+        "cookies": {
+          "description": "这些名字都有了才算取到；空的时候等名字不再变。",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "domains": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "name": {
+          "type": "string"
+        },
+        "site": {
+          "type": "string"
+        },
+        "url": {
+          "description": "打开哪一页来取，只能是 https。",
+          "type": "string"
+        }
+      },
+      "required": [
+        "site",
+        "name",
+        "url"
+      ]
+    },
     "WireCapabilities": {
       "type": "object",
       "properties": {
@@ -901,6 +947,13 @@
             }
           ],
           "default": null
+        },
+        "visitors": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
         }
       }
     },
