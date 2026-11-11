@@ -4,6 +4,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, expect, it, vi } from "vitest";
 import type { ConfirmImportRequest, ImportEntry, ImportView } from "../api/endpoints";
 import { createAppRouter } from "../router";
+// 路由是用到才载入这一页的；先载入，免得第一次转译的时间算进等页面出现的那一秒里。
+import "./ImportPage";
 
 afterEach(() => {
   cleanup();

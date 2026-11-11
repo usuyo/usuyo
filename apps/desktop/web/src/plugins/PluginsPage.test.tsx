@@ -4,6 +4,8 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { FetchPlugin, PluginsView, SiteLogin, VisitorIdentity } from "../api/endpoints";
 import { createAppRouter } from "../router";
+// 路由是用到才载入这一页的；先载入，免得第一次转译的时间算进等页面出现的那一秒里。
+import "./PluginsPage";
 
 afterEach(() => {
   cleanup();

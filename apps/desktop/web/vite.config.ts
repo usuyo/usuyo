@@ -110,5 +110,5 @@ export default defineConfig({
   },
   // 登录窗口上面那一条是另一张页面（src-tauri/src/login.rs）。
   build: { rolldownOptions: { input: { main: "index.html", loginBar: "login-bar.html" } } },
-  test: { environment: "jsdom" },
+  test: { environment: "jsdom", setupFiles: ["./src/test-setup.ts"] },
 });
