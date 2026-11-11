@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/*"]
+members = ["crates/*", "plugins/*"]
 # 桌面壳自带工作区，接好以后再并进来。
 exclude = ["apps/desktop/src-tauri"]
 
