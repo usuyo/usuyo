@@ -472,7 +472,7 @@ Go 生态里现成的封装：[fencesandbox/fence](https://github.com/fencesandb
 | [wazero](https://github.com/wazero/wazero)（原 `tetratelabs/wazero`，import path 不变） | 纯 Go；README 写明零依赖、不依赖 cgo | WASI preview1；component model / WASI 0.2 明确不做（[#2200](https://github.com/tetratelabs/wazero/issues/2200) 2024-05-02 以 not planned 关闭，维护者说要等 W3C 标准化） | SIMD 默认开；threads 在 experimental；没有 wasi-nn 或 WebGPU 导入，所以用不了 GPU | `WithMemoryLimitPages`；`WithCloseOnContextDone(true)` 让 ctx 取消或超时即终止；默认无文件与网络 | Rust `wasm32-wasip1`、TinyGo、Go `GOOS=wasip1`、C/C++（wasi-sdk） | 6440 ★，v1.12.0（2026-05-29），推送 2026-10-19，Apache-2.0；编译器后端只支持 amd64/arm64；签名后的 macOS 应用用编译器模式要加 `allow-jit` 与 `allow-unsigned-executable-memory` entitlement（[#2393](https://github.com/tetratelabs/wazero/issues/2393)） |
 | [Extism go-sdk](https://github.com/extism/go-sdk) | 纯 Go，基于 wazero（go.mod 固定 v1.9.0） | 可选 WASI p1；无 component model | 同 wazero | manifest `allowed_hosts`、`allowed_paths`、`memory.max_pages`、`memory.max_http_response_bytes`、`timeout_ms`；HTTP 由宿主实现 | PDK：Rust、JS、Python、Go（TinyGo）、Haskell、AssemblyScript、.NET、C、C++、Zig | go-sdk 185 ★，最后提交 2025-05-14，v1.7.1（2025-03-19），停了约 17 个月；主仓 [extism/extism](https://github.com/extism/extism)（Rust 运行时）5818 ★，v1.41.0（2026-10-09），BSD-3-Clause |
 | [knqyf263/go-plugin](https://github.com/knqyf263/go-plugin) | 纯 Go，wazero + protobuf 代码生成 | WASI p1 | 同 wazero | 同 wazero | Go / TinyGo | 733 ★，v0.9.0（2025-03-12），MIT |
-| Wasmtime / [wasmtime-go](https://github.com/bytecodealliance/wasmtime-go) | wasmtime-go README 说它经 cgo 调 C API，与歇存「不用 cgo」的 [ADR-001](../decisions/ADR-001-stack.md) 冲突 | 完整 component model 与 WASI 0.2；WASI 0.3.0 于 2026-06-11 发布，Wasmtime 46.0.0（2026-06-22）起默认支持（[wasi.dev](https://wasi.dev/releases/wasi-p3)） | 待核实 | fuel / epoch 中断（待核实） | Rust、C/C++、JS 等 | [wasmtime](https://github.com/bytecodealliance/wasmtime) 18792 ★，v50.0.0（2026-10-20） |
+| Wasmtime / [wasmtime-go](https://github.com/bytecodealliance/wasmtime-go) | wasmtime-go README 说它经 cgo 调 C API，与歇存「不用 cgo」的 [ADR-001](../decisions/ADR-004-rust-tauri.md) 冲突 | 完整 component model 与 WASI 0.2；WASI 0.3.0 于 2026-06-11 发布，Wasmtime 46.0.0（2026-06-22）起默认支持（[wasi.dev](https://wasi.dev/releases/wasi-p3)） | 待核实 | fuel / epoch 中断（待核实） | Rust、C/C++、JS 等 | [wasmtime](https://github.com/bytecodealliance/wasmtime) 18792 ★，v50.0.0（2026-10-20） |
 | [wasi-nn](https://github.com/WebAssembly/wasi-nn)（提案） | — | Phase 2 | — | — | — | 561 ★，最后推送 2024-10-28 |
 
 **ffmpeg、ASR 放进 Wasm 的可行性证据**（文档原文）：
@@ -498,7 +498,7 @@ Go 生态里现成的封装：[fencesandbox/fence](https://github.com/fencesandb
 | 导出格式映射（条目 → Obsidian / Logseq / 思源 / Notion 的 Markdown 或 JSON） | Wasm | 纯数据变换；插件只返回字节，由宿主写到用户选的目录，宿主始终是唯一写文件的一方 | 同上 |
 | 云端导出（Notion、飞书、语雀 API） | 原生进程或 Wasm，网络必须走宿主 | 需要网络与密钥；密钥不应交给插件 | 网络 allowlist 限定到目标域名；密钥由宿主注入 |
 
-结论：ffmpeg、ASR、OCR、本地 VLM 只能是原生进程；纯变换与 HTTP 型的插件适合 Wasm。真正要定的是「一套机制分档」还是「两套机制」——建议内核只认一种协议（独立进程 + JSON），Wasm 插件由官方的 `wasm-runner` 进程承载（内嵌 wazero，纯 Go）。这样 wazero 不进内核，符合 [ADR-001](../decisions/ADR-001-stack.md)；`allow-jit` entitlement 只加在 runner 上；对内核来说 runner 只是又一个进程插件。
+结论：ffmpeg、ASR、OCR、本地 VLM 只能是原生进程；纯变换与 HTTP 型的插件适合 Wasm。真正要定的是「一套机制分档」还是「两套机制」——建议内核只认一种协议（独立进程 + JSON），Wasm 插件由官方的 `wasm-runner` 进程承载（内嵌 wazero，纯 Go）。这样 wazero 不进内核，符合 [ADR-001](../decisions/ADR-004-rust-tauri.md)；`allow-jit` entitlement 只加在 runner 上；对内核来说 runner 只是又一个进程插件。
 
 <a id="45-权限声明与各平台落实程度"></a>
 ### 4.5 权限声明与各平台落实程度

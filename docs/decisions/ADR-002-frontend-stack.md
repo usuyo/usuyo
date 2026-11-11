@@ -3,7 +3,7 @@
 
 日期：2026-10-23 · 状态：proposed · 2026-11-11 照代码修订
 
-本条不涉及桌面壳。壳 11-11 换成 Tauri 2，见 [ADR-004](ADR-004-rust-tauri.md)（取代 [ADR-001](ADR-001-stack.md) 的 MyGo）；Tauri 的接口只许出现在 `apps/desktop/web/src/shell/`。
+本条不涉及桌面壳。壳 11-11 换成 Tauri 2，见 [ADR-004](ADR-004-rust-tauri.md)（取代 [ADR-004](ADR-004-rust-tauri.md) 的 MyGo）；Tauri 的接口只许出现在 `apps/desktop/web/src/shell/`。
 
 <a id="背景"></a>
 ## 背景

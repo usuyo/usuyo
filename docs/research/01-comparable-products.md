@@ -139,7 +139,7 @@
 - AI 与 Agent：REST API（ALPHA）、Python API（BETA）；无官方 MCP。
 - 许可证：MIT。活跃度：v0.9.73 发布于 2026-10-06，仓库 2026-10-20 推送，约 28.8k stars。来源：<https://github.com/ArchiveBox/ArchiveBox/releases>。
 - 定价：免费。
-- 对歇存的启示：这是现有产品里最接近 [SPEC §2](../SPEC.md#2-资料库目录真相源)「目录即真相、索引可重建」的实现，三条做法可以直接吸收：(1) 每个快照目录自带 `index.json`，目录本身可脱离数据库被识别——对应歇存 `manifest.json`；(2) rescan 把「数据库里没有的目录」当作新发现而不是错误，冲突报告不覆盖——`xiecun reindex` 应照此定义（[SPEC §11](../SPEC.md#11-索引)、验收 5）；(3) 多抽取器并存写同一目录——对应歇存 `raw/` + `derived/` 分层。它也说明了代价：无头浏览器、WARC、yt-dlp 一起上，运行时很重，这是歇存把重计算放 sidecar（[ADR-001](../decisions/ADR-001-stack.md)）的理由。
+- 对歇存的启示：这是现有产品里最接近 [SPEC §2](../SPEC.md#2-资料库目录真相源)「目录即真相、索引可重建」的实现，三条做法可以直接吸收：(1) 每个快照目录自带 `index.json`，目录本身可脱离数据库被识别——对应歇存 `manifest.json`；(2) rescan 把「数据库里没有的目录」当作新发现而不是错误，冲突报告不覆盖——`xiecun reindex` 应照此定义（[SPEC §11](../SPEC.md#11-索引)、验收 5）；(3) 多抽取器并存写同一目录——对应歇存 `raw/` + `derived/` 分层。它也说明了代价：无头浏览器、WARC、yt-dlp 一起上，运行时很重，这是歇存把重计算放 sidecar（[ADR-001](../decisions/ADR-004-rust-tauri.md)）的理由。
 
 <a id="singlefile"></a>
 ### SingleFile
@@ -430,8 +430,8 @@
 6. **propose / apply / undo 是独有的，值得当卖点写**：Eagle 的确认清单是最接近的，但没有 journal 和整批撤销。→ [PRD §4 原则 6](../PRD.md#4-原则)、[SPEC §10](../SPEC.md#10-mcp-工具m0)。
 7. **M0 就写一份 SKILL.md，和 MCP 并行**：Karakeep CLI 捆绑官方 Skill、Cubox 用 CLI + Skill 不做 MCP、OpenCLI 用 `npx skills add` 分发。对 Claude Code / Codex 用户，Skill 比 MCP 配置更轻。→ [PRD §4 原则 6](../PRD.md#4-原则)、[PRD §8 M0](../PRD.md#8-里程碑)、[SPEC §9](../SPEC.md#9-clim0)。
 8. **本地 API 与 MCP 同源生成**：Anytype 用 OpenAPI 规范自动生成 MCP 工具，保证两者一致。歇存 [SPEC §9](../SPEC.md#9-clim0) 本地 HTTP API 与 [§10](../SPEC.md#10-mcp-工具m0) MCP 若共用一份契约定义，可避免双写。→ [SPEC §9](../SPEC.md#9-clim0)、[§10](../SPEC.md#10-mcp-工具m0)；可写成 ADR。
-9. **daemon 独立于 GUI 的决定保持**：Zotero、Eagle、Anytype 的本地 API 都要求桌面应用在前台运行，是用户抱怨最多的点之一。→ [SPEC §9](../SPEC.md#9-clim0) `xiecun daemon` / `xiecun mcp` 内嵌回退、[ADR-001](../decisions/ADR-001-stack.md)。
-10. **搜索不依赖外部服务**：Karakeep「`MEILI_ADDR` 未设则搜索禁用」是反例；bleve 内嵌正确。→ [ADR-001](../decisions/ADR-001-stack.md)、[SPEC §11](../SPEC.md#11-索引)。
+9. **daemon 独立于 GUI 的决定保持**：Zotero、Eagle、Anytype 的本地 API 都要求桌面应用在前台运行，是用户抱怨最多的点之一。→ [SPEC §9](../SPEC.md#9-clim0) `xiecun daemon` / `xiecun mcp` 内嵌回退、[ADR-001](../decisions/ADR-004-rust-tauri.md)。
+10. **搜索不依赖外部服务**：Karakeep「`MEILI_ADDR` 未设则搜索禁用」是反例；bleve 内嵌正确。→ [ADR-001](../decisions/ADR-004-rust-tauri.md)、[SPEC §11](../SPEC.md#11-索引)。
 11. **公众号的「最简」参考适配器定位为「从已打开页面抽取」**：wechat-article-exporter 因上游后台接口被关而终止，Cubox 的入口是用户在微信里主动转发，OpenCLI 的公众号能力是「下载当前文章为 Markdown」。接口路线不可靠，所见即所存最稳。→ [PRD §8 M1](../PRD.md#8-里程碑)、[SPEC §8](../SPEC.md#8-适配器协议-v0)。
 12. **抖音参考适配器先走浏览器扩展路线**：现有工具（XHS-Downloader、DouK-Downloader）全部依赖 Cookie、带请求延时与风控提示，且抖音参数算法「不再维护」；「抖喜欢」式扩展（本机文件夹、无服务器）更贴近歇存原则。→ [PRD §8 M1](../PRD.md#8-里程碑)、[PRD §9](../PRD.md#9-风险)、[SPEC §8](../SPEC.md#8-适配器协议-v0) `requires.cookie` 应区分「none / 浏览器会话 / 用户粘贴」。
 13. **OpenCLI 作为 M2 收藏列表适配器的上游**：B 站 `favorite` 已有；小红书、抖音的收藏列表命令缺失，适配器须按能力声明而非按平台承诺。→ [PRD §8 M2](../PRD.md#8-里程碑)、[SPEC §8](../SPEC.md#8-适配器协议-v0) `capabilities`。
@@ -453,7 +453,7 @@
 | 待办、提醒、复习、推送 | Raindrop Reminders、Recall 间隔重复与 quiz、Readwise Daily Review、Cubox AI 定时报告、flomo 每日回顾 | [PRD §4.5](../PRD.md#4-原则)、[§6](../PRD.md#6-不做) |
 | 内置平台抓取代码 | XHS-Downloader、DouK-Downloader、wechat-article-exporter、OpenCLI 的平台命令 | [PRD §4.1](../PRD.md#4-原则)、[§6](../PRD.md#6-不做) |
 | 自动分类替用户决定 | mymind Smart Spaces、Karakeep 自动打标直接生效、Eagle AI Action 自动归档 | [PRD §6](../PRD.md#6-不做)；[SPEC §6](../SPEC.md#6-标签规则) engine 标签只建议 |
-| 搜索依赖外部服务 | Karakeep Meilisearch、Omnivore 自托管栈 | [ADR-001](../decisions/ADR-001-stack.md) |
+| 搜索依赖外部服务 | Karakeep Meilisearch、Omnivore 自托管栈 | [ADR-001](../decisions/ADR-004-rust-tauri.md) |
 | Agent 直接删除与外发 | Karakeep MCP `delete-*`、Raindrop MCP delete、Anytype MCP CRUD、Readwise 删高亮 | [SPEC §10](../SPEC.md#10-mcp-工具m0) |
 | 应用内自建聊天助手 | Cubox AI 问答、Readwise Ghostreader、Recall chat、Fabric assistant | [PRD §4.6](../PRD.md#4-原则) |
 | 源可用但非开源的许可 | Anytype ASAL 1.0、简悦 2.x 部分闭源 | [PRD §4.7](../PRD.md#4-原则) |

@@ -13,7 +13,7 @@
 
   | 字母 | 内核 | 壳 |
   |---|---|---|
-  | A | Go | MyGo（[ADR-001](../decisions/ADR-001-stack.md) 现状） |
+  | A | Go | MyGo（[ADR-001](../decisions/ADR-004-rust-tauri.md) 现状） |
   | A′ | Go | Wails v3 |
   | B | Go，作 Tauri 的 sidecar | Tauri 2 |
   | C | Rust | Tauri 2 |
@@ -309,7 +309,7 @@
 
 | 位置 | 现在写的 | 选 C 要改 | 选 A′ 要改 |
 |---|---|---|---|
-| [ADR-001](../decisions/ADR-001-stack.md) | Go + MyGo；「MyGo 仍在 0.5.x」；放弃 Rust + Tauri 是因为「单人速度不占优」 | 写新 ADR 取代它。理由换成「编译循环对壳和库的成熟度」这笔账 | 改壳那一行，更新版本号，补壳的退出条件 |
+| [ADR-001](../decisions/ADR-004-rust-tauri.md) | Go + MyGo；「MyGo 仍在 0.5.x」；放弃 Rust + Tauri 是因为「单人速度不占优」 | 写新 ADR 取代它。理由换成「编译循环对壳和库的成熟度」这笔账 | 改壳那一行，更新版本号，补壳的退出条件 |
 | [ADR-002](../decisions/ADR-002-frontend-stack.md#和内核的接口) | 前端只走本机接口；壳能力收在 `shell/` | `shell/` 的说明按 Tauri 改；前端不变 | `shell/` 的说明按 Wails 改 |
 | [CLAUDE.md](../../CLAUDE.md) 技术栈、代码约定、常用命令 | Go 1.23+、MyGo、bleve；`cmd/`、`internal/`、`pkg/`；`go test`、`make` | Rust + Tauri 2、tantivy 或 FTS5；cargo 工作区；`cargo test` | 壳改 Wails v3，Go 版本号更新 |
 | [04 §6.4](04-tech-options.md#64-桌面壳mygo-与回退路径) | MyGo ★★；「Wails v3 仍 beta」；Tauri ★ | 正文不改，加一行注：已过时，见本篇 | 同左 |

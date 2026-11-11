@@ -1,11 +1,11 @@
 <a id="04--技术选型调研搜索ocrasr关键帧去重画布与桌面壳"></a>
 # 04 · 技术选型调研：搜索、OCR、ASR、关键帧、去重、画布与桌面壳
 
-状态：草案 · 2026-10-21 · 2026-11-03 审过：画布结论已进 [ADR-002](../decisions/ADR-002-frontend-stack.md)；「向量检索只用 sqlite-vec」「cjk 开 `output_unigram`」还没进 [SPEC §11](../SPEC.md#11-索引)；MyGo 已到 v0.7.4（2026-11-01），[§6.4](#64-桌面壳mygo-与回退路径) 和 [ADR-001](../decisions/ADR-001-stack.md) 的版本说法过时，壳的退出条件还没写成 ADR；主界面改为点阵迷雾地图后，渲染选型在原型上重看；[§7](#7-对歇存技术决策的启示) 末尾的待核实在落地前做。
+状态：草案 · 2026-10-21 · 2026-11-03 审过：画布结论已进 [ADR-002](../decisions/ADR-002-frontend-stack.md)；「向量检索只用 sqlite-vec」「cjk 开 `output_unigram`」还没进 [SPEC §11](../SPEC.md#11-索引)；MyGo 已到 v0.7.4（2026-11-01），[§6.4](#64-桌面壳mygo-与回退路径) 和 [ADR-001](../decisions/ADR-004-rust-tauri.md) 的版本说法过时，壳的退出条件还没写成 ADR；主界面改为点阵迷雾地图后，渲染选型在原型上重看；[§7](#7-对歇存技术决策的启示) 末尾的待核实在落地前做。
 
 > 里程碑口径已废弃：项目改为按完整功能一次性开发。文中的 M0–M3 只指写作时 SPEC 的分段，请按功能面阅读。
 
-关联：[PRD](../PRD.md) · [SPEC §7 去重](../SPEC.md#7-去重) · [SPEC §11 索引](../SPEC.md#11-索引) · [ADR-001](../decisions/ADR-001-stack.md) · [feature 001](../features/001-m0-core-loop.md)
+关联：[PRD](../PRD.md) · [SPEC §7 去重](../SPEC.md#7-去重) · [SPEC §11 索引](../SPEC.md#11-索引) · [ADR-001](../decisions/ADR-004-rust-tauri.md) · [feature 001](../features/001-m0-core-loop.md)
 
 <a id="约定"></a>
 ## 约定
@@ -364,7 +364,7 @@ MyGo 的事实核对（ADR 写「仍在 0.5.x」）：
 <a id="7-对歇存技术决策的启示"></a>
 ## 7. 对歇存技术决策的启示
 
-与 [ADR-001](../decisions/ADR-001-stack.md)、[SPEC §11](../SPEC.md#11-索引)、[SPEC §7](../SPEC.md#7-去重) 的逐条对照。
+与 [ADR-001](../decisions/ADR-004-rust-tauri.md)、[SPEC §11](../SPEC.md#11-索引)、[SPEC §7](../SPEC.md#7-去重) 的逐条对照。
 
 一致之处：
 
