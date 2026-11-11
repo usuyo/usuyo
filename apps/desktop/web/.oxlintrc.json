@@ -1,0 +1,23 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "react", "import"],
+  "categories": { "correctness": "error", "suspicious": "error" },
+  "rules": {
+    "typescript/no-explicit-any": "error",
+    "typescript/ban-ts-comment": "error",
+    "react/react-in-jsx-scope": "off",
+    "import/no-unassigned-import": "off",
+    "react/incompatible-library": "warn",
+    "react/rules-of-hooks": "error",
+    "react/exhaustive-deps": "error",
+    "no-restricted-imports": [
+      "error",
+      { "patterns": [{ "group": ["@tauri-apps/*"], "message": "只有 src/shell 可以引入 Tauri。" }] }
+    ]
+  },
+  "overrides": [
+    { "files": ["src/api/client.ts"], "rules": { "typescript/no-unsafe-type-assertion": "off" } },
+    { "files": ["src/shell/**"], "rules": { "no-restricted-imports": "off" } }
+  ],
+  "ignorePatterns": ["dist"]
+}

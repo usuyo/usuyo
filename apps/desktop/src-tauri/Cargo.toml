@@ -1,0 +1,15 @@
+[package]
+name = "usuyo-desktop"
+version = "0.0.0"
+edition = "2024"
+license = "AGPL-3.0-only"
+publish = false
+
+# 自带工作区，根 Cargo.toml 已把本目录排除在外。
+[workspace]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }

@@ -1,0 +1,83 @@
+@import "tailwindcss";
+
+/* 只放中性的系统字体和间距令牌；视觉身份以后从画布原型移植。 */
+:root {
+  --bg: #ffffff;
+  --fg: #1c1c1e;
+  --muted: #6e6e73;
+  --line: #d9d9de;
+  --accent: #0a6cff;
+  --font-stack: system-ui, -apple-system, "PingFang SC", "Segoe UI", sans-serif;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1c1e;
+    --fg: #f2f2f7;
+    --muted: #98989d;
+    --line: #3a3a3c;
+    --accent: #4c9bff;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --font-sans: var(--font-stack);
+}
+
+body {
+  @apply bg-bg font-sans text-fg;
+  margin: 0;
+}
+
+.app-header {
+  @apply flex items-center gap-4 border-b border-line px-4 py-2;
+}
+.app-header nav {
+  @apply flex gap-4;
+}
+.app-header a[aria-current="page"] {
+  @apply font-semibold;
+}
+.app-main {
+  @apply mx-auto max-w-3xl p-4;
+}
+h1 {
+  @apply mb-3 text-xl font-semibold;
+}
+.muted {
+  @apply text-sm text-muted;
+}
+.row {
+  @apply flex items-end gap-2;
+}
+.field {
+  @apply flex flex-1 flex-col gap-1;
+}
+.field input,
+button {
+  @apply rounded border border-line bg-bg px-2 py-1;
+}
+.list-scroll {
+  @apply h-[60vh] overflow-auto;
+}
+.list {
+  @apply relative m-0 list-none p-0;
+}
+.list-row {
+  @apply absolute inset-x-0 top-0 flex flex-col justify-center border-b border-line;
+}
+.results {
+  @apply m-0 mt-3 flex list-none flex-col gap-3 p-0;
+}
+.text-column {
+  @apply max-w-prose whitespace-pre-wrap leading-relaxed;
+}
+a {
+  color: var(--accent);
+}
