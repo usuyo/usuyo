@@ -1,13 +1,14 @@
 //! 预装的通用网页获取插件 `builtin/web`（协议 §8.4）：只读公开网页，不登录，
 //! 没有任何站点专用的规则。子命令照协议 §3.2：`canonicalize`、`fetch`、`health`。
 
+mod address;
 mod page;
 
 use std::fmt;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use usuyo_plugin::protocol::{
     CallFailure, Canonicalized, Envelope, ErrorCode, Identity, OutputKind,
 };
@@ -35,7 +36,14 @@ fn main() -> ExitCode {
     let printed = match args.first().map(String::as_str) {
         Some("canonicalize") if args.len() == 2 => print(canonicalize(&args[1])),
         Some("fetch") => match parse_fetch(&args[1..]) {
-            Some((url, out, want)) => print(page::fetch(&url, &out, want.as_ref())),
+            Some((url, out, want)) => print(settings().and_then(|s| {
+                page::fetch(
+                    &url,
+                    &out,
+                    want.as_ref(),
+                    &address::Policy::strict(s.allow_private_network),
+                )
+            })),
             None => usage(),
         },
         Some("health") if args.len() <= 2 && args.get(1).is_none_or(|a| a == "--probe") => {
@@ -51,6 +59,31 @@ fn main() -> ExitCode {
         _ => usage(),
     };
     ExitCode::from(printed)
+}
+
+/// 插件设置（协议 §2.11），宿主经 `USUYO_SETTINGS` 指向的 JSON 文件传入；没有这个变量就全用默认值。
+#[derive(Debug, Default, Deserialize)]
+struct Settings {
+    /// 要取的链接本身可以是本机或内网地址。图片和跳转目标不受影响。
+    #[serde(rename = "allow-private-network", default)]
+    allow_private_network: bool,
+}
+
+fn settings() -> anyhow::Result<Settings> {
+    let Some(path) = std::env::var_os("USUYO_SETTINGS") else {
+        return Ok(Settings::default());
+    };
+    let bytes = std::fs::read(&path).map_err(|e| {
+        fail(
+            ErrorCode::InvalidArgs,
+            format!(
+                "cannot read USUYO_SETTINGS {}: {e}",
+                PathBuf::from(&path).display()
+            ),
+        )
+    })?;
+    serde_json::from_slice(&bytes)
+        .map_err(|e| fail(ErrorCode::InvalidArgs, format!("bad USUYO_SETTINGS: {e}")))
 }
 
 fn usage() -> u8 {
