@@ -22,7 +22,7 @@
 
 **清单现在怎么写出这个拆分。** 按能力分开声明（[协议 §2.3](../plugin-protocol.md#23-获取插件的字段)）：不要账号的写在 `fetch` 上，`login: none`；要账号的写在 `list` 上，`login: required`，`sites` 写是哪个账号；只要访客身份的写 `visitors`，它不算账号，`login: none` 也能写。B站的样子就是 `fetch` 不登录、`list` 要登录。
 
-**协议还说不出的一处：同一个能力里只有某一样要账号。** 视频号的 `fetch` 不登录能取作者、描述、封面，只有视频要借元宝账号。现在只能把整个 `fetch` 写成 `login: optional`，宿主不知道哪一样用得到账号：宿主的代码（`crates/usuyo-plugin/src/host/credentials.rs` 的 `handover`）只看能力的 `login` 不是 `none`、站点存着登录，就把凭据交给这次调用，不看 `--want`，靠插件自己只在那一步用。`login: optional` 时登录过就默认带上，是[协议 §13](../plugin-protocol.md#13-待定) 第 11 项早先的建议（[open-decisions P16](../open-decisions.md#7-获取与插件)），和上面这条规矩相反；照规矩，这一项的答案是「只为非账号不可的那几样带」。
+**协议还说不出的一处：同一个能力里只有某一样要账号。** 视频号的 `fetch` 不登录能取作者、描述、封面，只有视频要借元宝账号。现在只能把整个 `fetch` 写成 `login: optional`，宿主不知道哪一样用得到账号：宿主的代码（`crates/usuyo-plugin/src/host/credentials.rs` 的 `handover`）只看能力的 `login` 不是 `none`、站点存着登录，就把凭据交给这次调用，不看 `--want`，靠插件自己只在那一步用。`login: optional` 时登录过就默认带上，是[协议 §13](../plugin-protocol.md#13-待定) 第 11 项早先的建议（[PRD P16](../PRD.md#72-获取插件)），和上面这条规矩相反；照规矩，这一项的答案是「只为非账号不可的那几样带」。
 
 现行写法能做到的：把要账号的那一样拆成另一个插件，`fetch` 只声明那一样的 `outputs`，宿主照[协议 §3.1](../plugin-protocol.md#31-运行器与节奏) 在第一个插件回 `partial` 时带 `--want=<缺的>` 去试它。代价是同一个平台装两个插件、身份和节奏要对齐。
 

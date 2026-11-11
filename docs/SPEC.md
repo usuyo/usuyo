@@ -148,7 +148,7 @@ SHA-256，小写十六进制，算存下来的字节。字段名叫 `sha256` 时
 - 请求 `limit`（默认 50，最多 500）、`cursor`；响应 `items`、`nextCursor`（最后一页 `null`），和[协议 §3.8](plugin-protocol.md#38-list-与跟着收)、MCP 同名。
 - 11-11 还没做：本机接口回的是普通数组，没有 `cursor`；搜索的 `limit` 默认 50，限在 1 到 200（[本机接口](#本机接口第-2-层11-11-照代码)）。
 - 游标是不透明的 base64url，和查询绑定；查询变了或索引重建过回 `cursor-invalid`。按键分页，最后按 id 定序，新收下的不会让条目跳过或重复。有效期归第 2 层。
-- 响应不带总数（按键分页算总数要另扫一遍）；另给哪些计数（搜到多少条、磁盘占用），第 2 层按视图定。永远不出现的数：几条没看过、几条没整理、几个提议没决定（[原则 4](PRD.md#4-原则)）。插件 `sources` 的 `count` 是平台页面上的数（[open-decisions L5](open-decisions.md#4-借鉴其他软件)）。
+- 响应不带总数（按键分页算总数要另扫一遍）；另给哪些计数（搜到多少条、磁盘占用），第 2 层按视图定。永远不出现的数：几条没看过、几条没整理、几个提议没决定（[原则 4](PRD.md#4-原则)）。插件 `sources` 的 `count` 是平台页面上的数（[插件协议 L5](plugin-protocol.md#31-运行器与节奏)）。
 
 <a id="09-要你看一眼"></a>
 ### 0.9 要你看一眼
@@ -273,7 +273,7 @@ items/douyin/douyin-4plrcxk343onmyxibmrr672kga/
 | `action` `actedAt` `actedAtOriginal` | 平台上的动作和时间（[协议 §3.8](plugin-protocol.md#38-list-与跟着收)） |
 | `at`、`device` | 时间、哪台；转换在 `at` 最早那一项（一样早比 `id`）的 `device` 做（[调研 14 §0](research/14-sync-like-hatoba.md#0-结论) 第 10 问），那台不在了怎么换归同步 feature |
 
-你在跟着收的预览里自己点收下的，`takenBy: user`、`machinePicked: null`（推断：你一条条挑过）。跟着收按关键词或相似度命中收下的都标「机器挑的」。界面标「机器挑的」：每一项 `origins` 都带 `machinePicked`（你自己也收过一次就不标）；写过、放进主题、引用过都不去掉，它是来历（11-05 定，[§1.10 第 19 条](#110-要你看一眼)）；地图上怎么分开等 [M4](open-decisions.md#6-地图与界面)。
+你在跟着收的预览里自己点收下的，`takenBy: user`、`machinePicked: null`（推断：你一条条挑过）。跟着收按关键词或相似度命中收下的都标「机器挑的」。界面标「机器挑的」：每一项 `origins` 都带 `machinePicked`（你自己也收过一次就不标）；写过、放进主题、引用过都不去掉，它是来历（11-05 定，[§1.10 第 19 条](#110-要你看一眼)）；地图上怎么分开等 [M4](PRD.md#76-地图)。
 
 **`snapshots[]`**（[协议 §3.5](plugin-protocol.md#35-canonicalize-与身份)–[§3.7](plugin-protocol.md#37-fetch-输出)）：`id`（UUIDv7）；`plugin`、`pluginVersion`（交来已取到的内容时：投递接口记 `deliver:<令牌名>`，收件文件夹记 `deliver:inbox`；链接和交给导入插件的文件，记去取它的那个插件）；`at`、`inputUrl`（你给的原链接）、`resolvedUrl`（`canonicalize` 展开的完整链接）；`access`（投递为 `deliver`）、`site`、`upstream`；`outputs`（实际拿到的，比完整度只比它）；`missing`、`missingReason`、`completeness`（宿主在取的时候算，`missing` 是这次的 `--want` − 实际拿到的，之后不改）；`textOrigin`（`platform` 或 `machine`，等[协议 §13](plugin-protocol.md#13-待定) 第 24 项）。
 
@@ -344,7 +344,7 @@ items/douyin/douyin-4plrcxk343onmyxibmrr672kga/
 - 标题、作者照 [§0.6](#06-文本和文件) 的 Markdown 链接文字转义。
 - **正文**（11-11 代码）：插件给的 `textFormat: markdown` 只有两条都满足才照原样写：全文没有 `<`；每个链接目标（`](` 或 `]:` 后面，跳过空白）以 `http://`、`https://`、`mailto:`、`usuyo://` 或 `#` 开头，不分大小写。不满足的和 `plain` 一样照 [§0.6](#06-文本和文件) 转义成纯文字。原样还在 `raw/`。
 
-主快照或头部用到的字段变了就重写，原样在 `raw/`，不违背 [PRD 原则 2](PRD.md#4-原则)（[K5 A](open-decisions.md#11-存储同步与联网)）；CLAUDE.md 的措辞见 [§1.10 第 10 条](#110-要你看一眼)。应用里的原文栏和 `text` 引用读主快照的 `text` 或 `derived/readable.md`（下表），不读 `content.md`。**能看不能改**（11-05 定，[回答表](answers.md)）：宿主把它写成只读文件（系统支持时），总照主快照重写；重写前发现外面改过（和本机记下的上次写的哈希不一样，也不等于这台照现在的 manifest 和主快照会生成的字节；等于的话是另一台经云盘写来的，照收、记下哈希），先把改过的那份放进回收站（`kind: content`），再换回原样（推断）。要写字写在 `notes.md`、主题页里，或者导出到你的 vault 再写（[协议 §4.4](plugin-protocol.md#44-导出的-run-与-readback)）。它不同步，各台照原样自己生成。这改了 v0「机器永不改写正文」，也偏离[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突) 把它归「原样」层，调研 14 跟着改（[总纲](BUILD.md#5-功能线)）。
+主快照或头部用到的字段变了就重写，原样在 `raw/`，不违背 [PRD 原则 2](PRD.md#4-原则)（[K5 A](PRD.md#710-存储删除与联网)）；CLAUDE.md 的措辞见 [§1.10 第 10 条](#110-要你看一眼)。应用里的原文栏和 `text` 引用读主快照的 `text` 或 `derived/readable.md`（下表），不读 `content.md`。**能看不能改**（11-05 定，[回答表](answers.md)）：宿主把它写成只读文件（系统支持时），总照主快照重写；重写前发现外面改过（和本机记下的上次写的哈希不一样，也不等于这台照现在的 manifest 和主快照会生成的字节；等于的话是另一台经云盘写来的，照收、记下哈希），先把改过的那份放进回收站（`kind: content`），再换回原样（推断）。要写字写在 `notes.md`、主题页里，或者导出到你的 vault 再写（[协议 §4.4](plugin-protocol.md#44-导出的-run-与-readback)）。它不同步，各台照原样自己生成。这改了 v0「机器永不改写正文」，也偏离[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突) 把它归「原样」层，调研 14 跟着改（[总纲](BUILD.md#5-功能线)）。
 
 | 栏 | 文件 | 来源 | 链接里的层 |
 |---|---|---|---|
@@ -376,7 +376,7 @@ items/douyin/douyin-4plrcxk343onmyxibmrr672kga/
 <a id="14-你写的那一层"></a>
 ### 1.4 你写的那一层
 
-链路照 [T1 A](open-decisions.md#8-转换与-ai)：素材（各栏、划线、记一句）→ 卡片 → 主题页 → 成稿。都是普通 Markdown，id 在 front matter 的 `id`（`notes.md`、`highlights.md` 没有，文件夹名就是条目 id）。不写修改时间，两台都改过会在这一行撞上，修改时间从改动记录取。画布等 [M7](open-decisions.md#6-地图与界面)（建议一张地图）和画布原型，先留 `canvas/`，按 JSON Canvas 1.0，同步以节点 id 为键合并。
+链路照 [T1 A](PRD.md#74-变成文字)：素材（各栏、划线、记一句）→ 卡片 → 主题页 → 成稿。都是普通 Markdown，id 在 front matter 的 `id`（`notes.md`、`highlights.md` 没有，文件夹名就是条目 id）。不写修改时间，两台都改过会在这一行撞上，修改时间从改动记录取。画布等 [M7](PRD.md#76-地图)（建议一张地图）和画布原型，先留 `canvas/`，按 JSON Canvas 1.0，同步以节点 id 为键合并。
 
 **标题和文件名**：`title` 是真相，文件名 = `sanitize(title)`（[§0.6](#06-文本和文件)），子文件夹都算，同步的记录带子文件夹、不带文件名。
 
@@ -421,7 +421,7 @@ match:
 [^k3f7q]: 「第一段 40 克闷蒸 30 秒」[手冲咖啡：三段式注水 · 口播 00:42](usuyo://item/douyin-4plrcxk343onmyxibmrr672kga/asr@0193f2b0-1d2e-7f3a-8b4c-5d6e7f8a9b0c#t=42,48) · 咖啡日常 · 2026-10-01
 ```
 
-- `followed` 是「关注」，取消叫「不再关注」（[S11](open-decisions.md#3-叙事与介绍)）；只有关注着的主题参与命中。`match` 给跟着收判断命中（[M1 B](open-decisions.md#6-地图与界面)）：`keywords` 按 `keywords` 里的词字面命中，`similarity` 按和成员的相似度，可以都写。两种都看标题层（标题、简介、标签）和内容层（正文、口播转的文字、字幕、图里的字），画面描述默认不算，主题里能打开（11-06 定，[§1.10 第 7 条](#110-要你看一眼)；开关的字段归 feature）。看内容层要先把新条目取下来转成文字；没命中的不进资料库，取下来的临时文件删掉（推断）。卡片放进主题写在卡片自己的 `topics`；条目放进主题写在 manifest 的 `topics`（[§1.2.1](#121-manifestjson-v1)）。`create-topic` 的 `match` 默认 `[keywords]`。
+- `followed` 是「关注」，取消叫「不再关注」（[S11](BUILD.md#7-只有用户能答的和能验的)）；只有关注着的主题参与命中。`match` 给跟着收判断命中（[M1 B](PRD.md#76-地图)）：`keywords` 按 `keywords` 里的词字面命中，`similarity` 按和成员的相似度，可以都写。两种都看标题层（标题、简介、标签）和内容层（正文、口播转的文字、字幕、图里的字），画面描述默认不算，主题里能打开（11-06 定，[§1.10 第 7 条](#110-要你看一眼)；开关的字段归 feature）。看内容层要先把新条目取下来转成文字；没命中的不进资料库，取下来的临时文件删掉（推断）。卡片放进主题写在卡片自己的 `topics`；条目放进主题写在 manifest 的 `topics`（[§1.2.1](#121-manifestjson-v1)）。`create-topic` 的 `match` 默认 `[keywords]`。
 - 列表一行一项；空列表不写，没有这个键就是空的。
 - 成员记在成员上，加减成员不碰主题文件，主题页只因你改它而变（[PRD 7.7](PRD.md#77-你写的那一层)）；命中关注只记在 `origins[].matched`，不自动加成员。主题彻底移除以后，`topics` 里指向它的 id 读的时候跳过，不去改写。
 
@@ -431,7 +431,7 @@ match:
 - `cards/<标题>.md`：front matter 是 `id`、`title`、`createdAt`、`topics`（放进的主题 id），正文是你的一个观点。没写标题时，新建那次取第一行前 30 个字写进 `title`，之后不跟着变。
 - `drafts/<标题>.md`：front matter 是 `id`、`title`、`createdAt`、`kind`（`article` `post` `script` `other`）、`from`（用到的主题、卡片的 id，是哪种按 id 查）。引用主题页某段写 `usuyo://topic/<id>#^<块 id>`，顺着链接一路到原文那一段、那一秒。
 - 块 id 谁加：你在主题页上「引用这一段」时，宿主在段末补 `^块id`，记 `edit-topic-page`（`actor: user`），能撤销；Agent 起草的成稿要引用某段时，补块 id 放进同一个提议。
-- 记一句在 `notes.md` 头部的 `takeaway`，一条一句（[M9 A](open-decisions.md#6-地图与界面)），没有就不写这个键，也就不带 front matter；正文是你的笔记。划线在 `highlights.md`，一条贴在某一栏的某一处。
+- 记一句在 `notes.md` 头部的 `takeaway`，一条一句（[M9 A](PRD.md#76-地图)），没有就不写这个键，也就不带 front matter；正文是你的笔记。划线在 `highlights.md`，一条贴在某一栏的某一处。
 
 `items/<platform>/<itemId>/notes.md`：
 
@@ -468,7 +468,7 @@ takeaway: "闷蒸 30 秒比水温要紧"
 <a id="144-发生过的事"></a>
 #### 1.4.4 发生过的事
 
-[M6 A](open-decisions.md#6-地图与界面) 只记发生过的事。记过一句、被引用从文件里看得出，只有「打开过」另记，一行一次：`{"n":1,"t":"2026-11-05T03:00:01.123Z","ev":"opened","item":"douyin-4plrcxk343onmyxibmrr672kga"}`，放 `.usuyo/facts/<deviceId>/`，分段和改动记录同一套（[§1.6](#16-改动记录)）。
+[M6 A](PRD.md#76-地图) 只记发生过的事。记过一句、被引用从文件里看得出，只有「打开过」另记，一行一次：`{"n":1,"t":"2026-11-05T03:00:01.123Z","ev":"opened","item":"douyin-4plrcxk343onmyxibmrr672kga"}`，放 `.usuyo/facts/<deviceId>/`，分段和改动记录同一套（[§1.6](#16-改动记录)）。
 
 - 短时间里反复打开只记一次，间隔归第 2 层。不写进 manifest：每打开一次就改一次条目记录，同步要多传很多。
 - 「打开过几次、最近哪天」由索引算；索引不从 `facts/` 推出「没打开过」的列表、数字或标记（[原则 4](PRD.md#4-原则)）。
@@ -486,7 +486,7 @@ Agent（经 MCP）或宿主调的模型改已有内容，一个提议一个文�
 
 | op | 对象 | 参数 | 能提议 | 能撤销 |
 |---|---|---|---|---|
-| `add-item` | 条目 | `origin`、`created` | 不经提议，直接生效（[A3 A](open-decisions.md#9-agent)） | 能，整批 |
+| `add-item` | 条目 | `origin`、`created` | 不经提议，直接生效（[A3 A](PRD.md#78-agent)） | 能，整批 |
 | `set-tags` | 条目 | `add`、`remove` | 能 | 能 |
 | `set-topics` | 条目、卡片 | `add`、`remove`（主题 id） | 能 | 能 |
 | `set-takeaway`；`edit-notes` | 条目 | `text`；`hunks` | 能，要看得到笔记 | 能 |
@@ -506,7 +506,7 @@ Agent（经 MCP）或宿主调的模型改已有内容，一个提议一个文�
 
 - **要看得到笔记**：这几个改的是 `notes.md`、`highlights.md`，设置里没把「我的笔记」给 Agent 时回 `not-found`。
 - **`hunks`** 是 `[{id, before, after, anchor?}]`，按段（空行分开）：原文是 `before` 的那几段换成 `after`；`before` 为空时插在原文等于 `anchor` 的那段后面，`anchor` 为 `null` 插在末尾。
-- **`merge-items`**（A 并进 B）：A 的 `raw/<snapshotId>/` 整个移进 B 的 `raw/`；`snapshots`、`identities`、`origins` 并过去，`topics` 取并集，B 的 `aliases` 加上 A 的 id 和 A 的 `aliases`。A 的笔记正文按段接在 B 后面，记一句不一样时问你留哪句（同步自动并时出卡片）；划线：A 的 `highlights.md` 各行接在 B 后面，块 id 在 B 的文件里撞了就换一个。A 的 `manifest.json`、`content.md`、`derived/` 和一份 `notes.md`、`highlights.md` 进回收站（`reason: merge`），`derived/` 能重算；`raw/` 不进回收站：[K5 A](open-decisions.md#11-存储同步与联网) 只许「只留文字」和「删掉」把 `raw/` 移出资料库。
+- **`merge-items`**（A 并进 B）：A 的 `raw/<snapshotId>/` 整个移进 B 的 `raw/`；`snapshots`、`identities`、`origins` 并过去，`topics` 取并集，B 的 `aliases` 加上 A 的 id 和 A 的 `aliases`。A 的笔记正文按段接在 B 后面，记一句不一样时问你留哪句（同步自动并时出卡片）；划线：A 的 `highlights.md` 各行接在 B 后面，块 id 在 B 的文件里撞了就换一个。A 的 `manifest.json`、`content.md`、`derived/` 和一份 `notes.md`、`highlights.md` 进回收站（`reason: merge`），`derived/` 能重算；`raw/` 不进回收站：[K5 A](PRD.md#710-存储删除与联网) 只许「只留文字」和「删掉」把 `raw/` 移出资料库。
 - 主题「合并进另一个」（[PRD §7.3](PRD.md#82-其他对象)）的 op 等主题 feature 再加。
 
 <a id="152-提议文件"></a>
@@ -540,7 +540,7 @@ Agent（经 MCP）或宿主调的模型改已有内容，一个提议一个文�
 
 - **整批撤销**：从新到旧反着做，写成新的一批，每条带 `undoes`，旧记录不删；撤销的撤销就是重做。现哈希等于 `after` 就原样反做，不等就照 [§1.5.2](#152-提议文件) 逐项来，做不了的列出「这 2 处之后改过，没撤」。撤销批量导入那批，新建的同样进回收站（`reason: undo`），你之后写过的照 Agent 那批撤之前问你一次（推断）。已有 `undoes` 指向的不再反做；同一批两台同时撤销，同步后只认 `id` 小的那批，另一批在索引里算 `superseded`（推断）。
 - **撤不了的**：`purge`、回收站已到期的；已导出到别的软件的；平台上做过的动作；Agent 已读走的内容。
-- **Agent 直接收下**（[A3 A](open-decisions.md#9-agent)）：`add-item`，`actor: agent:<name>`、`via: mcp`，一次调用一批。已在库里、能给它看的只多一项 `origins`（`created: false`），撤销只去掉这一项；私密的不收，回 `skipped`；在回收站里的拿回来（[§1.7](#17-删掉)；离线短链展开后的见 [§0.4](#04-id)）。撤销新建的进回收站（`reason: undo`）；之后你写过、划过、放进主题或引用过的，在应用里和终端里的命令行撤之前问你一次也撤不撤（11-05 定，[§1.10 第 9 条](#110-要你看一眼)）；问不了时跳过并列出：命令行不在终端里这半是推断，Agent 经 MCP 见下一条。
+- **Agent 直接收下**（[A3 A](PRD.md#78-agent)）：`add-item`，`actor: agent:<name>`、`via: mcp`，一次调用一批。已在库里、能给它看的只多一项 `origins`（`created: false`），撤销只去掉这一项；私密的不收，回 `skipped`；在回收站里的拿回来（[§1.7](#17-删掉)；离线短链展开后的见 [§0.4](#04-id)）。撤销新建的进回收站（`reason: undo`）；之后你写过、划过、放进主题或引用过的，在应用里和终端里的命令行撤之前问你一次也撤不撤（11-05 定，[§1.10 第 9 条](#110-要你看一眼)）；问不了时跳过并列出：命令行不在终端里这半是推断，Agent 经 MCP 见下一条。
 - **Agent 经 MCP 能撤销哪些批**（11-05 定，[§1.10 第 18 条](#110-要你看一眼)）：只能撤同一个 Agent 的批。它这一批收进来或从回收站拿回来的条目，你没写过东西的放进回收站：新建的用 `reason: undo`，从回收站拿回来的照 [§1.7](#17-删掉) 原样放回。写过的照上面跳过并列出；你之后设成私密的也跳过，列给 Agent 时不列它（[§1.3](#13-条目的四个维度)）。你接受过的提议那批（带 `changeSet`）里新建的主题、卡片、成稿，经 MCP 撤时跳过并列出，要在应用里撤（推断）。不进回收站的步骤照常撤。撤掉它自己收进来的不算删除（[原则 5](PRD.md#4-原则)）。
 - **外面改的**：导出读回的（`via: readback:<插件 id>`）和 usuyo 外改了、照 [§1.4](#14-你写的那一层) 读进来合并的（`via: file`）不走提议（[ADR-003 §7](decisions/ADR-003-plugins.md#7-导出与读回)），一样能撤销。`actor` 记 `external`，不断言是你：直接改文件的 Agent（Claude Code 一类）分不出来。第 2 层的 MCP 工具说明写明：改已有内容走提议，不要直接改文件。
 - **活动记录**（[PRD 7.8](PRD.md#78-agent)）：由 `activity/`（在按机器的目录，搜过、读过，[§1.1](#11-目录树)）、`journal/`（写过）、`changes/`（提议过）拼出。
@@ -548,7 +548,7 @@ Agent（经 MCP）或宿主调的模型改已有内容，一个提议一个文�
 <a id="17-删掉"></a>
 ### 1.7 删掉
 
-照 [K1 A、K3 A、K5 A](open-decisions.md#11-存储同步与联网)；K1 A 里的删除记录 11-06 去掉了：删除就是删除，移除以后不留记录（[§1.10 第 12 条](#110-要你看一眼)）；K3 的「彻底忘掉」11-06 并进删掉，不再单独有（[§1.10 第 16 条](#110-要你看一眼)）。
+照 [K1 A、K3 A、K5 A](PRD.md#710-存储删除与联网)；K1 A 里的删除记录 11-06 去掉了：删除就是删除，移除以后不留记录（[§1.10 第 12 条](#110-要你看一眼)）；K3 的「彻底忘掉」11-06 并进删掉，不再单独有（[§1.10 第 16 条](#110-要你看一眼)）。
 
 - **回收站**：`.usuyo/trash/<trashId>/` 里一个 `entry.json` 加文件；`entry.json` 是 `{id, kind, target, path, files, reason, trashedAt}`，`kind` 取 `item` `topic` `card` `draft` `notes` `content`，`path` 是原相对路径，`files` 是对象以内的相对路径，`reason` 为 `delete` `keep-text` `merge` `undo` `conflict`。各台各挪各的，同步的是条目的 `state` 和主题、卡片、成稿记录上的 `trashedAt`（推断，归同步引擎）。进回收站时取消 `jobs.db` 里它的任务，之后回来的结果丢掉，不在原路径重建文件夹。
 - **回收站里怎么放**（11-11 代码）：`trashId` 必须是 UUIDv7。`path` 和 `files` 里每一项都只能是相对路径，不能有 `.`、`..`、绝对路径和盘符，不合的这一项当写坏了。
@@ -615,7 +615,7 @@ Agent（经 MCP）或宿主调的模型改已有内容，一个提议一个文�
 磁盘上没有 v0 资料库，不写迁移程序。原来的 Go 包 `pkg/contract` 11-11 搬成了 `crates/usuyo-contract`（[ADR-004](decisions/ADR-004-rust-tauri.md)）：磁盘上各记录的 serde 类型，每个对象带 `extra`，不认识的字段原样写回；下面几条 schema 在 `crates/usuyo-contract/schema/`，样例在 `testdata/`。v0 到本层的对照（历史，留着查）：
 
 - 目录：`items/YYYY/MM/<platform>-<id8>-<rand4>/` → `items/<platform>/<itemId>/`；`index/`、`jobs.db`、`config.json` 搬出 `.usuyo/`；`threads/`、`thoughts/`、`canvas.json` → `topics/`、`cards/`（按标题起名）、`canvas/`；`journal/YYYY-MM.jsonl`、`.trash/` → `.usuyo/journal/<deviceId>/`、`.usuyo/trash/`；条目根下的 `images/`、`media/` 进 `raw/<snapshotId>/`，`images/keyframes/` → `derived/keyframes/`。
-- manifest：`schema` → `formatVersion`；`capturedAt`、`origin` → `addedAt`、`origins[]`（`sync` → `subscription`）；快照的 `adapter`、`adapterVersion` → `plugin`、`pluginVersion`，`rawDir` 去掉；`missing` 用 `outputs` 词表；`slimmed` → `text-only`；`jobs`、`fingerprints` 进 `jobs.db`、`derived/`；`attention.json` 去掉（[M6 A](open-decisions.md#6-地图与界面)）；不写 `additionalProperties: false`。
+- manifest：`schema` → `formatVersion`；`capturedAt`、`origin` → `addedAt`、`origins[]`（`sync` → `subscription`）；快照的 `adapter`、`adapterVersion` → `plugin`、`pluginVersion`，`rawDir` 去掉；`missing` 用 `outputs` 词表；`slimmed` → `text-only`；`jobs`、`fingerprints` 进 `jobs.db`、`derived/`；`attention.json` 去掉（[M6 A](PRD.md#76-地图)）；不写 `additionalProperties: false`。
 
 schema 先定这几条：
 
@@ -636,12 +636,12 @@ schema 先定这几条：
 | 3 | [§1.4.1](#141-主题和主题页) 主题成员放哪 | **不再问（11-05 方向）**：成员记在成员上：条目 manifest 和卡片的 `topics`，见 [§1.4.1](#141-主题和主题页)；[回答表](answers.md) |
 | 4 | [§1.4.3](#143-引用) 引用怎么写 | **不再问（11-05 方向）**：脚注照旧，理由是通用 Markdown、来源删了也完整，见 [§1.4.3](#143-引用)；[回答表](answers.md) |
 | 5 | [§1.4.2](#142-卡片成稿记一句和划线) 记一句和划线放哪 | **不再问（11-05 方向）**：记一句是 `notes.md` 头部的 `takeaway`，划线放 `highlights.md`，见 [§1.4.2](#142-卡片成稿记一句和划线)；[回答表](answers.md) |
-| 6 | [§1.5.2](#152-提议文件) 改动提议多久没决定就作废（[A2](open-decisions.md#9-agent)） | **已定（11-06）**：不作废，一直留着，不计数、不提醒（[回答表](answers.md)） |
+| 6 | [§1.5.2](#152-提议文件) 改动提议多久没决定就作废（[A2](PRD.md#78-agent)） | **已定（11-06）**：不作废，一直留着，不计数、不提醒（[回答表](answers.md)） |
 | 7 | [§1.4.1](#141-主题和主题页) 跟着收的命中怎么判、看哪几层字 | **已定（11-06）**：默认按关键词，相似度你打开才用，命中收下的都标「机器挑的」（[第 14 条](#110-要你看一眼)）；看标题层和内容层，画面层默认不算（[回答表](answers.md)） |
 | 8 | [§1.2.3](#123-contentmd-和各栏) `content.md` 是给「不开 usuyo 也能读」的正文副本，和导出到 vault 无关；它能不能改 | **已定（11-05）**：能看不能改，只读文件，总照原样重写；外面强行改过的那份先进回收站（[回答表](answers.md)） |
 | 9 | [§1.6](#16-改动记录) 撤销 Agent 收下的一批时，你写过东西的条目怎么办 | **已定（11-05）**：撤之前问一次也撤不撤；问不了时跳过并列出（推断）（[回答表](answers.md)） |
 | 10 | [§1.2.3](#123-contentmd-和各栏) [CLAUDE.md](../CLAUDE.md) 原则 2 照 [PRD 原则 2](PRD.md#4-原则) 改成「机器永不改写或删除原样」，`content.md` 算宿主生成的只读副本；原则 3 的「删掉 `.usuyo/index/`」改成「删掉索引目录」；文档地图里 SPEC 那行改成 v1 草案 | **已定（11-05）**：三处都照这样改了（[回答表](answers.md)） |
-| 11 | [§1.7](#17-删掉) 删除记录多记一个删掉的时间 `deletedAt`（[K1 A](open-decisions.md#11-存储同步与联网) 说只记身份和标题） | **不再问（11-06 不留删除记录）**：删除记录去掉了，`deletedAt` 和「删掉过的」列表跟着没了；[回答表](answers.md) |
+| 11 | [§1.7](#17-删掉) 删除记录多记一个删掉的时间 `deletedAt`（[K1 A](PRD.md#710-存储删除与联网) 说只记身份和标题） | **不再问（11-06 不留删除记录）**：删除记录去掉了，`deletedAt` 和「删掉过的」列表跟着没了；[回答表](answers.md) |
 | 12 | [§1.7](#17-删掉) 主动收下一条以前删过的怎么办 | **已定（11-06 改）**：不记删过的，在回收站里的直接拿回来，不提醒（[回答表](answers.md)） |
 | 13 | [§1.3](#13-条目的四个维度) 成稿引用了私密条目，导出时怎么办 | **先放着（11-06）**：导出到 Obsidian 和给 Agent 分开定，等有界面和具体例子再定；[§1.3](#13-条目的四个维度) 现在的写法（只换那条脚注）是暂定（[回答表](answers.md)） |
 | 14 | [§1.2.1](#121-manifestjson-v1) Agent 自己挑着收下的算不算「机器挑的」 | **已定（11-06）**：机器找的、机器挑的都算，包括按关键词找的、跟着收按关键词命中的；只有你给的具体链接和你自己平台上的收藏、列表不算（[回答表](answers.md)） |
@@ -826,7 +826,7 @@ usuyo mcp                        # stdio MCP 服务（转发到 daemon，daemon 
 <a id="25-mcp-工具m0"></a>
 ### 2.5 MCP 工具（M0）
 
-v0，第 2 层重写前保留，11-11 还没实现。op 照 [§1.5.1](#151-op-词表)：`add_tag`、`rm_tag` 是 `set-tags`，`set_thread` 是 `set-topics`；另加收下工具（[A3 A](open-decisions.md#9-agent)，[§1.6](#16-改动记录)）；私密和笔记见 [§1.3](#13-条目的四个维度)。撤销照 [§1.6](#16-改动记录)。
+v0，第 2 层重写前保留，11-11 还没实现。op 照 [§1.5.1](#151-op-词表)：`add_tag`、`rm_tag` 是 `set-tags`，`set_thread` 是 `set-topics`；另加收下工具（[A3 A](PRD.md#78-agent)，[§1.6](#16-改动记录)）；私密和笔记见 [§1.3](#13-条目的四个维度)。撤销照 [§1.6](#16-改动记录)。
 
 - `search(query, filters) -> [{id, title, hitLayer, snippet, untrusted:true, source}]`
 - `get_item(id, layers=[original|derived|notes])`
@@ -860,7 +860,7 @@ v0 附录记的 18 处对不上：
 |---|---|---|---|
 | 1 | 本机接口 | 第 2 层 | 11-11 照代码先写了一节：[本机接口](#本机接口第-2-层11-11-照代码) |
 | 2 | 知识层目录 | 这里了结 | `topics/`、`cards/`、`drafts/`；`set_thread` 换成 `set-topics` |
-| 3 | 画布几个 | 这里一半 | 留 `canvas/`，个数等 [M7](open-decisions.md#6-地图与界面) |
+| 3 | 画布几个 | 这里一半 | 留 `canvas/`，个数等 [M7](PRD.md#76-地图) |
 | 4 | 任务状态 | 这里了结 | 搬进本机 `jobs.db`，资料库只看 `derived/` |
 | 5 | 注意力 | 这里了结 | `attention.json` 去掉，只记「打开过」 |
 | 6 | 存在和私密 | 这里了结 | `state` 三个值，加 `private` |
@@ -873,6 +873,6 @@ v0 附录记的 18 处对不上：
 | 13 | `missing` | 这里了结 | 用 `outputs` 词表 |
 | 14 | 导出身份键和导出记录 | 这里了结 | `usuyo_id` 一致；导出记录搬到按机器目录，[协议 §4.4](plugin-protocol.md#44-导出的-run-与-readback) 已跟着改 |
 | 15 | 插件来源怎么显示 | 插件协议 | [协议 §8.4](plugin-protocol.md#84-三种来源) |
-| 16 | GitHub App | 插件协议 | [O3](open-decisions.md#13-开源与发布) 已定 A；部署写进 ADR-003 和协议，见 [总纲](BUILD.md#012-插件的安装和分发) |
+| 16 | GitHub App | 插件协议 | [O3](BUILD.md#7-只有用户能答的和能验的) 已定 A；部署写进 ADR-003 和协议，见 [总纲](BUILD.md#012-插件的安装和分发) |
 | 17 | 改动提议多久作废 | 这里了结 | 不作废（[§1.10 第 6 条](#110-要你看一眼)） |
 | 18 | 插件清单是 v0 还是 v1 | 第 3 层 | `crates/usuyo-contract`（原 `pkg/contract`）只留资料库类型；插件协议的类型 11-11 在 `crates/usuyo-plugin`，`crates/usuyo-plugin-kit` 转出给插件用，schema 文件还没有 |

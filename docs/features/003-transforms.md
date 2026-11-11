@@ -75,7 +75,7 @@
 
 | 活 | 默认 | 为什么 | 能换成 |
 |---|---|---|---|
-| 合起来、抽音轨、取关键帧、量画面动不动 | ffmpeg 9.0.2，自己编的精简 LGPL 构建，随 `builtin/media` 插件带 | 只要拆封装、解码、几个滤镜（`scdet`、`freezedetect`、`scale`）、出 JPEG 和 WAV，LGPL 够用（[G2](../open-decisions.md#14-法律意见) 的建议 B）；体积小，版本由我们锁 | 开发时用 Homebrew 的 ffmpeg；以后可以换 PySceneDetect 0.7.3 做关键帧 |
+| 合起来、抽音轨、取关键帧、量画面动不动 | ffmpeg 9.0.2，自己编的精简 LGPL 构建，随 `builtin/media` 插件带 | 只要拆封装、解码、几个滤镜（`scdet`、`freezedetect`、`scale`）、出 JPEG 和 WAV，LGPL 够用（[G2](../BUILD.md#7-只有用户能答的和能验的) 的建议 B）；体积小，版本由我们锁 | 开发时用 Homebrew 的 ffmpeg；以后可以换 PySceneDetect 0.7.3 做关键帧 |
 | 说的转成文字 | sherpa-onnx 2.0.1（官方 Rust crate，静态链接）跑 SenseVoice-Small int8（2024-07-17 那份），silero VAD v5 切段 | 中文为主训练，中英日韩粤，自带标点和数字转写；int8 包 163 MB；三系统都有预编译；同一套运行时还能跑 FireRedASR2、Qwen3-ASR，换模型不换插件 | 同插件里选 FireRedASR2-AED int8（838.6 MB，自报普通话 CER 2.89%，覆盖中英混说）、Qwen3-ASR-0.6B int8（878.7 MB），只要中文时可选 Paraformer-zh int8（228.3 MB）；以后另一个插件包 whisper.cpp 1.9.5（多语种）；macOS 26 以后可以加系统的 SpeechAnalyzer |
 | 图里的字（macOS） | 系统 Vision（`VNRecognizeTextRequest`，revision 3，`.accurate`，`zh-Hans` + `en-US`），一个 Swift 写的插件 | 不用下载；这台实测 1080×1440 的图一张 0.4–1.0 秒；简体、繁体、粤语、英文都在列表里 | PP-OCRv6 small（经 `oar-ocr` 0.10.2 和 ONNX Runtime），Windows、Linux 的默认，macOS 上「换一个认」 |
 
@@ -180,7 +180,7 @@ raw 里的图、封面 ──ocr──▶ 图里的字
 - ADR-003 [§8](../decisions/ADR-003-plugins.md#8-gpl-工具) 写的是「第三方二进制只从上游官方 release 下载」。ffmpeg 官方不发二进制，所以从官方源码编是最接近的做法，要你确认（[§13](#13-风险和待定)）。现成的备选：martin-riedl.de 有签名的 macOS arm64 9.0.2 构建，带 sha256，但许可没写（多半带 x264，是 GPL）。
 - 开发时 `just dev-plugins` 把 `plugins/media` 编好，资产里的 `ffmpeg` 换成指向 Homebrew 那份的链接；只在开发机上。
 
-**模型**第一次用到时问一句再下（[T2](../open-decisions.md#8-转换与-ai) 的建议 B）：
+**模型**第一次用到时问一句再下（[T2](../PRD.md#74-变成文字) 的建议 B）：
 
 - 不在安装时下，不自己悄悄下。第一条要转口播的条目在那一面写：「转口播要先下载 SenseVoice 模型，约 163 MB，只下一次。」旁边一个「下载」；转换插件页也有同一个按钮，写模型名、大小、许可。下好以后，等着的条目照常转。没点就一直等着，不提醒第二次。
 - 大于 1 GiB 的（以后的 FireRedASR2 不到，Qwen3-ASR 不到，都写大小）同样只点了才下。换模型（插件设置里选另一个）也是先问。

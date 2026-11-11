@@ -268,7 +268,7 @@ clean 和 usable 的 28 个没有细查词义、误读和同名产品，不算�
 | 获取插件 `{fetch-org}` | `usuyo-sources` |
 | client-hook `{fetch-org}-hook` | `usuyo-sources-hook` |
 
-这一组是 [N2](../open-decisions.md#2-命名与组织) 的 A（带产品名）。N2 的建议是 B：和产品名没有字面关系，像 Keiyoushi 不带 Mihon 的名字，你还没回。选 B 时有一个候选 `kamiire`（紙入れ，Jisho 释作 wallet、billfold）加 `kamiire-hook`，也都 404；只查了一部词典，「把收下的装进纸里」是推断，起名留到下一轮。
+这一组是 [N2](../BUILD.md#7-只有用户能答的和能验的) 的 A（带产品名）。N2 的建议是 B：和产品名没有字面关系，像 Keiyoushi 不带 Mihon 的名字，你还没回。选 B 时有一个候选 `kamiire`（紙入れ，Jisho 释作 wallet、billfold）加 `kamiire-hook`，也都 404；只查了一部词典，「把收下的装进纸里」是推断，起名留到下一轮。
 
 <a id="7-11-05-再查开源生态和各平台"></a>
 ## 7. 11-05 再查开源生态和各平台
