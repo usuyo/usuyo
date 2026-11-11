@@ -862,10 +862,6 @@ impl Call {
                     Ok(Failed { mut error }) => Err(match error.check_from_plugin() {
                         Ok(()) => {
                             envelope_text::failure(&mut error);
-                            credentials::scrub(&mut error.message, &scrub);
-                            if let Some(h) = &mut error.hint {
-                                credentials::scrub(h, &scrub);
-                            }
                             error
                         }
                         Err(why) => host(ErrorCode::InvalidOutput, why),
@@ -882,7 +878,14 @@ impl Call {
             // 字段名来自插件：按 Debug 写，换行进不了日志
             tracing::warn!(plugin = %plugin.id(), call = %self.id, field = ?field, "unknown output field ignored");
         }
-        result.map_err(|failure| self.fail(plugin, failure, stderr))
+        result.map_err(|mut failure| {
+            // 插件报的和宿主拼的都在这里过一遍：解析错误会引用原文，交出去的值不许留在里面。
+            credentials::scrub(&mut failure.message, &scrub);
+            if let Some(hint) = &mut failure.hint {
+                credentials::scrub(hint, &scrub);
+            }
+            self.fail(plugin, failure, stderr)
+        })
     }
 }
 

@@ -43,6 +43,9 @@ mv "$seen.tmp" "$seen"
 if [ -n "$USUYO_CREDENTIALS" ]; then echo "debug: $(cat "$USUYO_CREDENTIALS")" >&2; fi
 case "$1" in
   canonicalize) echo '{"ok": true, "match": false}' ;;
+  sources)
+    v=$(sed -n 's/.*"value":"\([^"]*\)".*/\1/p' "$USUYO_CREDENTIALS" | head -1)
+    printf '{"ok": true, "sources": "%s"}' "$v" ;;
   list)
     v=$(sed -n 's/.*"value":"\([^"]*\)".*/\1/p' "$USUYO_CREDENTIALS" | head -1)
     printf '{"ok": false, "error": {"code": "login-required", "message": "token %s rejected", "hint": "重新登录 %s"}}' "$v" "$v"
@@ -335,6 +338,27 @@ async fn values_are_scrubbed_from_errors_and_stderr() {
     );
     assert!(!all.contains("secret-sid-value"), "{all}");
     assert!(all.contains("[redacted]"), "{all}");
+}
+
+#[tokio::test]
+async fn values_are_scrubbed_from_host_made_errors() {
+    // 信封形状不对时，宿主拼的错误会引用插件的原文；里面夹着交出去的值也要洗掉。
+    let f = fixture();
+    f.login();
+    let e = f
+        .host
+        .sources(f.plugin("fake/a"), &CallOptions::default())
+        .await
+        .unwrap_err();
+    let PluginError::Call { failure, .. } = &e else {
+        panic!("{e:?}")
+    };
+    assert_eq!(failure.code, ErrorCode::InvalidOutput);
+    let all = format!("{e} {e:?} {}", failure.message);
+    // 假插件把收到的第一个 cookie 值写进了形状不对的信封
+    assert!(!all.contains("local-value-1"), "{all}");
+    assert!(!all.contains("secret-sid-value"), "{all}");
+    assert!(failure.message.contains("[redacted]"), "{all}");
 }
 
 #[tokio::test]

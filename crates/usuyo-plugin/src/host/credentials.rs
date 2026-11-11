@@ -571,7 +571,8 @@ impl Logins {
         let incoming: StorageState =
             serde_json::from_value(update.clone()).map_err(|e| PluginError::Credentials {
                 target: "credentialsUpdate".into(),
-                message: format!("not a storageState: {e}"),
+                // 只说是哪一类错：serde 的原话会引用值，那可能就是新的 cookie
+                message: format!("not a storageState ({:?} error)", e.classify()),
             })?;
         let _guard = self
             .lock
