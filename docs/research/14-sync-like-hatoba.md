@@ -13,7 +13,7 @@
 - **Cloudflare**：官方文档，链接在正文。`dateModified`（2026 年）：D1、R2 的限额和定价页 10-30，Workers 限额 10-29，Workers 定价 10-02。
 - **标记**：「推断」是我们的推论，来源没这么写；「建议」是本篇的设计，等你定；估算都是推断；没测过的进 [§9](#9-待核实清单)。
 - **「web那个」**：读作 WebDAV（推断）；Hatoba 仓库里没有这个词。
-- **名字**：写「本产品」、`.{name}/`、`{name}-sync`，照 [overview](../overview.md#整体设计供-review) 的占位规则。本篇不改别的文档。
+- **名字**：写「本产品」、`.{name}/`、`{name}-sync`，照 [overview](../PRD.md#0-状态与读法) 的占位规则。本篇不改别的文档。
 
 <a id="0-结论"></a>
 ## 0. 结论
@@ -68,7 +68,7 @@
 | `items/…/manifest.json` | 混合，按字段合并 | S1 |
 | `content.md`、`derived/` 下的文字 | 原样、机器 | S1 |
 | `notes.md`、`topics/`、`cards/`、`canvas.json` | 你写的 | S1 |
-| 改动记录、改动提议（逐个存成文件，[overview §8](../overview.md#8-我们打算这样定的技术默认)）、删除记录、资料库设置 | 元数据 | S1 |
+| 改动记录、改动提议（逐个存成文件，[overview §8](../discussion.md#14-资料库能不能放进同步盘)）、删除记录、资料库设置 | 元数据 | S1 |
 | 网页原样，`images/`、`media/`、关键帧（没下视频的设备算不出来） | 原样、机器 | S2，放 R2 |
 | `derived/embeddings.bin` | 机器，跟着模型走 | 不同步 |
 | `.trash/` | — | 只同步「在回收站」，每台各挪各的 |

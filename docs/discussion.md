@@ -32,7 +32,7 @@
 
 **推荐和理由**：A，外加：低频的个人来源（一个博客、一个 Mastodon 或 Bluesky 账号）可照 C6 的 B 逐个跟着收，首次拉只记下已有的，之后的新条目收下。你平台上的收藏夹本来就像 B，照旧。Horizon 当普通 feed，读它的 Atom 或 Markdown，不包装它的 MCP；它的条目是机器挑的，收下时标明。OPML 照 A 不做整包导入。连带：读 feed、Horizon 输出的插件不含平台知识，照 P1、P3 放官方组织（D-f 下要你点头）；上游算好的打分和摘要，建议照转换插件的规矩进 `derived/`、标明出自上游（[调研 11 §6.2 第 11 条](research/11-subscriptions-compat-and-wx-cli.md#62-要补的地方)）。
 
-**不选推荐会怎样**：选 A2 或 B，本产品会变成换了地图皮的 RSS 阅读器。选 D，兼容清单（[overview §7](overview.md#7-兼容和开创)）去掉 RSS。
+**不选推荐会怎样**：选 A2 或 B，本产品会变成换了地图皮的 RSS 阅读器。选 D，兼容清单（[PRD 7.9](PRD.md#79-导出与互通)）去掉 RSS。
 
 **相关**：[C6](open-decisions.md#5-收下与入口)、[M4](open-decisions.md#6-地图与界面)；[调研 11 §2](research/11-subscriptions-compat-and-wx-cli.md#2-horizon)、[§3](research/11-subscriptions-compat-and-wx-cli.md#3-订阅和资料库的边界)。
 
@@ -205,7 +205,7 @@ A（Go + MyGo，即现在的 ADR-001）随[第 6 条](#6-桌面壳)出局；D（
 - jackwener/wx-cli-again 是真代码（0.6.3 的单提交快照）。现存工具都要微信 4.x，你这台是 3.8.8.19。层级 client-hook，必须登录。
 - 只调用你自装工具的包装仓库没被点名过；docker-wxcli 被点名，是因为带了取密钥工具。新的账号风险证据：[WeFlow #411](https://github.com/hicccc77/WeFlow/issues/411)（2026-03-11）。
 
-**选项**（R5）。层级从低到高（[overview §6](overview.md#6-插件能接哪些方案)）：official-export < public-web < vision-ui < browser-session < session-api < private-api < client-hook。B 收前五层，private-api 只收薄包装；C 收前四层。
+**选项**（R5）。层级从低到高（[PRD 7.2](PRD.md#72-获取插件)）：official-export < public-web < vision-ui < browser-session < session-api < private-api < client-hook。B 收前五层，private-api 只收薄包装；C 收前四层。
 
 | 选项 | 是什么 | 好处 | 代价 |
 |---|---|---|---|
@@ -325,7 +325,7 @@ A（Go + MyGo，即现在的 ADR-001）随[第 6 条](#6-桌面壳)出局；D（
 | B | 直接放在 WebDAV 或 S3 上 | 哪台电脑都能打开 | 慢，容易写一半 |
 | C（推荐） | 本机目录为真，可以放在同步盘里；索引和后台任务记录按机器分开、不同步 | 两台电脑能共用；索引本来能重建 | 隐藏目录要分跟着机器和跟着资料库两部分 |
 
-**推荐和理由**：C。PRD 原则 3 那句跟着改。改动提议存成文件，不放进按机器分开的后台任务记录（[overview §8](overview.md#8-我们打算这样定的技术默认)）。
+**推荐和理由**：C。PRD 原则 3 那句跟着改。改动提议存成文件，不放进按机器分开的后台任务记录（[总纲 006](BUILD.md#006-agent)）。
 
 **不选推荐会怎样**：选 B，同步冲突可能留下写了一半的条目；选 A，原则 3 的 WebDAV、S3 改成只做备份。
 
@@ -383,9 +383,9 @@ A（Go + MyGo，即现在的 ADR-001）随[第 6 条](#6-桌面壳)出局；D（
 
 **问题**：你说「然后我希望兼容性和开创性都需要具备」，又问「然后就是接口文档我们设计好了吗」。分 17a、17b、17c 三问，一次答一问。答了，PRD 原则和接口的写法就能定稿。
 
-**为什么现在问**：接口设计了一半。插件协议有 25 个待定；SPEC 和插件协议、product-model 有 [18 处对不上](SPEC.md#附和别的文档对不上的-18-处)；其余见 [overview §5](overview.md#5-接口做到哪了)。
+**为什么现在问**：接口设计了一半。插件协议有 25 个待定；SPEC 和插件协议、product-model 有 [18 处对不上](SPEC.md#附和别的文档对不上的-18-处)；其余见 [总纲 现在做到哪](BUILD.md#3-现在做到哪)。
 
-**17a 兼容和开创照这样写对不对**（**11-04**：你没选，另提了蒸馏链路：素材 → 卡片 → 主题页 → 成稿，每句带引用，产品里做、Agent 也能接；记在 [回答表](answers.md)。）推荐靠标准，不自己做阅读器。兼容靠 RSS、Atom、JSON Feed、OPML（交给阅读器）、Google Reader API、MCP、带 front matter 的 Markdown、Obsidian vault 进出；开创只说今天站得住的五件，迷雾地图暂时不当新东西讲。清单全文在 [overview §7](overview.md#7-兼容和开创)。另一条路是自己做阅读器（[第 1 条](#1-什么东西进资料库)的 A2）：一个应用里全有，但和 Folo、Miniflux 正面重叠，重心移到新来了什么。
+**17a 兼容和开创照这样写对不对**（**11-04**：你没选，另提了蒸馏链路：素材 → 卡片 → 主题页 → 成稿，每句带引用，产品里做、Agent 也能接；记在 [回答表](answers.md)。）推荐靠标准，不自己做阅读器。兼容靠 RSS、Atom、JSON Feed、OPML（交给阅读器）、Google Reader API、MCP、带 front matter 的 Markdown、Obsidian vault 进出；开创只说今天站得住的五件，迷雾地图暂时不当新东西讲。清单全文在 [PRD 7.9](PRD.md#79-导出与互通)。另一条路是自己做阅读器（[第 1 条](#1-什么东西进资料库)的 A2）：一个应用里全有，但和 Folo、Miniflux 正面重叠，重心移到新来了什么。
 
 **17b 接口先写哪个**（**已答（11-04）**：分五层依次写，D。）
 
@@ -394,9 +394,9 @@ A（Go + MyGo，即现在的 ADR-001）随[第 6 条](#6-桌面壳)出局；D（
 | A | 界面设计前全写完 | 一次定完 | 界面要什么还不知道 |
 | B | 先写条目格式和 MCP，界面接口等原型 | MCP 最早能用 | 违背 ADR-002 本地接口和 MCP 共用一份契约 |
 | C | 先写界面接口 | 原型直接对着做 | 资料库格式还没定 |
-| D 分层（推荐） | 按 [overview §5](overview.md#5-接口做到哪了) 的五层：占位和版本、资料库 v1、一份服务契约、plugin-kit、投递和订阅 | 先定真相再定服务 | 界面专用查询等原型 |
+| D 分层（推荐） | 按 [总纲 现在做到哪](BUILD.md#3-现在做到哪) 的五层：占位和版本、资料库 v1、一份服务契约、plugin-kit、投递和订阅 | 先定真相再定服务 | 界面专用查询等原型 |
 
-推荐 D。接口和语言无关，只有界面端口认哪个 `Origin`、daemon 在不在壳里要等[第 6 条](#6-桌面壳)、[第 7 条](#7-内核语言)。顺带看 [overview §8](overview.md#8-我们打算这样定的技术默认) 的五个技术默认，不同意就说。
+推荐 D。接口和语言无关，只有界面端口认哪个 `Origin`、daemon 在不在壳里要等[第 6 条](#6-桌面壳)、[第 7 条](#7-内核语言)。顺带看 [总纲 006](BUILD.md#006-agent) 的五个技术默认，不同意就说。
 
 **17c 资料库要不要往外给 feed**（生成 RSS 或 JSON Feed，给阅读器、Horizon 读；**已答（11-05）**：第一版不做，以后再看）
 

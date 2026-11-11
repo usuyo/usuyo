@@ -58,7 +58,7 @@
 | 获取、转换、导出插件 | 无关：独立进程，按 JSON 协议对接，插件作者用什么语言都行 | [ADR-003 §2](../decisions/ADR-003-plugins.md#2-进程与协议) |
 | ffmpeg、OCR、ASR、embedding | 无关：sidecar 或插件进程 | [CLAUDE.md](../../CLAUDE.md)「重计算」 |
 | 前端 | 无关：只走本机 HTTP 和事件，不调壳生成的绑定 | [ADR-002 和内核的接口](../decisions/ADR-002-frontend-stack.md#和内核的接口) |
-| 接口（HTTP、MCP、CLI、插件协议） | 无关：用 JSON Schema、OpenAPI 写下来，换语言不改接口（推断） | [overview §5](../overview.md#5-接口做到哪了) |
+| 接口（HTTP、MCP、CLI、插件协议） | 无关：用 JSON Schema、OpenAPI 写下来，换语言不改接口（推断） | [overview §5](../BUILD.md#3-现在做到哪) |
 | 壳 | 弱相关：壳和 daemon 本来就是两个进程；但和内核同一种语言，就少一套工具链 | [SPEC §9](../SPEC.md#9-clim0) 的 `daemon` |
 | 全文索引、向量 | 相关：进程内的库 | [04 §1](04-tech-options.md#1-搜索索引与向量检索) |
 | 文件监听 | 相关：资料库一开就要监听 | [§3](#3-对比表) 表下说明 |

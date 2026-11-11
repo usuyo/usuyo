@@ -2,7 +2,6 @@
 
 在推荐流外，维护一套你自己的思路。
 
-- 整体设计（先读）：[docs/overview.md](docs/overview.md)
 - 产品定义：[docs/PRD.md](docs/PRD.md)
 - 待讨论：[docs/discussion.md](docs/discussion.md)
 - 总纲（做到哪、要做的事）：[docs/BUILD.md](docs/BUILD.md)
