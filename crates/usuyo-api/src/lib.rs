@@ -21,18 +21,12 @@ pub use problem::Problem;
 /// 默认端口，和前端的 `DEFAULT_API_BASE` 一致。
 pub const DEFAULT_PORT: u16 = 47615;
 
-/// 允许的浏览器来源：Tauri 2 的 webview（macOS、Linux 是 `tauri://localhost`，Windows 是
-/// `http(s)://tauri.localhost`）和 Vite 开发服务器（`apps/desktop/web/vite.config.ts` 固定 5173）。
+/// 允许的浏览器来源：只有打包好的桌面壳的 webview（macOS、Linux 是 `tauri://localhost`，
+/// Windows 是 `http://tauri.localhost`）。开发时前端经 Vite 的代理走，代理不带 `Origin`、带令牌。
 pub fn default_origins() -> Vec<String> {
-    [
-        "tauri://localhost",
-        "http://tauri.localhost",
-        "https://tauri.localhost",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ]
-    .map(String::from)
-    .to_vec()
+    ["tauri://localhost", "http://tauri.localhost"]
+        .map(String::from)
+        .to_vec()
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -77,16 +71,21 @@ pub fn router(engine: Engine, config: ApiConfig) -> Result<Router, Error> {
     Ok(routes::build(engine, links, gate, &config.origins))
 }
 
-/// 绑 127.0.0.1:`port`，跑后台任务和接口，`shutdown` 完成时停。
+/// 绑 127.0.0.1:`port`。和 [`serve`] 分开，好让调用方确认端口拿到了再登记自己。
+pub async fn bind(port: u16) -> Result<tokio::net::TcpListener, Error> {
+    let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
+    tokio::net::TcpListener::bind(addr)
+        .await
+        .map_err(|source| Error::Bind { addr, source })
+}
+
+/// 在绑好的端口上跑后台任务和接口，`shutdown` 完成时停。
 pub async fn serve(
+    listener: tokio::net::TcpListener,
     engine: Engine,
     config: ApiConfig,
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> Result<(), Error> {
-    let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, config.port));
-    let listener = tokio::net::TcpListener::bind(addr)
-        .await
-        .map_err(|source| Error::Bind { addr, source })?;
     let stop = tokio_util::sync::CancellationToken::new();
     let app = router(engine.clone(), config)?.layer(axum::Extension(stop.clone()));
     let worker = {

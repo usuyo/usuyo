@@ -67,7 +67,7 @@ export function ItemPage() {
 function ItemBody({ item, topics }: { item: Item; topics: Topic[] }) {
   const video = facetOf(item, "video");
   const firstImage = facetOf(item, "image")?.images[0]?.key ?? null;
-  const player = usePlayer(video, firstImage, item.stored === "complete");
+  const player = usePlayer(video, firstImage, item.stored === "complete" || item.stored === "partial");
   const change = useItemChange(item.id);
   const open = useFlash();
   const trashed = item.trashedAt !== undefined;

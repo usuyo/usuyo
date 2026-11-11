@@ -1,7 +1,7 @@
 import { Link2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Input, Label, TextField } from "react-aria-components";
-import { useTake } from "../api/hooks";
+import { useHealth, useTake } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
 import type { EmptyScene } from "../fog/field";
 import { clamp, strHash } from "../fog/noise";
@@ -27,6 +27,7 @@ export function EmptyPage({ onLanded }: { onLanded: () => void }) {
   const [toast, setToast] = useState(0);
   const pointer = useRef<{ x: number; y: number } | null>(null);
   const take = useTake();
+  const library = useHealth().data?.library;
   const reduced = useReducedMotion();
 
   // 中间那块字的位置：画布上是 1440×900 里的 (720, 445)。
@@ -188,6 +189,11 @@ export function EmptyPage({ onLanded }: { onLanded: () => void }) {
       <div className="absolute bottom-4 left-5 z-10 text-tag whitespace-pre text-sub">
         移动鼠标拨开雾　·　粘贴或拖进来，就收下了
       </div>
+      {library ? (
+        <div className="absolute right-5 bottom-4 z-10 max-w-[60%] truncate text-tag text-sub select-text" title={library}>
+          收下的都存在 {library}
+        </div>
+      ) : null}
     </div>
   );
 }

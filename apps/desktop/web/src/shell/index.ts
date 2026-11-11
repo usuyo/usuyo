@@ -5,6 +5,13 @@ export function isDesktopShell(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
+/** 桌面壳给的内核地址和令牌；壳会等内核起来再回。不在桌面壳里时是 null。 */
+export async function daemonConnection(): Promise<{ base: string; token: string } | null> {
+  if (!isDesktopShell()) return null;
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<{ base: string; token: string }>("daemon_connection");
+}
+
 async function currentWindow() {
   const { getCurrentWindow } = await import("@tauri-apps/api/window");
   return getCurrentWindow();

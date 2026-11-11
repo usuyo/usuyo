@@ -407,26 +407,12 @@ async fn deleting_the_index_and_reindexing_gives_the_same_results() {
 async fn follow_and_membership_shape_the_map() {
     let f = Fixture::new();
     f.install("fake/web", "web", "*", FETCH_OK);
-    // 主题现在没有接口能建，先经资料库建一个。
-    let topic = {
-        let mut lib = usuyo_library::Library::open(&f.library, &f.machine()).unwrap();
-        let b = usuyo_library::Batch::new("user", "cli").unwrap();
-        lib.apply(
-            &b,
-            &usuyo_contract::OpTarget {
-                kind: "topic".into(),
-                id: String::new(),
-            },
-            usuyo_contract::Op::CreateTopic {
-                title: "手冲咖啡".into(),
-                keywords: vec![],
-                match_: vec!["keywords".into()],
-            },
-        )
-        .unwrap()
-        .id
-    };
     let engine = f.engine();
+    let topic = engine.create_topic(" 手冲咖啡 ", Via::App).unwrap().id;
+    // 同名的不再建一个
+    assert_eq!(engine.create_topic("手冲咖啡", Via::App).unwrap().id, topic);
+    assert_eq!(engine.topics().unwrap().len(), 1);
+    assert!(engine.create_topic("  ", Via::App).is_err());
     assert!(!engine.topics().unwrap()[0].followed);
     let t = engine
         .take("https://example.test/pour", "link", Via::App)
@@ -451,4 +437,60 @@ async fn follow_and_membership_shape_the_map() {
         .set_topic(&t.id, &topic, false, Via::App, &Links::default())
         .unwrap();
     assert!(v.summary.topic_ids.is_empty());
+}
+
+#[tokio::test]
+async fn partial_fetch_is_not_complete() {
+    let f = Fixture::new();
+    let partial = FETCH_OK.replace(
+        r#""missing": []"#,
+        r#""missing": [], "missingReason": "有 2 张图没下载下来""#,
+    );
+    f.install("fake/web", "web", "*", &partial);
+    let engine = f.engine();
+    let t = engine
+        .take("https://example.test/some-images", "link", Via::App)
+        .await
+        .unwrap();
+    engine.run_due().await.unwrap();
+    let v = engine.item(&t.id, &Links::default()).unwrap();
+    assert_eq!(v.stored, Stored::Partial);
+    assert_eq!(
+        v.missing.as_deref(),
+        Some("有些没存下来（有 2 张图没下载下来）")
+    );
+
+    // 一张图都没取到：宿主自己从 missing 看出来
+    let f = Fixture::new();
+    let none = FETCH_OK
+        .replace(r#", "images": ["images/001.png"]"#, ", \"images\": []")
+        .replace(
+            r#""missing": []"#,
+            r#""missing": ["images"], "missingReason": "正文里的图片没有下载下来""#,
+        )
+        .replace(r#""completeness": "full""#, r#""completeness": "partial""#);
+    f.install("fake/web", "web", "*", &none);
+    let engine = f.engine();
+    let t = engine
+        .take("https://example.test/no-images", "link", Via::App)
+        .await
+        .unwrap();
+    engine.run_due().await.unwrap();
+    let v = engine.item(&t.id, &Links::default()).unwrap();
+    assert_eq!(v.stored, Stored::Partial);
+    assert!(v.missing.unwrap().contains("图片"), "should name images");
+
+    // 页面本来就没有图：宿主也记一笔 images，但插件没说丢了什么，照都存好了
+    let f = Fixture::new();
+    let plain = FETCH_OK.replace(r#", "images": ["images/001.png"]"#, ", \"images\": []");
+    f.install("fake/web", "web", "*", &plain);
+    let engine = f.engine();
+    let t = engine
+        .take("https://example.test/plain", "link", Via::App)
+        .await
+        .unwrap();
+    engine.run_due().await.unwrap();
+    let v = engine.item(&t.id, &Links::default()).unwrap();
+    assert_eq!(v.stored, Stored::Complete);
+    assert_eq!(v.missing, None);
 }

@@ -63,6 +63,14 @@
 6. 打开窗口：能粘贴链接收下，列表里出现，点进去看到正文，搜得到。
 7. `just check` 通过。
 
+## 桌面应用（11-11 补）
+
+- 壳管内核：先找在跑的（`daemon.json` 加带令牌的 `/health`），没有就起包里带的 `usuyo daemon`，等它答应了才把地址和令牌经 `src/shell/` 交给前端；退出只停自己起的那个（SIGTERM，5 秒后强停）。内核收到 SIGTERM 和 Ctrl-C 一样收尾。
+- 第一次打开：`usuyo daemon --first-library <目录>` 在没有资料库时建一个，壳给的是「文稿」下的 `usuyo`；设了 `USUYO_HOME` 时是 `$USUYO_HOME/library`。预装的网页插件作为资源打进包里，经 `--plugins` 找到。
+- 门：除了 CORS 预检，每个请求都带令牌；`Origin` 只用来挡，名单里只有桌面壳的 webview。开发时经 Vite 的代理，代理在服务端带令牌。
+- 契约（`endpoints.ts`）：`POST /topics {name}` 按名字建主题（同名回已有的）；`stored` 多了 `partial`，缺的写在 `missing`；`GET /health` 多了 `library`；事件流用 fetch 读，`LibraryEvent` 列出五种事件。
+- 怎么出包、怎么开发：[apps/desktop/README.md](../../apps/desktop/README.md)。
+
 ## 测试
 
 - library：id 的固定样例（SPEC §0.4 的例子）、文件名规则、front matter 往返后字节相同、回收站进出、op 做了再撤销。

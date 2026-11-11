@@ -15,6 +15,8 @@ export interface Library {
   health(): Promise<Health>;
   map(): Promise<MapView>;
   topics(): Promise<Topic[]>;
+  /** 按名字建一个主题；同名的已经有了就回那个。 */
+  createTopic(name: string): Promise<Topic>;
   follow(topicId: string, followed: boolean): Promise<Topic>;
   item(id: string): Promise<Item>;
   search(q: string): Promise<SearchHit[]>;
@@ -32,6 +34,7 @@ const daemon: Library = {
   health: () => request<Health>(paths.health),
   map: () => request<MapView>(paths.map),
   topics: () => request<Topic[]>(paths.topics),
+  createTopic: (name) => request<Topic>(paths.topics, { method: "POST", body: { name } }),
   follow: (topicId, followed) => request<Topic>(paths.topicFollow(topicId), { method: "POST", body: { followed } }),
   item: (id) => request<Item>(paths.item(id)),
   search: (q) => request<SearchHit[]>(paths.search, { query: { q } }),
@@ -55,6 +58,11 @@ const MOCK_EMPTY =
 
 let mockLibrary: Promise<Library> | null = null;
 let usingMock = MOCK_FORCED;
+
+/** 已经换成样例库了：事件流不用再连。 */
+export function usingMockLibrary(): boolean {
+  return usingMock;
+}
 
 function mock(): Promise<Library> {
   mockLibrary ??= import("../mock/library").then((m) => m.createMockLibrary(MOCK_EMPTY));

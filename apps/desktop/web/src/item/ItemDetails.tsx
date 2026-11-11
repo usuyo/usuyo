@@ -1,6 +1,6 @@
 import { FileText, Plus, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import { Button as AriaButton, Dialog, DialogTrigger, Popover, ToggleButton } from "react-aria-components";
+import { Button as AriaButton, Dialog, DialogTrigger, Input, Popover, TextField, ToggleButton } from "react-aria-components";
 import type { Item, Topic } from "../api/endpoints";
 import { useItemChange } from "../api/hooks";
 import { openExternal } from "../shell";
@@ -63,7 +63,7 @@ export function ItemMeta({ item, topics }: { item: Item; topics: Topic[] }) {
             </AriaButton>
             <Popover placement="top start" offset={8} className="w-[300px] animate-rise rounded-card border border-border2 bg-card p-3 shadow-panel">
               <Dialog aria-label="放进哪个主题" className="outline-none">
-                <div className="px-0.5 pb-2 text-tag text-sub">点一下放进去，再点一下拿出来</div>
+                <div className="px-0.5 pb-2 text-tag text-sub">点一下放进去，再点一下拿出来；没有的写个名字</div>
                 <div className="flex flex-wrap gap-1.5">
                   {topics.map((t) => {
                     const on = item.topicIds.includes(t.id);
@@ -83,6 +83,17 @@ export function ItemMeta({ item, topics }: { item: Item; topics: Topic[] }) {
                     );
                   })}
                 </div>
+                <NewTopicField
+                  onSubmit={(name) => {
+                    const existing = topics.find((t) => t.name === name);
+                    if (existing) {
+                      if (!item.topicIds.includes(existing.id)) change.mutate({ kind: "topic", topicId: existing.id, member: true });
+                      topicFlash.show(`放进了「${existing.name}」`);
+                      return;
+                    }
+                    change.mutate({ kind: "new-topic", name }, { onSuccess: () => topicFlash.show(`建了「${name}」，放进去了`) });
+                  }}
+                />
               </Dialog>
             </Popover>
           </DialogTrigger>
@@ -90,6 +101,27 @@ export function ItemMeta({ item, topics }: { item: Item; topics: Topic[] }) {
         <FlashLine flash={topicFlash} className="mt-1 block min-h-[18px] text-small text-sub" />
       </Row>
     </div>
+  );
+}
+
+/** 放进主题浮层底下：写个名字回车，没有这个主题就建一个再放进去。 */
+function NewTopicField({ onSubmit }: { onSubmit: (name: string) => void }) {
+  const [name, setName] = useState("");
+  return (
+    <TextField value={name} onChange={setName} aria-label="新主题的名字" className="mt-2.5">
+      <Input
+        placeholder="新主题，回车放进去"
+        maxLength={80}
+        className="h-ctl-sm w-full rounded-input border border-border2 bg-transparent px-3 font-sans text-small text-text outline-none data-[focused]:border-label"
+        onKeyDown={(e) => {
+          if (e.key !== "Enter") return;
+          const trimmed = name.trim();
+          if (trimmed === "") return;
+          onSubmit(trimmed);
+          setName("");
+        }}
+      />
+    </TextField>
   );
 }
 
@@ -189,14 +221,23 @@ export function ItemActions({ item }: { item: Item }) {
         <ActionCard
           icon={<RefreshCw size={14} aria-hidden="true" />}
           label={change.isPending && change.variables.kind === "refetch" ? "正在重新获取" : "重新获取"}
-          sub={item.stored === "text-only" ? "从原帖再取视频和封面，原帖还在才行" : "从原帖再取一次，存着的不动"}
+          sub={
+            item.stored === "text-only"
+              ? "从原帖再取一次文字；回收站里的视频和封面不动，要拿回来点上面那张"
+              : "从原帖再取一次，存着的不动"
+          }
           off={change.isPending}
           onPress={() =>
             change.mutate(
               { kind: "refetch" },
               {
-                onSuccess: (next) =>
-                  setMsg(item.stored === "text-only" && next.stored === "complete" ? "从原帖重新取到了视频和封面" : `补了一次快照（${dayText(new Date().toISOString())}），原来存的都留着`),
+                // 内核只是排上了；取到以后事件流会让这一条自己刷新。
+                onSuccess: () =>
+                  setMsg(
+                    item.stored === "text-only"
+                      ? "在从原帖再取一次；这条还是只留文字，原来存的都留着"
+                      : "在从原帖再取一次；取到了会多一份，原来存的都留着",
+                  ),
               },
             )
           }

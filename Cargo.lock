@@ -3282,6 +3282,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "usuyo-plugin-kit"
+version = "0.0.0"
+dependencies = [
+ "thiserror",
+ "ureq",
+ "url",
+ "usuyo-plugin",
+]
+
+[[package]]
 name = "usuyo-plugin-web"
 version = "0.0.0"
 dependencies = [
@@ -3294,9 +3304,9 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
- "ureq",
  "url",
  "usuyo-plugin",
+ "usuyo-plugin-kit",
 ]
 
 [[package]]

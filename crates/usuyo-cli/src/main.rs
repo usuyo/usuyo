@@ -57,10 +57,13 @@ enum Command {
     },
     /// 照资料库的文件重建索引。
     Reindex,
-    /// 起本机接口（只绑 127.0.0.1）和后台取内容。
+    /// 起本机接口（只绑 127.0.0.1）和后台取内容。收到 Ctrl-C 或 SIGTERM 时收尾退出。
     Daemon {
         #[arg(long, env = "USUYO_PORT", default_value_t = usuyo_api::DEFAULT_PORT)]
         port: u16,
+        /// 还没有资料库时在这里建一个（桌面窗口第一次打开时用）；已经有了就不管它。
+        #[arg(long, value_name = "DIR")]
+        first_library: Option<PathBuf>,
     },
 }
 
@@ -91,6 +94,16 @@ async fn run(cli: Cli) -> Result<()> {
     {
         return through_daemon(&client, cli.command);
     }
+    if let Command::Daemon {
+        first_library: Some(dir),
+        ..
+    } = &cli.command
+        && cli.library.is_none()
+        && !machine::has_library(&root)?
+    {
+        let path = machine::first_library(dir, &root)?;
+        tracing::info!(library = %path.display(), "created the first library");
+    }
     let engine = open(&root, &cli)?;
     match cli.command {
         Command::Init { .. } => Ok(()),
@@ -120,7 +133,7 @@ async fn run(cli: Cli) -> Result<()> {
             println!("重建了索引：{n} 条");
             Ok(())
         }
-        Command::Daemon { port } => daemon(engine, &root, port).await,
+        Command::Daemon { port, .. } => daemon(engine, &root, port).await,
     }
 }
 
@@ -137,10 +150,13 @@ fn open(root: &std::path::Path, cli: &Cli) -> Result<Engine> {
 
 async fn daemon(engine: Engine, root: &std::path::Path, port: u16) -> Result<()> {
     let token = usuyo_api::load_or_create_token(&machine::token_path(root))?;
+    // 先拿到端口再登记：端口被别的占着时不碰正在跑的那个的 daemon.json。
+    let listener = usuyo_api::bind(port).await?;
+    let pid = std::process::id();
     let info = machine::daemon_path(root);
     std::fs::write(
         &info,
-        serde_json::to_vec(&json!({"port": port, "pid": std::process::id()}))?,
+        serde_json::to_vec(&json!({"port": port, "pid": pid}))?,
     )?;
     tracing::info!(
         library = %engine.library_root().display(),
@@ -152,15 +168,36 @@ async fn daemon(engine: Engine, root: &std::path::Path, port: u16) -> Result<()>
         token,
         origins: usuyo_api::default_origins(),
     };
-    let result = usuyo_api::serve(engine, config, async {
-        // 收不到信号（不该发生）就一直跑，靠杀进程停。
-        if tokio::signal::ctrl_c().await.is_err() {
-            std::future::pending::<()>().await;
-        }
-    })
-    .await;
-    std::fs::remove_file(&info).ok();
+    let result = usuyo_api::serve(listener, engine, config, stop_signal()).await;
+    machine::forget_daemon(&info, pid);
     Ok(result?)
+}
+
+/// Ctrl-C，或（Unix 上）SIGTERM：桌面壳退出时发的是 SIGTERM。
+async fn stop_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{SignalKind, signal};
+        match signal(SignalKind::terminate()) {
+            Ok(mut term) => {
+                tokio::select! {
+                    _ = tokio::signal::ctrl_c() => {}
+                    _ = term.recv() => {}
+                }
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "cannot listen for SIGTERM; only Ctrl-C stops the daemon");
+                if tokio::signal::ctrl_c().await.is_err() {
+                    std::future::pending::<()>().await;
+                }
+            }
+        }
+    }
+    #[cfg(not(unix))]
+    if tokio::signal::ctrl_c().await.is_err() {
+        std::future::pending::<()>().await;
+    }
+    tracing::info!("stopping");
 }
 
 fn through_daemon(c: &Client, command: Command) -> Result<()> {
@@ -192,6 +229,7 @@ fn print_stored(item: &Value) {
     match (item["stored"].as_str(), item["missing"].as_str()) {
         (Some("link"), Some(why)) => println!("只有链接：{why}"),
         (Some("link"), None) => println!("只有链接，过会儿再取（守护进程在跑时会自己再试）"),
+        (Some("partial"), Some(why)) => println!("存下了一部分：{title}（{why}）"),
         (_, Some(why)) => println!("存好了：{title}（{why}）"),
         _ => println!("存好了：{title}"),
     }

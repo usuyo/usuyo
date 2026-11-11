@@ -1,14 +1,15 @@
 //! 本机接口的门：机器上任何网页都能试着访问 127.0.0.1，所以每个请求都要过这里。
 //!
 //! - `Host` 必须是本机地址加这个端口（挡 DNS rebinding）。
-//! - 带 `Origin` 的（浏览器发的）只认名单里的：Tauri 的 webview 和 Vite 开发服务器。
-//! - 不带 `Origin` 的（命令行、别的程序）要带令牌 `Authorization: Bearer <token>`。
-//! - `<img>`、`<video>` 两样都不带，媒体地址里带守护进程每次启动随机生成的 `k`。
+//! - 带 `Origin` 的（浏览器发的）只认名单里的：桌面壳的 webview。`Origin` 谁都能伪造，只用来挡，不用来放行。
+//! - 每个请求都要带令牌 `Authorization: Bearer <token>`；令牌在只有自己能读的文件里。
+//! - 只有 CORS 预检（带名单里的 `Origin`）不带令牌也放行，预检本身不碰资料库。
+//! - `<img>`、`<video>` 带不了令牌，`/media/` 下认守护进程每次启动随机生成的 `k`。
 
 use std::sync::Arc;
 
 use axum::extract::{Request, State};
-use axum::http::{HeaderMap, header};
+use axum::http::{HeaderMap, Method, header};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 
@@ -44,13 +45,17 @@ impl Gate {
         if !local.iter().any(|h| h.eq_ignore_ascii_case(host)) {
             return Err(Problem::new("forbidden", "unexpected Host header"));
         }
-        if let Some(origin) = headers.get(header::ORIGIN) {
+        let origin = headers.get(header::ORIGIN);
+        if let Some(origin) = origin {
             let origin = origin.to_str().unwrap_or_default();
-            return if self.origins.iter().any(|o| o == origin) {
-                Ok(())
-            } else {
-                Err(Problem::new("forbidden", "origin not allowed"))
-            };
+            if !self.origins.iter().any(|o| o == origin) {
+                return Err(Problem::new("forbidden", "origin not allowed"));
+            }
+            if req.method() == Method::OPTIONS
+                && headers.contains_key(header::ACCESS_CONTROL_REQUEST_METHOD)
+            {
+                return Ok(());
+            }
         }
         if bearer(headers).is_some_and(|t| same(t, &self.token)) {
             return Ok(());

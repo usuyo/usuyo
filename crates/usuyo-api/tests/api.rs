@@ -159,21 +159,39 @@ async fn host_origin_and_token_rules() {
         problem(send(&f.app, req).await, StatusCode::FORBIDDEN, "forbidden").await;
     }
 
-    // 名单里的来源能进，带上 CORS 头
+    // 名单里的来源不带令牌：Origin 谁都能伪造，不算数
     let req = get("/map")
-        .header(header::ORIGIN, "http://localhost:5173")
+        .header(header::ORIGIN, "tauri://localhost")
         .body(Body::empty())
         .unwrap();
-    let res = send(&f.app, req).await;
-    assert_eq!(res.status(), StatusCode::OK);
-    assert_eq!(
-        res.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN],
-        "http://localhost:5173"
-    );
-    assert_eq!(json_of(res).await, json!({"regions": [], "points": []}));
+    problem(
+        send(&f.app, req).await,
+        StatusCode::UNAUTHORIZED,
+        "unauthorized",
+    )
+    .await;
 
-    // 别的网页：带了令牌也不行
-    for origin in ["http://evil.test", "null"] {
+    // 名单里的来源带令牌：能进，带上 CORS 头
+    for origin in ["tauri://localhost", "http://tauri.localhost"] {
+        let req = get("/map")
+            .header(header::ORIGIN, origin)
+            .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+            .body(Body::empty())
+            .unwrap();
+        let res = send(&f.app, req).await;
+        assert_eq!(res.status(), StatusCode::OK, "{origin}");
+        assert_eq!(res.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN], origin);
+        assert_eq!(json_of(res).await, json!({"regions": [], "points": []}));
+    }
+
+    // 别的网页，包括开发服务器的默认端口：带了令牌也不行
+    for origin in [
+        "http://evil.test",
+        "null",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "https://tauri.localhost",
+    ] {
         let req = get("/map")
             .header(header::ORIGIN, origin)
             .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
@@ -182,13 +200,16 @@ async fn host_origin_and_token_rules() {
         problem(send(&f.app, req).await, StatusCode::FORBIDDEN, "forbidden").await;
     }
 
-    // 预检
+    // 预检不带令牌，名单里的来源才放行
     let pre = |origin: &str| {
         Request::options("/items")
             .header(header::HOST, format!("localhost:{PORT}"))
             .header(header::ORIGIN, origin)
             .header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
-            .header(header::ACCESS_CONTROL_REQUEST_HEADERS, "content-type")
+            .header(
+                header::ACCESS_CONTROL_REQUEST_HEADERS,
+                "content-type, authorization",
+            )
             .body(Body::empty())
             .unwrap()
     };
@@ -198,10 +219,19 @@ async fn host_origin_and_token_rules() {
         res.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN],
         "tauri://localhost"
     );
-    assert_eq!(
-        send(&f.app, pre("http://evil.test")).await.status(),
-        StatusCode::FORBIDDEN
-    );
+    for origin in ["http://evil.test", "http://localhost:5173"] {
+        assert_eq!(
+            send(&f.app, pre(origin)).await.status(),
+            StatusCode::FORBIDDEN
+        );
+    }
+    // 不是预检的 OPTIONS 照样要令牌
+    let bare = Request::options("/items")
+        .header(header::HOST, format!("localhost:{PORT}"))
+        .header(header::ORIGIN, "tauri://localhost")
+        .body(Body::empty())
+        .unwrap();
+    assert_eq!(send(&f.app, bare).await.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
@@ -209,7 +239,8 @@ async fn take_then_media_with_range() {
     let f = fixture();
     let req = get("/items")
         .method("POST")
-        .header(header::ORIGIN, "http://localhost:5173")
+        .header(header::ORIGIN, "tauri://localhost")
+        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(
             json!({"input": "https://example.test/a", "kind": "link"}).to_string(),
@@ -225,6 +256,8 @@ async fn take_then_media_with_range() {
 
     let item = json_of(send(&f.app, authed(&format!("/items/{id}"))).await).await;
     assert_eq!(item["stored"], "complete");
+    // 图片尺寸照文件量（这张不是真的 PNG，量不出就是 0）
+    assert_eq!(item["facets"][0]["images"][0]["width"], 0);
     // 平台来的标题原样当字给出，不渲染
     assert_eq!(item["title"], "<b>标题</b>");
     let url = item["facets"][0]["images"][0]["url"].as_str().unwrap();
@@ -275,6 +308,12 @@ async fn take_then_media_with_range() {
         "unauthorized",
     )
     .await;
+    // 带 k 的媒体地址，来源不在名单里也不行
+    let req = get(path)
+        .header(header::ORIGIN, "http://evil.test")
+        .body(Body::empty())
+        .unwrap();
+    problem(send(&f.app, req).await, StatusCode::FORBIDDEN, "forbidden").await;
     // 网页原文不是媒体层，不经这里给出
     problem(
         send(&f.app, authed(&format!("/media/{id}/text"))).await,
@@ -371,4 +410,48 @@ async fn events_stream_announces_takes() {
     let text = String::from_utf8(frame.into_data().unwrap().to_vec()).unwrap();
     assert!(text.starts_with("event: item-added\n"), "{text}");
     assert!(text.contains(r#""type":"item-added""#), "{text}");
+}
+
+#[tokio::test]
+async fn create_topic_then_put_an_item_in_it() {
+    let f = fixture();
+    let post = |path: &str, body: Value| {
+        get(path)
+            .method("POST")
+            .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap()
+    };
+    let res = send(&f.app, post("/topics", json!({"name": "手冲咖啡"}))).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let topic = json_of(res).await;
+    assert_eq!(topic["name"], "手冲咖啡");
+    assert_eq!(topic["followed"], false);
+    let again = json_of(send(&f.app, post("/topics", json!({"name": "手冲咖啡"}))).await).await;
+    assert_eq!(again["id"], topic["id"]);
+    problem(
+        send(&f.app, post("/topics", json!({"name": " "}))).await,
+        StatusCode::BAD_REQUEST,
+        "invalid-args",
+    )
+    .await;
+
+    let taken = f
+        .engine
+        .take("https://example.test/a", "link", Via::Api)
+        .await
+        .unwrap();
+    let path = format!("/items/{}/topics", taken.id);
+    let item = json_of(
+        send(
+            &f.app,
+            post(&path, json!({"topicId": topic["id"], "member": true})),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(item["topicIds"], json!([topic["id"]]));
+    let health = json_of(send(&f.app, authed("/health")).await).await;
+    assert!(health["library"].as_str().unwrap().ends_with("lib"));
 }

@@ -244,7 +244,7 @@ export function createMockLibrary(empty: boolean): Library {
   };
 
   return {
-    health: async () => ({ status: "ok", version: "mock" }),
+    health: async () => ({ status: "ok", version: "mock", library: "~/Documents/usuyo（样例库，不在磁盘上）" }),
     async map(): Promise<MapView> {
       await wait(40);
       const live = [...entries.values()].filter((e) => !e.item.trashedAt);
@@ -267,6 +267,16 @@ export function createMockLibrary(empty: boolean): Library {
       return { regions, points };
     },
     topics: async () => topics.map((t) => ({ ...t })),
+    async createTopic(name) {
+      await wait(40);
+      const trimmed = name.trim();
+      if (trimmed === "") throw new Error("topic name is empty");
+      const found = topics.find((t) => t.name === trimmed);
+      if (found) return { ...found };
+      const topic: Topic = { id: `t${topics.length + 1}-${Math.floor(Math.random() * 1e6).toString(36)}`, name: trimmed, followed: false };
+      topics.push(topic);
+      return { ...topic };
+    },
     async follow(topicId, followed) {
       await wait(40);
       const topic = topics.find((t) => t.id === topicId);
@@ -334,6 +344,7 @@ export function createMockLibrary(empty: boolean): Library {
       }),
     restoreMedia: (id) => update(id, (item) => ({ ...item, stored: "complete" })),
     textOnly: (id) => update(id, (item) => ({ ...item, stored: "text-only" })),
-    refetch: (id) => update(id, (item) => ({ ...item, stored: item.stored === "text-only" ? "complete" : item.stored })),
+    // 和内核一样：只是排上再取一次，存着的不动。
+    refetch: (id) => update(id, (item) => item),
   };
 }

@@ -70,6 +70,8 @@ pub enum Facet {
 #[serde(rename_all = "kebab-case")]
 pub enum Stored {
     Complete,
+    /// 取到了，但有的没存下来（见 `missing`）。
+    Partial,
     Link,
     TextOnly,
 }

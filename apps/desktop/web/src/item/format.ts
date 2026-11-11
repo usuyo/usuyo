@@ -42,6 +42,7 @@ export function dayText(iso: string): string {
 
 export const STORED_TEXT: Record<Stored, string> = {
   complete: "都存好了",
+  partial: "存下了一部分",
   link: "只有链接",
   "text-only": "只留文字",
 };
@@ -62,7 +63,10 @@ export function savedText(item: Item): string {
     else parts.push(`${f.comments.length} 条评论`);
   }
   const list = parts.join("、");
-  return item.stored === "text-only" ? `${list}。视频和封面在回收站，30 天内能恢复` : `${list} — 都存好了`;
+  if (item.stored === "text-only") return `${list}。视频和封面在回收站，30 天内能恢复`;
+  // 缺了什么写在后面的 `missing` 里。
+  if (item.stored === "partial") return `${list}。`;
+  return `${list} — 都存好了`;
 }
 
 export function facetOf<L extends FacetLayer>(item: Item, layer: L): Extract<Facet, { layer: L }> | undefined {

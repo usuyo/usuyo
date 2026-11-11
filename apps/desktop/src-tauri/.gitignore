@@ -1,2 +1,5 @@
 /target
 /gen
+# stage-core.sh 放进来的内核和预装插件
+/binaries
+/core-plugins

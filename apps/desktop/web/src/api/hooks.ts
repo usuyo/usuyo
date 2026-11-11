@@ -64,6 +64,8 @@ export function useFollow() {
 type ItemChange =
   | { kind: "note"; text: string }
   | { kind: "topic"; topicId: string; member: boolean }
+  /** 按名字放进一个主题，还没有这个主题就先建。 */
+  | { kind: "new-topic"; name: string }
   | { kind: "trash" }
   | { kind: "restore" }
   | { kind: "restore-media" }
@@ -81,6 +83,8 @@ export function useItemChange(id: string) {
             return l.setNote(id, change.text);
           case "topic":
             return l.setTopic(id, change.topicId, change.member);
+          case "new-topic":
+            return l.createTopic(change.name).then((t) => l.setTopic(id, t.id, true));
           case "trash":
             return l.trash(id);
           case "restore":
@@ -96,6 +100,7 @@ export function useItemChange(id: string) {
     onSuccess: (item, change) => {
       queryClient.setQueryData(queryKeys.item(id), item);
       if (change.kind !== "note") void queryClient.invalidateQueries({ queryKey: queryKeys.map });
+      if (change.kind === "new-topic") void queryClient.invalidateQueries({ queryKey: queryKeys.topics });
     },
   });
 }

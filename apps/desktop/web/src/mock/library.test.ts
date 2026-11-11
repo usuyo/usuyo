@@ -32,6 +32,15 @@ describe("mock library", () => {
     }
   });
 
+  it("creates a topic by name once and puts an item in it", async () => {
+    const lib = createMockLibrary(false);
+    const a = await lib.createTopic(" 新主题 ");
+    expect(a.name).toBe("新主题");
+    expect((await lib.createTopic("新主题")).id).toBe(a.id);
+    const item = await lib.setTopic("c1", a.id, true);
+    expect(item.topicIds).toContain(a.id);
+  });
+
   it("starts empty when asked", async () => {
     expect((await createMockLibrary(true).map()).points).toHaveLength(0);
   });

@@ -38,17 +38,20 @@ const SEARCH_MAX: usize = 200;
 struct AppState {
     engine: Engine,
     links: Arc<Links>,
+    /// 资料库在哪；`/health` 不去拿资料库的锁。
+    library: Arc<FsPath>,
 }
 
 pub(crate) fn build(engine: Engine, links: Links, gate: Arc<Gate>, origins: &[String]) -> Router {
     let state = AppState {
+        library: engine.library_root().into(),
         engine,
         links: Arc::new(links),
     };
     let api = Router::new()
         .route("/health", get(health))
         .route("/map", get(map))
-        .route("/topics", get(topics))
+        .route("/topics", get(topics).post(create_topic))
         .route("/topics/{id}/follow", post(follow))
         .route("/items", post(take))
         .route("/items/{id}", get(item))
@@ -123,8 +126,12 @@ fn body<T>(r: Result<Json<T>, JsonRejection>) -> Result<T, Problem> {
     }
 }
 
-async fn health() -> Json<serde_json::Value> {
-    Json(json!({"status": "ok", "version": env!("CARGO_PKG_VERSION")}))
+async fn health(State(s): State<AppState>) -> Json<serde_json::Value> {
+    Json(json!({
+        "status": "ok",
+        "version": env!("CARGO_PKG_VERSION"),
+        "library": &*s.library,
+    }))
 }
 
 async fn map(State(s): State<AppState>) -> ApiResult<MapView> {
@@ -133,6 +140,21 @@ async fn map(State(s): State<AppState>) -> ApiResult<MapView> {
 
 async fn topics(State(s): State<AppState>) -> ApiResult<Vec<Topic>> {
     Ok(Json(blocking(move || s.engine.topics()).await?))
+}
+
+#[derive(Deserialize)]
+struct CreateTopicRequest {
+    name: String,
+}
+
+async fn create_topic(
+    State(s): State<AppState>,
+    req: Result<Json<CreateTopicRequest>, JsonRejection>,
+) -> ApiResult<Topic> {
+    let req = body(req)?;
+    Ok(Json(
+        blocking(move || s.engine.create_topic(&req.name, Via::App)).await?,
+    ))
 }
 
 #[derive(Deserialize)]

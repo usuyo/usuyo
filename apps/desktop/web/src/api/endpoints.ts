@@ -3,9 +3,16 @@
 
 export const DEFAULT_API_BASE = "http://127.0.0.1:47615";
 
+/** 开发服务器上代理到内核的路径：vite.config.ts 在服务端带上令牌，前端走同源。 */
+export const DEV_PROXY_PATH = "/api";
+
+// 除了 CORS 预检，每个请求都带 `Authorization: Bearer <令牌>`；令牌由桌面壳给（src/shell/）。
+// 带了 `Origin` 的还要在内核的名单里，名单里只有桌面壳的 webview。
+// `<img>`、`<video>` 带不了令牌，媒体地址里自带 `k`。
 export const paths = {
   health: "/health",
   map: "/map",
+  /** GET 列出全部；POST 按名字建一个，同名的已经有了就回那个。 */
   topics: "/topics",
   topicFollow: (id: string) => `/topics/${encodeURIComponent(id)}/follow`,
   item: (id: string) => `/items/${encodeURIComponent(id)}`,
@@ -20,12 +27,24 @@ export const paths = {
   itemRefetch: (id: string) => `/items/${encodeURIComponent(id)}/refetch`,
   search: "/search",
   take: "/items",
+  /** 事件流（SSE）：`event:` 是 `LibraryEvent["type"]`，`data:` 是事件的 JSON。要带令牌，用 fetch 读。 */
+  events: "/events",
 } as const;
 
 export interface Health {
   status: string;
   version?: string;
+  /** 资料库在哪个文件夹。 */
+  library?: string;
 }
+
+/** 内核推的事件。收到以后重新拉对应的数据就是最新的；落后丢掉的不补。 */
+export type LibraryEvent =
+  | { type: "item-added"; id: string }
+  | { type: "item-updated"; id: string }
+  | { type: "item-fetch-failed"; id: string; code: string; hint?: string; retry: boolean }
+  | { type: "item-trashed"; id: string }
+  | { type: "topic-updated"; id: string };
 
 /** 平台的显示名由获取插件给，内核不认识具体平台。 */
 export interface Platform {
@@ -90,8 +109,8 @@ export type Facet =
 
 export type FacetLayer = Facet["layer"];
 
-/** 存下了多少：都存好了、只有链接、只留文字（媒体在回收站）。 */
-export type Stored = "complete" | "link" | "text-only";
+/** 存下了多少：都存好了、存下了一部分（缺的写在 `missing`）、只有链接、只留文字（媒体在回收站）。 */
+export type Stored = "complete" | "partial" | "link" | "text-only";
 
 export interface ItemSummary {
   id: string;
@@ -179,6 +198,10 @@ export interface NoteRequest {
 export interface TopicMembershipRequest {
   topicId: string;
   member: boolean;
+}
+
+export interface CreateTopicRequest {
+  name: string;
 }
 
 export interface FollowRequest {

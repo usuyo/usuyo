@@ -8,8 +8,21 @@ publish = false
 # 自带工作区，根 Cargo.toml 已把本目录排除在外。
 [workspace]
 
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+anyhow = "1.0.104"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
 tauri = { version = "2", features = [] }
+ureq = "3.5.1"
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.31", features = ["signal"] }

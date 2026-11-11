@@ -41,6 +41,8 @@ pub(crate) struct Content {
     pub video: Option<VideoFile>,
     pub takeaway: Option<String>,
     pub notes: String,
+    /// 主快照的 `missingReason`：插件说有些没存下来，哪怕每一类都拿到了一些（例如十张图下了八张）。
+    pub partial: Option<String>,
 }
 
 /// 读一条在 `items/` 里的条目存着的内容。
@@ -79,6 +81,13 @@ pub(crate) fn read(lib: &Library, item: &Item) -> Result<Content> {
         c.comments = Some((primary.clone(), parse_comments(&bytes)));
     }
     c.images = images(&rec, &raw);
+    c.partial = rec
+        .extra
+        .get("missingReason")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|r| !r.is_empty())
+        .map(str::to_owned);
     if let Some(v) = rec.media.iter().find(|m| m.kind == "video")
         && raw.join(&v.path).is_file()
     {

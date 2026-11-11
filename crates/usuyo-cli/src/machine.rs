@@ -49,6 +49,34 @@ pub fn remember_library(root: &Path, library: &Path) -> Result<()> {
     std::fs::write(&path, bytes).with_context(|| format!("cannot write {}", path.display()))
 }
 
+/// `settings.json` 里记着当前资料库没有。
+pub fn has_library(root: &Path) -> Result<bool> {
+    Ok(read_settings(root)?.contains_key("library"))
+}
+
+/// 第一次打开：在 `dir` 建资料库并记成当前的；那里已经有一个（设置丢过）就直接用它。
+pub fn first_library(dir: &Path, root: &Path) -> Result<PathBuf> {
+    let path = if dir.join(".usuyo/library.json").is_file() {
+        dir.to_owned()
+    } else {
+        usuyo_core::Engine::init_library(dir, root)?
+    };
+    remember_library(root, &path)?;
+    Ok(path)
+}
+
+/// 退出时去掉 daemon.json，只在它还登记着自己时。
+pub fn forget_daemon(info: &Path, pid: u32) {
+    let ours = std::fs::read(info)
+        .ok()
+        .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
+        .and_then(|v| v.get("pid").and_then(Value::as_u64))
+        == Some(u64::from(pid));
+    if ours && let Err(e) = std::fs::remove_file(info) {
+        tracing::warn!(path = %info.display(), error = %e, "cannot remove daemon.json");
+    }
+}
+
 /// 当前资料库：`--library`、`USUYO_LIBRARY`，再没有就是 `usuyo init` 记下的那个。
 pub fn library(root: &Path, flag: Option<PathBuf>) -> Result<PathBuf> {
     if let Some(p) = flag {

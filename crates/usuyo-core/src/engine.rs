@@ -385,12 +385,16 @@ impl Engine {
                     .or(j.error_code)
                     .unwrap_or_else(|| "原因不明".into())
             )),
-            None => describe_missing(m),
+            None => describe_missing(m).or_else(|| {
+                c.partial
+                    .as_ref()
+                    .map(|why| format!("有些没存下来（{why}）"))
+            }),
         };
         Ok(ItemView {
             summary: self.summary(m),
             url: link_of(m),
-            stored: stored(m),
+            stored: stored(m, c.partial.is_some()),
             missing,
             note: c.takeaway.clone(),
             facets,
@@ -443,6 +447,34 @@ impl Engine {
     pub fn topics(&self) -> Result<Vec<Topic>> {
         let lib = self.lib();
         topics_of(&lib)
+    }
+
+    /// 按名字建一个主题；同名的已经有了就回那个。
+    pub fn create_topic(&self, name: &str, via: Via) -> Result<Topic> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(Error::InvalidArgs("topic name is empty".into()));
+        }
+        let mut lib = self.lib();
+        if let Some(t) = topics_of(&lib)?.into_iter().find(|t| t.name == name) {
+            return Ok(t);
+        }
+        let target = OpTarget {
+            kind: "topic".into(),
+            id: String::new(),
+        };
+        let op = Op::CreateTopic {
+            title: name.to_owned(),
+            keywords: Vec::new(),
+            match_: vec!["keywords".into()],
+        };
+        let id = lib.apply(&via.batch()?, &target, op)?.id;
+        self.emit(Event::TopicUpdated { id: id.clone() });
+        Ok(Topic {
+            id,
+            name: name.to_owned(),
+            followed: false,
+        })
     }
 
     /// 地图：所有在 `items/` 里的条目。
@@ -678,11 +710,15 @@ fn meta_layer(snippet: &usuyo_index::Snippet, author: &str) -> HitLayer {
     }
 }
 
-fn stored(m: &Manifest) -> Stored {
+/// `partial`：主快照的插件说了有些没存下来，哪怕每一类都拿到了一些。
+/// 只有 `missing` 没有原因的不算：宿主照「想要的 − 拿到的」算，页面本来就没图也会记一笔 `images`。
+fn stored(m: &Manifest, partial: bool) -> Stored {
     if m.state == ItemState::TextOnly {
         Stored::TextOnly
     } else if m.snapshots.is_empty() {
         Stored::Link
+    } else if partial || (!m.missing.is_empty() && m.missing_reason.is_some()) {
+        Stored::Partial
     } else {
         Stored::Complete
     }
@@ -710,7 +746,9 @@ fn fetch_url(m: &Manifest) -> Option<String> {
 }
 
 /// 「没存下来：图片、视频（原因）」
+/// 插件没说原因的不写，理由同 [`stored`]。
 fn describe_missing(m: &Manifest) -> Option<String> {
+    let reason = m.missing_reason.as_ref()?;
     if m.missing.is_empty() {
         return None;
     }
@@ -729,11 +767,5 @@ fn describe_missing(m: &Manifest) -> Option<String> {
             other => other,
         })
         .collect();
-    let mut s = format!("没存下来：{}", names.join("、"));
-    if let Some(r) = &m.missing_reason {
-        s.push('（');
-        s.push_str(r);
-        s.push('）');
-    }
-    Some(s)
+    Some(format!("没存下来：{}（{reason}）", names.join("、")))
 }
