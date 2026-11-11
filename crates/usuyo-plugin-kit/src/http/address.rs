@@ -15,6 +15,8 @@ pub type Lookup = fn(&str, u16) -> io::Result<Vec<SocketAddr>>;
 pub struct Policy {
     pub lookup: Lookup,
     pub public: fn(IpAddr) -> bool,
+    /// 登录信息能不能走明文 http。出厂的策略不许；连本地测试服务器的测试才开。
+    pub cookies_over_http: bool,
 }
 
 impl Policy {
@@ -22,6 +24,7 @@ impl Policy {
         Policy {
             lookup: system_lookup,
             public: is_public,
+            cookies_over_http: false,
         }
     }
 }

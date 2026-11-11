@@ -287,10 +287,12 @@ impl Request<'_> {
             }
             let host = url.host_str().unwrap_or_default();
             let agent = pinned_agent(host, addrs, left, &self.client.user_agent);
+            // 登录信息只走 https：同一个主机跳到明文 http 也不带。
+            let encrypted = url.scheme() == "https" || self.client.policy.cookies_over_http;
             let cookie = self
                 .cookie
                 .as_ref()
-                .filter(|c| c.hosts.allows(host))
+                .filter(|c| encrypted && c.hosts.allows(host))
                 .map(|c| c.value.as_str());
             let response = match &body {
                 None => with_headers(agent.get(url.as_str()), &self.headers, cookie).call(),
@@ -551,6 +553,7 @@ mod tests {
         Policy {
             lookup,
             public: |ip| ip == IpAddr::from([127, 0, 0, 1]),
+            cookies_over_http: true,
         }
     }
 
@@ -738,6 +741,24 @@ mod tests {
             .unwrap_err();
         assert!(matches!(err, Error::CookieHeader), "{err:?}");
         assert_eq!(seen.lock().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn cookie_is_not_sent_over_plain_http() {
+        let (port, seen) = serve();
+        let client = Client::new(UA, Hosts::any()).with_policy(Policy {
+            cookies_over_http: false,
+            ..local_policy()
+        });
+        let cookie = Cookie::new("sid=secret", ["a.site.test"]);
+        client
+            .get(&url(&format!("http://a.site.test:{port}/end")))
+            .cookie(&cookie)
+            .send()
+            .unwrap();
+        let log = seen.lock().unwrap().clone();
+        assert_eq!(log.len(), 1);
+        assert_eq!(log[0].2, None);
     }
 
     #[test]

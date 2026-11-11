@@ -435,6 +435,7 @@ mod tests {
         Policy {
             lookup,
             public: |ip| ip == std::net::IpAddr::from([127, 0, 0, 1]),
+            cookies_over_http: false,
         }
     }
 
