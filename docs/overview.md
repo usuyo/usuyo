@@ -11,8 +11,8 @@ v0.1 · 2026-11-04，2026-11-05 改名。产品名 **usuyo**，只用拉丁字�
 - **是什么**：在推荐流外，维护一套你自己的思路：收下的内容原样存在你电脑上，能搜，摆在点阵迷雾地图上。
 - **已定**：见 [§3](#3-已经定了的)；原则是 CLAUDE.md 的六条（[PRD §4](PRD.md#4-原则) 扩成九条）。
 - **待讨论**：[discussion](discussion.md#1-什么东西进资料库) 的 17 条 11-04、11-05 都答了，记在 [open-decisions §1.8](open-decisions.md#18-grill-回答)；还剩获取插件组织的名字。
-- **接口**：设计了一半。插件协议和资料库（[SPEC](SPEC.md#0-约定第-0-层) 第 0、1 层）是 v1 草案，其余多在 v0 或只有一句（[§5](#5-接口做到哪了)）。
-- **语言**：Go 内核加 MyGo 壳（11-04 定）；只做桌面，手机以后原生重写；MyGo 出问题换 Wails v3。
+- **接口**：插件协议和资料库（[SPEC](SPEC.md#0-约定第-0-层) 第 0、1 层）是 v1 草案，11-11 照代码补过；本机接口照代码写了一节；MCP、投递、导出还没做（[§5](#5-接口做到哪了)）。
+- **语言**：Rust 内核加 Tauri 2 壳（11-11 定，[ADR-004](decisions/ADR-004-rust-tauri.md)，取代 11-04 的 Go 加 MyGo）；只做桌面，手机以后原生重写。
 - **wx-cli**：2026-07-15 起被 GitHub 屏蔽（腾讯方面的 DMCA），你这台微信 3.8.8.19 也用不了。建议 `usuyo-fetch` 不收微信 client-hook 插件，导出文件照 official-export 导入，见 [9](discussion.md#9-自己的获取插件组织收什么)。
 - **RSS、Horizon**：建议在现成阅读器里读，加星算收下；Horizon 当普通 feed，见 [1](discussion.md#1-什么东西进资料库)。
 
@@ -42,7 +42,7 @@ v0.1 · 2026-11-04，2026-11-05 改名。产品名 **usuyo**，只用拉丁字�
 | 不用 Seelu，只定英文名；倾向 Dokokara，没定 | 11-01、11-03 | 「然后Dokokara我感觉挺合适」（[§1.6](open-decisions.md#16-11-03-回复记下的)） |
 | 不要角色或动物（M14 关，M10–M13 不再问）；调研过的方案都能做成插件，`usuyo-fetch` 收哪些见 [9](discussion.md#9-自己的获取插件组织收什么)；兼容和开创都要，以后支持 RSS、Horizon 一类，是方向，见 [17](discussion.md#17-兼容和开创各指什么) | 11-04 | 「不要角色或者动物」（[§1.7](open-decisions.md#17-11-04-回复记下的)） |
 
-**定了、11-04 重问后确认**：Go 加 MyGo（10-21，[ADR-001](decisions/ADR-001-stack.md)），只做桌面，退路 Wails v3（[6](discussion.md#6-桌面壳)、[7](discussion.md#7-内核语言)）；分发用 GitHub App（10-28，[ADR-003](decisions/ADR-003-plugins.md)），11-04 重问后照旧（[8](discussion.md#8-插件怎么校验)）。
+**定了、11-04 重问后确认**：Go 加 MyGo（10-21，[ADR-001](decisions/ADR-001-stack.md)），只做桌面，退路 Wails v3（[6](discussion.md#6-桌面壳)、[7](discussion.md#7-内核语言)），11-11 换成 Rust 加 Tauri 2（[ADR-004](decisions/ADR-004-rust-tauri.md)）；分发用 GitHub App（10-28，[ADR-003](decisions/ADR-003-plugins.md)），11-04 重问后照旧（[8](discussion.md#8-插件怎么校验)）。
 
 **雾的意思（11-02 你说，11-05 确认）**：雾是收了一大堆之后的脑雾（「不知道从何开始去处理」，[§1.5](open-decisions.md#15-11-02-回复记下的)）；产品不驱散它，只给口子，其余的留在雾里也没关系。让一片一直清楚的动作叫「关注」（[2](discussion.md#2-地图上一直清楚的是什么)）。
 
@@ -65,26 +65,26 @@ flowchart LR
 <a id="5-接口做到哪了"></a>
 ## 5. 接口做到哪了
 
-答「接口文档我们设计好了吗」：设计了一半。22 项（下表并成 12 行）还没有一项定稿。第 0、1 层 11-05 写成草案，等你过目；SPEC、`pkg/contract` 原来和插件协议、product-model 对不上的 18 处，草案里逐条写了去向：10 处定了，2 处定了一半，6 处归插件协议或第 2、3 层（[SPEC 附](SPEC.md#附v0-各节和-18-处的去向)）。
+11-11 先写了代码，文档照代码补：实现替草案定下的地方写回了 SPEC 和插件协议，标「11-11 代码」；还没做到的标「11-11 还没做」。接口都还不算定稿。
 
-| 接口 | 状态 | 缺什么 |
+| 接口 | 状态（11-11） | 缺什么 |
 |---|---|---|
-| [插件协议](plugin-protocol.md#01-读者与状态) | v1 草案 | [31 项待定](plugin-protocol.md#13-待定)；没有 schema 文件 |
-| 资料库格式、`pkg/contract`（[SPEC §1](SPEC.md#1-资料库-v1第-1-层)） | v1 草案 | 等你过目；schema 和 `pkg/contract` 在 feature 001 写 |
-| 改动提议、改动记录（[SPEC §1.5](SPEC.md#15-改动提议)、[§1.6](SPEC.md#16-改动记录)） | v1 草案 | 等你过目 |
-| 宿主 ↔ 界面（[ADR-002](decisions/ADR-002-frontend-stack.md#和内核的接口)） | 四条规则 | 资源、令牌、端口；错误体照 [SPEC §0.3](SPEC.md#03-错误模型) 套到各资源 |
-| 内核推的事件 | ADR-002 一句 | 事件清单、信封、补发 |
-| [MCP 工具](SPEC.md#10-mcp-工具m0) | 草案 | 输入输出 schema；收下工具 |
-| [命令行](SPEC.md#9-clim0) | 草案 | 只有 9 个子命令；输出形状 |
-| [搜索语法](SPEC.md#11-索引) | 一句话 | 查询串、筛选、分页 |
-| [投递接口](plugin-protocol.md#5-投递接口) | 草案 | 批次查询；错误体照 [SPEC §0.3](SPEC.md#03-错误模型) |
+| [插件协议](plugin-protocol.md#01-读者与状态) | v1 草案；宿主和 plugin-kit 有了第一版（[§3.13](plugin-protocol.md#313-宿主和-plugin-kit-现在做到的11-11)、[§10.1](plugin-protocol.md#101-plugin-kit-的-http-客户端11-11)） | [待定](plugin-protocol.md#13-待定) 39 项里 29–32 答了；凭据、沙箱、本机代理、`serve`、schema 文件、`usuyo plugin check` |
+| 资料库格式（[SPEC §1](SPEC.md#1-资料库-v1第-1-层)） | v1 草案，`crates/usuyo-contract`、`crates/usuyo-library` 照它实现 | 联网后并身份、到期移除没接上；同步 |
+| 改动提议、改动记录（[SPEC §1.5](SPEC.md#15-改动提议)、[§1.6](SPEC.md#16-改动记录)） | v1 草案，资料库层能写能撤 | 接受提议的流程、界面 |
+| 宿主 ↔ 界面（[SPEC 本机接口](SPEC.md#本机接口第-2-层11-11-照代码)） | 照代码写了；契约文件是 `apps/desktop/web/src/api/endpoints.ts` | `/v1/` 前缀、分页、OpenAPI 描述 |
+| 内核推的事件 | server-sent events，五种事件（同上） | 补发、信封 |
+| [MCP 工具](SPEC.md#10-mcp-工具m0) | v0 草案，没实现 | 全部 |
+| [命令行](SPEC.md#9-clim0) | `init`、`add`、`get`、`search`、`reindex`、`daemon` | 输出形状、其余子命令 |
+| [搜索语法](SPEC.md#11-索引) | tantivy 索引能搜；语法没写 | 查询串、筛选、分页 |
+| [投递接口](plugin-protocol.md#5-投递接口) | 草案，没实现，在 [feature 002](features/002-platforms.md) 里做 | 批次查询；按投递端的令牌 |
 | [导出与读回](plugin-protocol.md#44-导出的-run-与-readback) | 草案 | 笔记库里的文件形状 |
-| 配置、版本策略（[SPEC §0.2](SPEC.md#02-版本与兼容)、[§1.1](SPEC.md#11-目录树)） | v1 草案 | 等你过目；设置的完整清单归第 2 层 |
+| 配置、版本策略（[SPEC §0.2](SPEC.md#02-版本与兼容)、[§1.1](SPEC.md#11-目录树)） | v1 草案 | 设置的完整清单 |
 | 订阅源 | 没有 | 你填的地址、订阅对象 |
 
-设计分五层（11-04 定）：0 占位规则、版本、错误模型、ID；1 资料库 v1，加改动提议和改动记录的格式（这两层 11-05 写成草案：[SPEC §0](SPEC.md#0-约定第-0-层)、[§1](SPEC.md#1-资料库-v1第-1-层)）；2 一份内核服务契约，派生 HTTP、MCP、命令行；3 plugin-kit；4 投递、导出、分发、订阅。
+设计分五层（11-04 定）：0 占位规则、版本、错误模型、ID；1 资料库 v1，加改动提议和改动记录的格式（[SPEC §0](SPEC.md#0-约定第-0-层)、[§1](SPEC.md#1-资料库-v1第-1-层)）；2 一份内核服务契约，派生 HTTP、MCP、命令行；3 plugin-kit；4 投递、导出、分发、订阅。
 
-接口和语言无关；内核用 Go（[7](discussion.md#7-内核语言)），界面端口认哪个 `Origin`、内核是否跑在壳里，在第 2 层按 MyGo 定。
+内核是 Rust，壳是 Tauri 2（11-11，[ADR-004](decisions/ADR-004-rust-tauri.md)）：守护进程是独立进程，壳找到或起它，前端只经本机 HTTP 找它；界面端口只认 Tauri webview 的 `Origin`。
 
 <a id="6-插件能接哪些方案"></a>
 ## 6. 插件能接哪些方案
@@ -139,7 +139,7 @@ flowchart LR
 ## 8. 我们打算这样定的技术默认
 
 - 本机接口用 REST 加 [OpenAPI 3.2](https://github.com/OAI/OpenAPI-Specification/releases)（3.2.1，2026-09-10）：投递接口已是 `/v1/*`，一份描述生成客户端和文档。
-- 事件用 SSE，信封取 [CloudEvents 1.0](https://github.com/cloudevents/spec/releases)（1.0.2，2022-02-06）的字段：只要单向，浏览器自带重连；ADR-002 改一句。
+- 事件用 SSE，信封取 [CloudEvents 1.0](https://github.com/cloudevents/spec/releases)（1.0.2，2022-02-06）的字段：只要单向，浏览器自带重连；ADR-002 改一句。11-11 做了 SSE，因为要带令牌，前端用 `fetch` 读、自己重连，信封先是 `{type, id, …}`，没用 CloudEvents（[SPEC 本机接口](SPEC.md#本机接口第-2-层11-11-照代码)）。
 - 界面和投递分两个端口：投递端口的 `Origin` 规则不用为 webview 放宽。
 - 改动提议逐个存成文件：文件是真相，后台任务记录按机器分开时也不会丢。
 - 搜索用自己的小语法（`字段:值`、引号、`-`、`after:`）：不把索引实现绑进接口。
@@ -188,6 +188,6 @@ flowchart LR
 ## 11. 文档地图
 
 - **入口**：overview、[PRD](PRD.md)、[discussion](discussion.md)、[TODO](TODO.md)。
-- **参考**：[open-decisions](open-decisions.md)（完整登记表；「先定哪些」由 discussion 取代）、[product-model](product-model.md)（部分并入 PRD v0.4）、[plugin-protocol](plugin-protocol.md)（v1 草案）、[SPEC](SPEC.md)（第 0、1 层 v1 草案；第 2 层重写前留着部分 v0）、[acknowledgements](acknowledgements.md)（致谢候选）、[ADR-001](decisions/ADR-001-stack.md)（11-04 确认，补了退出条件）、[ADR-002](decisions/ADR-002-frontend-stack.md)、[TEMPLATE](features/TEMPLATE.md)。
+- **参考**：[open-decisions](open-decisions.md)（完整登记表；「先定哪些」由 discussion 取代）、[product-model](product-model.md)（部分并入 PRD v0.4）、[plugin-protocol](plugin-protocol.md)（v1 草案）、[SPEC](SPEC.md)（第 0、1 层 v1 草案；第 2 层有一节照代码写的本机接口，别的还留着 v0）、[acknowledgements](acknowledgements.md)（致谢候选）、[ADR-004](decisions/ADR-004-rust-tauri.md)（11-11，取代 [ADR-001](decisions/ADR-001-stack.md)）、[ADR-002](decisions/ADR-002-frontend-stack.md)、[TEMPLATE](features/TEMPLATE.md)。
 - **调研**：[research/README](research/README.md) 是索引；01–10 是参考，08 被 09 取代，07 部分被取代，06 公开不公开等 [16](discussion.md#16-哪些文档公开)；新的 [11](research/11-subscriptions-compat-and-wx-cli.md#0-结论) 讲订阅和 wx-cli，[12](research/12-shell-and-core-language.md#0-结论) 讲壳和语言。
 - **过时待改**：[ADR-003](decisions/ADR-003-plugins.md)、[feature 001](features/001-m0-core-loop.md)，还按 M0 写、用旧名。

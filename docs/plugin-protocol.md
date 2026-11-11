@@ -2,7 +2,7 @@
 <a id="usuyo-插件协议-v1草案"></a>
 # usuyo 插件协议 v1（草案）
 
-状态：草案 · 2026-11-04 · `protocol: 1`
+状态：草案 · 2026-11-04 · `protocol: 1`。11-11 有了第一版宿主和 plugin-kit，做到哪见 [§3.13](#313-宿主和-plugin-kit-现在做到的11-11)、[§10.1](#101-plugin-kit-的-http-客户端11-11)。
 
 把自己的工具接进 usuyo，读这一份就够：清单怎么写、宿主怎么调用、输出什么 JSON、凭据和权限怎么给、怎么发版和分发。三类插件（获取、转换、导出）都在这里；投递接口给浏览器扩展、油猴脚本、手机快捷指令这类不能由宿主启动的工具用。
 
@@ -21,7 +21,7 @@
 
 - [ADR-003](decisions/ADR-003-plugins.md) 定了插件的种类、进程模型、权限与隔离、仓库拆分、分发与校验、导出与读回；本文是它的展开。2026-11-01 的修订见 [ADR-003 修订](decisions/ADR-003-plugins.md#修订-2026-11-01)。
 - SPEC v0 的适配器协议已删，以本文为准（[SPEC 附](SPEC.md#附v0-各节和-18-处的去向)）。资料库目录、`manifest.json`、`derived/` 文件以 [SPEC 第 1 层](SPEC.md#1-资料库-v1第-1-层)为准（[§1.1](SPEC.md#11-目录树)、[§1.2.1](SPEC.md#121-manifestjson-v1)、[§1.2.2](SPEC.md#122-raw-和-derived)），身份和 id 以 [SPEC §0.4](SPEC.md#04-id) 为准，去重仍以 [SPEC §2.3](SPEC.md#23-去重)（v0）为准。
-- `pkg/contract` 的 Go 类型、JSON Schema 和 `testdata/` 仍是 v0；按 ADR-003，实现插件运行器时再按本文改，插件相关的 schema 迁到 plugin-kit（[§10](#10-契约测试与-plugin-kit)）。和 `fetch-output.schema.json` 的差异列在 [§3.7](#37-fetch-输出)，和 `adapter.schema.json` 的对照在 [§2.12](#212-旧字段对照)。
+- 11-11 起内核是 Rust（[ADR-004](decisions/ADR-004-rust-tauri.md)）。本文的类型在 `crates/usuyo-plugin`（清单、信封、宿主），插件作者用 MIT 的 `crates/usuyo-plugin-kit`，它转出这些类型，另带 HTTP 客户端（[§10.1](#101-plugin-kit-的-http-客户端11-11)）；资料库的类型在 `crates/usuyo-contract`（原 `pkg/contract`）。插件的 JSON Schema 文件还没有（[§10](#10-契约测试与-plugin-kit)）。下面和 v0 schema 的对照留着查。和 `fetch-output.schema.json` 的差异列在 [§3.7](#37-fetch-输出)，和 `adapter.schema.json` 的对照在 [§2.12](#212-旧字段对照)。
 - 依据：适配器生态 [调研 02](research/02-adapter-ecosystems.md)、Agent 协议 [调研 03](research/03-agent-protocols.md)、笔记软件与插件 [调研 05](research/05-note-apps-and-plugins.md)、平台获取与账号 [调研 06](research/06-platform-access-and-account-risk.md)。
 - 需要用户拍板的产品问题汇总在 [open-decisions](open-decisions.md)，本文相关的见 [§13](#13-待定)。
 
@@ -47,7 +47,7 @@ GitHub 组织（2026-11-05 定，用户自己注册）：官方组织 `usuyo`，
 | 平台与获取方式 | 登录方式：不需要 / 复用日常浏览器 / 专用资料目录 / cookie 文件（[§6](#6-凭据)） | 待定，见 [§13](#13-待定) 第 4 项 | | 替换「不需要 / 用浏览器里登录着的 / cookie 文件」 |
 | 平台与获取方式 | `login: optional` 的获取方式带不带账号（[§2.4](#24-access-与-login)） | 待定，见 [§13](#13-待定) 第 11 项 | | 新增 |
 | 平台与获取方式 | 获取方式来源：组织名或 `owner/repo`；每个来源显示「由 `<owner>/<repo>` 的发版工作流构建」或「没有来源证明」（[§8.3](#83-校验与来源证明)、[§8.4](#84-三种来源)） | 空 | | 替换「获取方式来源列表；官方不内置任何来源，显示签名指纹」 |
-| 平台与获取方式 | 插件那一行：「继续」（被暂停或连续崩溃后停用的）、「在平台上取消收藏」开关（[§2.6](#26-账号写操作)） | 取消收藏关 | | 新增 |
+| 平台与获取方式 | 插件那一行：「继续」（被暂停或连续崩溃后停用的；11-11 还没有这个按钮，`blocked` 先暂停一小时，[§3.1](#31-运行器与节奏)）、「在平台上取消收藏」开关（[§2.6](#26-账号写操作)） | 取消收藏关 | | 新增 |
 | 平台与获取方式 | 外部程序的路径：chrome、yt-dlp、ffmpeg 等（[§2.13](#213-运行时解析)） | 自动查找 | | 新增 |
 | 平台与获取方式 | 调用超时加长（[§3.4](#34-超时与取消)） | 按插件声明 | | 新增 |
 | 平台与获取方式 | 一次获取的输出大小上限（[§3.6](#36-fetch-与输出目录)） | 8 GiB | | 新增 |
@@ -134,7 +134,7 @@ upstream:
 | `sites` | 全部 | 有登录时必填 | 用到 `sites` 里的哪几个，写 `site` 值 | `[www.douyin.com]` |
 | `timeout` | 全部 | 否 | 覆盖 [§3.4](#34-超时与取消) 的默认总时长；获取插件只用这一处，不用 `permissions.limits.timeout` | `2h` |
 | `perPlatform` | 全部 | 否 | 多平台插件里某个平台走的路不同时，按平台覆盖 `access`、`login`、`sites` | `{bilibili: {access: private-api, login: optional}}` |
-| `outputs` | `fetch` | 是 | 能取到哪些东西，固定词表：`text`、`html`、`images`、`media:video`、`media:audio`、`subtitle`、`meta`（要改，见 [§13](#13-待定) 第 31 项） | `[text, images, media:video]` |
+| `outputs` | `fetch` | 是 | 能取到哪些东西，固定词表：`text`、`html`、`images`、`media:video`、`media:audio`、`subtitle`、`meta`、`comments`（11-11 照 [§13](#13-待定) 第 31 项加了 `comments`） | `[text, images, media:video]` |
 | `input` | `fetch` | 否 | 接什么：`[url]`（默认）、`[ref]`（只接 `list` 返回的 `ref`，导入插件这样写）或 `[url, ref]` | `[ref]` |
 | `order` | `list` | 是 | `newest-first`（按加入时间从新到旧）或 `unordered`，决定跟着收怎么停（[§3.8](#38-list-与跟着收)） | `newest-first` |
 | `sources` | `list` | 否 | 固定的来源，界面在登录前就能显示；运行时以 `sources` 子命令为准 | `[{source: "douyin:favorites", title: 我的收藏夹, action: favorite}]` |
@@ -289,7 +289,7 @@ capabilities:
 | `network.mode` | 枚举 | `none` | `none` 或 `allowlist` | `allowlist` |
 | `network.hosts` | 字符串数组 | `[]` | 允许出站的主机，可带端口，不带端口指 80 与 443；`*.` 匹配子域；单写 `"*"` 表示任意公开主机（通用网页一类插件用，权限页写「可以连任何公开主机」）；可以引用设置 `${setting.<key>}`，宿主取其中的主机和端口。回环和内网地址只在显式写了带端口的地址时放行（[§3.2](#32-调用约定)） | `["*.douyin.com", "127.0.0.1:5556"]` |
 | `exec` | 字符串数组 | `requires.runtime` 里的名字 | 允许再起的程序名，管整个进程树：被包装的工具再起的程序也要算进来。`${PLUGIN_DIR}` 里的可执行文件（插件自带的工具和它们再起的 helper）总是可以执行，不用写。缺省等于 `requires.runtime` 里的名字，只有额外的程序（例如系统自带的 `osascript`）才另写；解析见 [§2.13](#213-运行时解析) | `[osascript]` |
-| `env` | 字符串数组 | `[]` | 允许从用户环境透传的变量名；不能用来传凭据，名字里带 `TOKEN`、`COOKIE`、`KEY`、`SECRET`、`PASSWORD` 的，`usuyo plugin check` 判失败 | `[LANG]` |
+| `env` | 字符串数组 | `[]` | 允许从用户环境透传的变量名；不能用来传凭据，名字里带 `TOKEN`、`COOKIE`、`KEY`、`SECRET`、`PASSWORD` 的，`usuyo plugin check` 判失败。11-11 代码在加载时就拒掉这个插件：名字要合 `[A-Za-z_][A-Za-z0-9_]*`；不能带上面五个词和 `AUTH`、`SOCK`（不分大小写）；不能是宿主自己设的变量：`HOME`、`PATH`、`TMPDIR`、`TMP`、`TEMP`、`SYSTEMROOT`、`WINDIR`，以及 `XDG_`、`USUYO_` 开头的 | `[LANG]` |
 | `gpu` | 布尔 | `false` | 要不要 GPU | `false` |
 | `devices` | 枚举数组 | `[]` | 设备类权限，见下 | `[ios-device, clipboard]` |
 | `limits.memory` | 大小 | `1GiB` | 内存上限，超了宿主杀进程 | `4GiB` |
@@ -468,9 +468,9 @@ SPEC v0 的适配器协议（[SPEC 附](SPEC.md#附v0-各节和-18-处的去向)
 
 宿主怎么用获取插件，插件作者要知道的部分：
 
-- **身份**：收下一个链接时，宿主在 `match` 命中的插件上按用户排的顺序调 `canonicalize`，取第一个 `match: true` 的结果作为身份（[SPEC §0.4](SPEC.md#04-id)）。`identity.contentId` 要符合平台列表里的格式（[§2.3](#23-获取插件的字段)），不符合的按 `invalid-output` 处理。
+- **身份**：收下一个链接时，宿主在 `match` 命中的插件上按用户排的顺序调 `canonicalize`，取第一个 `match: true` 的结果作为身份（[SPEC §0.4](SPEC.md#04-id)）。`identity.contentId` 要符合平台列表里的格式（[§2.3](#23-获取插件的字段)），不符合的按 `invalid-output` 处理（11-11 代码：平台列表还没有，只查非空、不超过 256 字节、没有控制字符）。
 - **顺序**：每个平台按用户排的顺序依次调 `fetch`，失败换下一个，全部失败停在 `link` 并记下各自的原因。默认顺序是待定项（[§13](#13-待定) 第 3 项）。不论 `access` 高低都照这个顺序换。平台插件和 `platforms` 含 `web` 的插件都命中时，先把平台插件全部试完，再轮到 `web` 插件。
-- **暂停单个插件**：插件返回 `rate-limited` 时，宿主在 `retryAfter` 之内（没给就 15 分钟）不再在这个平台上调它；返回 `blocked` 时，暂停到用户在插件那一行点「继续」。别的插件照常按顺序试，包括用同一个账号的插件：平台的限流常按接口分开计，换一个插件、换一个接口可能还取得到（推断），这是按 D-c 和实用优先定的技术做法。
+- **暂停单个插件**：插件返回 `rate-limited` 时，宿主在 `retryAfter` 之内（没给就 15 分钟）不再在这个平台上调它；返回 `blocked` 时，暂停到用户在插件那一行点「继续」；11-11 还没有这个按钮，先暂停一小时，这一条不因这次暂停重试。11-11 代码：`retryAfter` 最多算一小时（更长的按一小时）；`platforms` 含 `web` 的插件按链接的主机暂停，别的按平台；`jobs.db` 打开时丢掉比现在晚一小时以上的旧暂停。别的插件照常按顺序试，包括用同一个账号的插件：平台的限流常按接口分开计，换一个插件、换一个接口可能还取得到（推断），这是按 D-c 和实用优先定的技术做法。
 - **完整度只升不降**：宿主给每个快照记下实际拿到的输出集合（`outputs` 词表里的值）。新快照算不算升级、用户改了「只留文字」之类的设置后要不要再取，比的是这个集合，不比 `full`、`partial` 这两个字样。失败不降级。
 
 **节奏。** 每个平台一组上限，该平台所有获取插件共用（D-e，目的是不被限流、能一直用）：
@@ -511,7 +511,7 @@ SPEC v0 的适配器协议（[SPEC 附](SPEC.md#附v0-各节和-18-处的去向)
 
 `<command>` 是 `run.command` 展开后的命令。各子命令的输入输出见 [§3.5](#35-canonicalize-与身份) 到 [§3.12](#312-常驻模式-serve)。
 
-**环境变量。** 宿主清空环境后只传下面这些，加上 `permissions.env` 声明的变量：
+**环境变量。** 宿主清空环境后只传下面这些，加上 `permissions.env` 声明的变量（11-11 哪些已经传了见 [§3.13](#313-宿主和-plugin-kit-现在做到的11-11)）：
 
 | 变量 | 什么时候有 | 含义 |
 |---|---|---|
@@ -521,7 +521,7 @@ SPEC v0 的适配器协议（[SPEC 附](SPEC.md#附v0-各节和-18-处的去向)
 | `USUYO_CALL_ID` | 总是 | 这次调用的 id，写日志用 |
 | `USUYO_LOCALE` | 总是 | 用户界面语言，例如 `zh-CN`；`hint` 按它写 |
 | `USUYO_NETWORK` | 宿主查到这台机器开着假 IP 模式的代理时 | 值是 `fake-ip`。这时系统给每个域名都回 `198.18.0.0/15` 里的地址；plugin-kit 的客户端据此放行查出来全在这一段的域名，没有这个变量就照旧拒绝。是不是这种环境由宿主拿固定的公网域名去查（11-11） |
-| `USUYO_SETTINGS` | 有设置时 | 非密钥设置的 JSON 文件路径 |
+| `USUYO_SETTINGS` | 有设置时 | 非密钥设置的 JSON 文件路径（11-11 已传，[§3.13](#313-宿主和-plugin-kit-现在做到的11-11)） |
 | `USUYO_SECRETS` | 插件声明了 `secret: true` 的设置、且用户填了值时，和 `login` 无关 | 一个 0600 的临时文件，内容只有 `{"<key>": "<value>"}`，调用结束即删 |
 | `USUYO_INPUT` | 导入调用（[§3.9](#39-从文件导入)） | `${INPUT}`，导入文件的副本 |
 | `USUYO_CREDENTIALS` | 这次调用要带账号、且用户已登录时（[§2.4](#24-access-与-login)） | 凭据 JSON 文件路径（[§6](#6-凭据)） |
@@ -605,7 +605,7 @@ SPEC v0 的适配器协议（[SPEC 附](SPEC.md#附v0-各节和-18-处的去向)
 | `state:` | 要用户处理的状态：`unlocked`（屏幕或手机没解锁）、`logged-in`（客户端里没登录）、`debugging`（手机没开开发者选项或 USB 调试）、`authorized`（手机还没允许这台电脑调试） | `state:unlocked` |
 | `file:` | 导入文件的副本已经不在 | `file:twitter-2026-10-30.zip` |
 
-这张表要改，见 [§13](#13-待定) 第 30 项。
+11-11 照 [§13](#13-待定) 第 30 项加了前缀 `version:`，例 `version:usuyo>=1.3`。
 
 插件返回的错误码：
 
@@ -615,7 +615,7 @@ SPEC v0 的适配器协议（[SPEC 附](SPEC.md#附v0-各节和-18-处的去向)
 | `not-found` | 内容不存在、已删除或当前身份看不到；能分清时填 `reason` | 换下一个。只有全部是 `not-found` 且 `reason` 都是 `deleted` 时，条目才记「平台上已看不到」；有 `link-expired` 时提示用户重新分享或重新导出链接；其余记「取不到」并列出原因 |
 | `login-required` | 没登录，或登录已过期 | 换下一个；插件那一行提示重新登录 `site` |
 | `rate-limited` | 被平台限流 | 换下一个；这个插件在这个平台暂停到 `retryAfter` |
-| `blocked` | 平台出现验证页、风控提示或拦截 | 换下一个；这个插件在这个平台暂停到用户点「继续」 |
+| `blocked` | 平台出现验证页、风控提示或拦截 | 换下一个；这个插件在这个平台暂停到用户点「继续」（11-11 先暂停一小时，[§3.1](#31-运行器与节奏)） |
 | `upstream-changed` | 页面或接口改版，解析不出 | 换下一个；记进插件的最近失败 |
 | `network` | 网络不通、DNS、TLS 或插件自己的请求超时 | 换下一个 |
 | `dependency-missing` | 缺运行时、外部程序、设备、设置、系统授权、本机服务，或要用户处理的状态 | 换下一个；界面列出 `needs` |
@@ -639,8 +639,8 @@ SPEC v0 的适配器协议（[SPEC 附](SPEC.md#附v0-各节和-18-处的去向)
 | `health` | 10 s；`--probe` 30 s |
 | `unfavorite` | 30 s |
 
-- 两种计时同时生效。**总时长**：默认照上表，获取插件用能力里的 `timeout` 改，转换、导出插件用 `permissions.limits.timeout` 改；用户可以在设置里再加长，不设硬上限，下一个大视频、在 CPU 上转写几小时的播客都放得下。**无进度时长**：插件发过 `progress` 之后，120 s 内没有新的 `progress` 就算超时，用来发现卡住的调用；从没发过 `progress` 的调用只受总时长约束。
-- 插件发出 `waiting` 后，两种计时都暂停，直到下一个 `progress` 事件，最长等 10 分钟；等用户在弹出的窗口里过验证时不会被杀。
+- 两种计时同时生效。**总时长**：默认照上表，获取插件用能力里的 `timeout` 改，转换、导出插件用 `permissions.limits.timeout` 改；用户可以在设置里再加长，不设硬上限，下一个大视频、在 CPU 上转写几小时的播客都放得下（11-11 代码：能力里的 `timeout` 超过 2 小时按 2 小时算，设置还没有）。**无进度时长**：插件发过 `progress` 之后，120 s 内没有新的 `progress` 就算超时，用来发现卡住的调用；从没发过 `progress` 的调用只受总时长约束。
+- 插件发出 `waiting` 后，两种计时都暂停，直到下一个 `progress` 事件，最长等 10 分钟（11-11 代码：一次调用里所有 `waiting` 的时间加起来算这 10 分钟）；等用户在弹出的窗口里过验证时不会被杀。
 - 取消与超时：宿主先发 SIGTERM（Windows 上向进程组发 `CTRL_BREAK_EVENT`），插件应在 5 秒内收尾退出，能输出 `cancelled` 信封就输出；5 秒后宿主杀掉整个进程组（Windows 上终止 Job Object），插件启动的浏览器一并结束。
 - 被取消或超时的调用，输出目录整个丢掉。
 
@@ -661,7 +661,7 @@ SPEC v0 的适配器协议（[SPEC 附](SPEC.md#附v0-各节和-18-处的去向)
 
 - 展开短链、去掉跟踪参数、取出平台内容 ID（[SPEC §0.4](SPEC.md#04-id)）。不是自己的链接回 `match: false`，退出码 0，这不是错误。
 - 只为展开短链才发请求，只跟随重定向，不带凭据；这个请求不计入平台节奏，另受每平台每分钟的上限（[§3.1](#31-运行器与节奏)）。
-- `identity` 的形状和 `fetch` 输出里的一样。`identity.contentId` 照 plugin-kit 平台列表里的格式写（[§2.3](#23-获取插件的字段)）。`identity.url` 写规范化后的链接，去掉跟踪参数和会话 token 一类参数，只用于去重和显示（要改，见 [§13](#13-待定) 第 29 项）。
+- `identity` 的形状和 `fetch` 输出里的一样。`identity.contentId` 照 plugin-kit 平台列表里的格式写（[§2.3](#23-获取插件的字段)）。`identity.url` 写规范化后的链接，去掉跟踪参数和会话 token 一类参数，只用于去重和显示。`platform: web` 的身份不带 `contentId`，必带 `url`，宿主再照 [SPEC §0.4](SPEC.md#04-id) 规范化一遍（11-11 照 [§13](#13-待定) 第 29 项做了）。
 - `resolvedUrl` 可选：展开短链后的完整链接，保留全部参数。宿主把用户给的原链接另存（快照里记 `inputUrl`，[SPEC §1.2.1](SPEC.md#121-manifestjson-v1)），有 `resolvedUrl` 时一并记下，交给 `fetch` 的是这两者之一，不是 `identity.url`（[§3.6](#36-fetch-与输出目录)）。小红书的链接要带 `xsec_token` 才取得到（[06 §1.3](research/06-platform-access-and-account-risk.md#13-混合路径视觉层拿链接公开页面取内容)），去掉参数就取不到了。
 
 <a id="36-fetch-与输出目录"></a>
@@ -675,7 +675,7 @@ SPEC v0 的适配器协议（[SPEC 附](SPEC.md#附v0-各节和-18-处的去向)
 - `--want` 是宿主想要的东西，取 `outputs` 的子集；不给时按 `outputs` 全取。例如用户开了「收下后直接只留文字」，宿主就不要 `media:video`，插件不必下载视频。
 - `--out` 是宿主新建的空目录，绝对路径。插件只在里面写文件，不依赖当前目录；输出 JSON 里的路径都相对它。
 - 成功后宿主把整个目录移成 `raw/<snapshotId>/`，没被 JSON 引用的文件（例如平台原始返回）也原样留下；失败就整个丢掉。
-- **输出目录的规则**（[§4.2](#42-转换的-run)、[§4.4](#44-导出的-run-与-readback)、[§5.1](#51-本机-http-接口)、[§5.2](#52-监听文件夹) 都照这条）：宿主在移动前遍历整个目录，不只看 JSON 引用的条目。只接受普通文件和目录；遇到符号链接、`nlink > 1` 的硬链接、FIFO、套接字、设备文件，或名字含 `..`、以 `/` 开头、含控制字符的条目，整次判 `invalid-output` 并丢弃（名字的规则要改，见 [§13](#13-待定) 第 32 项）。JSON 里的路径同样不能有 `..` 或绝对路径。整个目录有大小上限，`fetch` 默认 8 GiB，转换、导出和投递默认 1 GiB，用户可以在设置里改，超了也判 `invalid-output`。原因：插件在沙箱里读不了 `~/.ssh`，但能在 `out` 里建一个指向它的符号链接；目录移进资料库后，索引、导出和 MCP 会以宿主的身份读到目标内容。
+- **输出目录的规则**（[§4.2](#42-转换的-run)、[§4.4](#44-导出的-run-与-readback)、[§5.1](#51-本机-http-接口)、[§5.2](#52-监听文件夹) 都照这条）：宿主在移动前遍历整个目录，不只看 JSON 引用的条目。只接受普通文件和目录；遇到符号链接、`nlink > 1` 的硬链接、FIFO、套接字、设备文件，或名字含 `..`、以 `/` 开头、含控制字符的条目，整次判 `invalid-output` 并丢弃。名字另照 [§13](#13-待定) 第 32 项查（11-11 做了）：不能以 `usuyo.` 开头（不分大小写），不能有 `< > : " / \ | ? *`，不以 `.` 开头、不以空格或 `.` 结尾，要是 NFC，不能是 Windows 保留名（带扩展名也算），大小写折叠后不重名，每段不超过 200 字节，相对路径不超过 99 个 UTF-16 单位（条目文件夹以内的 140 减去 `raw/<snapshotId>/`）。整个目录最多 10,000 项（文件加目录）。JSON 里同一个文件只能引用一次，引用的文件要在。JSON 里的路径同样不能有 `..` 或绝对路径。整个目录有大小上限，`fetch` 默认 8 GiB，转换、导出和投递默认 1 GiB，用户可以在设置里改，超了也判 `invalid-output`。原因：插件在沙箱里读不了 `~/.ssh`，但能在 `out` 里建一个指向它的符号链接；目录移进资料库后，索引、导出和 MCP 会以宿主的身份读到目标内容。
 - 建议的目录布局：
 
 ```
@@ -728,7 +728,7 @@ SPEC v0 的适配器协议（[SPEC 附](SPEC.md#附v0-各节和-18-处的去向)
 | `evidence.site` | 无 | 用了登录时填站点 |
 | `evidence.upstream` | 无 | 可选，`{name, version}`，被包装工具的实际版本 |
 | `evidence.status` | 可选 | 只在 HTTP 类请求时填 |
-| 其余字段 | | 不变：`kind`、`title`、`author`、`publishedAt`、`text`、`html`、`images`、`platformTags`、`completeness`、`missing`、`evidence.fetchedAt`（时间的格式要改，见 [§13](#13-待定) 第 30 项） |
+| 其余字段 | | 不变：`kind`、`title`、`author`、`publishedAt`、`text`、`html`、`images`、`platformTags`、`completeness`、`missing`、`evidence.fetchedAt`；时间一律 RFC 3339 带偏移，宿主把 `publishedAt` 换成 UTC 存（11-11 照 [§13](#13-待定) 第 30 项做了） |
 
 - `completeness`：`full` 是 `--want` 里的都拿到了；`partial` 是缺了一部分，缺什么写进 `missing`；`link` 是只认出了身份。宿主会按实际输出重算，比较完整度时比的是实际拿到的输出集合（[§3.1](#31-运行器与节奏)）。
 - `text` 是平台原文的文字，宿主据此生成 `content.md`：只读副本，总照主快照重写；原样在 `raw/`（[SPEC §1.2.3](SPEC.md#123-contentmd-和各栏)）。
@@ -765,7 +765,7 @@ SPEC v0 的适配器协议（[SPEC 附](SPEC.md#附v0-各节和-18-处的去向)
 
 - `source` 是插件自己定的字符串，建议写 `<platform>:<kind>[:<id>]`；`file:` 开头的留给导入（[§3.9](#39-从文件导入)）。`sources` 列出用户能选的来源，要登录时也要先登录。
 - 每页由宿主单独调用，页与页之间按节奏等待；不传 `--cursor` 是第一页，`nextCursor: null` 是最后一页。游标是插件私有的不透明字符串。
-- 条目字段：`url` 或 `ref` 至少一个；`identity`、`title`、`author`、`publishedAt`、`action`（`favorite`、`like`、`share`、`view`、`unknown`）、`actedAt` 能给就给（时间的格式要改，见 [§13](#13-待定) 第 30 项）。拿不到加入时间时 `actedAt` 留空，不用抓取时间冒充（[02 §15.5](research/02-adapter-ecosystems.md#155-批量导入与同步)）。
+- 条目字段：`url` 或 `ref` 至少一个；`identity`、`title`、`author`、`publishedAt`、`action`（`favorite`、`like`、`share`、`view`、`unknown`）、`actedAt` 能给就给，时间 RFC 3339 带偏移（11-11 照 [§13](#13-待定) 第 30 项做了）。拿不到加入时间时 `actedAt` 留空，不用抓取时间冒充（[02 §15.5](research/02-adapter-ecosystems.md#155-批量导入与同步)）。
 - 只有 `url` 的条目，宿主按 [§3.1](#31-运行器与节奏) 的顺序去取内容；带 `ref` 的条目，宿主回到这个插件调 `fetch <ref>`。`ref` 由插件自己定，对宿主不透明；宿主为每个 `ref` 记下它来自哪个插件、哪个 `source`，调 `fetch <ref>` 时按这个 `source` 设好 `${INPUT}` 一类的上下文。
 - **跟着收（增量）**：每个订阅记下自己列过的身份，只存身份的哈希、不存标题，按机器记在 `jobs.db`，和翻页游标放在一起（推断，[SPEC §1.1](SPEC.md#11-目录树)）。宿主只收这个订阅没列过的身份：回收站里的跳过，资料库里已有的不新建、只多一项 `origins`（[SPEC §1.7](SPEC.md#17-删掉)）。所以它列过、你删掉的不会被它带回来，回收站到期移除以后也一样；它没列过的（比如你自己粘贴过、删掉、已经到期移除的），以后它第一次列出来就照新的收（11-06，这是代价）。`order: newest-first` 的来源，宿主从第一页往后翻，遇到一整页都是这个订阅列过的就停；`--since` 是这个来源上次跟着收成功跑完的时间，插件拿得到 `actedAt` 时可以据此提前结束、返回 `nextCursor: null`。`unordered` 的来源每次全量翻，频率由用户的订阅设置定。
 - 一台机器第一次跑一个订阅，只记下列出来的身份，不收（[PRD 7.3](PRD.md#73-导入和跟着收) 对个人来源这样建议，这里所有订阅都照它，推断）。这一次跑完才把列出来的记成列过；还没跑完过一次的，下一次仍照第一次跑（推断）。换了 `fetchDevice`，新的那台也是第一次：上一台最后一次跑完到新的那台第一次跑之间新出现的，会漏掉（推断）。
@@ -884,6 +884,25 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip"
 - 进度和等待用 `progress`、`waiting` 通知，参数同 stderr 事件，另带 `id`。取消用 `cancel` 通知。
 - 空闲 10 分钟后宿主关闭 stdin，插件 5 秒内退出。进程崩溃怎么处理见 [§3.1](#31-运行器与节奏) 的表。
 - 一次一进程的子命令仍然必须有；两种方式结果相同，SDK 从同一套处理函数生成。
+
+<a id="313-宿主和-plugin-kit-现在做到的11-11"></a>
+### 3.13 宿主和 plugin-kit 现在做到的（11-11）
+
+照 b574487 的 `crates/usuyo-plugin`、`crates/usuyo-core` 写。和上面不一样的以这里为准，直到正文改过来。
+
+- **找插件**：按机器目录的 `plugins/<owner>/<repo>/<版本>/usuyo-plugin.yaml`（内核可以配几个根目录，同一个 id 以先找到的为准；开发版另把 web 插件放进 `dev-plugins/builtin/web/<版本>/`），同一个插件只用最高版本，最高版本不合格整个不加载，不退回旧版本；`id`、`version` 要和目录对上。清单里不认识的字段只记警告。签名和来源证明还不查（[§8.3](#83-校验与来源证明)）。只有一次一进程的调用，`serve` 还没做。
+- **环境变量**：先清空，再放 `permissions.env` 里列的、宿主自己环境里有的，再放宿主设的（同名的以宿主为准，清单也不许列它们，[§2.7](#27-权限-permissions)）。宿主设：`USUYO_PROTOCOL=1`、`USUYO_PLUGIN_DIR`、`USUYO_CACHE_DIR`（按机器目录的 `cache/plugins/<owner>/<repo>/`）、`USUYO_CALL_ID`（UUIDv7）、`USUYO_LOCALE`、导入时的 `USUYO_INPUT`、`HOME`、`XDG_CONFIG_HOME`、`XDG_CACHE_HOME`、`TMPDIR`、`TMP`、`TEMP`、`PATH`（`${TMP}/bin` 加系统目录）。工作目录是 `${TMP}`，stdin 是空的。
+- **`USUYO_SETTINGS`**：按机器 `settings.json` 里 `plugins.<插件 id>.settings` 有值时，宿主把它写成这次调用文件夹里的 `settings.json`，变量指向它；没有就不设。
+- **`USUYO_NETWORK`**：宿主查 `example.com`、`example.org` 两个名字（两秒内），两个都有回答、回答全在 `198.18.0.0/15` 里时设成 `fake-ip`，结果缓存一分钟；查不到、超时都算不是。不看要取的那个域名自己的回答。
+- **节奏还没做**：[§3.1](#31-运行器与节奏) 的 `interval`、`daily`、每平台一个调用的锁、整机锁和设备锁都还没有；任务一次只跑一个。
+- **还没传的**：`USUYO_SECRETS`、`USUYO_CREDENTIALS`、`USUYO_COOKIES_TXT`、`USUYO_BROWSER_PROFILE`、`USUYO_PROVIDER`、`ADB_SERVER_SOCKET`、`ANDROID_SERIAL`、各个代理变量。凭据、密钥、本机代理和沙箱（[§6](#6-凭据)、[§7](#7-权限与隔离)）都还没做；插件的出站现在靠 plugin-kit 的客户端自己把关（[§10.1](#101-plugin-kit-的-http-客户端11-11)）。
+- **调用文件夹**：资料库的 `.usuyo/tmp/usuyo-call-<UUIDv7>-<随机>/`，里面 `tmp/`、`tmp/home/`、`tmp/bin/`，`fetch` 另有 `out/`；用完整个删掉，崩溃留下的在下次打开库时清掉。
+- **时长**：`canonicalize` 10 s、`fetch` 300 s、`sources` 30 s、`list` 每页 60 s；发过 `progress` 以后 120 s 没有新的算卡住；一次调用里 `waiting` 加起来最多 600 s，等的时候另两个时钟停；能力的 `timeout` 最多按 2 小时算。超时或取消先给进程组 SIGTERM，5 秒后 SIGKILL；正常退出后也给进程组发一次 SIGKILL，留下的子进程一起结束。Windows 上只结束这一个进程（还没有 Job Object）。
+- **stdout、stderr**：stdout 最多 32 MiB，超了 `invalid-output`；stderr 留最后 200 行，每行最多 8 KiB；解析不了的 `@usuyo ` 行忽略。
+- **信封里的字**：标题、作者的 `name`、`platformId`、`url`，错误的 `message`、`hint`、`site`，`missingReason`、`evidence.site`，`list` 条目的标题和作者，`sources` 的标题：各截到 1024 字节（按字符边界），控制字符（含换行）换成空格。`platformTags` 最多 64 个，每个截到 100 字节。正文 `text` 不动。这些是截断，不拒。
+- **会拒的**：插件给的链接（`identity.url`、`resolvedUrl`、`list` 的 `items[].url`）超过 4096 字节或有控制字符；`contentId` 空、超过 256 字节或有控制字符；身份的 `platform` 不在清单的 `platforms` 里；`comments` 不是 `comments.json`；同一个文件引用两次、引用的文件不在；输出目录不合 [§3.6](#36-fetch-与输出目录)（最多 10,000 项，默认 8 GiB）；插件报宿主才用的码（`timeout`、`crashed`、`invalid-output`、`profile-busy`）；`dependency-missing` 不带 `needs`。都记 `invalid-output`。
+- **完整度**：宿主照 `--want` 和实际输出重算，和插件报的不一样记警告；算出来是 `link` 按 `unsupported-input`。
+- **暂停**：`rate-limited` 按 `retryAfter`，没给 15 分钟，最多一小时；`blocked` 一小时；通用网页插件按主机暂停，别的按平台（[§3.1](#31-运行器与节奏)）。重试按 30 秒乘 4 的次方退后，最多 6 小时、6 次。
 
 <a id="4-转换与导出插件协议"></a>
 ## 4. 转换与导出插件协议
@@ -1008,7 +1027,7 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip"
 <a id="51-本机-http-接口"></a>
 ### 5.1 本机 HTTP 接口
 
-对应 [SPEC §2.1](SPEC.md#21-仓库布局monorepo) 的 `internal/api` 和 PRD 的浏览器扩展、本地 HTTP API，约定照 [03 §6.3](research/03-agent-protocols.md#63-对歇存的意义)：
+对应 PRD 的浏览器扩展、本地 HTTP API，约定照 [03 §6.3](research/03-agent-protocols.md#63-对歇存的意义)。这一节是设计，11-11 还没做：守护进程现在只有给窗口和命令行的接口（端口 47615，见 [SPEC 本机接口](SPEC.md#本机接口第-2-层11-11-照代码)），下面的 `/v1/deliver`、`/v1/batches` 和按投递端发的令牌在 [feature 002](features/002-platforms.md) 里做。
 
 - 只绑 `127.0.0.1`，默认端口 `47821`，可改。
 - 每个请求带 `Authorization: Bearer <令牌>`。令牌在设置 › 隐私 › 本地接口的访问令牌里按投递端分别生成：名字（例如「xhs-vault 脚本」）、入口类型（`extension`、`mobile`、`api`），可单独撤销。令牌存在本机配置目录，不放进资料库。
@@ -1039,7 +1058,7 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip"
 {"id": "douyin-4plrcxk343onmyxibmrr672kga", "state": "accepted", "duplicate": false}
 ```
 
-已经取到内容的（例如在页面里拿到了正文和图片），用 `multipart/form-data`：`item` 部分是 fetch 输出 JSON；每个文件部分的**字段名**就是 JSON 里引用的相对路径，宿主按字段名找文件，`filename` 只作参考。原因：Go 的 `mime/multipart` 的 `Part.FileName()` 会先过一遍 `filepath.Base`（已用 Go 1.26 的 `go doc` 核对），`images/001.jpg` 会变成 `001.jpg`；各家浏览器扩展对带斜杠的 `filename` 处理也不一致（推断）。字段名照 [§3.6](#36-fetch-与输出目录) 的输出目录规则校验，一次投递默认最多 1 GiB。`item` 按 fetch 输出的 schema 校验，只有 `evidence.access` 可以省略，宿主在快照里记成 `deliver`。
+已经取到内容的（例如在页面里拿到了正文和图片），用 `multipart/form-data`：`item` 部分是 fetch 输出 JSON；每个文件部分的**字段名**就是 JSON 里引用的相对路径，宿主按字段名找文件，`filename` 只作参考。原因：有的 multipart 库取文件名时只留最后一段（Go 的 `Part.FileName()` 会先过一遍 `filepath.Base`，11-05 用 Go 1.26 的 `go doc` 核对过），`images/001.jpg` 会变成 `001.jpg`；各家浏览器扩展对带斜杠的 `filename` 处理也不一致（推断）。字段名照 [§3.6](#36-fetch-与输出目录) 的输出目录规则校验，一次投递默认最多 1 GiB。`item` 按 fetch 输出的 schema 校验，只有 `evidence.access` 可以省略，宿主在快照里记成 `deliver`。
 
 ```
 curl -X POST http://127.0.0.1:47821/v1/deliver \
@@ -1094,6 +1113,8 @@ curl -X POST http://127.0.0.1:47821/v1/deliver \
 <a id="6-凭据"></a>
 ## 6. 凭据
 
+11-11 还没做：宿主还不给插件传任何凭据和密钥（[§3.13](#313-宿主和-plugin-kit-现在做到的11-11)）；`credentialsUpdate` 存进 `usuyo.fetch.json` 前去掉。
+
 - **只由宿主在调用时传入**，只传清单 `sites` 里声明、这个能力用到的站点；`login: none` 的能力不传任何平台账号凭据。插件自己的密钥设置不算平台凭据，另经 `USUYO_SECRETS` 传（[§2.11](#211-插件设置-settings)）。
 - **这些限制靠沙箱的文件读权限落实。** 在文件读取只能「仅告知」的平台上（Windows，以及 Linux 上 bubblewrap 和 Landlock 都不可用时），任何插件都可能读到别的调用的凭据文件、别的站点的资料目录和日常浏览器的 cookie 库，这几条只是约定，不是隔离；界面的权限页按 [§7](#7-权限与隔离) 的三档如实标出。
 - **形式**：`USUYO_CREDENTIALS` 指向一个临时 JSON 文件（权限 0600，放在这次调用的临时目录里，调用结束即删除）；`credential: cookies` 时另有 `USUYO_COOKIES_TXT`，内容相同、格式是 Netscape cookies.txt。常驻模式下路径放在每个请求的 `context` 里。
@@ -1126,6 +1147,8 @@ curl -X POST http://127.0.0.1:47821/v1/deliver \
 
 <a id="7-权限与隔离"></a>
 ## 7. 权限与隔离
+
+11-11 还没做：沙箱和宿主的本机代理都没有；插件的进程放在自己的进程组里，环境照 [§3.13](#313-宿主和-plugin-kit-现在做到的11-11)。代理做出来时，plugin-kit 的客户端要能经宿主的代理出站（另用一个专门的变量，不读 `HTTP_PROXY`），地址检查跟着挪到宿主一侧。
 
 沿用 [ADR-003 §4](decisions/ADR-003-plugins.md#4-权限与隔离)：macOS 用 Seatbelt，Linux 用 bubblewrap（不可用时 Landlock），Windows 先只强制 Job Object 与环境变量；超时杀进程组；`allowlist` 网络只经宿主代理出站；界面按平台、按声明项显示「强制 / 部分 / 仅告知」，不一律写「已沙箱」。各声明项在各平台的落实程度见 [05 §4.5](research/05-note-apps-and-plugins.md#45-权限声明与各平台落实程度)。
 
@@ -1234,7 +1257,7 @@ jobs:
 1. 查屏蔽清单（[§8.6](#86-屏蔽清单与下架)），命中就拒装。
 2. 下载 release 资产 `usuyo-plugin.yaml`，按 schema 校验；`id` 等于仓库、`version` 等于 tag，否则拒装。
 3. 下载本机平台的资产，sha256 和清单不一致就拒装（[ADR-003 §6](decisions/ADR-003-plugins.md#6-分发与校验)）。
-4. 有 `provenance.sigstore.json` 时，用 sigstore-go 验证，不经 GitHub API（Sigstore 的信任根由客户端按 TUF 定期更新）：签名有效、证书里的源仓库是这个仓库、源 ref 是这个 tag。签发者（构建它的工作流，按仓库和路径，不含 ref）的要求分两种：
+4. 有 `provenance.sigstore.json` 时，用 Sigstore 的客户端库验证（原写 sigstore-go；内核 11-11 换成 Rust，用哪个库实现时定），不经 GitHub API（Sigstore 的信任根由客户端按 TUF 定期更新）：签名有效、证书里的源仓库是这个仓库、源 ref 是这个 tag。签发者（构建它的工作流，按仓库和路径，不含 ref）的要求分两种：
    - **官方组织**：客户端内置，签发者必须是 `usuyo/plugin-kit` 的发版工作流；没有来源证明或验证失败就拒装。
    - **用户添加的来源**（包括 `usuyo-fetch`）：添加时固定签发者。[附录 A.4](#a4-添加第三方来源时的确认) 的确认框显示这个来源现有插件的签发工作流，例如「由 `usuyo/plugin-kit` 的 `release.yml` 构建」，或「没有来源证明」；用户添加后客户端记下。以后这个来源里的新版本，签发工作流和记下的不同，或者原来有来源证明现在没有，就不更新并标出来。添加时记下的是「没有来源证明」的，不做这项比对，只逐个版本显示有没有。验证失败一律拒装。这和 Mihon 的做法同一个思路：信任来自用户添加 store 时接受的签名指纹（[02 §15.7](research/02-adapter-ecosystems.md#157-适配器源信任与治理)），客户端不用认识 `usuyo-fetch`。
 5. 读 GitHub App 写在 tag 提交上的 check run，显示「校验通过 / 没通过 / 没有校验」（[ADR-003 §6](decisions/ADR-003-plugins.md#6-分发与校验)）。只认 `app.id` 等于 usuyo GitHub App 的 check run，客户端内置这个 id：任何人都能用 Actions 的 `GITHUB_TOKEN` 或自己的 App 写一个同名、结论为 success 的 check run。官方组织的插件没通过就拒装；读不到 check run 时（App 还没跑完、被限额挡住）推迟这次更新，下次检查时再读，不安装。第三方插件读不到时显示「没有校验」；没通过时拦下还是只标出，见 [§13](#13-待定) 第 7 项。
@@ -1580,8 +1603,21 @@ usuyo plugin pack --version 0.3.1 dist/*
 
 - 契约测试不在 CI 里请求平台：CI 在机房 IP 上跑，结果不稳，也平白多出请求。
 - GitHub App 不执行插件，只做不用跑插件的检查：清单 schema、tag 和 `version`、资产 sha256、来源证明、`testdata/outputs` 过 schema，结果写成 check run。要执行插件的部分（`health`、禁网沙箱里的 `canonicalize` 样例、两种方式结果一致、导出插件的往返测试）放进 plugin-kit 的可复用工作流，在插件仓库自己的 Actions 里跑；App 只读那次运行的结论。否则 App 要在自己的服务器上执行任何装了它的仓库发布的二进制。
-- plugin-kit（MIT）里有：清单、信封、JSON-RPC 消息和 `derived/` 文件的 JSON Schema；平台 id 列表；`usuyo plugin check` 的实现（主程序内嵌同一份代码，另有给 CI 用的 action）；发版可复用工作流；Go、TypeScript、Python 三个 SDK。SDK 管参数解析、信封和错误码、stderr 事件、常驻模式的循环、凭据文件读取、输出目录的路径检查、转换与导出的 JSON-RPC 循环；作者只写处理函数。
-- schema 以 plugin-kit 为准；内核经 Go 模块依赖引用，`pkg/contract` 只留资料库自己的类型（实现插件运行器时迁移，见 [§11](#11-设计取舍)）。
+- plugin-kit（MIT）里有：清单、信封、JSON-RPC 消息和 `derived/` 文件的 JSON Schema；平台 id 列表；`usuyo plugin check` 的实现（主程序内嵌同一份代码，另有给 CI 用的 action）；发版可复用工作流；SDK。11-11：plugin-kit 是 Rust crate `crates/usuyo-plugin-kit`，转出协议类型，另带 HTTP 客户端（[§10.1](#101-plugin-kit-的-http-客户端11-11)）；TypeScript、Python 的 SDK 还没有。SDK 管参数解析、信封和错误码、stderr 事件、常驻模式的循环、凭据文件读取、输出目录的路径检查、转换与导出的 JSON-RPC 循环；作者只写处理函数。
+- schema 以 plugin-kit 为准；内核经 cargo 依赖引用，`crates/usuyo-contract` 只留资料库自己的类型（[§11](#11-设计取舍)）。11-11 还没有 schema 文件，也没有 `usuyo plugin check`、`try`、`pack`。
+
+<a id="101-plugin-kit-的-http-客户端11-11"></a>
+### 10.1 plugin-kit 的 HTTP 客户端（11-11）
+
+`crates/usuyo-plugin-kit` 的 `http::Client`（MIT）。获取插件的每个请求都走它，包括接口调用、展开短链、下图片和视频，不另引别的 HTTP 库：在沙箱和宿主的代理做出来以前（[§7](#7-权限与隔离)），这是挡住插件连到本机和内网的那一层。它做的：
+
+- **只连公网地址。** 只认 `http`、`https`；带用户名、密码的链接不连；主机要在调用方给的名单里。解析出的每个地址都要是公网：IPv4 拒 `0/8`、`10/8`、`100.64/10`、`127/8`、`169.254/16`、`172.16/12`、`192.0.0/24`、`192.0.2/24`、`192.88.99/24`、`192.168/16`、`198.18/15`、`198.51.100/24`、`203.0.113/24`、`224/4`、`240/4`；IPv6 只认 `2000::/3`，再去掉 `2001::/23`、`2001:db8::/32`、`2002::/16`、`3fff::/20`；IPv4 映射和 `64:ff9b::/96` 按里面的 IPv4 判。连接只连查过的那个地址，不再查一次 DNS。DNS 算在总时限里。
+- **假 IP 代理。** 宿主设了 `USUYO_NETWORK=fake-ip`（[§3.13](#313-宿主和-plugin-kit-现在做到的11-11)）时，回答全在 `198.18.0.0/15` 的域名照常连；单段名字和 `.localhost`、`.local`、`.internal`、`.lan`、`.home`、`.home.arpa`、`.corp`、`.intranet`、`.private` 结尾的照旧拒；直接写成这一段 IP 的链接一律拒。插件用 `Policy::from_host()`（`Client::new` 就是），测试才自己拼策略。
+- **重定向默认不跟。** 调用方开了才跟（只跟 301、302、303、307、308），每一跳重新查主机名单和地址。换了主机，或从 https 跳到 http，只留 `Accept`、`Accept-Language`，调用方加的别的头不带过去。
+- **cookie** 不能自己写进 `Cookie` 头，要用 `Cookie::new(值, 主机)`：只发给列出的主机，只走 https。没有 cookie 罐，`Set-Cookie` 不带到下一跳。
+- **大小和时间。** 读正文时调用方必须给上限，按解压后的字节算，到上限就停（`TooLarge`）；默认总时长 30 秒（含所有跳和读正文），连接 15 秒。不读系统的代理设置。
+
+通用网页插件（`plugins/web`）另外：图片的 `Referer` 只给页面的源加 `/`，https 页面上的 http 图片不给；正文里有图片没下下来时在 `missingReason` 里写几张没下下来，一张都没下下来才把 `images` 记进 `missing`。设置 `allow-private-network`（默认关）只放开你给的那条链接的第一跳，图片和重定向照旧只连公网。
 
 <a id="11-设计取舍"></a>
 ## 11. 设计取舍
@@ -1674,7 +1710,7 @@ usuyo plugin pack --version 0.3.1 dist/*
 <a id="13-待定"></a>
 ## 13. 待定
 
-需要用户在产品层面拍板的问题都在 [open-decisions](open-decisions.md)，选项、建议和影响以那里为准。本文其他地方引用本节时写的「第 N 项」就是下面的编号；open-decisions 的表格行没有单独的锚点，链接指向条目所在的节，条目编号写在链接文字里。第 29–34 项例外：不是产品问题，是 SPEC v1 草案（[第 0 层](SPEC.md#0-约定第-0-层)、[第 1 层](SPEC.md#1-资料库-v1第-1-层)）带来的协议改动，用户过目 SPEC 后再写进正文（[TODO](TODO.md#2-文档和接口设计)）；正文里受影响的地方标了「要改」。
+需要用户在产品层面拍板的问题都在 [open-decisions](open-decisions.md)，选项、建议和影响以那里为准。本文其他地方引用本节时写的「第 N 项」就是下面的编号；open-decisions 的表格行没有单独的锚点，链接指向条目所在的节，条目编号写在链接文字里。第 29–34 项例外：不是产品问题，是 SPEC v1 草案（[第 0 层](SPEC.md#0-约定第-0-层)、[第 1 层](SPEC.md#1-资料库-v1第-1-层)）带来的协议改动，用户过目 SPEC 后再写进正文（[TODO](TODO.md#2-文档和接口设计)）；正文里受影响的地方标了「要改」。11-11 代码照第 29–32 项做了，这几处正文跟着改了；第 33、34 项还没做。第 35–39 项是 11-11 写插件时发现的空缺，还没定。
 
 1. 两个组织的名字和权利人联系地址：[N1、N2](open-decisions.md#2-命名与组织)，[R4](open-decisions.md#12-声明与责任)。
 2. 只读导出文件的导入插件放哪个组织、要不要预装：[P3](open-decisions.md#7-获取与插件)。11-01 已定：别的工具的导出进官方组织并预装，平台官方导出包放 `usuyo-fetch`（[§8.4](#84-三种来源)）。
@@ -1697,22 +1733,28 @@ usuyo plugin pack --version 0.3.1 dist/*
 19. ~~视觉层调用能不能自己跑~~：2026-11-04 已定，见 [§3.1](#31-运行器与节奏)（[P19](open-decisions.md#7-获取与插件)）。
 20. `usuyo-fetch` 收不收包装自带模型的第三方手机 Agent 的获取插件（[§4.3](#43-模型与密钥由宿主代发)）：[R11](open-decisions.md#12-声明与责任)。
 21. 用户自己填的来源参数：`sources` 只能列插件自己知道的来源，填不进一个 feed 地址或一个账号（[§3.8](#38-list-与跟着收)）。提议加子命令 `resolve-source <输入>`，返回 `{match, source, title, order, owner}`；先例是 RSSHub 路由的 `:param`：[调研 11 §6](research/11-subscriptions-compat-and-wx-cli.md#6-对插件协议的影响)。
-22. feed 条目的身份和第一次拉：`guid`、`atom:id` 是任意字符串，套不进 plugin-kit 要求的 `contentId` 正则；别人的来源第一次拉只记下已有条目、不收，以后只收新出现的（[§3.8](#38-list-与跟着收)）：[调研 11 §6](research/11-subscriptions-compat-and-wx-cli.md#6-对插件协议的影响)。
+22. feed 条目的身份和第一次拉：`guid`、`atom:id` 是任意字符串，套不进 plugin-kit 要求的 `contentId` 正则；别人的来源第一次拉只记下已有条目、不收，以后只收新出现的（[§3.8](#38-list-与跟着收)）：[调研 11 §6](research/11-subscriptions-compat-and-wx-cli.md#6-对插件协议的影响)。11-11 答了一半：宿主不查 `contentId` 的格式，只要非空、不超过 256 字节、没有控制字符，`guid` 放得进；第一次拉还没做。
 23. OPML 导进来的是订阅，不是条目：[§3.9](#39-从文件导入) 的导入插件只会列出条目，要有地方建一批跟着收的订阅。只在 [discussion 第 1 条](discussion.md#1-什么东西进资料库)选 B 时需要：[调研 11 §6](research/11-subscriptions-compat-and-wx-cli.md#6-对插件协议的影响)。
 24. 上游 AI 产物放哪：fetch 输出加一个可选的 `derived` 字段，放 Horizon 这类上游已经算好的摘要、打分和标签，宿主照转换插件的规矩移进 `derived/`；另加一个原文来源标记（例如 `textOrigin: platform | machine`），界面据此标出原文是机器写的。`derived` 那半要不要做，随 [discussion 第 1 条](discussion.md#1-什么东西进资料库)一起答：[调研 11 §6](research/11-subscriptions-compat-and-wx-cli.md#6-对插件协议的影响)。
 25. 连本机 Unix socket 的权限：包装常驻进程类的工具（例如 wx-cli 的 `daemon.sock`）时，`fs.read`、`network.hosts` 都表达不了「连本机某个 socket」，要么加一个权限项，要么要求这类插件走本机 HTTP（[§2.7](#27-权限-permissions)）。只在第三方写包装常驻进程的插件时用得到：[调研 11 §6](research/11-subscriptions-compat-and-wx-cli.md#6-对插件协议的影响)。
 26. 按关键词搜、按创作者主页列：现有 `list` 只列用户自己的收藏夹和列表，没有带查询词的搜索，也没有「某个创作者的主页」这种来源；结果只列出、不进库，用户挑了才 `fetch`（2026-11-04 用户要，[open-decisions §1.8](open-decisions.md#18-grill-回答)）。
-27. 评论：`fetch` 输出没有评论这一类；要可选、默认不取，按平台或按条打开，能设上限（同上）。评论 JSON 的形状、上限怎么交给插件（`fetch` 现在只有 `--want`）还没定。
+27. 评论：`fetch` 输出没有评论这一类；要可选、默认不取，按平台或按条打开，能设上限（同上）。评论 JSON 的形状、上限怎么交给插件（`fetch` 现在只有 `--want`）还没定。11-11：放哪照第 31 项做了，形状和上限还没定。
 28. 扫码登录：要账号的平台在内置浏览器里打开登录页、用户扫码，登录态按站点存本机；和 [§6](#6-凭据) 的凭据怎么接、过期后怎么提示重扫（同上）。
-29. web 身份的插件侧：`platform: web` 的 `identity` 不带 `contentId`，`identity.url` 必填（[§3.5](#35-canonicalize-与身份)）；宿主再照 [SPEC §0.4](SPEC.md#04-id) 规范化一遍，算出条目 id（2026-11-05 资料库 v1 草案带来的，下同）。
-30. 照 SPEC 第 0 层补的两条：`needs` 加前缀 `version:`，例 `version:usuyo>=1.3`（[§3.3](#33-信封与错误码)，[SPEC §0.3](SPEC.md#03-错误模型)）；插件给的时间（`publishedAt`、`actedAt`、`evidence.fetchedAt`）一律 RFC 3339 带偏移（[§3.7](#37-fetch-输出)、[§3.8](#38-list-与跟着收)，[SPEC §0.5](SPEC.md#05-时间)）。
-31. 评论放哪：[§2.3](#23-获取插件的字段) 的 `outputs` 词表加 `comments`；插件把评论写在输出目录根下的 `comments.json`，[§3.7](#37-fetch-输出) 加可选字段 `comments`，值固定是 `comments.json`；整个目录照 [§3.6](#36-fetch-与输出目录) 移进 `raw/<snapshotId>/`，宿主不改名（[SPEC §1.2.3](SPEC.md#123-contentmd-和各栏)）。了结第 27 项「放哪」那一半。
-32. 输出目录里的名字（[§3.6](#36-fetch-与输出目录)）：`usuyo.` 开头的文件名留给宿主（宿主在快照里存 `usuyo.fetch.json`），插件写了判 `invalid-output`；宿主移动前按 [SPEC §0.6](SPEC.md#06-文本和文件) 查名字（长度、保留名带扩展名也算、大小写折叠后重名、NFC），不合格判 `invalid-output`。
+29. web 身份的插件侧：`platform: web` 的 `identity` 不带 `contentId`，`identity.url` 必填（[§3.5](#35-canonicalize-与身份)）；宿主再照 [SPEC §0.4](SPEC.md#04-id) 规范化一遍，算出条目 id（2026-11-05 资料库 v1 草案带来的，下同）。**11-11 已答**：照这样做了，正文 [§3.5](#35-canonicalize-与身份) 已改。
+30. 照 SPEC 第 0 层补的两条：`needs` 加前缀 `version:`，例 `version:usuyo>=1.3`（[§3.3](#33-信封与错误码)，[SPEC §0.3](SPEC.md#03-错误模型)）；插件给的时间（`publishedAt`、`actedAt`、`evidence.fetchedAt`）一律 RFC 3339 带偏移（[§3.7](#37-fetch-输出)、[§3.8](#38-list-与跟着收)，[SPEC §0.5](SPEC.md#05-时间)）。**11-11 已答**：两条都照做了，`publishedAt` 存成 UTC，偏移不是 `Z` 的另存 `publishedAtOriginal`。
+31. 评论放哪：[§2.3](#23-获取插件的字段) 的 `outputs` 词表加 `comments`；插件把评论写在输出目录根下的 `comments.json`，[§3.7](#37-fetch-输出) 加可选字段 `comments`，值固定是 `comments.json`；整个目录照 [§3.6](#36-fetch-与输出目录) 移进 `raw/<snapshotId>/`，宿主不改名（[SPEC §1.2.3](SPEC.md#123-contentmd-和各栏)）。了结第 27 项「放哪」那一半。**11-11 已答**：照这样做了，`comments` 不是 `comments.json` 判 `invalid-output`；一个文件只能担一个角色。
+32. 输出目录里的名字（[§3.6](#36-fetch-与输出目录)）：`usuyo.` 开头的文件名留给宿主（宿主在快照里存 `usuyo.fetch.json`），插件写了判 `invalid-output`；宿主移动前按 [SPEC §0.6](SPEC.md#06-文本和文件) 查名字（长度、保留名带扩展名也算、大小写折叠后重名、NFC），不合格判 `invalid-output`。**11-11 已答**：照这样做了，规则写进了 [§3.6](#36-fetch-与输出目录)。
 33. 投递遇到不收的条目（[§5.1](#51-本机-http-接口)）：`/v1/deliver` 返回的 `state` 加 `skipped`，这时不回 `id`；只在 `api` 令牌交来的链接是私密条目时这样回（[SPEC §1.7](SPEC.md#17-删掉)），又私密又在回收站里的也这样回。其余在回收站里的，哪种令牌交来都拿回来（记 `restore`，能撤销），不提醒；已经到期移除的，就是普通的收下（11-06）。收不收等身份算出来再判；只有短链自己的 `web:` 身份时（[§3.1](#31-运行器与节奏)），照常建条目、回 `id`，并进平台 id 以后再查：`api` 令牌交来的，目标私密时并进那一条，已回的 id 成了别名；别的照 [SPEC §0.4](SPEC.md#04-id) 收下（推断）。
 34. 导出和读回跟上资料库 v1（[§4.4](#44-导出的-run-与-readback)；11-05 照 [SPEC 第 1 层](SPEC.md#1-资料库-v1第-1-层) 的新形状重写）：
     - `run` 的 `items[]` 不再给 `manifest`、`content` 的路径，每项是 `{id, title, author, publishedAt, publishedAtOriginal, addedAt, platform, kind, url, tags: {user, platform}, topics: [{id, title}], takeaway, highlights: [{id, layer, snapshot, fragment, quote, caption}], text, notes, derived, files}`：`text` 是主快照文字的路径，`notes` 是 `notes.md` 去掉 front matter 的正文。
     - `topics[]`、`cards[]`、`drafts[]` 是 `{id, title, createdAt, folder, path}`，`path` 是只有正文的副本，私密条目的脚注已换掉（[SPEC §1.3](SPEC.md#13-条目的四个维度)）；主题另有 `members`（索引给的，私密的不列），卡片另有 `topics`，成稿另有 `kind`。
     - `readback` 返回 `run` 的用户层键，宿主照 [SPEC §1.4](SPEC.md#14-你写的那一层)、[§1.8](SPEC.md#18-同步) 合并，照 [§1.5.1](SPEC.md#151-op-词表) 记 op，`actor: external`、`via: readback:<插件 id>`（11-06 定，[§4.4](#44-导出的-run-与-readback)）。
+
+35. 一类输出只拿到一部分（2026-11-11 两个插件作者写插件时报的，35–39 同）：`outputs`、`missing` 只说一类有没有，没有字段说「这一类拿到了一部分」；web 插件现在写进 `missingReason`。
+36. 访客凭据：有的平台不登录也要一份访客 cookie 才取得到，[§6](#6-凭据) 的凭据里没有这一种；小红书插件现在做成插件设置，让你自己粘。
+37. 短码的别名：同一条内容的短码没有地方记成身份的别名（推断的后果：用短码和用完整 id 收下的会成两条）。
+38. 音频和视频分开给：`media[]` 说不出两个文件是同一段的音轨和画面、要合起来看。
+39. 按语言的提示：`hint` 一次只按 `USUYO_LOCALE` 写一种语言，没有按语言分开给的写法。
 
 调研 11 建议的其余几处还没编号：`owner` 的含义、同时带 `url` 和 `ref` 时先用哪个、`sites[].site` 引用设置项、`feed:` 来源按主机算节奏（`origin.subscription` 已按 SPEC v1 写进 [§3.8](#38-list-与跟着收)），见[调研 11 §6.2](research/11-subscriptions-compat-and-wx-cli.md#62-要补的地方)。
 

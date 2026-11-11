@@ -15,7 +15,7 @@
 - [x] [3. 知识的单位](discussion.md#3-知识的单位)：主题页，加卡片和成稿的链路（11-04）
 - [x] [4. 删掉以后留下什么](discussion.md#4-删掉以后留下什么)：回收站加删除记录（11-04）；11-06 改成只留回收站，不留删除记录（[open-decisions §1.8](open-decisions.md#18-grill-回答)）
 - [x] [5. 名字](discussion.md#5-名字)：usuyo（11-05），两轮复查没有同类软件；组织 `usuyo`、`usuyo-fetch`、`usuyo-fetch-hook`（11-05）
-- [x] [6. 桌面壳](discussion.md#6-桌面壳)、[7. 内核语言](discussion.md#7-内核语言)：Go 加 MyGo（11-04）
+- [x] [6. 桌面壳](discussion.md#6-桌面壳)、[7. 内核语言](discussion.md#7-内核语言)：Go 加 MyGo（11-04）；11-11 你提出换成 Rust 加 Tauri 2（[ADR-004](decisions/ADR-004-rust-tauri.md)）
 - [x] [8. 插件怎么校验](discussion.md#8-插件怎么校验)：照 10-28 做 GitHub App，无服务器中转加 Actions 跑校验（11-04）
 - [ ] 把 App 的部署（无服务器中转接 webhook，官方组织的 Actions 跑契约测试、写回 check run）写进 [ADR-003 §6](decisions/ADR-003-plugins.md#6-分发与校验) 和[插件协议 §8.3](plugin-protocol.md#83-校验与来源证明) — 文档会话 · 小 · 挡发版流程
 - [x] [9. 自己的获取插件组织收什么](discussion.md#9-自己的获取插件组织收什么)：七层都收，client-hook 单独一个组织（11-04）
@@ -35,9 +35,9 @@
 
 - [x] 第 0 层：版本策略、错误模型（RFC 9457）、ID 和时间格式 — 草案写好，等你过目：[SPEC §0](SPEC.md#0-约定第-0-层)（11-05）
 - [x] 第 1 层：[SPEC](SPEC.md) 改成资料库 v1，加改动提议和改动记录的格式；补快照字段、`private`、`web` 身份、`jobs` 取值 — 草案写好，等你过目：[SPEC §1](SPEC.md#1-资料库-v1第-1-层)，v0 附录 18 处的去向在 [SPEC 附](SPEC.md#附v0-各节和-18-处的去向)（11-05）
-- [ ] 第 2 层：一份内核服务契约，派生 HTTP（OpenAPI 3.2）、MCP、CLI；含搜索语法、SSE 事件、端口 — 文档会话 · 一到两天 · 挡界面对接、MCP
+- [ ] 第 2 层：一份内核服务契约，派生 HTTP（OpenAPI 3.2）、MCP、CLI；含搜索语法、SSE 事件、端口 — 文档会话 · 一到两天 · 挡 MCP（界面对接 11-11 先照代码做了：端口、令牌、握手、SSE 写进 [SPEC 本机接口](SPEC.md#本机接口第-2-层11-11-照代码)，契约文件是 `apps/desktop/web/src/api/endpoints.ts`）
   - 第 0、1 层留给这一层的：`settings.json` 的完整清单、Agent 连接名从哪来、MCP 收下工具的 `pickedBy`、MCP 的撤销工具（能撤哪些已定，[SPEC §1.10 第 18 条](SPEC.md#110-要你看一眼)）、MCP 错误和输出 schema 怎么配、游标有效期、各处的间隔、上限和文案；重写时替换 [SPEC §2](SPEC.md#2-留着的-v0第-2-层重写前保留) 留着的 v0
-- [ ] 第 3 层：plugin-kit 的 schema、拆 `pkg/contract`、SDK 的形状 — 文档会话 · 中 · 挡插件运行器
+- [ ] 第 3 层：plugin-kit 的 schema、SDK 的形状、`usuyo plugin check` — 文档会话 · 中 · 挡别人写插件（11-11：`pkg/contract` 成了 `crates/usuyo-contract`，插件运行器和 `crates/usuyo-plugin-kit` 有了第一版，见[插件协议 §3.13](plugin-protocol.md#313-宿主和-plugin-kit-现在做到的11-11)；还没有插件的 schema 文件）
 - [ ] 第 4 层：投递、导出文件形状、分发、订阅源 — 文档会话 · 中 · 挡对应功能
 - 等[第 1 条](discussion.md#1-什么东西进资料库)答了再补协议：
   - [ ] 订阅：`resolve-source`（带 `owner`）、`sourceItemId`、url 与 ref 的先后、第一次拉只记不收、`origin.subscription`、`feed:` 按主机算节奏；OPML 订阅对象只在选 B 时 — 文档会话 · 中 · 挡跟着收个人来源
@@ -49,7 +49,7 @@
 - [x] [CLAUDE.md](../CLAUDE.md)：一句话、文档地图、原则 1、2、6、技术栈、第一版范围（11-04，你点头后改；名字等定名再换）
 - [ ] [03](research/03-agent-protocols.md#13-现状2026-07-28-修订要点) 第 80 行加注：rmcp 3.0.0 已在 2026-07-28 发正式版（[crates.io](https://crates.io/crates/rmcp/versions)，11-04 查） — 文档会话 · 一行 · 不挡
 - [ ] [04 §6.4](research/04-tech-options.md#64-桌面壳mygo-与回退路径) 的版本说法过时：MyGo 0.7.4、Wails v3 正式版，出处见[调研 12](research/12-shell-and-core-language.md#25-壳的成熟度) — 文档会话 · 小 · 不挡
-- [ ] [ADR-002](decisions/ADR-002-frontend-stack.md#和内核的接口) 第 37 行：接受 SSE 就把 WebSocket 换掉 — 文档会话 · 一句 · 不挡
+- [x] [ADR-002](decisions/ADR-002-frontend-stack.md#和内核的接口)：WebSocket 换成 SSE（用 `fetch` 读），另补了 oxlint、React Compiler 的接法和契约文件（11-11）
 - [ ] ADR-003 改 accepted：先定 O3、O9、G2 — 你定，文档会话改 · 小 · 不挡代码
 - [x] 全仓改名为 usuyo（11-05）：入口文档、CLAUDE.md、README、SPEC、插件协议、ADR、feature 001、product-model、致谢；调研和 open-decisions 留旧名作记录；代码见下一条
 - [x] 代码改名（11-05）：`go.mod` 模块 `github.com/usuyo/usuyo`、`cmd/usuyo`、import、Makefile；`make check` 通过
@@ -63,9 +63,9 @@
 - [x] [CLAUDE.md](../CLAUDE.md)：原则 2 照 [PRD 原则 2](PRD.md#4-原则) 改措辞（`content.md` 是宿主生成的只读副本）；原则 3「删掉 `.usuyo/index/`」改成「删掉索引目录」（[SPEC §1.10 第 10 条](SPEC.md#110-要你看一眼)）；文档地图里 SPEC 那行改成 v1 草案（11-05 你点头，改了）
 - [ ] 跟着第 1 层改别的文档：[ADR-003 §7](decisions/ADR-003-plugins.md#7-导出与读回)（导出记录搬到按机器目录、读回的改动记 `actor: external`、仍不走提议、能撤销、读回的层，11-06 已写进[修订 2026-11-06](decisions/ADR-003-plugins.md#修订-2026-11-06)；还要在修订一节补上 [§1](decisions/ADR-003-plugins.md#1-插件分三类) 的 `images/keyframes/`、`origin.entry` 跟着改成 `derived/keyframes/`、`origins[].entry`）；[product-model §5.4](product-model.md#54-边界情况)（「用户自己又粘贴同一个链接」那行改成：照收，在回收站的直接拿回来，不提醒，不弹浮层，见 [SPEC §1.7](SPEC.md#17-删掉)；去掉「当时记的一句」）、[§1](product-model.md#1-一条视频从收下到放下)（照 [M1](open-decisions.md#6-地图与界面) 重写时「磁盘上发生什么」一栏换成 v1 路径，或删掉这一栏指向 [SPEC §1.2](SPEC.md#12-条目文件夹)）、[§3](product-model.md#3-词汇表)（删除记录那条去掉，见下一条）、[§7.3](product-model.md#73-其他对象) 和 [§8.1](product-model.md#81-设置清单)（改动提议不作废，去掉「7 天没处理就作废」和那一项设置）、[§6](product-model.md#6-知识层)（规则 3 第 165 行「要求 Obsidian 打开时可读」改成不开 usuyo 也能读；主题页按标题起名，记一句是 `notes.md` 头部的 `takeaway`；卡片 `cards/<标题>.md`、模型或 Agent 只能起草；加成稿一行；规则 4 第 166 行：头部不写成员和修改时间，不在 Obsidian 里改，改走导出再读回）；[调研 14 §3](research/14-sync-like-hatoba.md#3-存在哪和花多少)、[§5](research/14-sync-like-hatoba.md#5-改动和冲突)（`content.md` 归机器层；改到同一处时先推上服务器的当现在这份；删除记录去掉，见下一条；改动记录的段和提议放 `blobs`；`derived/` 先推上的留下；输掉的那份进回收站，不放 `sync.db`；[§2 第 1 条](research/14-sync-like-hatoba.md#2-本产品要同步什么)改成文件夹不按年月；第 23、145、167、181 行的「Obsidian 能打开」「Obsidian 同时在改」改成不开 usuyo 也能读、云盘上的另一台或手改）；[调研 11 §4.2](research/11-subscriptions-compat-and-wx-cli.md#42-标准) 第 526 行「条目的 `content.md`」改成「主题页、卡片、成稿、导出」 — 文档会话 · 小 · 不挡
 - [ ] 11-06 不留删除记录、「彻底忘掉」并进删掉（[open-decisions §1.8](open-decisions.md#18-grill-回答)），跟着改别的文档：[product-model §3](product-model.md#3-词汇表)（删除记录那条去掉）、[§5.2](product-model.md#52-六个动作)（「删掉」去掉「留下删除记录」；「彻底忘掉」那行去掉）、[§5.4](product-model.md#54-边界情况)（跟着收又遇到同一条：按这个订阅列过的跳过，不查删除记录，也不写「10 月 20 日删掉过」那行；「被主题页引用的来源被删掉并清除」：原话、标题留着，链接换成「已删掉」，引用处写「来源已删掉」，不带日期，照 [SPEC §1.4.3](SPEC.md#143-引用)；「回收站到期清除」：删掉的条目和主题、卡片、成稿整个移除时，改动记录里留的那行不写是哪一条；只留文字、合并这些照旧）、[§7.1](product-model.md#71-条目)（存在那行去掉「留删除记录」）、[§7.3](product-model.md#73-其他对象)（回收站那行结束时留下的改成「无」，删除记录那行去掉；「立即清除」照到期办，没有「彻底忘掉」了，见 [SPEC §1.7](SPEC.md#17-删掉)）、[§10](product-model.md#10-界面地图)（「回收站与删掉过的」只剩回收站一个列表，动作是恢复、立即清除）；[调研 14 §0](research/14-sync-like-hatoba.md#0-结论)（第 40 行「彻底忘掉」改成删掉到期或立即清除）、[§2](research/14-sync-like-hatoba.md#2-本产品要同步什么)、[§3](research/14-sync-like-hatoba.md#3-存在哪和花多少)（要同步的东西和 D1 `records` 里去掉删除记录）、[§5](research/14-sync-like-hatoba.md#5-改动和冲突)（第 176 行元数据去掉删除记录；第 186 行到期只推墓碑，不写删除记录；第 188 行去掉；第 189 行「彻底忘掉」改成到期和立即清除：推条目记录的墓碑，各台改自己手上的改动记录）；[discussion 第 4 条](discussion.md#4-删掉以后留下什么)「已答」那句补「11-06 改：不留删除记录，「彻底忘掉」并进删掉」，选项表照旧 — 文档会话 · 小 · 不挡
-- [ ] [插件协议 §13](plugin-protocol.md#13-待定) 第 29–34 项：资料库 v1 带来的协议改动（web 身份、`version:`、时间带偏移、评论、`usuyo.` 文件名、`skipped`、导出读回带主题 id 和卡片、成稿；第 34 项 11-05 照资料库的新形状重写，11-06 照读回的新做法又改写：readback 交回 `run` 的用户层键，宿主照 [SPEC §1.8](SPEC.md#18-同步) 合并，划线不读回，见 [open-decisions §1.8](open-decisions.md#18-grill-回答)） — 文档会话 · 小 · 挡插件运行器和导出
+- [ ] [插件协议 §13](plugin-protocol.md#13-待定) 第 29–34 项（11-11：29–32 代码照做了，正文跟着改了；剩 33、34）：资料库 v1 带来的协议改动（web 身份、`version:`、时间带偏移、评论、`usuyo.` 文件名、`skipped`、导出读回带主题 id 和卡片、成稿；第 34 项 11-05 照资料库的新形状重写，11-06 照读回的新做法又改写：readback 交回 `run` 的用户层键，宿主照 [SPEC §1.8](SPEC.md#18-同步) 合并，划线不读回，见 [open-decisions §1.8](open-decisions.md#18-grill-回答)） — 文档会话 · 小 · 挡插件运行器和导出
 - [x] [overview §5](overview.md#5-接口做到哪了) 表上面那句（「18 处对不上」）和插件协议那行的待定项数跟着改（11-05）
-- [ ] feature 001 时把 manifest、changeset、journal-entry 和 topic、card、draft、notes 的 schema 写进 `crates/usuyo-contract`，类型和 `testdata/` 照 [SPEC §1.9](SPEC.md#19-schema-和-pkgcontract) 改 — 主会话 · 中 · 挡资料库读写
+- [x] feature 001 时把 manifest、changeset、journal-entry 和 topic、card、draft、notes 的 schema 写进 `crates/usuyo-contract`，类型和 `testdata/` 照 [SPEC §1.9](SPEC.md#19-schema-和-usuyo-contract) 改（11-11）
 - [x] 代码里引 SPEC 节号的注释：Go 代码 11-11 整个换掉了（[ADR-004](decisions/ADR-004-rust-tauri.md)），不用改了
 
 <a id="3-原型和量测"></a>
@@ -91,7 +91,9 @@
 - [ ] 005 你写的那层：笔记、划线、主题页、卡片、成稿和引用 — 同上 · 大
 - [ ] 006 Agent（MCP、命令行）、007 导出和读回、008 文字同步 — 同上 · 大
 - [ ] 插件开发指引和官方插件仓库（11-11 你说后面弄好） — 同上 · 中 · 挡别人写插件
-- [ ] 跟着 [ADR-004](decisions/ADR-004-rust-tauri.md) 改写死 Go、MyGo、bleve、`pkg/contract` 的文档：[overview](overview.md)、[SPEC §1.9](SPEC.md#19-schema-和-pkgcontract) 和留着的 v0 各节、[插件协议 §8.3](plugin-protocol.md#83-校验与来源证明) 和 [§10](plugin-protocol.md#10-契约测试与-plugin-kit)、[ADR-002](decisions/ADR-002-frontend-stack.md)、[discussion 第 6、7 条](discussion.md#6-桌面壳) — 文档会话 · 小 · 不挡
+- [x] 跟着 [ADR-004](decisions/ADR-004-rust-tauri.md) 改写死 Go、MyGo、bleve、`pkg/contract` 的文档：overview、SPEC、插件协议、ADR-002 改了，SPEC 留着的 v0 各节加了「历史」的说明（11-11）
+- [ ] 还写着 Go、MyGo 或和代码对不上的：[discussion 第 6、7 条](discussion.md#6-桌面壳)（还写「保持 MyGo」）、[ADR-003](decisions/ADR-003-plugins.md)（`pkg/contract` 的 Go 类型）、[04 §6.4](research/04-tech-options.md#64-桌面壳mygo-与回退路径)；代码里的 `crates/usuyo-plugin-kit/README.md`（说 `Client::new` 不认环境变量，测试例子少两个字段）、`crates/usuyo-plugin-kit/src/http/address.rs` 和 `crates/usuyo-api/src/lib.rs` 开头的注释（只用 `Policy::strict`；事件能用 `EventSource` 读） — 文档会话、主会话 · 小 · 不挡
+- [ ] 代码和文档还没对上、要代码去做的（11-11 写在 SPEC、插件协议里，标「11-11 还没做」）：联网后并进平台身份、`inputUrl` 记原链接、回收站到期移除、列表分页、`blocked` 的「继续」按钮、凭据和沙箱 — 主会话 · 中 · 挡 002 以后的功能
 
 <a id="5-发布之前"></a>
 ## 5. 发布之前
