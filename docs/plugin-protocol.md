@@ -37,7 +37,7 @@ GitHub 组织（2026-11-05 定，用户自己注册）：官方组织 `usuyo`，
 <a id="04-需要同步的文档"></a>
 ### 0.4 需要同步的文档
 
-本文新增或改动了下面这些设置，[product-model §8.1](product-model.md#81-设置清单) 的设置清单要跟着改。格式照那张表；最后一列写和现有行的关系。
+本文新增或改动了下面这些设置，[PRD §8.1](PRD.md#711-设置) 的设置清单要跟着改。格式照那张表；最后一列写和现有行的关系。
 
 | 分组 | 设置 | 默认 | 离开本机 | 和现有行的关系 |
 |---|---|---|---|---|
@@ -299,7 +299,7 @@ capabilities:
 <a id="26-账号写操作"></a>
 ### 2.6 账号写操作
 
-对平台账号做写操作的能力要单独声明。v1 只定义一个：`unfavorite`，在平台上取消收藏（[product-model D3](product-model.md#12-待决问题)）。
+对平台账号做写操作的能力要单独声明。v1 只定义一个：`unfavorite`，在平台上取消收藏（[open-decisions D3](open-decisions.md)）。
 
 ```yaml
 capabilities:
@@ -1318,7 +1318,7 @@ jobs:
 5. 读 GitHub App 写在 tag 提交上的 check run，显示「校验通过 / 没通过 / 没有校验」（[ADR-003 §6](decisions/ADR-003-plugins.md#6-分发与校验)）。只认 `app.id` 等于 usuyo GitHub App 的 check run，客户端内置这个 id：任何人都能用 Actions 的 `GITHUB_TOKEN` 或自己的 App 写一个同名、结论为 success 的 check run。官方组织的插件没通过就拒装；读不到 check run 时（App 还没跑完、被限额挡住）推迟这次更新，下次检查时再读，不安装。第三方插件读不到时显示「没有校验」；没通过时拦下还是只标出，见 [§13](#13-待定) 第 7 项。
 6. 展示权限，用户同意后安装（[§8.5](#85-添加来源更新与权限扩大)）。权限页列出每个站点的 `site`、`credential` 和 `domains`，以及每个密钥设置会被注入到哪个 `inject.host`。
 
-分工：sha256 防下载途中被换；immutable releases 防发布后被换；来源证明说明资产是这个仓库在这个 tag 上由哪个工作流构建的，替代自己管签名密钥（Mihon 用 store 的签名指纹，[02 §15.7](research/02-adapter-ecosystems.md#157-适配器源信任与治理)）；GitHub App 的 check run 说明清单和契约测试过没过。界面上把 [product-model §8.1](product-model.md#81-设置清单) 里的「显示签名指纹」换成「由 `<owner>/<repo>` 的发版工作流构建」。
+分工：sha256 防下载途中被换；immutable releases 防发布后被换；来源证明说明资产是这个仓库在这个 tag 上由哪个工作流构建的，替代自己管签名密钥（Mihon 用 store 的签名指纹，[02 §15.7](research/02-adapter-ecosystems.md#157-适配器源信任与治理)）；GitHub App 的 check run 说明清单和契约测试过没过。界面上把 [PRD §8.1](PRD.md#711-设置) 里的「显示签名指纹」换成「由 `<owner>/<repo>` 的发版工作流构建」。
 
 GitHub App 的检查加三条：`env` 里有凭据类变量判失败；`access` 或 `login` 比上一版高时写进检查结果，供更新说明显示；被包装工具里有发帖、点赞、私信一类命令时只作提示。App 不执行插件，具体分工见 [§10](#10-契约测试与-plugin-kit)。
 

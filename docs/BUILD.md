@@ -318,7 +318,7 @@ flowchart LR
 |---|---|---|
 | `CLAUDE.md` | 给模型的规则：原则、技术栈、约定、命令 | — |
 | `docs/BUILD.md` | 这份：做到哪、界面清单、每条线的决定、依赖顺序、规矩、要用户答的验的办的 | 已并完（原来的 `TODO.md`、`overview.md`、`discussion.md`） |
-| `docs/PRD.md` | 产品：为什么做、是什么、原则、用到的词、功能 | `product-model.md`（`overview.md` 讲产品的部分已并进来） |
+| `docs/PRD.md` | 产品：为什么做、是什么、原则、用到的词、功能 | 已并完（原来的 `product-model.md`、`overview.md` 讲产品的部分） |
 | `docs/answers.md` | 用户逐条说过的话，一张表 | 回答表已从 `open-decisions.md` 搬来；那份里别的登记项，定了的并进产品、规格、协议，没定的进这份的[只有用户能答的](#7-只有用户能答的和能验的) |
 | `docs/spec/` | 内核的规格，按约定、资料库、本机接口、按机器的目录分开 | `SPEC.md`，去掉 v0 各层和旧对照表 |
 | `docs/protocol/` | 插件协议，按清单、获取、转换和导出、投递、凭据、隔离、分发、包装现有工具分开 | `plugin-protocol.md`，去掉采纳情况和改名对照这类历史 |

@@ -362,7 +362,7 @@ items/douyin/douyin-4plrcxk343onmyxibmrr672kga/
 <a id="13-条目的四个维度"></a>
 ### 1.3 条目的四个维度
 
-| 维度（[product-model §7.1](product-model.md#71-条目)） | 存在哪 | 怎么变 |
+| 维度（[PRD §7.1](PRD.md#8-条目的状态)） | 存在哪 | 怎么变 |
 |---|---|---|
 | 存下了多少 | `outputs`、`completeness`、`missing` | 宿主算；`completeness` 只升不降 |
 | 后台任务到哪一步 | 本机 `jobs.db`；做好的看 `derived/` | 不进资料库，两台不会来回改 |
@@ -507,7 +507,7 @@ Agent（经 MCP）或宿主调的模型改已有内容，一个提议一个文�
 - **要看得到笔记**：这几个改的是 `notes.md`、`highlights.md`，设置里没把「我的笔记」给 Agent 时回 `not-found`。
 - **`hunks`** 是 `[{id, before, after, anchor?}]`，按段（空行分开）：原文是 `before` 的那几段换成 `after`；`before` 为空时插在原文等于 `anchor` 的那段后面，`anchor` 为 `null` 插在末尾。
 - **`merge-items`**（A 并进 B）：A 的 `raw/<snapshotId>/` 整个移进 B 的 `raw/`；`snapshots`、`identities`、`origins` 并过去，`topics` 取并集，B 的 `aliases` 加上 A 的 id 和 A 的 `aliases`。A 的笔记正文按段接在 B 后面，记一句不一样时问你留哪句（同步自动并时出卡片）；划线：A 的 `highlights.md` 各行接在 B 后面，块 id 在 B 的文件里撞了就换一个。A 的 `manifest.json`、`content.md`、`derived/` 和一份 `notes.md`、`highlights.md` 进回收站（`reason: merge`），`derived/` 能重算；`raw/` 不进回收站：[K5 A](open-decisions.md#11-存储同步与联网) 只许「只留文字」和「删掉」把 `raw/` 移出资料库。
-- 主题「合并进另一个」（[product-model §7.3](product-model.md#73-其他对象)）的 op 等主题 feature 再加。
+- 主题「合并进另一个」（[PRD §7.3](PRD.md#82-其他对象)）的 op 等主题 feature 再加。
 
 <a id="152-提议文件"></a>
 #### 1.5.2 提议文件
@@ -559,7 +559,7 @@ Agent（经 MCP）或宿主调的模型改已有内容，一个提议一个文�
 | 主题、卡片、成稿 | `body.md` | `["body.md"]` |
 | `notes`、`content` | 原文件名的那个文件（`reason: conflict`） | 那一个 |
 | 只留文字 | 照条目里的相对路径放，例 `raw/<snapshotId>/images/001.jpg`、`derived/runs/<runId>/play.mp4` | 这些路径 |
-- **到期**：照回收站项 `entry.json` 的 `trashedAt`（条目、主题、卡片、成稿都一样；2026-11-11 定，原先写的是条目按 manifest 的 `stateAt`），加当前的 `trashDays` 现算（[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突)「到期照 A 写的算」），「一直」不到期；`entry.json` 的 `trashedAt` 照同步来的值写，不用本机挪进来的时间；`merge`、`conflict`、`kind: notes` 和 `kind: content` 只在本机，按本机的。移除本机文件，记 `purge`（`actor: host`）；`keep-text`、`merge`、`conflict`、`kind: notes` 和 `kind: content` 到期只做这一步。对象整个离开资料库的（条目 `reason: delete` 或 `undo`；主题、卡片、成稿，`conflict` 的除外）还要清干净、推墓碑，见下面的「清干净」。开了同步的库启动后先拉完一轮再判，按服务器时间（[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突)），离线时不移除，推墓碑走 CAS，底本不是最新就放弃这次、重新判断。没开同步的按本机时间；本机时间比记下的最大时间晚了超过 `trashDays`（会把回收站整个移除），先不移除，你点「照时间移除」才移除（推断；这个放行还没做，[总纲](BUILD.md#5-功能线)）。你在回收站里「立即清除」（[product-model §7.3](product-model.md#73-其他对象)）照到期办，不等 `trashDays`（11-06 定，[§1.10 第 16 条](#110-要你看一眼)）；确认框列出还在引用它的页（推断）。11-11 代码：守护进程启动时查一遍，之后每 6 小时一遍（每遍都是整个回收站），到期的照下面移除。到期时间照回收站项 `entry.json` 的 `trashedAt` 加 `trashDays` 现算；`trashDays` 是「一直」时不到期。一项读不了的跳过、只记回收站 id 和错误码（日志里没有标题），不拦别的。时钟守卫：记下的最大时间放在 `libraries/<libraryId>/clock-mark`（还没有就取改动记录里最晚的一行）；这一遍有到期的、而现在比它晚了超过 `trashDays` 整天时，一项也不移除，只记下有几项因此留着（日志里的 `held`），`clock-mark` 也不更新。没有这种情况的话，这一遍结束把 `clock-mark` 更新成它和现在中较晚的。代码里有「照时间移除」这条路（跳过守卫），但还没有接口和界面能触发（还没做，[总纲](BUILD.md#5-功能线)）；每 6 小时的那一遍永远只用 `Check`，守卫拦下以后会不会自己放行是个开放的问题，也记在 TODO。回收站里一项也可以「立即清除」：`POST /trash/{trashId}/purge`，`trashId` 是回收站项的 id，不是条目 id；成功回 204，一项照到期办，整个离开资料库的条目发 `item-removed`。现在没有列出回收站的接口，也没有回收站页。
+- **到期**：照回收站项 `entry.json` 的 `trashedAt`（条目、主题、卡片、成稿都一样；2026-11-11 定，原先写的是条目按 manifest 的 `stateAt`），加当前的 `trashDays` 现算（[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突)「到期照 A 写的算」），「一直」不到期；`entry.json` 的 `trashedAt` 照同步来的值写，不用本机挪进来的时间；`merge`、`conflict`、`kind: notes` 和 `kind: content` 只在本机，按本机的。移除本机文件，记 `purge`（`actor: host`）；`keep-text`、`merge`、`conflict`、`kind: notes` 和 `kind: content` 到期只做这一步。对象整个离开资料库的（条目 `reason: delete` 或 `undo`；主题、卡片、成稿，`conflict` 的除外）还要清干净、推墓碑，见下面的「清干净」。开了同步的库启动后先拉完一轮再判，按服务器时间（[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突)），离线时不移除，推墓碑走 CAS，底本不是最新就放弃这次、重新判断。没开同步的按本机时间；本机时间比记下的最大时间晚了超过 `trashDays`（会把回收站整个移除），先不移除，你点「照时间移除」才移除（推断；这个放行还没做，[总纲](BUILD.md#5-功能线)）。你在回收站里「立即清除」（[PRD §7.3](PRD.md#82-其他对象)）照到期办，不等 `trashDays`（11-06 定，[§1.10 第 16 条](#110-要你看一眼)）；确认框列出还在引用它的页（推断）。11-11 代码：守护进程启动时查一遍，之后每 6 小时一遍（每遍都是整个回收站），到期的照下面移除。到期时间照回收站项 `entry.json` 的 `trashedAt` 加 `trashDays` 现算；`trashDays` 是「一直」时不到期。一项读不了的跳过、只记回收站 id 和错误码（日志里没有标题），不拦别的。时钟守卫：记下的最大时间放在 `libraries/<libraryId>/clock-mark`（还没有就取改动记录里最晚的一行）；这一遍有到期的、而现在比它晚了超过 `trashDays` 整天时，一项也不移除，只记下有几项因此留着（日志里的 `held`），`clock-mark` 也不更新。没有这种情况的话，这一遍结束把 `clock-mark` 更新成它和现在中较晚的。代码里有「照时间移除」这条路（跳过守卫），但还没有接口和界面能触发（还没做，[总纲](BUILD.md#5-功能线)）；每 6 小时的那一遍永远只用 `Check`，守卫拦下以后会不会自己放行是个开放的问题，也记在 TODO。回收站里一项也可以「立即清除」：`POST /trash/{trashId}/purge`，`trashId` 是回收站项的 id，不是条目 id；成功回 204，一项照到期办，整个离开资料库的条目发 `item-removed`。现在没有列出回收站的接口，也没有回收站页。
 - **再遇到同一身份**（11-06 改，[§1.10 第 12 条](#110-要你看一眼)：不记删过的，移除以后再收下就是普通收下）：
 
 | 入口 | 在回收站里 | 私密 |

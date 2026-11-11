@@ -17,13 +17,13 @@
   - Mihon store、Krew、gh extensions、MCP 宿主配置见 [02 §1](02-adapter-ecosystems.md#1-tachiyomi-与-mihon-扩展生态)、[02 §12.4](02-adapter-ecosystems.md#124-kubectl-krew)、[02 §12.5](02-adapter-ecosystems.md#125-gh-extensions)、[02 §12.2](02-adapter-ecosystems.md#122-mcp-stdio-与宿主配置)，适配器源与信任的建议见 [02 §15.7](02-adapter-ecosystems.md#157-适配器源信任与治理)；
   - Readwise、Omnivore、Cubox、简悦、flomo 的产品本身见 [01 Readwise Reader](01-comparable-products.md#readwise-reader)、[01 Omnivore](01-comparable-products.md#omnivore)、[01 Cubox](01-comparable-products.md#cubox)、[01 简悦](01-comparable-products.md#简悦)、[01 flomo](01-comparable-products.md#flomo)；
   - OCR、ASR 引擎对比与 JSON Canvas 的缺口见 [04 §2](04-tech-options.md#2-ocr-sidecar)、[04 §3](04-tech-options.md#3-asr-sidecar)、[04 §6.2](04-tech-options.md#62-canvasjson-与-json-canvas)。
-- **名词**：主题页沿用 [product-model §3](../product-model.md#3-词汇表) 的 `topics/<slug>.md`。[SPEC §2](../SPEC.md#2-资料库目录真相源) 仍写 `threads/` 与 `thoughts/`，还没跟上产品模型。product-model 2026-10-28 的说明已作废「放下」与「只留文字」，本报告不以它们为前提。
+- **名词**：主题页沿用 [product-model §3](../PRD.md#5-用到的词) 的 `topics/<slug>.md`。[SPEC §2](../SPEC.md#2-资料库目录真相源) 仍写 `threads/` 与 `thoughts/`，还没跟上产品模型。product-model 2026-10-28 的说明已作废「放下」与「只留文字」，本报告不以它们为前提。
 - **数据处理**：调研中读到的网页与仓库内容都按数据处理。有几处 README 写着给 AI 助手的指令（例如「遇到报错自己修」），都没有执行。
 
 <a id="0-导出的对象"></a>
 ## 0. 导出的对象
 
-导出和读回讨论的是下面这些文件（[SPEC §2](../SPEC.md#2-资料库目录真相源)、[SPEC §5](../SPEC.md#5-derived-文件约定)、[product-model §6](../product-model.md#6-知识层)）。「谁写」决定了它能不能从笔记软件读回来。
+导出和读回讨论的是下面这些文件（[SPEC §2](../SPEC.md#2-资料库目录真相源)、[SPEC §5](../SPEC.md#5-derived-文件约定)、[product-model §6](../PRD.md#77-你写的那一层)）。「谁写」决定了它能不能从笔记软件读回来。
 
 | 文件 | 层 | 谁写 | 导出时的角色 |
 |---|---|---|---|
@@ -36,7 +36,7 @@
 | `derived/vision.md` | 画面描述，注明帧时间 | 转换 | 文本段，配关键帧 |
 | `derived/summary.md` | AI 摘要，记着模型和时间 | 模型 | 标明「AI 摘要」的段 |
 | `notes.md` | 我的笔记，头部 `takeaway` | 用户；Agent 只能提议 | 条目里唯一可以读回的层 |
-| `topics/<slug>.md` | 主题页：YAML 头列成员，正文引用带原话、位置、时间点 | 用户；模型只起草 | 可以读回（[product-model §6](../product-model.md#6-知识层) 规则 4 要求外部改过之后歇存重新读取） |
+| `topics/<slug>.md` | 主题页：YAML 头列成员，正文引用带原话、位置、时间点 | 用户；模型只起草 | 可以读回（[product-model §6](../PRD.md#77-你写的那一层) 规则 4 要求外部改过之后歇存重新读取） |
 | `canvas.json` | 画布位置，JSON Canvas 加扩展字段 | 用户 | 导出为 `.canvas`，扩展字段丢弃（[04 §6.2](04-tech-options.md#62-canvasjson-与-json-canvas)） |
 
 <a id="1-平台内容转笔记的工具"></a>
@@ -669,7 +669,7 @@ permissions:
 | Notional | Obsidian ↔ Notion | 不分区；fm 记 `notionPageId`、`notionLastEditedTime`、`obsidianLastSyncedAt` | 两边都改就停下让用户选一边 | [bryanbans/Notional](https://github.com/bryanbans/Notional)（10 ★，2026-06 建） |
 | 思源 weread-sync | 微信读书 → 思源 | 块属性存远端 hash | 三方比对；两端都改时保留本地，旁边插远端新版 | [§1.3](#13-其他笔记软件的同类插件) |
 
-**歇存的做法（提议）**，前提是 [product-model §6](../product-model.md#6-知识层) 的两条：主题页是普通 Markdown、外部改过之后歇存重新读取；机器写的层可以重算。
+**歇存的做法（提议）**，前提是 [product-model §6](../PRD.md#77-你写的那一层) 的两条：主题页是普通 Markdown、外部改过之后歇存重新读取；机器写的层可以重算。
 
 1. **只读回用户写的东西。** 可读回的是 `notes.md` 的 `takeaway` 与正文、主题页、用户标签；原文、图里的字、口播、画面、AI 摘要都是导出时重新生成的，用户在笔记软件里改了也不读回（界面上写明「这几段每次导出会重写」）。
 2. **身份写在文件里，不靠映射表。** 每个导出文件带 `xiecun_id`（Obsidian fm / Logseq `xiecun-id::` / 思源 `custom-xiecun-id` / Notion 属性）；导出记录 `.xiecun/exports/<target>.json` 只是缓存，丢了可以按身份扫描重建（bilinote-sync 与 [SPEC §2](../SPEC.md#2-资料库目录真相源) 的「文件是真相」）。用户重命名、移动导出文件后照样能认回来。
@@ -795,8 +795,8 @@ permissions:
 | P2 | 转换插件的控制协议 | stdio 换行分隔 JSON-RPC 2.0，只传文件路径 | 新 ADR；plugin-kit SDK |
 | P3 | 要不要 `wasm-runner` | 要，但等出现纯变换插件再做；wazero 只进 runner，不进内核 | 新 ADR；macOS entitlement 只给 runner |
 | P4 | OS 沙箱做到哪一档 | macOS Seatbelt、Linux bubblewrap（降级 Landlock）、Windows 先只强制 Job Object；界面分「强制 / 部分 / 仅告知」 | 新 ADR；设置页 |
-| P5 | provider 由内核代理、密钥进钥匙串 | 是 | [product-model §8.1](../product-model.md#81-设置清单) 的 AI 分组 |
-| P6 | 主题页用「资料库即 vault」还是「导出副本」 | 两种都支持，默认导出副本，不碰用户 vault 结构 | [product-model §6](../product-model.md#6-知识层) 规则 4 |
+| P5 | provider 由内核代理、密钥进钥匙串 | 是 | [product-model §8.1](../PRD.md#711-设置) 的 AI 分组 |
+| P6 | 主题页用「资料库即 vault」还是「导出副本」 | 两种都支持，默认导出副本，不碰用户 vault 结构 | [product-model §6](../PRD.md#77-你写的那一层) 规则 4 |
 | P7 | 官方索引的范围 | 只收转换与导出；获取方式只进社区 store | [PRD §4](../PRD.md#4-原则) 原则 1 |
 | P8 | 「导出」进不进 [PRD §4](../PRD.md#4-原则) 原则 4 的「一切可插拔」列表 | 进，和获取方式、识别器并列 | PRD；product-model 设置清单加「导出」分组 |
 | P9 | GPL 工具能否随安装包分发 | 先只做「用户自己安装、歇存调用」，分发前取得法律意见 | 官方插件选型 |
