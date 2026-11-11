@@ -1789,8 +1789,8 @@ usuyo plugin pack --version 0.3.1 dist/*
 20. `usuyo-fetch` 收不收包装自带模型的第三方手机 Agent 的获取插件（[§4.3](#43-模型与密钥由宿主代发)）：[R11](open-decisions.md#12-声明与责任)。
 21. 用户自己填的来源参数：`sources` 只能列插件自己知道的来源，填不进一个 feed 地址或一个账号（[§3.8](#38-list-与跟着收)）。提议加子命令 `resolve-source <输入>`，返回 `{match, source, title, order, owner}`；先例是 RSSHub 路由的 `:param`：[调研 11 §6](research/11-subscriptions-compat-and-wx-cli.md#6-对插件协议的影响)。
 22. feed 条目的身份和第一次拉：`guid`、`atom:id` 是任意字符串，套不进 plugin-kit 要求的 `contentId` 正则；别人的来源第一次拉只记下已有条目、不收，以后只收新出现的（[§3.8](#38-list-与跟着收)）：[调研 11 §6](research/11-subscriptions-compat-and-wx-cli.md#6-对插件协议的影响)。11-11 答了一半：宿主不查 `contentId` 的格式，只要非空、不超过 256 字节、没有控制字符，`guid` 放得进；第一次拉还没做。
-23. OPML 导进来的是订阅，不是条目：[§3.9](#39-从文件导入) 的导入插件只会列出条目，要有地方建一批跟着收的订阅。只在 [discussion 第 1 条](discussion.md#1-什么东西进资料库)选 B 时需要：[调研 11 §6](research/11-subscriptions-compat-and-wx-cli.md#6-对插件协议的影响)。
-24. 上游 AI 产物放哪：fetch 输出加一个可选的 `derived` 字段，放 Horizon 这类上游已经算好的摘要、打分和标签，宿主照转换插件的规矩移进 `derived/`；另加一个原文来源标记（例如 `textOrigin: platform | machine`），界面据此标出原文是机器写的。`derived` 那半要不要做，随 [discussion 第 1 条](discussion.md#1-什么东西进资料库)一起答：[调研 11 §6](research/11-subscriptions-compat-and-wx-cli.md#6-对插件协议的影响)。
+23. OPML 导进来的是订阅，不是条目：[§3.9](#39-从文件导入) 的导入插件只会列出条目，要有地方建一批跟着收的订阅。只在 [回答表第 1 条](answers.md#1-什么东西进资料库)选 B 时需要：[调研 11 §6](research/11-subscriptions-compat-and-wx-cli.md#6-对插件协议的影响)。
+24. 上游 AI 产物放哪：fetch 输出加一个可选的 `derived` 字段，放 Horizon 这类上游已经算好的摘要、打分和标签，宿主照转换插件的规矩移进 `derived/`；另加一个原文来源标记（例如 `textOrigin: platform | machine`），界面据此标出原文是机器写的。`derived` 那半要不要做，随 [回答表第 1 条](answers.md#1-什么东西进资料库)一起答：[调研 11 §6](research/11-subscriptions-compat-and-wx-cli.md#6-对插件协议的影响)。
 25. 连本机 Unix socket 的权限：包装常驻进程类的工具（例如 wx-cli 的 `daemon.sock`）时，`fs.read`、`network.hosts` 都表达不了「连本机某个 socket」，要么加一个权限项，要么要求这类插件走本机 HTTP（[§2.7](#27-权限-permissions)）。只在第三方写包装常驻进程的插件时用得到：[调研 11 §6](research/11-subscriptions-compat-and-wx-cli.md#6-对插件协议的影响)。
 26. 按关键词搜、按创作者主页列：现有 `list` 只列用户自己的收藏夹和列表，没有带查询词的搜索，也没有「某个创作者的主页」这种来源；结果只列出、不进库，用户挑了才 `fetch`（2026-11-04 用户要，[回答表](answers.md)）。
 27. 评论：`fetch` 输出没有评论这一类；要可选、默认不取，按平台或按条打开，能设上限（同上）。评论 JSON 的形状、上限怎么交给插件（`fetch` 现在只有 `--want`）还没定。11-11：放哪照第 31 项做了，形状和上限还没定。

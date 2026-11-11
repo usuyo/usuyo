@@ -3,7 +3,7 @@
 在推荐流外，维护一套你自己的思路。
 
 - 产品定义：[docs/PRD.md](docs/PRD.md)
-- 待讨论：[docs/discussion.md](docs/discussion.md)
+- 用户逐条的回答：[docs/answers.md](docs/answers.md)
 - 总纲（做到哪、要做的事）：[docs/BUILD.md](docs/BUILD.md)
 - 技术规格：[docs/SPEC.md](docs/SPEC.md)
 - 功能文档：[docs/features/](docs/features/)

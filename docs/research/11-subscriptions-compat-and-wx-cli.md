@@ -3,7 +3,7 @@
 
 状态：草案 · 2026-11-04
 
-回答 11-04 的三句话：「然后再看看wx-cli」「然后我希望兼容性和开创性都需要具备，后续甚至可以支持那种，rss，Thysrael/Horizon这种」「然后之前调研的所有的方案都可以作为一种插件去弄」。要你定的事在 discussion [第 1 条](../discussion.md#1-什么东西进资料库)、[第 9 条](../discussion.md#9-自己的获取插件组织收什么)、[第 17 条](../discussion.md#17-兼容和开创各指什么)；11-04 的回复记在 [open-decisions §1.7](../open-decisions.md#17-11-04-回复记下的)。
+回答 11-04 的三句话：「然后再看看wx-cli」「然后我希望兼容性和开创性都需要具备，后续甚至可以支持那种，rss，Thysrael/Horizon这种」「然后之前调研的所有的方案都可以作为一种插件去弄」。要你定的事在 discussion [第 1 条](../answers.md#1-什么东西进资料库)、[第 9 条](../answers.md#9-自己的获取插件组织收什么)、[第 17 条](../answers.md#17-兼容和开创各指什么)；11-04 的回复记在 [open-decisions §1.7](../open-decisions.md#17-11-04-回复记下的)。
 
 <a id="约定"></a>
 ## 约定
@@ -296,7 +296,7 @@ xiaotianhu/wx-cli 只是同名：一个扫码登录的远程 Shell 机器人，�
 |---|---|---|---|
 | 读它发布的 Atom | 通用 feed 插件；一篇日报是一条 entry | 小（feed 插件做好以后） | 建议 |
 | 读 `horizon-*.md` | 投递文件夹，或一个导入插件（[§3.9](../plugin-protocol.md#39-从文件导入)、[§5.2](../plugin-protocol.md#52-监听文件夹)） | 小 | 建议 |
-| Agent Skill | 你的 Agent 跑 Horizon、读日报，把你想要的链接逐条 `{name} add`（[§5.3](../plugin-protocol.md#53-各种入口怎么接)，能不能直接收下等 [discussion 第 15 条](../discussion.md#15-agent-能不能直接收下)） | 小 | 可以 |
+| Agent Skill | 你的 Agent 跑 Horizon、读日报，把你想要的链接逐条 `{name} add`（[§5.3](../plugin-protocol.md#53-各种入口怎么接)，能不能直接收下等 [discussion 第 15 条](../answers.md#15-agent-能不能直接收下)） | 小 | 可以 |
 | 包装它的 MCP（[§9.3](../plugin-protocol.md#93-包装-mcp-服务)） | 获取插件启动 `horizon-mcp` | 大 | **不建议**：要在 `requires.runtime` 里带一整套 Python；它用自己配的密钥调模型，[§4.3](../plugin-protocol.md#43-模型与密钥由宿主代发) 的宿主代发管不到；`hz_send_webhook` 会往外发，插件得写明不调 |
 | 它的 Webhook 推到投递接口 | [§5.1](../plugin-protocol.md#51-本机-http-接口) | — | **不合适**：`api` 令牌只收链接，一段 `text` 只取第一个链接，整篇日报会变成一个链接 |
 
@@ -315,7 +315,7 @@ xiaotianhu/wx-cli 只是同名：一个扫码登录的远程 Shell 机器人，�
 <a id="3-订阅和资料库的边界"></a>
 ## 3. 订阅和资料库的边界
 
-收下是你拿的，feed 条目是自己来的。这一节比五个选项，[discussion 第 1 条](../discussion.md#1-什么东西进资料库) 由你定。
+收下是你拿的，feed 条目是自己来的。这一节比五个选项，[discussion 第 1 条](../answers.md#1-什么东西进资料库) 由你定。
 
 <a id="31-现状"></a>
 ### 3.1 现状
@@ -467,7 +467,7 @@ xiaotianhu/wx-cli 只是同名：一个扫码登录的远程 Shell 机器人，�
 - 原则 4、5 和 07 的定位都不用让步；
 - 在「AI 阅读器」这条路上，Folo（39k ★）和 TrendRadar（63k ★）已经走得很远。
 
-**要你答的**，并在 [discussion 第 1 条](../discussion.md#1-什么东西进资料库) 里：
+**要你答的**，并在 [discussion 第 1 条](../answers.md#1-什么东西进资料库) 里：
 - 你现在用哪个阅读器？这决定先接 Google Reader API，还是 Readwise、Folo。
 - 「加星就是收下」能不能当 RSS 的唯一入口？
 - 低频个人来源那一小条要不要？
@@ -542,7 +542,7 @@ Mastodon、Bluesky 的路径出处：
 | 本机 HTTP 读接口 | 不在：投递接口只有 `ping`、`deliver`、`batches` | 和 MCP 同源生成 | 中 |
 | **资料库导出成 feed** | 不在 | 导出插件 `target: feed`、`writes: files` | 中 |
 
-**导出成 feed 的两种看法**（都是推断，要你定，在 [discussion 第 17 条](../discussion.md#17-兼容和开创各指什么)）：
+**导出成 feed 的两种看法**（都是推断，要你定，在 [discussion 第 17 条](../answers.md#17-兼容和开创各指什么)）：
 - **不冲突**：阅读器里的未读是你自己选的，不在本产品里，和原则 4 不冲突。
 - **冲突**：阅读器大多会显示未读数，等于本产品亲手造了一个未读数，和原则 4 冲突。
 
@@ -601,14 +601,14 @@ Mastodon、Bluesky 的路径出处：
 - 兼容靠 [§4.2](#42-标准) 那张表里的标准；
 - 开创放在收下以后：你的判断怎么留下，Agent 怎么只提议。
 
-不放在「又一个 AI 阅读器」上。这一问在 [discussion 第 17 条](../discussion.md#17-兼容和开创各指什么)。
+不放在「又一个 AI 阅读器」上。这一问在 [discussion 第 17 条](../answers.md#17-兼容和开创各指什么)。
 
 ---
 
 <a id="6-对插件协议的影响"></a>
 ## 6. 对插件协议的影响
 
-11-04 那句「之前调研的所有的方案都可以作为一种插件去弄」，按窄读处理：协议对七个获取层级都开放，client-hook 也能写成插件。你自己的 `{fetch-org}` 收哪些，是 [R5](../open-decisions.md#12-声明与责任)、[R11](../open-decisions.md#12-声明与责任) 的事，另问（[discussion 第 9 条](../discussion.md#9-自己的获取插件组织收什么)）。
+11-04 那句「之前调研的所有的方案都可以作为一种插件去弄」，按窄读处理：协议对七个获取层级都开放，client-hook 也能写成插件。你自己的 `{fetch-org}` 收哪些，是 [R5](../open-decisions.md#12-声明与责任)、[R11](../open-decisions.md#12-声明与责任) 的事，另问（[discussion 第 9 条](../answers.md#9-自己的获取插件组织收什么)）。
 
 <a id="61-插件化覆盖表"></a>
 ### 6.1 插件化覆盖表
