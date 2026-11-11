@@ -1,7 +1,7 @@
 <a id="adr-004-内核换成-rust壳换成-tauri-2"></a>
 # ADR-004 内核换成 Rust，壳换成 Tauri 2
 
-日期：2026-11-11 · 状态：accepted · 取代 [ADR-004](ADR-004-rust-tauri.md)
+日期：2026-11-11 · 状态：accepted · 取代原来的 ADR-001（Go 内核加 MyGo 壳）
 
 <a id="背景"></a>
 ## 背景
