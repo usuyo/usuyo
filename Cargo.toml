@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "plugins/*"]
+# 插件里只有通用网页获取在这个工作区；转换插件带各自的原生依赖，各是一个独立的包，有自己的锁文件。
+members = ["crates/*", "plugins/web"]
 # 桌面壳自带工作区，接好以后再并进来。
 exclude = ["apps/desktop/src-tauri"]
 
