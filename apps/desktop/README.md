@@ -38,7 +38,7 @@ pnpm typecheck && pnpm lint && pnpm test && pnpm build
 - 除了 CORS 预检，每个请求都要带 `Authorization: Bearer <令牌>`；令牌在按机器目录的 `api-token`（0600）。打包的应用里由壳读出来，经 `src/shell/` 交给前端。
 - 带 `Origin` 的还得在名单里：只有桌面壳的 webview（`tauri://localhost`，Windows 是 `http://tauri.localhost`）。开发服务器的来源不在名单里。
 - `<img>`、`<video>` 带不了请求头，媒体地址自带守护进程每次启动随机生成的 `k`，只对 `/media/` 有效。事件流 `GET /events` 用 `fetch` 读，好带令牌。
-- 窗口的 CSP 在 `src-tauri/tauri.conf.json`：只许自己的资源和 `http://127.0.0.1:47615`。
+- 窗口的 CSP 在 `src-tauri/tauri.conf.json`：只许自己的资源和 `http://127.0.0.1:47615`。脚本只许自己的文件；样式另外放行行内的（`style-src` 带 `'unsafe-inline'`），因为 React Aria 这类组件库运行时会往页面里插 `<style>`，不放行会被挡掉。平台来的字只当文字显示，不会变成样式。
 
 ## 还没做
 

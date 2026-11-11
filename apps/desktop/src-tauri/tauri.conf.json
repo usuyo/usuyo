@@ -24,7 +24,7 @@
       "csp": {
         "default-src": "'self'",
         "script-src": "'self'",
-        "style-src": "'self'",
+        "style-src": "'self' 'unsafe-inline'",
         "img-src": "'self' data: http://127.0.0.1:47615",
         "media-src": "'self' http://127.0.0.1:47615",
         "font-src": "'self'",
