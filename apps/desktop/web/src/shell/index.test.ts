@@ -1,14 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { openExternal, webUrl } from "./index";
+import { clearVisitorData, openExternal, openVisitor, webUrl } from "./index";
 
 const openUrl = vi.fn<(url: string) => Promise<void>>();
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl }));
+const invoke = vi.fn<(command: string, args: unknown) => Promise<void>>();
+vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
 const hostile = ["javascript:alert(1)", "file:///etc/passwd", "data:text/html,<b>x</b>", "not a url", "", "//evil.test/x"];
 
 afterEach(() => {
   vi.unstubAllGlobals();
   openUrl.mockReset();
+  invoke.mockReset();
   Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
 });
 
@@ -42,5 +45,32 @@ describe("openExternal", () => {
     openUrl.mockRejectedValue(new Error("forbidden"));
     vi.spyOn(console, "warn").mockImplementation(() => {});
     expect(await openExternal("https://example.test/b")).toBe(false);
+  });
+});
+
+describe("openVisitor", () => {
+  it("does nothing outside the desktop shell", async () => {
+    expect(await openVisitor("www.example.test", true)).toBe(false);
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("tells the shell whether to start from a clean data store", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    invoke.mockResolvedValue();
+    expect(await openVisitor("www.example.test", false)).toBe(true);
+    expect(invoke).toHaveBeenLastCalledWith("open_visitor", { site: "www.example.test", replace: false });
+    expect(await openVisitor("www.example.test", true)).toBe(true);
+    expect(invoke).toHaveBeenLastCalledWith("open_visitor", { site: "www.example.test", replace: true });
+  });
+});
+
+describe("clearVisitorData", () => {
+  it("does nothing outside the desktop shell and clears the visitor store inside it", async () => {
+    await clearVisitorData("www.example.test");
+    expect(invoke).not.toHaveBeenCalled();
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    invoke.mockResolvedValue();
+    await clearVisitorData("www.example.test");
+    expect(invoke).toHaveBeenCalledWith("clear_visitor", { site: "www.example.test" });
   });
 });

@@ -28,8 +28,13 @@ describe("import words", () => {
   it("explains why an import waits", () => {
     const now = new Date(2026, 10, 11, 14, 0, 0);
     const until = new Date(2026, 10, 11, 14, 0, 5).toISOString();
-    expect(waitingText({ code: "pacing", until }, "B站", now)).toBe("按B站的节奏，下一条大概 14:00:05");
-    expect(waitingText({ code: "login-required" }, "B站", now)).toBe("要重新登录B站：登录好了点「接着导入」");
-    expect(waitingText({ code: "blocked", hint: "B站挡住了" }, "B站", now)).toBe("B站挡住了 · 等你点「接着导入」");
+    expect(waitingText({ code: "pacing", until }, "B站", undefined, now)).toBe("按B站的节奏，下一条大概 14:00:05");
+    expect(waitingText({ code: "login-required" }, "B站", undefined, now)).toBe("要重新登录B站：登录好了点「接着导入」");
+    expect(waitingText({ code: "visitor-required" }, "小红书", undefined, now)).toBe("要访客身份；好了点「接着导入」");
+    expect(waitingText({ code: "visitor-required" }, "小红书", "missing", now)).toBe(
+      "要先取访客身份：在「获取插件」页的「访客身份」里取一份；好了点「接着导入」",
+    );
+    expect(waitingText({ code: "visitor-required" }, "小红书", "present", now)).toBe("这份访客身份不管用了，换一份再试；好了点「接着导入」");
+    expect(waitingText({ code: "blocked", hint: "B站挡住了" }, "B站", undefined, now)).toBe("B站挡住了 · 等你点「接着导入」");
   });
 });

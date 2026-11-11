@@ -72,12 +72,20 @@ export async function openLogin(site: string): Promise<boolean> {
 /**
  * 开取访客身份的窗口：不登录。只交站点名，打开哪一页、等哪些 cookie 由壳自己问内核；
  * 页面自己生成的访客 cookie 由壳直接交给内核，和同一主机的账号分开存。
+ * `replace`：换一份。壳先清掉这个窗口那份网页数据，页面才会给一份新的；第一次取不用。
  */
-export async function openVisitor(site: string): Promise<boolean> {
+export async function openVisitor(site: string, replace: boolean): Promise<boolean> {
   if (!isDesktopShell()) return false;
   const { invoke } = await import("@tauri-apps/api/core");
-  await invoke("open_visitor", { site });
+  await invoke("open_visitor", { site, replace });
   return true;
+}
+
+/** 去掉访客身份时清掉那个窗口的网页数据（cookie、缓存）；再取就从一个干净的窗口开始。 */
+export async function clearVisitorData(site: string): Promise<void> {
+  if (!isDesktopShell()) return;
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("clear_visitor", { site });
 }
 
 /** 退出登录以后清掉这个站点那份网页数据（登录窗口的 cookie、缓存），下次登录从头来。 */

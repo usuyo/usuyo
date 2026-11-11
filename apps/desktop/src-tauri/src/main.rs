@@ -43,13 +43,21 @@ async fn open_login(
 }
 
 /// 开取访客身份的窗口（不登录）。前端只给站点名，打开哪一页、等哪些 cookie 由壳自己问内核。
+/// `replace`（换一份）：先关掉开着的窗口、清掉它那份网页数据，免得页面还认得上一份。
 #[tauri::command]
 async fn open_visitor(
     app: tauri::AppHandle,
     logins: tauri::State<'_, Arc<Logins>>,
     site: String,
+    replace: bool,
 ) -> Result<(), String> {
     let logins = Arc::clone(&logins);
+    if replace {
+        logins
+            .clear(&app, &login::visitor_store(&site))
+            .await
+            .map_err(|e| plain("清掉上一份访客身份的网页数据", &e))?;
+    }
     tauri::async_runtime::spawn_blocking(move || logins.open_visitor(&app, &site))
         .await
         .map_err(|e| e.to_string())?
@@ -60,6 +68,20 @@ async fn open_visitor(
 #[tauri::command]
 fn login_done(webview: tauri::Webview, logins: tauri::State<'_, Arc<Logins>>) {
     logins.pressed(webview.label());
+}
+
+/// 去掉访客身份时，先清掉它那个窗口的网页数据（再由前端去内核删），免得再取时页面还认得上一份。
+#[tauri::command]
+async fn clear_visitor(
+    app: tauri::AppHandle,
+    logins: tauri::State<'_, Arc<Logins>>,
+    site: String,
+) -> Result<(), String> {
+    let logins = Arc::clone(&logins);
+    logins
+        .clear(&app, &login::visitor_store(&site))
+        .await
+        .map_err(|e| plain("清掉访客身份的网页数据", &e))
 }
 
 /// 退出登录以后清掉这个站点的网页数据。
@@ -85,7 +107,8 @@ fn main() {
             open_login,
             open_visitor,
             login_done,
-            clear_login
+            clear_login,
+            clear_visitor
         ])
         .setup(|app| {
             let plugins = app.path().resource_dir()?.join("plugins");

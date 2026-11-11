@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { VisitorIdentity as Visitor } from "../api/endpoints";
 import { useForgetVisitor } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
-import { openVisitor } from "../shell";
+import { clearVisitorData, openVisitor } from "../shell";
 import { Button } from "../ui/Button";
 
 const STATE_TEXT: Record<Visitor["state"], string> = {
@@ -20,11 +20,24 @@ export function VisitorIdentity({ visitor }: { visitor: Visitor }) {
   async function take() {
     setSay(null);
     try {
-      const opened = await openVisitor(visitor.site);
+      const opened = await openVisitor(visitor.site, stored);
       setSay(opened ? "窗口开着：页面自己打开，取到访客身份就关上。" : "这个窗口只在 usuyo 的应用里开得了，浏览器标签页里不行。");
     } catch (error) {
       setSay(typeof error === "string" ? error : "没能打开窗口");
     }
+  }
+
+  // 先清窗口的网页数据、再让内核删：前一步失败就什么都没去掉，可以再点；
+  // 反过来的话内核删了而窗口还留着旧 cookie，再取会拿回上一份。内核那一步成败才算去掉了没有。
+  async function remove() {
+    setSay(null);
+    try {
+      await clearVisitorData(visitor.site);
+    } catch (error) {
+      setSay(typeof error === "string" ? error : "没能清掉访客窗口的网页数据");
+      return;
+    }
+    forget.mutate(visitor.site);
   }
 
   return (
@@ -39,7 +52,7 @@ export function VisitorIdentity({ visitor }: { visitor: Visitor }) {
           {stored ? "换一份" : "取访客身份"}
         </Button>
         {stored ? (
-          <Button variant="quiet" size="sm" onPress={() => forget.mutate(visitor.site)} isDisabled={forget.isPending}>
+          <Button variant="quiet" size="sm" onPress={() => void remove()} isDisabled={forget.isPending}>
             去掉
           </Button>
         ) : null}

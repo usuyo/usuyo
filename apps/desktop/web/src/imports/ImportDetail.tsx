@@ -2,8 +2,8 @@ import { Link } from "@tanstack/react-router";
 import { Check } from "lucide-react";
 import { useState } from "react";
 import { Checkbox, ToggleButton, ToggleButtonGroup } from "react-aria-components";
-import type { ImportEntry, ImportView } from "../api/endpoints";
-import { useImport, useImportChange, useImportEntries, usePlugins } from "../api/hooks";
+import type { ImportEntry, ImportView, VisitorIdentity } from "../api/endpoints";
+import { useImport, useImportChange, useImportEntries, usePlugins, useVisitors } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
 import { dayText } from "../item/format";
 import { timeText } from "../plugins/words";
@@ -18,11 +18,13 @@ const MORE = 40;
 export function ImportDetail({ id, onGone }: { id: string; onGone: () => void }) {
   const view = useImport(id);
   const plugins = usePlugins();
+  const visitors = useVisitors();
   if (view.error) return <ErrorLine error={view.error} />;
   const v = view.data;
   if (!v) return null;
   const plugin = plugins.data?.plugins.find((p) => p.id === v.pluginId);
   const platform = plugin?.platforms[0]?.name;
+  const visitor = visitors.data?.find((x) => plugin?.visitors.includes(x.site))?.state;
   const from =
     v.kind === "delivered" ? `交进来的${v.client ? ` · ${v.client}` : ""}` : `${plugin?.name ?? v.pluginId ?? ""} · 从插件列出来的`;
 
@@ -34,22 +36,22 @@ export function ImportDetail({ id, onGone }: { id: string; onGone: () => void })
           {from} · {dayText(v.createdAt)}
         </span>
       </div>
-      {v.state === "listing" ? <Listing v={v} /> : null}
+      {v.state === "listing" ? <Listing v={v} visitor={visitor} /> : null}
       {v.state === "ready" ? <Ready v={v} platform={platform} /> : null}
-      {v.state === "taking" || v.state === "held" || v.state === "done" ? <Running v={v} platform={platform} /> : null}
+      {v.state === "taking" || v.state === "held" || v.state === "done" ? <Running v={v} platform={platform} visitor={visitor} /> : null}
       <Discard id={v.id} done={v.state === "done"} onGone={onGone} />
     </div>
   );
 }
 
 /** 在列：一页页列，列到的条目跟着出现。 */
-function Listing({ v }: { v: ImportView }) {
+function Listing({ v, visitor }: { v: ImportView; visitor: VisitorIdentity["state"] | undefined }) {
   const n = v.preview.new + v.preview.stored + v.preview.trashed;
   return (
     <>
       <p className="m-0 mt-5 text-title font-semibold text-text">在列：列了 {v.pages} 页，{n} 条</p>
       <p className="m-0 mt-1 text-note text-sub">按平台的节奏一页页列，列完给你看一眼，你点了才收。</p>
-      {v.waiting ? <p className="m-0 mt-1 text-small text-sub">{waitingText(v.waiting, undefined)}</p> : null}
+      {v.waiting ? <p className="m-0 mt-1 text-small text-sub">{waitingText(v.waiting, undefined, visitor)}</p> : null}
       <Group v={v} standing="new" title="新的" note="资料库里还没有" />
       <Group v={v} standing="stored" title="已经存着的" note="不动" />
       <Group v={v} standing="trashed" title="在回收站里的" note="你删过的" />
@@ -116,7 +118,7 @@ function Ready({ v, platform }: { v: ImportView; platform: string | undefined })
 }
 
 /** 按节奏收、停着、收完：只说收下了几条、为什么在等、下一条大概什么时候、哪些没存下。 */
-function Running({ v, platform }: { v: ImportView; platform: string | undefined }) {
+function Running({ v, platform, visitor }: { v: ImportView; platform: string | undefined; visitor: VisitorIdentity["state"] | undefined }) {
   const change = useImportChange(v.id);
   return (
     <>
@@ -128,7 +130,7 @@ function Running({ v, platform }: { v: ImportView; platform: string | undefined 
           <div className="mt-1.5 flex flex-col gap-0.5 text-note text-sub">
             {v.state === "done" ? <span>这次的都收完了。</span> : null}
             {v.state === "held" ? <span>停着。点「接着导入」从停下的地方接着收。</span> : null}
-            {v.state === "taking" && v.waiting ? <span>{waitingText(v.waiting, platform)}</span> : null}
+            {v.state === "taking" && v.waiting ? <span>{waitingText(v.waiting, platform, visitor)}</span> : null}
             {v.state === "taking" && !v.waiting && v.nextAt ? <span>下一条大概 {timeText(v.nextAt)}</span> : null}
             {v.skipped > 0 ? <span>{v.skipped} 条轮到时已经在回收站里、或者是私密的，没收。</span> : null}
           </div>

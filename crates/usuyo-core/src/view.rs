@@ -225,7 +225,7 @@ pub struct PreviewCounts {
     pub trashed: u32,
 }
 
-/// 为什么在等、停着。`code`：插件的错误码（`login-required`、`rate-limited`、`blocked`……），
+/// 为什么在等、停着。`code`：插件的错误码（`login-required`、`visitor-required`、`rate-limited`、`blocked`……），
 /// 或 `pacing`（等间隔）、`daily-limit`（今天批量的次数用完了）、`held`（你让插件先别试）、
 /// `batch-off`（这个平台不做导入）。没有 `until` 的等你动手。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

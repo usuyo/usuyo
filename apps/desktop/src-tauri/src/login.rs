@@ -60,6 +60,11 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
+/// 访客身份那个窗口的网页数据名，和同一主机的登录窗口（就叫站点名）分开。
+pub fn visitor_store(site: &str) -> String {
+    format!("visitor:{site}")
+}
+
 /// 只开网页地址；`http` 只给本机（开发时的测试页）。
 fn page_url(raw: &str) -> Result<Url> {
     let url = Url::parse(raw).with_context(|| format!("bad login url {raw}"))?;
@@ -199,7 +204,7 @@ impl Logins {
 
     /// 开访客身份的窗口：不登录，取到就关。打开哪一页、等哪些 cookie 由内核照插件清单给。
     pub fn open_visitor(self: &Arc<Self>, app: &AppHandle, site: &str) -> Result<()> {
-        let store = format!("visitor:{site}");
+        let store = visitor_store(site);
         if self.focus(app, &store) {
             return Ok(());
         }
@@ -401,6 +406,7 @@ impl Logins {
     }
 
     /// 退出登录以后：关掉这个站点开着的窗口，清掉它那份网页数据，下次登录从头来。
+    /// 访客身份换一份时也用它，`site` 写 `visitor:<站点>`（`visitor_store`）。
     pub async fn clear(&self, app: &AppHandle, site: &str) -> Result<()> {
         let label = lock(&self.open).remove(site).map(|s| s.window);
         if let Some(w) = label.and_then(|l| app.get_window(&l)) {
@@ -464,6 +470,16 @@ mod tests {
         assert!(!s.see(&named(&["webId", "a1"])));
         assert!(!s.see(&named(&["a1", "webId"])));
         assert!(s.see(&named(&["a1", "webId"])));
+    }
+
+    #[test]
+    fn a_visitor_window_never_shares_data_with_the_login_window_of_its_host() {
+        let site = "www.example.test";
+        assert_eq!(visitor_store(site), "visitor:www.example.test");
+        assert_ne!(
+            site_cookies::store_id(&visitor_store(site)),
+            site_cookies::store_id(site)
+        );
     }
 
     #[test]

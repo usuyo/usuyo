@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { loginText, pauseText, timeText } from "./words";
+import { loginText, pauseText, timeText, visitorText } from "./words";
 
 describe("plugin words", () => {
   const now = new Date(2026, 10, 11, 14, 0, 0);
@@ -18,6 +18,14 @@ describe("plugin words", () => {
   it("names the account a plugin needs in plain words", () => {
     expect(loginText("required", ["B站"])).toBe("要登录你的B站账号");
     expect(loginText("none", [])).toBe("不用账号");
+  });
+
+  it("tells a missing visitor identity from one that no longer works, and stays neutral without the state", () => {
+    expect(visitorText("missing")).toBe("要先取访客身份：在「获取插件」页的「访客身份」里取一份");
+    expect(visitorText("present")).toBe("这份访客身份不管用了，换一份再试");
+    expect(visitorText("expired")).toBe("这份访客身份不管用了，换一份再试");
+    expect(visitorText()).toBe("要访客身份");
+    expect(pauseText({ scope: "x", byYou: false, code: "visitor-required" }, [], now)).toBe("要访客身份 · 等你动手");
   });
 
   it("adds seconds only when the time is close, and the date when it is another day", () => {

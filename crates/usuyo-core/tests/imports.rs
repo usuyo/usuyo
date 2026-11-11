@@ -473,27 +473,34 @@ async fn a_rate_limited_listing_waits_and_try_now_clears_it() {
 }
 
 #[tokio::test]
-async fn login_required_stops_until_you_resume() {
-    let f = Fixture::new("");
-    f.set_cache(
-        "fail-list",
-        r#"{"ok": false, "error": {"code": "login-required", "message": "401", "hint": "请重新登录例子", "site": "www.example.test"}}"#,
-    );
-    let engine = f.engine();
-    let imp = engine
-        .start_import("fake/saved", "example:fav", "")
-        .unwrap();
-    engine.advance_imports().await.unwrap();
-    let v = engine.import(&imp.id).unwrap();
-    let w = v.waiting.unwrap();
-    assert_eq!(
-        (w.code.as_str(), w.hint.as_deref(), w.until),
-        ("login-required", Some("请重新登录例子"), None)
-    );
-    assert_eq!(engine.advance_imports().await.unwrap().0, 0, "不自己反复试");
-    std::fs::remove_file(f.machine().join("cache/plugins/fake/saved/fail-list")).unwrap();
-    engine.resume_import(&imp.id).unwrap();
-    list_all(&engine, &imp.id).await;
+async fn login_or_visitor_required_stops_until_you_resume() {
+    for (code, hint) in [
+        ("login-required", "请重新登录例子"),
+        ("visitor-required", "要先取访客身份"),
+    ] {
+        let f = Fixture::new("");
+        f.set_cache(
+            "fail-list",
+            &format!(
+                r#"{{"ok": false, "error": {{"code": "{code}", "message": "401", "hint": "{hint}", "site": "www.example.test"}}}}"#
+            ),
+        );
+        let engine = f.engine();
+        let imp = engine
+            .start_import("fake/saved", "example:fav", "")
+            .unwrap();
+        engine.advance_imports().await.unwrap();
+        let v = engine.import(&imp.id).unwrap();
+        let w = v.waiting.unwrap();
+        assert_eq!(
+            (w.code.as_str(), w.hint.as_deref(), w.until),
+            (code, Some(hint), None)
+        );
+        assert_eq!(engine.advance_imports().await.unwrap().0, 0, "不自己反复试");
+        std::fs::remove_file(f.machine().join("cache/plugins/fake/saved/fail-list")).unwrap();
+        engine.resume_import(&imp.id).unwrap();
+        list_all(&engine, &imp.id).await;
+    }
 }
 
 #[tokio::test]

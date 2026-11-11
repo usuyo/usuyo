@@ -1,5 +1,5 @@
 // 获取插件的标签和停着的原因，换成平常的话。只是给你挑的信息，不拦什么。
-import type { Access, LoginNeed, PluginPause } from "../api/endpoints";
+import type { Access, LoginNeed, PluginPause, VisitorIdentity } from "../api/endpoints";
 
 export const ACCESS_TEXT: Record<Access, string> = {
   "official-export": "读平台给你的官方导出",
@@ -34,10 +34,20 @@ export function timeText(iso: string, now = new Date()): string {
   return sameDay ? hm : `${d.getMonth() + 1} 月 ${d.getDate()} 日 ${hm}`;
 }
 
+/**
+ * 页面要访客身份时怎么说。`state` 是内核存着的那份的状态：没有就写怎么取，存着的就说换一份；
+ * 页面手上没有这个状态时写 `要访客身份`。
+ */
+export function visitorText(state?: VisitorIdentity["state"]): string {
+  if (state === undefined) return "要访客身份";
+  return state === "missing" ? "要先取访客身份：在「获取插件」页的「访客身份」里取一份" : "这份访客身份不管用了，换一份再试";
+}
+
 const PAUSE_CODE: Record<string, string> = {
   "rate-limited": "平台说请求太频繁",
   blocked: "平台挡住了这个插件",
   "login-required": "要重新登录",
+  "visitor-required": visitorText(),
   "upstream-changed": "平台改版了，插件读不到",
 };
 

@@ -1,6 +1,6 @@
 // 一次导入走到哪了，用平常的话说。只说事实：收下了几条、为什么在等、下一条大概什么时候；不说还剩多少。
-import type { ImportView, ImportWaiting } from "../api/endpoints";
-import { timeText } from "../plugins/words";
+import type { ImportView, ImportWaiting, VisitorIdentity } from "../api/endpoints";
+import { timeText, visitorText } from "../plugins/words";
 
 /** 记录栏里那一行。 */
 export function stateLine(v: ImportView): string {
@@ -18,8 +18,13 @@ export function stateLine(v: ImportView): string {
   }
 }
 
-/** 为什么在等。`platform` 是平台的显示名，有就写进去。 */
-export function waitingText(w: ImportWaiting, platform: string | undefined, now = new Date()): string {
+/** 为什么在等。`platform` 是平台的显示名，有就写进去；`visitor` 是这个插件的访客身份存着的状态，页面有就给。 */
+export function waitingText(
+  w: ImportWaiting,
+  platform: string | undefined,
+  visitor?: VisitorIdentity["state"],
+  now = new Date(),
+): string {
   const at = w.until ? timeText(w.until, now) : null;
   const on = platform ? `${platform}的` : "平台的";
   switch (w.code) {
@@ -33,6 +38,8 @@ export function waitingText(w: ImportWaiting, platform: string | undefined, now 
       return "这个平台不做批量导入";
     case "login-required":
       return `要重新登录${platform ?? ""}：登录好了点「接着导入」`;
+    case "visitor-required":
+      return `${visitorText(visitor)}；好了点「接着导入」`;
     default: {
       const why = w.hint ?? w.code;
       return at ? `${why} · ${at} 自己再试` : `${why} · 等你点「接着导入」`;

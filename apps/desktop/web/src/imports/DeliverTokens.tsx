@@ -54,7 +54,7 @@ export function DeliverTokens() {
         <TextField value={name} onChange={setName} aria-label="给它起个名字" className="w-[260px] max-w-full">
           <Label className="mb-1 block text-small text-faint">给它起个名字</Label>
           <Input
-            placeholder="例如 小红书油猴脚本"
+            placeholder="例如 收藏页的脚本"
             onKeyDown={(e) => {
               if (e.key === "Enter") issue();
             }}

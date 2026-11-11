@@ -45,13 +45,14 @@ impl<T: Serialize> Serialize for Envelope<T> {
     }
 }
 
-/// 错误码。前 11 个由插件报，后 4 个只由宿主记（协议 §3.3）。
+/// 错误码。前 12 个由插件报，后 4 个只由宿主记（协议 §3.3）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum ErrorCode {
     UnsupportedInput,
     NotFound,
     LoginRequired,
+    VisitorRequired,
     RateLimited,
     Blocked,
     UpstreamChanged,
@@ -99,6 +100,7 @@ impl ErrorCode {
             ErrorCode::UnsupportedInput => "unsupported-input",
             ErrorCode::NotFound => "not-found",
             ErrorCode::LoginRequired => "login-required",
+            ErrorCode::VisitorRequired => "visitor-required",
             ErrorCode::RateLimited => "rate-limited",
             ErrorCode::Blocked => "blocked",
             ErrorCode::UpstreamChanged => "upstream-changed",
@@ -328,11 +330,27 @@ mod tests {
     }
 
     #[test]
+    fn visitor_required_round_trips() {
+        let text = r#"{"code":"visitor-required","message":"sent home"}"#;
+        let failure: CallFailure = serde_json::from_str(text).unwrap();
+        assert_eq!(failure.code, ErrorCode::VisitorRequired);
+        assert_eq!(failure.code.as_str(), "visitor-required");
+        assert!(!failure.code.is_host_only());
+        assert_eq!(serde_json::to_string(&failure).unwrap(), text);
+        let env: Envelope<()> = Envelope::Err(failure);
+        assert_eq!(
+            serde_json::to_string(&env).unwrap(),
+            format!(r#"{{"ok":false,"error":{text}}}"#)
+        );
+    }
+
+    #[test]
     fn runner_semantics() {
         assert!(!ErrorCode::Cancelled.tries_next());
         assert!(ErrorCode::Blocked.tries_next());
         assert!(ErrorCode::Network.retryable());
         assert!(!ErrorCode::LoginRequired.retryable());
+        assert!(!ErrorCode::VisitorRequired.retryable());
         let mut limited = CallFailure::new(ErrorCode::RateLimited, "429");
         assert_eq!(limited.pause(), Some(Pause::For(Duration::from_secs(900))));
         limited.retry_after = Some(30);

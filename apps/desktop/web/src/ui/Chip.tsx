@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-/** 平台名的小块：B站、小红书。 */
+/** 平台名的小块。 */
 export function PlatformChip({ children }: { children: ReactNode }) {
   return (
     <span className="flex h-[22px] shrink-0 items-center rounded-chip bg-chip px-2 text-small leading-none font-medium text-label">

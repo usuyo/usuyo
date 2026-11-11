@@ -185,7 +185,7 @@ function NothingInstalled({ notLoaded }: { notLoaded: PluginsView["notLoaded"] }
       <div className="text-body text-label">还没有装获取插件。</div>
       <p className="m-0 mt-1 text-note text-sub">
         usuyo 自己不带平台的插件。现在只能在开发时装：在 usuyo 的仓库里跑下面这条命令，它把旁边 usuyo-fetch
-        里的小红书、微信视频号、B站插件编好、装到这台机器上；重启 usuyo 以后这里就有了。
+        里的插件编好、装到这台机器上；重启 usuyo 以后这里就有了。
       </p>
       <code className="mono mt-3 block rounded-sm bg-chip px-3 py-2 text-tag text-text select-text">just dev-plugins</code>
       {notLoaded.length > 0 ? (

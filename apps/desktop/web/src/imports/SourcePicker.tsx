@@ -3,9 +3,9 @@ import { useState } from "react";
 import { Button as AriaButton } from "react-aria-components";
 import { ApiError } from "../api/client";
 import type { FetchPlugin } from "../api/endpoints";
-import { usePlugins, useSites, useSources, useStartImport } from "../api/hooks";
+import { usePlugins, useSites, useSources, useStartImport, useVisitors } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
-import { pauseText } from "../plugins/words";
+import { pauseText, visitorText } from "../plugins/words";
 import { Button } from "../ui/Button";
 
 /** 内核回的错误里只按 `code` 分。 */
@@ -21,17 +21,20 @@ function problemCode(error: Error): string | null {
 
 function SourcesError({ error, plugin }: { error: Error; plugin: FetchPlugin }) {
   const code = problemCode(error);
+  const visitors = useVisitors();
   if (code === null) return <ErrorLine error={error} className="mt-2" />;
   const text =
     code === "login-required"
       ? `要先登录：在「获取插件」的${plugin.name}里登录好了，再回来列。`
-      : code === "rate-limited" || code === "blocked" || code === "paused"
+      : code === "visitor-required"
+        ? `${visitorText(visitors.data?.find((x) => plugin.visitors.includes(x.site))?.state)}；好了再回来列。`
+        : code === "rate-limited" || code === "blocked" || code === "paused"
         ? `${plugin.name}的插件停着，原因写在「获取插件」里。`
         : `没能列出来（${code}）。`;
   return (
     <p role="status" className="m-0 mt-2 text-small text-sub">
       {text}
-      {code === "login-required" || code === "paused" ? (
+      {code === "login-required" || code === "visitor-required" || code === "paused" ? (
         <Link to="/plugins" className="ml-1 text-label underline-offset-2 hover:underline">
           去看看
         </Link>

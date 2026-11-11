@@ -70,12 +70,13 @@
   ],
   "$defs": {
     "ErrorCode": {
-      "description": "错误码。前 11 个由插件报，后 4 个只由宿主记（协议 §3.3）。",
+      "description": "错误码。前 12 个由插件报，后 4 个只由宿主记（协议 §3.3）。",
       "type": "string",
       "enum": [
         "unsupported-input",
         "not-found",
         "login-required",
+        "visitor-required",
         "rate-limited",
         "blocked",
         "upstream-changed",
