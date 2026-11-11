@@ -19,7 +19,7 @@
 <a id="02-和其他文档的关系"></a>
 ### 0.2 和其他文档的关系
 
-- [ADR-003](decisions/ADR-003-plugins.md) 定了插件的种类、进程模型、权限与隔离、仓库拆分、分发与校验、导出与读回；本文是它的展开。2026-11-01 的修订见 [ADR-003 修订](decisions/ADR-003-plugins.md#修订-2026-11-01)。
+- [ADR-003](decisions/ADR-003-plugins.md) 定了插件的种类、进程模型、权限与隔离、仓库拆分、分发与校验、导出与读回；本文是它的展开。2026-11-01 的修订见 [ADR-003 修订](decisions/ADR-003-plugins.md#5-仓库拆分)。
 - SPEC v0 的适配器协议已删，以本文为准（[SPEC 附](SPEC.md#附v0-各节和-18-处的去向)）。资料库目录、`manifest.json`、`derived/` 文件以 [SPEC 第 1 层](SPEC.md#1-资料库-v1第-1-层)为准（[§1.1](SPEC.md#11-目录树)、[§1.2.1](SPEC.md#121-manifestjson-v1)、[§1.2.2](SPEC.md#122-raw-和-derived)），身份和 id 以 [SPEC §0.4](SPEC.md#04-id) 为准，去重仍以 [SPEC §2.3](SPEC.md#23-去重)（v0）为准。
 - 11-11 起内核是 Rust（[ADR-004](decisions/ADR-004-rust-tauri.md)）。本文的类型在 `crates/usuyo-plugin`（清单、信封、宿主），插件作者用 MIT 的 `crates/usuyo-plugin-kit`，它转出这些类型，另带 HTTP 客户端（[§10.1](#101-plugin-kit-的-http-客户端11-11)）；资料库的类型在 `crates/usuyo-contract`（原 `pkg/contract`）。插件的 JSON Schema 文件还没有（[§10](#10-契约测试与-plugin-kit)）。下面和 v0 schema 的对照留着查。和 `fetch-output.schema.json` 的差异列在 [§3.7](#37-fetch-输出)，和 `adapter.schema.json` 的对照在 [§2.12](#212-旧字段对照)。
 - 依据：适配器生态 [调研 02](research/02-adapter-ecosystems.md)、Agent 协议 [调研 03](research/03-agent-protocols.md)、笔记软件与插件 [调研 05](research/05-note-apps-and-plugins.md)、平台获取与账号 [调研 06](research/06-platform-access-and-account-risk.md)。
