@@ -164,7 +164,7 @@
 
 A（Go + MyGo，即现在的 ADR-001）随[第 6 条](#6-桌面壳)出局；D（Rust + 别的壳）出局，真为迷雾定了 Electron，改比 Go 内核 + Electron（[调研 12 §5](research/12-shell-and-core-language.md#5-什么会改变推荐)）；E（Rust 库经 cgo 进 Go）三套工具链，不做。
 
-**推荐和理由**：C。插件是独立进程，语言不从插件设计来，它决定壳、索引、文件监听、沙箱和手机端。壳用 Tauri 2，Rust 内核就是一套工具链。中文分词不是理由：Go 有纯 Go 的 jieba（gse）。你发过 Rust + egui 的跨平台应用 [SteamCloudFileManager](https://github.com/Fldicoahkiin/SteamCloudFileManager)（241★，11-04 查）。最大的风险是编译循环：先搭空骨架量，增量重编超过约 10 秒就退回 A′（[TODO §3](TODO.md#3-原型和量测)）。
+**推荐和理由**：C。插件是独立进程，语言不从插件设计来，它决定壳、索引、文件监听、沙箱和手机端。壳用 Tauri 2，Rust 内核就是一套工具链。中文分词不是理由：Go 有纯 Go 的 jieba（gse）。你发过 Rust + egui 的跨平台应用 [SteamCloudFileManager](https://github.com/Fldicoahkiin/SteamCloudFileManager)（241★，11-04 查）。最大的风险是编译循环：先搭空骨架量，增量重编超过约 10 秒就退回 A′（[总纲](BUILD.md#5-功能线)）。
 
 **不选推荐会怎样**：不要 Rust 就选 A′，内核不动，壳换 Wails v3。B 只在 A′ 的壳原型失败时作后备。
 

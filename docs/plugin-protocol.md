@@ -1085,7 +1085,7 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip"
 
 - 只绑 `127.0.0.1`，端口 `47615`，和给窗口用的路由是同一个监听口，不另开端口（11-11 代码；原先设想的 `47821` 不用）。
 - 每个请求带 `Authorization: Bearer <令牌>`。令牌按投递端分别生成：名字（例如「xhs-vault 脚本」）、入口类型（`extension`、`mobile`、`api`），可单独撤销。11-11 代码：在应用的导入页里发（`POST /deliver-tokens`，主令牌调），格式 `<id>.<秘密>`，整个令牌只在发的那一次回给调用方；存在按机器目录的 `deliver-tokens.json`，不放进资料库。投递令牌只能进 `/v1/ping`、`/v1/deliver`、`/v1/batches`。
-- 除 `chrome-extension://`、`moz-extension://`、`safari-web-extension://` 以外，带任何 `Origin` 头的请求都拒绝，包括 `Origin: null`（沙箱 iframe、`file://` 页面会带它），也不回 CORS 头：普通网页发不进来，也读不到响应。没有 `Origin` 的请求放行。宿主另外核对 `Host` 头是 `127.0.0.1:<端口>`、`localhost:<端口>` 或 `[::1]:<端口>`。各油猴脚本管理器的 `GM_xmlhttpRequest` 实际带什么 `Origin` 待核实。11-11 代码：投递令牌发出去以前先握手：`POST /handshake`，请求 `{nonce, client}`，`client` 是令牌 `.` 前面的 id，内核用整个令牌当密钥回 HMAC 证明，令牌本身不上线路（[SPEC 本机接口](SPEC.md#本机接口第-2-层11-11-照代码)）。`/v1/…` 不回 CORS 头，也不答 CORS 预检（Safari 的 Userscripts 没有网站访问权限时会先发预检，还没做，[TODO](TODO.md#4-开始写代码)）。
+- 除 `chrome-extension://`、`moz-extension://`、`safari-web-extension://` 以外，带任何 `Origin` 头的请求都拒绝，包括 `Origin: null`（沙箱 iframe、`file://` 页面会带它），也不回 CORS 头：普通网页发不进来，也读不到响应。没有 `Origin` 的请求放行。宿主另外核对 `Host` 头是 `127.0.0.1:<端口>`、`localhost:<端口>` 或 `[::1]:<端口>`。各油猴脚本管理器的 `GM_xmlhttpRequest` 实际带什么 `Origin` 待核实。11-11 代码：投递令牌发出去以前先握手：`POST /handshake`，请求 `{nonce, client}`，`client` 是令牌 `.` 前面的 id，内核用整个令牌当密钥回 HMAC 证明，令牌本身不上线路（[SPEC 本机接口](SPEC.md#本机接口第-2-层11-11-照代码)）。`/v1/…` 不回 CORS 头，也不答 CORS 预检（Safari 的 Userscripts 没有网站访问权限时会先发预检，还没做，[总纲](BUILD.md#5-功能线)）。
 - 条目在 `origins[]` 里那一项的 `entry` 取令牌的入口类型。`extension` 令牌交来已取到的内容时，快照的 `plugin` 记 `deliver:<令牌名>`；只交链接的，快照记去取它的那个插件。投递来的内容同样按不可信输入处理。
 - **令牌能交什么。** `api` 和 `mobile` 类令牌只接受链接（`url`、`text` 和 `/v1/batches`），不接受已取到的内容；已取到的内容只接受 `extension` 类令牌和收件文件夹（[§5.2](#52-监听文件夹)）（11-11 还没做：`/v1/deliver` 现在只收链接，没有 multipart，任何令牌都不能交已取到的内容）。Agent 用 `api` 令牌交已取好的内容，等于没经过改动提议就改了已有条目，和「Agent 写入先提议后生效」的原则冲突。
 - **身份由宿主重新算。** 宿主不采用投递方给的 `identity`，而是用 `identity.url`（没有就用 `url`）重新调 `canonicalize` 得出身份；拿不到身份的（没有网址的；http(s) 链接马上就有身份，最差是这条链接的 `web:` 身份，离线时的短链也一样，之后可能并进平台 id，见 [§3.1](#31-运行器与节奏)），按无平台 ID 的条目处理（[SPEC §0.4](SPEC.md#04-id)）。不然一个持有令牌的脚本报出某个已有条目的身份、再带上 `completeness: full`，就能覆盖那个条目。
@@ -1765,7 +1765,7 @@ usuyo plugin pack --version 0.3.1 dist/*
 <a id="13-待定"></a>
 ## 13. 待定
 
-需要用户在产品层面拍板的问题都在 [open-decisions](open-decisions.md)，选项、建议和影响以那里为准。本文其他地方引用本节时写的「第 N 项」就是下面的编号；open-decisions 的表格行没有单独的锚点，链接指向条目所在的节，条目编号写在链接文字里。第 29–34 项例外：不是产品问题，是 SPEC v1 草案（[第 0 层](SPEC.md#0-约定第-0-层)、[第 1 层](SPEC.md#1-资料库-v1第-1-层)）带来的协议改动，用户过目 SPEC 后再写进正文（[TODO](TODO.md#2-文档和接口设计)）；正文里受影响的地方标了「要改」。11-11 代码照第 29–32 项做了，这几处正文跟着改了；第 33、34 项还没做。第 35–39 项是 11-11 写插件时发现的空缺，还没定。
+需要用户在产品层面拍板的问题都在 [open-decisions](open-decisions.md)，选项、建议和影响以那里为准。本文其他地方引用本节时写的「第 N 项」就是下面的编号；open-decisions 的表格行没有单独的锚点，链接指向条目所在的节，条目编号写在链接文字里。第 29–34 项例外：不是产品问题，是 SPEC v1 草案（[第 0 层](SPEC.md#0-约定第-0-层)、[第 1 层](SPEC.md#1-资料库-v1第-1-层)）带来的协议改动，用户过目 SPEC 后再写进正文（[总纲](BUILD.md#5-功能线)）；正文里受影响的地方标了「要改」。11-11 代码照第 29–32 项做了，这几处正文跟着改了；第 33、34 项还没做。第 35–39 项是 11-11 写插件时发现的空缺，还没定。
 
 1. 两个组织的名字和权利人联系地址：[N1、N2](open-decisions.md#2-命名与组织)，[R4](open-decisions.md#12-声明与责任)。
 2. 只读导出文件的导入插件放哪个组织、要不要预装：[P3](open-decisions.md#7-获取与插件)。11-01 已定：别的工具的导出进官方组织并预装，平台官方导出包放 `usuyo-fetch`（[§8.4](#84-三种来源)）。

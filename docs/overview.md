@@ -19,7 +19,7 @@ v0.1 · 2026-11-04，2026-11-05 改名。产品名 **usuyo**，只用拉丁字�
 <a id="1-先读这四份"></a>
 ## 1. 先读这四份
 
-本篇 → [PRD](PRD.md#0-状态与读法) → [discussion](discussion.md#1-什么东西进资料库) → [TODO](TODO.md#1-等你回答)。时长估计：10、25、每条 3、5 分钟。
+本篇 → [PRD](PRD.md#0-状态与读法) → [discussion](discussion.md#1-什么东西进资料库) → [总纲](answers.md)。时长估计：10、25、每条 3、5 分钟。
 
 <a id="2-产品是什么"></a>
 ## 2. 产品是什么
@@ -187,7 +187,7 @@ flowchart LR
 <a id="11-文档地图"></a>
 ## 11. 文档地图
 
-- **入口**：overview、[PRD](PRD.md)、[discussion](discussion.md)、[TODO](TODO.md)。
+- **入口**：overview、[PRD](PRD.md)、[discussion](discussion.md)、[总纲](BUILD.md)。
 - **参考**：[open-decisions](open-decisions.md)（完整登记表；「先定哪些」由 discussion 取代）、[product-model](product-model.md)（部分并入 PRD v0.4）、[plugin-protocol](plugin-protocol.md)（v1 草案）、[SPEC](SPEC.md)（第 0、1 层 v1 草案；第 2 层有一节照代码写的本机接口，别的还留着 v0）、[acknowledgements](acknowledgements.md)（致谢候选）、[ADR-004](decisions/ADR-004-rust-tauri.md)（11-11，取代 [ADR-001](decisions/ADR-001-stack.md)）、[ADR-002](decisions/ADR-002-frontend-stack.md)、[TEMPLATE](features/TEMPLATE.md)。
 - **调研**：[research/README](research/README.md) 是索引；01–10 是参考，08 被 09 取代，07 部分被取代，06 公开不公开等 [16](discussion.md#16-哪些文档公开)；新的 [11](research/11-subscriptions-compat-and-wx-cli.md#0-结论) 讲订阅和 wx-cli，[12](research/12-shell-and-core-language.md#0-结论) 讲壳和语言。
 - **过时待改**：[ADR-003](decisions/ADR-003-plugins.md)、[feature 001](features/001-m0-core-loop.md)，还按 M0 写、用旧名。

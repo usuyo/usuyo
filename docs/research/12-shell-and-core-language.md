@@ -44,7 +44,7 @@
 5. **要你回答的只有一句：内核改用 Rust，你愿意吗？**
    - 愿意 → C；不愿意 → A′。
    - 两种回答都会换掉 MyGo。你想留 MyGo，在 [待讨论 6](../discussion.md#6-桌面壳) 里说。
-6. **退出条件。** 你答「愿意」后，第一件事是搭一个空骨架：Tauri 2 + tantivy + rusqlite + rmcp + tokio，量增量重编。改一行要等超过约 10 秒，就退回 A′。这一条已列进 [TODO](../TODO.md#3-原型和量测)（[§5](#5-什么会改变推荐)）。
+6. **退出条件。** 你答「愿意」后，第一件事是搭一个空骨架：Tauri 2 + tantivy + rusqlite + rmcp + tokio，量增量重编。改一行要等超过约 10 秒，就退回 A′。这一条已列进 [TODO](../BUILD.md#5-功能线)（[§5](#5-什么会改变推荐)）。
 7. **现在换最便宜。** Go 代码共 794 行，大半是占位（[§6](#6-迁移要改什么)）。
 8. **你回答之前，ADR-001（Go + MyGo）仍是 accepted，其他文档照它写。**
 
@@ -291,7 +291,7 @@
 | 情况 | 改成什么 | 为什么 |
 |---|---|---|
 | 你不愿意让内核用 Rust | A′，不选 B | A′ 只有一套工具链，Wails v3 也已是稳定版。B 留作 A′ 的后备 |
-| 骨架的编译循环太慢 | A′ | 你同意 C 以后先搭空骨架：Tauri 2 + tantivy + rusqlite + rmcp + tokio。在本机改一行内核代码，量 `cargo build` 的增量重编，顺手记一轮 `cargo test` 的时间。增量重编超过约 10 秒就退回 A′。阈值是推断，你可以改（[TODO](../TODO.md#3-原型和量测)） |
+| 骨架的编译循环太慢 | A′ | 你同意 C 以后先搭空骨架：Tauri 2 + tantivy + rusqlite + rmcp + tokio。在本机改一行内核代码，量 `cargo build` 的增量重编，顺手记一轮 `cargo test` 的时间。增量重编超过约 10 秒就退回 A′。阈值是推断，你可以改（[TODO](../BUILD.md#5-功能线)） |
 | 为迷雾选了 Electron（要 120fps 或一致的 WebGPU） | Go 内核 + Electron | Tauri 生态这条理由没了，只按内核本身比，编译快的分量变重。这是 ADR-001 原来列的回退 |
 | sigstore-verify 做不到 [插件协议 §8.3](../plugin-protocol.md#83-校验与来源证明) 的要求（按 TUF 更新信任根、离线验证 GitHub attestation bundle、按工作流核对签发者） | C 里带一个 Go 写的小校验进程，或重新比 C 和 A′ | 校验是装插件的门，不能打折扣 |
 | 手机端确定只做薄客户端，Windows 也确定只做 Job Object | 单凭这一项不改；和编译偏慢叠在一起时改 A′ | C「以后」的两条好处没了，「眼下」的几条还在 |

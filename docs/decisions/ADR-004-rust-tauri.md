@@ -42,4 +42,4 @@
 - [ADR-001](ADR-001-stack.md) 标成被取代。
 - [CLAUDE.md](../../CLAUDE.md) 的技术栈、代码约定、常用命令跟着改。
 - `pkg/contract` 搬到 `crates/usuyo-contract`，JSON Schema 和样例原样留着。
-- 别的文档里写死 Go、MyGo、bleve、`pkg/contract` 的地方跟着改，见 [TODO](../TODO.md#2-文档和接口设计)。
+- 别的文档里写死 Go、MyGo、bleve、`pkg/contract` 的地方跟着改，见 [总纲](../BUILD.md#3-现在做到哪)。

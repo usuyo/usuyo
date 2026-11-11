@@ -5,7 +5,7 @@
 - 整体设计（先读）：[docs/overview.md](docs/overview.md)
 - 产品定义：[docs/PRD.md](docs/PRD.md)
 - 待讨论：[docs/discussion.md](docs/discussion.md)
-- 要做的事：[docs/TODO.md](docs/TODO.md)
+- 总纲（做到哪、要做的事）：[docs/BUILD.md](docs/BUILD.md)
 - 技术规格：[docs/SPEC.md](docs/SPEC.md)
 - 功能文档：[docs/features/](docs/features/)
 - 架构决策：[docs/decisions/](docs/decisions/)

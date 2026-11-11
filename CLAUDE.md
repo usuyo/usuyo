@@ -8,12 +8,11 @@
 
 接着写代码先读 `docs/BUILD.md`：总纲，做到哪了、还剩什么、每条线已经定的、依赖顺序、干活的规矩。
 
-再读这四份：
+再读这三份：
 
 - `docs/overview.md` — 整体设计（供 review）：已定的、整体结构、接口做到哪了
 - `docs/PRD.md` — 产品定义 v0.4：为什么做、做什么、不做什么，每段标已定或待讨论
 - `docs/discussion.md` — 待讨论，按顺序一条条问用户
-- `docs/TODO.md` — 要做的事，写了谁做、挡住什么
 
 需要时查：
 
@@ -96,4 +95,4 @@ usuyo --help  # CLI
 4. MCP、导出到 Obsidian 并读回；命令行不再加新命令（2026-11-11）。
 5. 文字同步。
 
-详见 `docs/PRD.md` §12 和 `docs/TODO.md`。
+详见 `docs/PRD.md` §12 和 `docs/BUILD.md`。
