@@ -172,7 +172,7 @@ pub(crate) fn fetch(
         output.text_format = output.text.as_ref().map(|_| TextFormat::Plain);
         if output.text.is_none() {
             output.missing.push(OutputKind::Text);
-            reasons.push("没有找到正文");
+            reasons.push("没有找到正文".to_owned());
         }
     }
 
@@ -206,7 +206,13 @@ pub(crate) fn fetch(
         let downloaded = download_images(&sources, &base, out, &mut failed_images, &client)?;
         if downloaded.is_empty() && !sources.is_empty() {
             output.missing.push(OutputKind::Images);
-            reasons.push("正文里的图片没有下载下来");
+            reasons.push("正文里的图片没有下载下来".to_owned());
+        } else if !failed_images.is_empty() {
+            // 拿到了一些、少了几张：这一类不算缺，但要如实说。
+            reasons.push(format!(
+                "正文里有 {} 张图片没有下载下来",
+                failed_images.len()
+            ));
         }
         for (path, url) in downloaded {
             image_records.push(json!({"path": path.as_str(), "url": url}));
@@ -545,7 +551,12 @@ mod tests {
                 format!("{base}/img/missing.png"),
             ])
         );
+        // 图片这一类拿到了，所以不算缺；少的两张写在原因里
         assert_eq!(output.completeness, Completeness::Full);
+        assert_eq!(
+            output.missing_reason.as_deref(),
+            Some("正文里有 2 张图片没有下载下来")
+        );
     }
 
     #[test]

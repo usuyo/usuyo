@@ -28,7 +28,9 @@ usuyo-plugin-kit = { path = "../xiecun/crates/usuyo-plugin-kit" }
 另外几条：
 
 - 检查过的地址就是要连的地址，不再查第二次 DNS，域名解析中途换成内网地址也没用。
+- 开着「假 IP」模式的代理（Clash、Surge、sing-box 一类）时，系统给每个域名都回 `198.18.0.0/15` 里的地址。域名查出来全是这一段的照常放行，否则在这样的机器上什么都取不了。代价：这时看不到真正的地址，一个真指向内网的域名拦不住，要靠代理工具自己的规则；链接里直接写这一段的数字地址照样拒绝。
 - 跳转默认不跟，3xx 原样交回给你，由你看 `Location` 决定下一步。调用 `follow_redirects(n)` 才跟，每一跳都重新过上面的检查。
+- cookie 只在 https 上发，同一个主机跳到明文 http 也不带。
 - 不读 `HTTP_PROXY` 一类环境变量，没有 cookie 罐：上一跳的 `Set-Cookie` 不会带到下一跳。
 - `timeout` 管一次请求的总时长，包括所有跳转和读完响应体，默认 30 秒。
 - 响应体只能带上限读：`read_to_vec(limit)`，或大文件用 `into_reader(limit)`，超过上限时读错误的类别是 `io::ErrorKind::FileTooLarge`。

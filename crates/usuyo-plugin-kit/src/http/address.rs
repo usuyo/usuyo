@@ -90,6 +90,14 @@ fn v6_public(ip: Ipv6Addr) -> bool {
     in_v6(bits, (1 << 125, 3)) && !V6_BLOCKED.iter().any(|&range| in_v6(bits, range))
 }
 
+/// 代理工具「假 IP」模式用的段：开着这种代理时，系统给每个域名都回这一段里的地址，
+/// 真正的地址由代理工具自己去查，这里看不到。
+const FAKE_IP: (u32, u32) = (0xc612_0000, 15);
+
+fn is_fake_ip(ip: IpAddr) -> bool {
+    matches!(ip, IpAddr::V4(v4) if in_v4(u32::from(v4), FAKE_IP))
+}
+
 #[derive(Debug)]
 pub(crate) enum Refusal {
     /// 不是 http(s)、带账号密码、没有主机。
@@ -118,10 +126,10 @@ pub(crate) fn admit(
         return refuse("no port".into());
     };
     // 数字地址由 URL 类型解析，十进制、十六进制、八进制的写法都已经变成 IP
-    let addrs = match url.host() {
-        Some(Host::Ipv4(ip)) => vec![SocketAddr::new(ip.into(), port)],
-        Some(Host::Ipv6(ip)) => vec![SocketAddr::new(ip.into(), port)],
-        Some(Host::Domain(name)) => (policy.lookup)(name, port).map_err(Refusal::Lookup)?,
+    let (addrs, named) = match url.host() {
+        Some(Host::Ipv4(ip)) => (vec![SocketAddr::new(ip.into(), port)], false),
+        Some(Host::Ipv6(ip)) => (vec![SocketAddr::new(ip.into(), port)], false),
+        Some(Host::Domain(name)) => ((policy.lookup)(name, port).map_err(Refusal::Lookup)?, true),
         None => return refuse("no host".into()),
     };
     if addrs.is_empty() {
@@ -130,7 +138,14 @@ pub(crate) fn admit(
             "no address",
         )));
     }
-    if !private_ok && let Some(bad) = addrs.iter().find(|a| !(policy.public)(a.ip())) {
+    // 域名查出来全是假 IP：这台机器开着假 IP 模式的代理，公网的域名都长这样，只能放行。
+    // 代价是这时看不到真正的地址，一个真指向内网的域名拦不住，要靠代理工具自己的规则。
+    // 链接里直接写这一段的数字地址不算，照样拒绝。
+    let proxied = named && addrs.iter().all(|a| is_fake_ip(a.ip()));
+    if !private_ok
+        && !proxied
+        && let Some(bad) = addrs.iter().find(|a| !(policy.public)(a.ip()))
+    {
         let host = url.host_str().unwrap_or_default();
         return Err(Refusal::NotPublic(format!(
             "`{host}` is not a public address ({})",
@@ -227,6 +242,8 @@ mod tests {
             "intranet.test" => &["192.168.1.10"],
             "mixed.test" => &["93.184.216.34", "10.0.0.1"],
             "mapped.test" => &["::ffff:127.0.0.1"],
+            "proxied.test" => &["198.18.11.245"],
+            "half-proxied.test" => &["198.18.11.245", "10.0.0.1"],
             _ => return Err(io::Error::new(io::ErrorKind::NotFound, "no such host")),
         };
         Ok(ips.iter().map(|s| SocketAddr::new(ip(s), port)).collect())
@@ -262,6 +279,17 @@ mod tests {
             check("http://nowhere.test/", false),
             Err(Refusal::Lookup(_))
         ));
+    }
+
+    #[test]
+    fn fake_ip_answers_are_admitted_only_for_names() {
+        assert_eq!(
+            check("https://proxied.test/", false).unwrap(),
+            [SocketAddr::new(ip("198.18.11.245"), 443)]
+        );
+        assert!(refused("http://half-proxied.test/"));
+        assert!(refused("http://198.18.11.245/"));
+        assert!(refused("http://198.18.0.1/"));
     }
 
     #[test]
