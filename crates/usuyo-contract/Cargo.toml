@@ -1,0 +1,11 @@
+[package]
+name = "usuyo-contract"
+description = "usuyo 资料库的数据契约：类型和 JSON Schema"
+version.workspace = true
+edition.workspace = true
+license = "MIT"
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

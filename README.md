@@ -12,11 +12,11 @@
 - 开发约定：[CLAUDE.md](CLAUDE.md)
 
 ```
-make init     # 安装依赖
-make check    # lint + test
-make build    # 产出 bin/usuyo
+just init     # 装前端依赖
+just check    # lint + test
+just build    # 产出 target/release/usuyo
 ```
 
 ## 许可证
 
-内核以 [AGPL-3.0](LICENSE) 发布；对外契约 [pkg/contract](pkg/contract/) 以 [MIT](pkg/contract/LICENSE) 发布，供适配器与 SDK 自由使用。
+内核以 [AGPL-3.0](LICENSE) 发布；对外契约 [crates/usuyo-contract](crates/usuyo-contract/) 以 [MIT](crates/usuyo-contract/LICENSE) 发布，供适配器与 SDK 自由使用。

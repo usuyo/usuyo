@@ -8,11 +8,11 @@ trim_trailing_whitespace = true
 indent_style = space
 indent_size = 2
 
-[*.go]
-indent_style = tab
+[*.rs]
+indent_size = 4
 
-[Makefile]
-indent_style = tab
+[justfile]
+indent_size = 4
 
 [*.md]
 trim_trailing_whitespace = false

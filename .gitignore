@@ -1,13 +1,11 @@
 # 构建与工具产物
 /bin/
 /dist/
-*.test
-*.out
-coverage.*
+target/
 
 # 系统与编辑器
 .DS_Store
 Thumbs.db
 
-# 前端（M3）
+# 前端
 node_modules/
