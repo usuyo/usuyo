@@ -27,6 +27,14 @@ app:
 build:
     cargo build --release -p usuyo-cli
 
+# 查文档：给的每个文件的锚点和引用，再查全仓库的相对链接（调研 05 里有 10 条已知的假阳性）。
+# 例：just docs docs/BUILD.md docs/SPEC.md
+docs +files:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for f in {{files}}; do python3 -I tools/check_md.py "$f"; done
+    python3 -I tools/resolve_links.py .
+
 # 开发时、只在自己的机器上：把旁边 `../usuyo-fetch/` 下三个平台获取插件编成 release，照安装的样子
 # 放进按机器目录的 `plugins/<owner>/<repo>/<version>/`（认 `USUYO_HOME`，没设就是系统的位置）。
 # 平台插件不进本仓库、不进安装包（CLAUDE.md 原则 1）；装好以后重启守护进程才会找到。
