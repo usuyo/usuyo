@@ -32,6 +32,7 @@ export function applyEvent(queryClient: QueryClient, e: DaemonEvent): void {
     case "topic-updated":
       refresh(queryKeys.topics);
       refresh(queryKeys.map);
+      refresh(queryKeys.topicPage(e.id));
       return;
     case "item-fetch-failed":
       refresh(queryKeys.item(e.id));

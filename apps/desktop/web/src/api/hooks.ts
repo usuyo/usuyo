@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { SettingsPatch, TransformRequest, ConfirmImportRequest, CreateDeliverTokenRequest, ImportEntry, ImportView, Item, StartImportRequest, TakeRequest } from "./endpoints";
+import type { ChangesView, FollowPatch, FollowTrialRequest, NewFollowRequest, Draft, DraftPatch, NewDraftRequest, CiteRequest, PagePatch, TopicMatch, TopicPage, SettingsPatch, TransformRequest, ConfirmImportRequest, CreateDeliverTokenRequest, ImportEntry, ImportView, Item, StartImportRequest, TakeRequest } from "./endpoints";
 import { ApiError, DaemonUnreachableError, isNotServed } from "./client";
 import { call } from "./source";
 
@@ -22,6 +22,13 @@ export const queryKeys = {
   settings: ["settings"] as const,
   deliverTokens: ["deliver-tokens"] as const,
   inbox: ["inbox"] as const,
+  fileReaders: ["file-readers"] as const,
+  topicPage: (id: string) => ["topic-page", id] as const,
+  follows: ["follows"] as const,
+  changes: ["changes"] as const,
+  exportView: ["export"] as const,
+  drafts: ["drafts"] as const,
+  draft: (id: string) => ["drafts", id] as const,
 };
 
 export function useHealth() {
@@ -127,6 +134,190 @@ export function useItemChange(id: string) {
         void queryClient.invalidateQueries({ queryKey: queryKeys.trash });
       }
       if (change.kind === "new-topic") void queryClient.invalidateQueries({ queryKey: queryKeys.topics });
+    },
+  });
+}
+
+// —— 主题页 ——
+
+export function useTopicPage(id: string) {
+  return useQuery({ queryKey: queryKeys.topicPage(id), queryFn: () => call((s) => s.topicPage(id)), retry: retryUnlessMissing });
+}
+
+type TopicPageChange =
+  | { kind: "page"; patch: PagePatch }
+  | { kind: "cite"; body: CiteRequest }
+  | { kind: "match"; match: TopicMatch }
+  | { kind: "angle"; question: string }
+  | { kind: "run"; angleId: string }
+  /** 放进或拿出这个主题：走条目上的成员接口，回来再拉一次这一页。 */
+  | { kind: "member"; itemId: string; member: boolean };
+
+/** 主题页上的改动都回整页最新的样子，直接放进缓存。 */
+export function useTopicPageChange(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (change: TopicPageChange): Promise<TopicPage> =>
+      call((s) => {
+        switch (change.kind) {
+          case "page":
+            return s.editTopicPage(id, change.patch);
+          case "cite":
+            return s.citeInTopic(id, change.body);
+          case "match":
+            return s.setTopicMatch(id, change.match);
+          case "angle":
+            return s.addAngle(id, change.question);
+          case "run":
+            return s.runAngle(id, change.angleId);
+          default:
+            return s.setTopic(change.itemId, id, change.member).then(() => s.topicPage(id));
+        }
+      }),
+    onSuccess: (page, change) => {
+      queryClient.setQueryData(queryKeys.topicPage(id), page);
+      if (change.kind === "member") {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.map });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.item(change.itemId) });
+      }
+    },
+  });
+}
+
+/** 不要这个线头：不留记录，从这一页上拿掉。 */
+export function useDismissThread(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (threadId: string) => call((s) => s.dismissThread(id, threadId)),
+    onSuccess: (_, threadId) =>
+      queryClient.setQueryData(queryKeys.topicPage(id), (page: TopicPage | undefined) =>
+        page ? { ...page, threads: page.threads.filter((t) => t.id !== threadId) } : page,
+      ),
+  });
+}
+
+// —— 成稿 ——
+
+export function useDrafts() {
+  return useQuery({ queryKey: queryKeys.drafts, queryFn: () => call((s) => s.drafts()), retry: retryUnlessMissing });
+}
+
+export function useDraft(id: string) {
+  return useQuery({ queryKey: queryKeys.draft(id), queryFn: () => call((s) => s.draft(id)), retry: retryUnlessMissing });
+}
+
+export function useNewDraft() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: NewDraftRequest) => call((s) => s.newDraft(body)),
+    onSuccess: (draft) => {
+      queryClient.setQueryData(queryKeys.draft(draft.id), draft);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.drafts, exact: true });
+    },
+  });
+}
+
+type DraftChange = { kind: "meta"; patch: DraftPatch } | { kind: "page"; patch: PagePatch } | { kind: "cite"; body: CiteRequest };
+
+/** 成稿上的改动都回整篇最新的样子。 */
+export function useDraftChange(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (change: DraftChange): Promise<Draft> =>
+      call((s) => (change.kind === "meta" ? s.changeDraft(id, change.patch) : change.kind === "page" ? s.editDraftPage(id, change.patch) : s.citeInDraft(id, change.body))),
+    onSuccess: (draft) => {
+      queryClient.setQueryData(queryKeys.draft(id), draft);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.drafts, exact: true });
+    },
+  });
+}
+
+// —— 跟着收 ——
+
+export function useFollows() {
+  return useQuery({ queryKey: queryKeys.follows, queryFn: () => call((s) => s.follows()), retry: retryUnlessMissing });
+}
+
+type FollowChange =
+  | { kind: "new"; body: NewFollowRequest }
+  | { kind: "patch"; id: string; patch: FollowPatch }
+  | { kind: "remove"; id: string }
+  | { kind: "power"; powerOnly: boolean };
+
+/** 跟着收的改动；改完重拉整页。 */
+export function useFollowChange() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (change: FollowChange): Promise<unknown> =>
+      call<unknown>((s) => {
+        switch (change.kind) {
+          case "new":
+            return s.newFollow(change.body);
+          case "patch":
+            return s.changeFollow(change.id, change.patch);
+          case "remove":
+            return s.removeFollow(change.id);
+          default:
+            return s.setFollowPower(change.powerOnly);
+        }
+      }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.follows }),
+  });
+}
+
+/** 试列一次：什么都不收，只看会收下哪些。 */
+export function useFollowTrial() {
+  return useMutation({ mutationFn: (body: FollowTrialRequest) => call((s) => s.trialFollow(body)) });
+}
+
+// —— 改动记录 ——
+
+export function useChanges() {
+  return useQuery({ queryKey: queryKeys.changes, queryFn: () => call((s) => s.changes()), retry: retryUnlessMissing });
+}
+
+type BatchAction = { kind: "accept" | "decline"; ops?: string[] } | { kind: "undo" | "redo" };
+
+/** 定一批提议、撤销、重做：回来的这一批换进列表；资料库变了，地图、条目和主题页都重拉。 */
+export function useChangeBatch(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (a: BatchAction) =>
+      call((s) =>
+        a.kind === "accept" ? s.acceptChange(id, a.ops) : a.kind === "decline" ? s.declineChange(id, a.ops) : a.kind === "undo" ? s.undoChange(id) : s.redoChange(id),
+      ),
+    onSuccess: (batch) => {
+      queryClient.setQueryData(queryKeys.changes, (v: ChangesView | undefined) => (v ? { batches: v.batches.map((b) => (b.id === batch.id ? batch : b)) } : v));
+      void queryClient.invalidateQueries({ queryKey: queryKeys.map });
+      void queryClient.invalidateQueries({ queryKey: ["items"] });
+      void queryClient.invalidateQueries({ queryKey: ["topic-page"] });
+    },
+  });
+}
+
+// —— 导出 ——
+
+export function useExportView() {
+  return useQuery({ queryKey: queryKeys.exportView, queryFn: () => call((s) => s.exportView()), retry: retryUnlessMissing });
+}
+
+export function useExportFolder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (folder: string) => call((s) => s.setExportFolder(folder)),
+    onSuccess: (view) => queryClient.setQueryData(queryKeys.exportView, view),
+  });
+}
+
+/** 现在导出：读回的改动进了改动记录，两边都改过的那段进了回收站，这几处都重拉。 */
+export function useExportNow() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => call((s) => s.exportNow()),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.exportView });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.changes });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.trash });
     },
   });
 }
@@ -270,6 +461,23 @@ export function useNotStored(id: string, taken: number, limit: number) {
 }
 
 type ImportChange = { kind: "confirm"; body: ConfirmImportRequest } | { kind: "hold" } | { kind: "resume" } | { kind: "delete" };
+
+/** 能读别的工具导出的文件的导入插件。 */
+export function useFileReaders() {
+  return useQuery({ queryKey: queryKeys.fileReaders, queryFn: () => call((s) => s.fileReaders()), retry: retryUnlessMissing });
+}
+
+/** 交一个文件给导入插件读：回来的导入和别的导入一样，看预览、确认。 */
+export function useImportFile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ reader, file }: { reader: string; file: File }) => call((s) => s.importFile(reader, file)),
+    onSuccess: (view) => {
+      queryClient.setQueryData(queryKeys.import(view.id), view);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.imports });
+    },
+  });
+}
 
 export function useStartImport() {
   const queryClient = useQueryClient();

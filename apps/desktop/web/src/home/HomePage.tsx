@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useMap, useTopics } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
 import { EmptyPage } from "../empty/EmptyPage";
@@ -9,13 +9,8 @@ import { MapScreen } from "./MapScreen";
 export function HomePage() {
   const map = useMap();
   const topics = useTopics();
-  // 在空资料库里刚收下的那一条，等它落完再换成地图。
+  // 在空资料库里收下了以后，雾和落下的那几条留着，等你点「去地图看看」再换成地图。
   const [holdEmpty, setHoldEmpty] = useState(false);
-  useEffect(() => {
-    if (!holdEmpty) return undefined;
-    const id = setTimeout(() => setHoldEmpty(false), 3200);
-    return () => clearTimeout(id);
-  }, [holdEmpty]);
   const [wasEmpty, setWasEmpty] = useState(false);
   const empty = map.data !== undefined && map.data.points.length === 0;
   if (empty && !wasEmpty) setWasEmpty(true);
@@ -32,6 +27,6 @@ export function HomePage() {
     );
   }
   if (!map.data || !topics.data) return <div className="h-full bg-bg" />;
-  if (empty || (wasEmpty && holdEmpty)) return <EmptyPage onLanded={() => setHoldEmpty(true)} />;
+  if (empty || (wasEmpty && holdEmpty)) return <EmptyPage onLanded={() => setHoldEmpty(true)} onLeave={() => setHoldEmpty(false)} />;
   return <MapScreen map={map.data} topics={topics.data} />;
 }

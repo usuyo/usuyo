@@ -102,6 +102,8 @@ export async function request<T>(
   init: {
     method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
     body?: unknown;
+    /** 原样交一个文件（别的工具导出的文件）；和 `body` 只给一个。 */
+    file?: Blob;
     query?: Record<string, string>;
     /** 调插件的慢请求（列来源）要等得久一些。 */
     timeoutMs?: number;
@@ -119,9 +121,9 @@ export async function request<T>(
       method: init.method ?? "GET",
       headers: {
         ...authHeaders(c),
-        ...(init.body === undefined ? {} : { "Content-Type": "application/json" }),
+        ...(init.file ? { "Content-Type": "application/octet-stream" } : init.body === undefined ? {} : { "Content-Type": "application/json" }),
       },
-      body: init.body === undefined ? undefined : JSON.stringify(init.body),
+      body: init.file ?? (init.body === undefined ? undefined : JSON.stringify(init.body)),
       signal: AbortSignal.timeout(init.timeoutMs ?? REQUEST_TIMEOUT_MS),
     });
   } catch (error) {

@@ -205,7 +205,7 @@ export function MapScreen({ map, topics }: { map: MapView; topics: Topic[] }) {
               name={t.name}
               active={railHover === t.id}
               onHoverChange={(on) => setRailHover(on ? t.id : null)}
-              onPress={() => setArrangement("topic")}
+              onPress={() => void navigate({ to: "/topics/$id", params: { id: t.id } })}
             />
           ))}
           {railTopics.length === 0 ? (

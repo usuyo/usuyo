@@ -5,17 +5,20 @@ import { ErrorLine } from "../components/ErrorLine";
 import { Rail } from "../frame/Rail";
 import { dayText } from "../item/format";
 import { Button } from "../ui/Button";
+import { Choice } from "../ui/Choice";
 import { DeliverTokens } from "./DeliverTokens";
+import { FileImport } from "./FileImport";
 import { ImportDetail } from "./ImportDetail";
 import { SourcePicker } from "./SourcePicker";
 import { stateLine } from "./words";
 
 /** 导入：左边选来源、看预览、收；右边一栏是每一次导入的记录，交进来的清单也在这里。 */
 export function ImportPage() {
-  const { open } = useSearch({ from: "/import" });
+  const { open, from } = useSearch({ from: "/import" });
   const navigate = useNavigate();
   const imports = useImports();
   const show = (id: string | undefined) => void navigate({ to: "/import", search: id ? { open: id } : {} });
+  const half = (next: "platform" | "file") => void navigate({ to: "/import", search: next === "file" ? { from: "file" } : {}, replace: true });
 
   return (
     <div className="relative h-full overflow-hidden bg-bg">
@@ -26,7 +29,7 @@ export function ImportPage() {
           <header className="col-span-full flex max-w-[752px] items-start justify-between gap-4">
             <div className="min-w-0">
               <h1 className="m-0 text-title font-semibold text-text">导入</h1>
-              <p className="m-0 mt-1 text-note text-sub">把你在平台上存过的列出来，先看一眼，再按平台的节奏慢慢收下。</p>
+              <p className="m-0 mt-1 text-note text-sub">把你在平台上存过的、别的工具导出的列出来，先看一眼，再慢慢收下。</p>
             </div>
             {open ? (
               <Button variant="outline" size="md" className="flex-none" onPress={() => show(undefined)}>
@@ -40,8 +43,25 @@ export function ImportPage() {
               <ImportDetail key={open} id={open} onGone={() => show(undefined)} />
             ) : (
               <>
-                <SourcePicker onStarted={show} />
-                <DeliverTokens />
+                <div className="mb-5">
+                  <Choice
+                    label="从哪儿导入"
+                    options={[
+                      { id: "platform", text: "平台上存过的" },
+                      { id: "file", text: "别的工具导出的文件" },
+                    ]}
+                    value={from === "file" ? "file" : "platform"}
+                    onChange={half}
+                  />
+                </div>
+                {from === "file" ? (
+                  <FileImport onStarted={show} />
+                ) : (
+                  <>
+                    <SourcePicker onStarted={show} />
+                    <DeliverTokens />
+                  </>
+                )}
               </>
             )}
           </div>
@@ -59,7 +79,7 @@ export function ImportPage() {
                   >
                     <div className="mono text-tag text-faint">
                       {dayText(v.createdAt)}
-                      {v.kind === "delivered" ? ` · 交进来的${v.client ? ` · ${v.client}` : ""}` : ""}
+                      {v.kind === "delivered" ? ` · 交进来的${v.client ? ` · ${v.client}` : ""}` : v.kind === "file" ? " · 别的工具导出的文件" : ""}
                     </div>
                     <div className="mt-0.5 truncate text-body font-medium text-text">{v.title}</div>
                     <div className="text-small text-sub">{stateLine(v)}</div>

@@ -6,9 +6,9 @@ import { timeText, visitorText } from "../plugins/words";
 export function stateLine(v: ImportView): string {
   switch (v.state) {
     case "listing":
-      return `在列，列出 ${v.preview.new + v.preview.stored + v.preview.trashed} 条`;
+      return `${v.kind === "file" ? "在读，读出" : "在列，列出"} ${v.preview.new + v.preview.stored + v.preview.trashed} 条`;
     case "ready":
-      return `列完了，等你看一眼 · 新的 ${v.preview.new} 条`;
+      return `${v.kind === "file" ? "读完了" : "列完了"}，等你看一眼 · 新的 ${v.preview.new} 条`;
     case "taking":
       return `收下了 ${v.taken} 条 · 在收`;
     case "held":
@@ -45,4 +45,16 @@ export function waitingText(
       return at ? `${why} · ${at} 自己再试` : `${why} · 等你点「接着导入」`;
     }
   }
+}
+
+/** 挑文件时过滤用的后缀：「某站-*.zip」只认得出 `.zip`，文件名的样子由插件再看。 */
+export function acceptOf(patterns: string[]): string[] {
+  return [
+    ...new Set(
+      patterns.flatMap((p) => {
+        const ext = /\.[A-Za-z0-9]+$/.exec(p)?.[0];
+        return ext ? [ext.toLowerCase()] : [];
+      }),
+    ),
+  ];
 }

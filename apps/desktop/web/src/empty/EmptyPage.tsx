@@ -8,6 +8,7 @@ import { clamp, strHash } from "../fog/noise";
 import { useFog, useSize } from "../fog/useFog";
 import { useReducedMotion } from "../motion/clock";
 import { Button } from "../ui/Button";
+import { Ways } from "./Ways";
 
 interface Drop {
   id: string;
@@ -17,14 +18,24 @@ interface Drop {
   sub: string;
 }
 
-/** 空资料库：只有雾和名字。收下的落进雾里，同一个站的落在一起。内核还不收文件，这里只收链接。 */
-export function EmptyPage({ onLanded }: { onLanded: () => void }) {
+/**
+ * 空资料库，也是第一次打开：只有雾和名字，什么都不用设就能收下一条，看它落进雾里。
+ * 收下的落进雾里，同一个站的落在一起；旁边轻轻放着「存过的一批也能拿回来」的几种路子，不催。内核还不收文件，这里只收链接。
+ */
+export function EmptyPage({ onLanded, onLeave }: { onLanded: () => void; onLeave: () => void }) {
   const root = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const size = useSize(root);
   const [drops, setDrops] = useState<Drop[]>([]);
   const [value, setValue] = useState("");
   const [toast, setToast] = useState(0);
+  const [showWays, setShowWays] = useState(false);
+  // 收起那一层以后，焦点回到打开它的那个按钮上。
+  const waysTrigger = useRef<HTMLDivElement>(null);
+  const closeWays = () => {
+    setShowWays(false);
+    requestAnimationFrame(() => waysTrigger.current?.querySelector<HTMLButtonElement>("button[aria-expanded]")?.focus());
+  };
   const pointer = useRef<{ x: number; y: number } | null>(null);
   const take = useTake();
   const library = useHealth().data?.library;
@@ -65,7 +76,7 @@ export function EmptyPage({ onLanded }: { onLanded: () => void }) {
     let y = cy + Math.sin(a) * 300;
     x += ((hj & 255) / 255 - 0.5) * 90;
     y += (((hj >>> 8) & 255) / 255 - 0.5) * 70;
-    x = clamp(x, 90, size.width - 140);
+    x = clamp(x, 90, size.width - 170);
     y = clamp(y, 90, size.height - 100);
     // 不落在中间那块字上。
     if (Math.abs(x - cx) < 290 && Math.abs(y - cy) < 165) y = y < cy ? cy - 185 : cy + 185;
@@ -121,7 +132,8 @@ export function EmptyPage({ onLanded }: { onLanded: () => void }) {
         </div>
       ))}
       <div
-        className="absolute z-[5] flex w-[520px] flex-col items-center text-center"
+        inert={showWays}
+        className={`absolute z-[5] flex w-[520px] flex-col items-center text-center transition-opacity duration-200 ${showWays ? "opacity-0" : "opacity-100"}`}
         style={{ left: cx - 260, top: cy - 127 }}
       >
         <h1 className="m-0 text-display font-semibold tracking-[-0.01em] text-text">usuyo</h1>
@@ -177,7 +189,22 @@ export function EmptyPage({ onLanded }: { onLanded: () => void }) {
           {toast ? "收下了" : ""}
         </div>
         {take.error ? <ErrorLine error={take.error} /> : null}
+        <div ref={waysTrigger} className="mt-1 flex items-center gap-2">
+          {drops.length > 0 ? (
+            <Button variant="soft" size="tight" onPress={onLeave}>
+              去地图看看
+            </Button>
+          ) : null}
+          <Button variant="quiet" size="tight" aria-expanded={showWays} onPress={() => setShowWays(true)}>
+            存过的一批，也能拿回来
+          </Button>
+        </div>
       </div>
+      {showWays ? (
+        <div className="absolute inset-0 z-[6] flex items-center justify-center px-6 pt-6 pb-12">
+          <Ways onClose={closeWays} />
+        </div>
+      ) : null}
       <div className="absolute bottom-4 left-5 z-10 text-tag whitespace-pre text-sub">
         移动鼠标拨开雾　·　粘贴或把链接拖进来，就收下了
       </div>

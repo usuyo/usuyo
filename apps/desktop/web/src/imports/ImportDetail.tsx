@@ -26,7 +26,11 @@ export function ImportDetail({ id, onGone }: { id: string; onGone: () => void })
   const platform = plugin?.platforms[0]?.name;
   const visitor = visitors.data?.find((x) => plugin?.visitors.includes(x.site))?.state;
   const from =
-    v.kind === "delivered" ? `交进来的${v.client ? ` · ${v.client}` : ""}` : `${plugin?.name ?? v.pluginId ?? ""} · 从插件列出来的`;
+    v.kind === "delivered"
+      ? `交进来的${v.client ? ` · ${v.client}` : ""}`
+      : v.kind === "file" && v.file
+        ? `${v.file.reader} · 读「${v.file.name}」`
+        : `${plugin?.name ?? v.pluginId ?? ""} · 从插件列出来的`;
 
   return (
     <div className="animate-fade">
@@ -49,8 +53,17 @@ function Listing({ v, visitor }: { v: ImportView; visitor: VisitorIdentity["stat
   const n = v.preview.new + v.preview.stored + v.preview.trashed;
   return (
     <>
-      <p className="m-0 mt-5 text-title font-semibold text-text">在列：列了 {v.pages} 页，{n} 条</p>
-      <p className="m-0 mt-1 text-note text-sub">按平台的节奏一页页列，列完给你看一眼，你点了才收。</p>
+      {v.kind === "file" ? (
+        <>
+          <p className="m-0 mt-5 text-title font-semibold text-text">在读：读出 {n} 条</p>
+          <p className="m-0 mt-1 text-note text-sub">在这台电脑上读这个文件的副本，不连平台；读完给你看一眼，你点了才收。</p>
+        </>
+      ) : (
+        <>
+          <p className="m-0 mt-5 text-title font-semibold text-text">在列：列了 {v.pages} 页，{n} 条</p>
+          <p className="m-0 mt-1 text-note text-sub">按平台的节奏一页页列，列完给你看一眼，你点了才收。</p>
+        </>
+      )}
       {v.waiting ? <p className="m-0 mt-1 text-small text-sub">{waitingText(v.waiting, undefined, visitor)}</p> : null}
       <Group v={v} standing="new" title="新的" note="资料库里还没有" />
       <Group v={v} standing="stored" title="已经存着的" note="不动" />
@@ -87,7 +100,7 @@ function Ready({ v, platform }: { v: ImportView; platform: string | undefined })
     <>
       <div className="mt-5 flex flex-wrap items-start gap-x-4 gap-y-3">
         <div className="min-w-[240px] flex-1">
-          <p className="m-0 text-title font-semibold text-text">列完了：{v.preview.new + v.preview.stored + v.preview.trashed} 条</p>
+          <p className="m-0 text-title font-semibold text-text">{v.kind === "file" ? "读完了" : "列完了"}：{v.preview.new + v.preview.stored + v.preview.trashed} 条</p>
           <p className="m-0 mt-1 text-note text-sub">
             {total > 0
               ? `这次会收下${takeNew > 0 ? `新的 ${takeNew} 条` : ""}${takeNew > 0 && bringBack > 0 ? "，" : ""}${bringBack > 0 ? `从回收站拿回 ${bringBack} 条` : ""}。`

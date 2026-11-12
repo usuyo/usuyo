@@ -4,11 +4,13 @@ import type {
   DeliverToken,
   FetchMethod,
   FetchPlugin,
+  FileReader,
   ImportEntry,
   ImportView,
   SiteLogin,
   VisitorIdentity,
 } from "../api/endpoints";
+import { ApiError } from "../api/client";
 import type { Platforms } from "../api/source";
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -212,6 +214,51 @@ function baseSites(): SiteLogin[] {
       plugins: ["usuyo-fetch/wechat-channels"],
     },
   ];
+}
+
+/** 读别的工具导出的文件的两样：X 插件的官方归档（照 docs/platforms/routes.md 的 `archive`），和官方的链接清单。 */
+const X_ARCHIVE: FileReader = {
+  id: "usuyo-fetch/x#archive",
+  name: "官方归档",
+  plugin: "X",
+  reads: "X 设置里「下载你的数据」给的 zip，在你自己的电脑上读，不连 X",
+  patterns: ["twitter-*.zip"],
+  lists: ["喜欢", "书签"],
+  note: "归档里有没有书签还没核过；没有的话只列得出喜欢。",
+};
+const LINK_LIST: FileReader = {
+  id: "usuyo/link-list#file",
+  name: "链接清单",
+  plugin: "链接清单导入",
+  reads: "一份 JSON 或 CSV，一行一个链接，可以带标题和日期；书签工具、阅读器导出的多半是这样",
+  patterns: ["*.json", "*.csv"],
+  lists: ["清单里的链接"],
+};
+const FILE_READERS = [X_ARCHIVE, LINK_LIST] as const;
+
+/** 只认 `*` 的文件名通配，不分大小写。 */
+function globMatch(pattern: string, name: string): boolean {
+  const re = new RegExp(`^${pattern.split("*").map((p) => p.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*")}$`, "i");
+  return re.test(name);
+}
+
+const POSTS = ["关于慢慢写东西的一条长帖", "胶片扫描的一个小技巧", "一张东京的夜景", "读书笔记的模板", "做饭时的一个顺序", "前端动效的几条规矩"];
+
+/** 归档里读出来的喜欢和书签：前两条库里已经存着，第三条在回收站里。 */
+function archiveEntries(n: number): ImportEntry[] {
+  return Array.from({ length: n }, (_, i): ImportEntry => {
+    const standing = i < 2 ? "stored" : i === 2 ? "trashed" : "new";
+    return {
+      seq: i + 1,
+      url: `https://x.com/i/status/18${(5_300_000_000_000_000 + i * 7_919).toString()}`,
+      title: POSTS[i % POSTS.length] ?? "",
+      action: i % 4 === 0 ? "favorite" : "like",
+      actedAt: new Date(Date.UTC(2026, 9, 28 - i, 9)).toISOString(),
+      ...(standing === "new" ? {} : { itemId: `x-mock${i}` }),
+      standing,
+      taken: false,
+    };
+  });
 }
 
 const TITLES = ["4:6 冲煮法复刻", "手冲水温到底要多少", "胶片相机入门：先买哪台", "城市骑行路线整理", "一周备餐的思路", "读《置身事内》的笔记"];
@@ -522,5 +569,40 @@ export function createMockPlatforms(empty = false): Platforms {
       if (at >= 0) tokens.splice(at, 1);
     },
     inbox: async () => ({ path: "~/Library/Application Support/usuyo/inbox（样例）" }),
+    async fileReaders() {
+      await wait(40);
+      return empty ? [LINK_LIST] : [...FILE_READERS];
+    },
+    async importFile(readerId, file) {
+      await wait(400);
+      const reader = [...FILE_READERS].find((r) => r.id === readerId);
+      if (!reader) throw new ApiError(400, "没有这个导入插件", "invalid-args");
+      if (!reader.patterns.some((pattern) => globMatch(pattern, file.name))) {
+        throw new ApiError(400, `${reader.plugin}的${reader.name}读不了「${file.name}」：文件名不像${reader.patterns.join("、")}`, "invalid-args");
+      }
+      const id = `0193f2b0-${(imports.size + 1).toString().padStart(4, "0")}-7f3a-8b4c-5d6e7f8a9b0c`;
+      const all = archiveEntries(reader.id === LINK_LIST.id ? 9 : 31);
+      imports.set(id, {
+        entries: [],
+        later: all,
+        everyMs: 5000,
+        at: Date.now(),
+        chosen: new Set(),
+        view: {
+          id,
+          kind: "file",
+          title: reader.lists.join("和"),
+          file: { name: file.name, reader: `${reader.plugin} · ${reader.name}` },
+          createdAt: new Date().toISOString(),
+          state: "listing",
+          pages: 0,
+          preview: { new: 0, stored: 0, trashed: 0 },
+          taken: 0,
+          notStored: 0,
+          skipped: 0,
+        },
+      });
+      return { ...getImport(id).view };
+    },
   };
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ImportView } from "../api/endpoints";
-import { stateLine, waitingText } from "./words";
+import { acceptOf, stateLine, waitingText } from "./words";
 
 const base: ImportView = {
   id: "i",
@@ -37,4 +37,10 @@ describe("import words", () => {
     expect(waitingText({ code: "visitor-required" }, "小红书", "present", now)).toBe("这份访客身份不管用了，换一份再试；好了点「接着导入」");
     expect(waitingText({ code: "blocked", hint: "B站挡住了" }, "B站", undefined, now)).toBe("B站挡住了 · 等你点「接着导入」");
   });
+});
+
+it("filters the file picker by the extensions a reader's patterns name", () => {
+  expect(acceptOf(["twitter-*.zip"])).toEqual([".zip"]);
+  expect(acceptOf(["*.json", "*.CSV", "*.json"])).toEqual([".json", ".csv"]);
+  expect(acceptOf(["archive"])).toEqual([]);
 });

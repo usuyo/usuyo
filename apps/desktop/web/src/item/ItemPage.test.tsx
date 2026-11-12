@@ -16,7 +16,7 @@ afterEach(() => {
 const NO_ROUTE = () => Response.json({ code: "not-found", detail: "no such route" }, { status: 404 });
 
 /** 内核今天的样子：条目没有 `pending`、每面没有 `key`，也还没有 /transforms。 */
-function serve(item: Item, trash: TrashView, today = false) {
+function serve(item: Item, trash: TrashView, today = false, search = "") {
   const posted: string[] = [];
   vi.stubGlobal("scrollTo", vi.fn());
   vi.stubGlobal(
@@ -35,7 +35,7 @@ function serve(item: Item, trash: TrashView, today = false) {
       return Promise.resolve(NO_ROUTE());
     }),
   );
-  const router = createAppRouter(createMemoryHistory({ initialEntries: [`/items/${item.id}`] }));
+  const router = createAppRouter(createMemoryHistory({ initialEntries: [`/items/${item.id}${search}`] }));
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <RouterProvider router={router} />
@@ -82,4 +82,11 @@ it("does not call the media cleared while the whole text-only item sits in the t
   });
   expect(await screen.findByText("视频和封面在回收站里")).toBeTruthy();
   expect(screen.queryByText(/已经从回收站清掉了/)).toBeNull();
+});
+
+it("opens at the second a quotation points back to", async () => {
+  const item = await createMockLibrary(false).item("c1");
+  serve(item, { trashDays: 30, entries: [] }, false, "?t=150");
+  const slider = await screen.findByRole("slider");
+  expect(slider.getAttribute("aria-valuetext")).toMatch(/^02:3/);
 });

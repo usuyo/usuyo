@@ -31,6 +31,62 @@ export const paths = {
   itemRefetch: (id: string) => `/items/${encodeURIComponent(id)}/refetch`,
   search: "/search",
   take: "/items",
+  // —— 主题页（BUILD 004、005）。内核今天（11-12）还没有这几条。——
+  /** GET `TopicPage`：主题自己的那页字、成员、命中方式、机器挑的线头、几个角度。 */
+  topic: (id: string) => `/topics/${encodeURIComponent(id)}`,
+  /** PUT `PagePatch`：改这一页的字（段的顺序、文字、每段带着的引用），回整个 `TopicPage`。宿主照 SPEC §1.4 写回 Markdown。 */
+  topicPage: (id: string) => `/topics/${encodeURIComponent(id)}/page`,
+  /** POST `CiteRequest`：把一段原话引用进这一页，接在 `after` 那段后面或页尾，回整个 `TopicPage`。 */
+  topicCite: (id: string) => `/topics/${encodeURIComponent(id)}/cite`,
+  /** PUT `TopicMatch`：怎么算命中（关键词；相似度要你自己打开），回整个 `TopicPage`。 */
+  topicMatch: (id: string) => `/topics/${encodeURIComponent(id)}/match`,
+  /** POST：这个线头不要了，204；不留记录，之后不再拿它给你看。 */
+  topicThreadDismiss: (id: string, threadId: string) => `/topics/${encodeURIComponent(id)}/threads/${encodeURIComponent(threadId)}/dismiss`,
+  /** POST `{question}`：加一个角度（让模型按这个问题读这一主题的段），回整个 `TopicPage`。 */
+  topicAngles: (id: string) => `/topics/${encodeURIComponent(id)}/angles`,
+  /** POST：这个角度再读一次，新的一次和旧的并排，回整个 `TopicPage`；没选模型回 `model-required`。 */
+  topicAngleRun: (id: string, angleId: string) => `/topics/${encodeURIComponent(id)}/angles/${encodeURIComponent(angleId)}/run`,
+
+  // —— 成稿（BUILD 005）。内核今天（11-12）还没有这几条。——
+  /** GET `DraftSummary[]`（改过的在前）；POST `NewDraftRequest` 写一篇新的，回 `Draft`。 */
+  drafts: "/drafts",
+  /** GET `Draft`；PATCH `DraftPatch` 改标题和是哪种，回 `Draft`。标题就是文件名，在访达里改名也是改标题。 */
+  draft: (id: string) => `/drafts/${encodeURIComponent(id)}`,
+  /** PUT `PagePatch`：改正文，回 `Draft`。 */
+  draftPage: (id: string) => `/drafts/${encodeURIComponent(id)}/page`,
+  /** POST `CiteRequest`：把一段原话引进来，出处跟着它，回 `Draft`。 */
+  draftCite: (id: string) => `/drafts/${encodeURIComponent(id)}/cite`,
+
+  // —— 跟着收（BUILD 009）。内核今天（11-12）还没有这几条。——
+  /** GET `FollowsView`；POST `NewFollowRequest` 跟着收一个新的，回 `FollowView`。 */
+  follows: "/follows",
+  /** PATCH `FollowPatch`（停下、接着、改节奏、改收什么），回 `FollowView`；DELETE 不再跟着收，204，收下的条目都留着。 */
+  follow: (id: string) => `/follows/${encodeURIComponent(id)}`,
+  /** POST `FollowTrialRequest`：照现在的内容试列一次，回 `FollowTrial`，什么都不收、不记。会调插件，按节奏可能要等一会儿。 */
+  followTrials: "/follow-trials",
+  /** PATCH `{powerOnly}`：只在接着电源时跑，回 `FollowsView`。 */
+  followSettings: "/follow-settings",
+
+  // —— 改动记录与改动提议（BUILD 006）。内核今天（11-12）还没有这几条。——
+  /** GET `ChangesView`：一批一批，新的在前。 */
+  changes: "/changes",
+  /** POST `DecideRequest`：接受这一批提议里的几处（不给 `ops` 是全部），回这一批。 */
+  changeAccept: (id: string) => `/changes/${encodeURIComponent(id)}/accept`,
+  /** POST `DecideRequest`：不要这一批提议里的几处（不给 `ops` 是全部），资料库不变，回这一批。 */
+  changeDecline: (id: string) => `/changes/${encodeURIComponent(id)}/decline`,
+  /** POST：整批撤销，回这一批；之后能重做。 */
+  changeUndo: (id: string) => `/changes/${encodeURIComponent(id)}/undo`,
+  /** POST：撤销过的这一批再做一次，回这一批。 */
+  changeRedo: (id: string) => `/changes/${encodeURIComponent(id)}/redo`,
+
+  // —— 导出到 Obsidian（BUILD 007）。内核今天（11-12）还没有这几条。——
+  /** GET `ExportView`：导到哪、会写出什么、一篇笔记的样子、导出记录。 */
+  exportView: "/export",
+  /** PUT `{folder}`：换导出的文件夹（按机器存，不跟着同步），回 `ExportView`。文件夹不在或写不了回 `invalid-args`。 */
+  exportTarget: "/export/target",
+  /** POST：现在导出。先读回上次导出以后在那边改的，合进来，再写出；回这一次的 `ExportRun`。只在你点的时候跑。 */
+  exportRuns: "/export/runs",
+
   /** 事件流（SSE）：`event:` 是 `LibraryEvent["type"]` 或 `PlatformEvent["type"]`，`data:` 是事件的 JSON。要带令牌，用 fetch 读。 */
   events: "/events",
 
@@ -100,6 +156,16 @@ export const paths = {
   deliverToken: (id: string) => `/deliver-tokens/${encodeURIComponent(id)}`,
   /** GET `{path}`：收件文件夹在哪。手机经云盘往里放 `.txt`（一行一个链接或整段分享文字），收完移到 `.usuyo-done/`。 */
   inbox: "/inbox",
+
+  // —— 别的工具导出的文件（「导入」页的另一半，BUILD 007）。内核今天（11-12）还没有这两条。——
+  /** GET `FileReader[]`：装着的、能读别的工具导出的文件的导入插件。 */
+  fileReaders: "/file-readers",
+  /**
+   * POST 文件本身（`application/octet-stream`），`?reader=<插件 id>&name=<文件名>`：内核存一份副本，原文件不动，
+   * 由那个导入插件读出清单，回 `ImportView`（`kind: "file"`，`state: "listing"` 或 `ready`）；之后和别的导入一样看预览、确认。
+   * 插件读不了这个文件回 `invalid-args`，带一句原因。
+   */
+  fileImports: "/file-imports",
 } as const;
 
 /**
@@ -374,6 +440,303 @@ export interface FollowRequest {
   followed: boolean;
 }
 
+// —— 你写的那一层：主题页、成稿共用 ——
+
+/** 一段能引用的原话：哪一条、哪一层、哪一处。引用按这几样找回，不认哪一次转录（重新识别不断）。 */
+export interface SegmentRef {
+  itemId: string;
+  title: string;
+  platform: Platform;
+  author?: string;
+  layer: FacetLayer;
+  position?: Position;
+  text: string;
+}
+
+/**
+ * 页里的一处引用（SPEC §1.4.3 的脚注）。原话、标题、作者、日期是插入时抄下的，之后不跟着刷新。
+ * `found`：照原样找回了（`same`）；那一秒的文字变了，`now` 是现在的（`changed`，两句并排看）；
+ * 文字类找不到了，显示存下的原话（`missing`）；被引的条目清掉了，`itemId` 是 null，写「来源已删掉」（`gone`）。
+ */
+export interface Citation {
+  label: string;
+  itemId: string | null;
+  layer: FacetLayer;
+  position?: Position;
+  quote: string;
+  title: string;
+  author?: string;
+  /** 发布日期，`YYYY-MM-DD`。 */
+  date: string;
+  found: "same" | "changed" | "missing" | "gone";
+  now?: string;
+}
+
+/** 页里的一段：你写的字，段末带着的几处引用（`Citation.label`）。只放引用、不写字的段 `text` 是空的。 */
+export interface PageBlock {
+  id: string;
+  kind: "text" | "heading";
+  text: string;
+  cites: string[];
+}
+
+/** 你写的一页：普通 Markdown 文件，不开 usuyo 也能读。 */
+export interface WrittenPage {
+  /** 资料库里的路径，例如 `topics/咖啡.md`。 */
+  file: string;
+  blocks: PageBlock[];
+  citations: Citation[];
+}
+
+/** 改一页：整页的段交回来；新段不带 `id`，宿主起。没列出的引用从页尾去掉。 */
+export interface PagePatch {
+  blocks: (Omit<PageBlock, "id"> & { id?: string })[];
+}
+
+export interface CiteRequest {
+  segment: Pick<SegmentRef, "itemId" | "layer" | "position" | "text">;
+  /** 接在哪一段后面；不给接在页尾。 */
+  after?: string;
+}
+
+/** 怎么算命中：关键词按字面看标题层和内容层；相似度按和成员相近，要你自己打开（SPEC §1.4.1）。 */
+export interface TopicMatch {
+  keywords: string[];
+  similarity: boolean;
+}
+
+/** 机器拼出来的一组相近的段：标「机器挑的」，只摘原话，不起名、不写总结；没有「看过」。 */
+export interface Thread {
+  id: string;
+  segments: SegmentRef[];
+}
+
+/** 一个角度：让模型按一个问题去读这一主题的段。每读一次留一份，并排放；引用由机器另外核对到原话。 */
+export interface Angle {
+  id: string;
+  question: string;
+  runs: AngleRun[];
+}
+
+export interface AngleRun {
+  id: string;
+  at: string;
+  /** 读的模型，例如「Qwen3 8B · 本机」。 */
+  model: string;
+  /** 模型写的几点，每点带它引的原话；`checked` 是核对到了原话。 */
+  points: { text: string; cites: { segment: SegmentRef; checked: boolean }[] }[];
+}
+
+export interface TopicPage extends Topic {
+  page: WrittenPage;
+  match: TopicMatch;
+  /** 你放进来的条目。命中不自动变成成员。 */
+  members: ItemSummary[];
+  /** 按关键词命中、还没放进来的（机器挑的），带命中的词。 */
+  hits: { item: ItemSummary; words: string[] }[];
+  threads: Thread[];
+  angles: Angle[];
+}
+
+/** 成稿是哪一种（SPEC §1.4.2 的 `kind`）。 */
+export type DraftKind = "article" | "post" | "script" | "other";
+
+export interface DraftSummary {
+  id: string;
+  title: string;
+  kind: DraftKind;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** 一篇成稿：你自己的东西，每处引用都带着出处；`from` 是用到的主题（引过它们页里的段）。 */
+export interface Draft extends DraftSummary {
+  page: WrittenPage;
+  from: { id: string; name: string }[];
+}
+
+export interface NewDraftRequest {
+  title: string;
+  kind: DraftKind;
+}
+
+export interface DraftPatch {
+  title?: string;
+  kind?: DraftKind;
+}
+
+// —— 跟着收 ——
+
+/** 跟着什么：你在平台上的一个收藏夹或列表、一个创作者的主页、一个订阅源（RSS、Atom、JSON Feed），或者关键词。 */
+export type FollowKind = "list" | "creator" | "feed" | "keywords";
+
+/**
+ * 收什么：`all` 新出现的都收（你自己的收藏夹只能这样，不逐条看）；
+ * 不是 `all` 的只收命中的：`topics` 是关注着的主题（照它们的关键词），`words` 是另加的词。按词命中的都标「机器挑的」。
+ */
+export type FollowTake = { all: true } | { all: false; topics: string[]; words: string[] };
+
+/** 这台电脑上能跟着收的：哪个插件的哪种取法能列这一种，没做好的也列出来。 */
+export interface FollowOption {
+  kind: FollowKind;
+  pluginId: string;
+  pluginName: string;
+  methodName: string;
+  built: boolean;
+  /** `list` 的：能跟着的收藏夹和列表。 */
+  sources?: PluginSource[];
+  /** 插件声明的最快节奏，小时。 */
+  minHours: number;
+}
+
+export interface FollowView {
+  id: string;
+  kind: FollowKind;
+  title: string;
+  pluginId: string;
+  pluginName: string;
+  /** `list` 的：`PluginSource.source`。 */
+  source?: string;
+  /** `creator`、`feed` 的地址；`keywords` 没有。 */
+  url?: string;
+  take: FollowTake;
+  /** 多久看一次，小时。 */
+  everyHours: number;
+  /** 你停下了的是 false。 */
+  on: boolean;
+  lastAt?: string;
+  nextAt?: string;
+  /** 为什么停着：平台限频（带 `until`，到点自己再试）、要重新登录、插件不能用（等你动手）。只停这一个。 */
+  waiting?: ImportWaiting;
+}
+
+/** 跟着收最近收下的一条。`picked` 有的是按词命中收下的，标「机器挑的」，一直留着这个来历。 */
+export interface FollowTaken {
+  itemId: string;
+  title: string;
+  platform: Platform;
+  takenAt: string;
+  followId: string;
+  picked?: { words: string[]; topicIds: string[] };
+}
+
+export interface FollowsView {
+  follows: FollowView[];
+  /** 最近收下的，新的在前。 */
+  recent: FollowTaken[];
+  options: FollowOption[];
+  /** 只在接着电源时跑（默认开）。 */
+  powerOnly: boolean;
+}
+
+export interface FollowTrialRequest {
+  kind: FollowKind;
+  pluginId: string;
+  source?: string;
+  url?: string;
+  /** `keywords` 的词。 */
+  words?: string[];
+  take: FollowTake;
+}
+
+/**
+ * 试列一次的结果：现在列得到的里头，照「收什么」会收下哪些。
+ * `firstRun`：`record` 是第一次只记下现在有的、不收，以后新出现的才收（创作者、订阅源、关键词）；`take` 是新加进去的直接收（你自己的收藏夹）。
+ */
+export interface FollowTrial {
+  title: string;
+  firstRun: "record" | "take";
+  /** 这一次列到了几条。 */
+  listed: number;
+  would: { title: string; url: string; actedAt?: string; picked?: string[] }[];
+  /** 列到了、但不会收的：库里已经存着的、在回收站里的、没命中的。 */
+  left: { stored: number; trashed: number; unmatched: number };
+}
+
+export type NewFollowRequest = FollowTrialRequest & { title?: string; everyHours: number };
+
+export interface FollowPatch {
+  on?: boolean;
+  everyHours?: number;
+  take?: FollowTake;
+}
+
+// —— 改动记录与改动提议 ——
+
+/** 谁做的：你、哪个 Agent、导出读回、同步来的；都带是哪台电脑。 */
+export type ChangeActor =
+  | { kind: "you"; device: string }
+  | { kind: "agent"; name: string; device: string }
+  | { kind: "readback"; target: string; device: string }
+  | { kind: "sync"; device: string };
+
+/** 一批里的一处：动了什么、怎么动的，文字类的带改之前和改之后。提议里的每一处有自己的决定。 */
+export interface ChangeOp {
+  id: string;
+  target: { kind: "item" | "topic" | "card" | "draft"; id: string; title: string };
+  op: "add-item" | "set-note" | "edit-page" | "add-citation" | "add-to-topic" | "keep-text" | "restore";
+  before?: string;
+  after?: string;
+  /** 只在提议里有：还没定、接受了、不要了。 */
+  decision?: "open" | "accepted" | "declined";
+}
+
+/**
+ * 一批改动。`applied` 生效了；`proposed` 是提议（Agent 改已有内容），等你一处处或整批定；
+ * `declined` 是整批都不要了，资料库没变；`undone` 撤销了，能重做。提议不作废，也不计数、不提醒。
+ */
+export interface ChangeBatch {
+  id: string;
+  at: string;
+  by: ChangeActor;
+  state: "applied" | "proposed" | "declined" | "undone";
+  /** 一句来历，例如「经 MCP」「导出前从 Obsidian 读回」。 */
+  via: string;
+  ops: ChangeOp[];
+  /** 撤销会连带的事，撤之前问你一次，例如「其中 1 条你记过一句，一起撤掉」。 */
+  undoNote?: string;
+}
+
+export interface ChangesView {
+  batches: ChangeBatch[];
+}
+
+export interface DecideRequest {
+  ops?: string[];
+}
+
+// —— 导出 ——
+
+/** 一次导出：先读回、再写出。数字只说这一次做了什么。 */
+export interface ExportRun {
+  id: string;
+  at: string;
+  state: "done" | "failed";
+  /** 没成的原因。 */
+  hint?: string;
+  /** 写出了几篇笔记。 */
+  written: number;
+  /** 读回合进来的：哪篇、改了什么；记在改动记录里的那一批。 */
+  readBack: { file: string; title: string; what: string; batchId?: string }[];
+  /** 两边都改过同一处：留下 usuyo 这份，Obsidian 那段进回收站，在那里能「换上这段」。 */
+  both: { file: string; title: string; kept: string; theirs: string }[];
+  /** 这次没读也没写的，和为什么；在那边改好，下次照常读回。 */
+  left: { file: string; reason: string }[];
+}
+
+export interface ExportView {
+  /** 导出插件，例如「Obsidian」。 */
+  target: { pluginId: string; name: string };
+  /** 导到哪个文件夹；还没选是 null。按机器记，不跟着同步。 */
+  folder: string | null;
+  /** 这一次会写出的：条目、主题页、成稿各几篇；私密的不导出。 */
+  will: { items: number; topics: number; drafts: number; privateLeft: number };
+  /** 一篇条目笔记的样子：分隔线以上是你的（读回），以下每次导出照 usuyo 重写。 */
+  sample: { file: string; yours: string; ours: string };
+  /** 导出记录，新的在前。 */
+  runs: ExportRun[];
+}
+
 // —— 获取插件 ——
 
 /** 七层取法（协议 §2.4），从低到高。只是给你挑的标签，不拦什么。 */
@@ -572,9 +935,11 @@ export interface ImportWaiting {
 /** 一次导入。只说事实：列了几页、预览里各几条、收下了几条、为什么在等；不给还剩多少。 */
 export interface ImportView {
   id: string;
-  /** `source`：插件列出来的；`delivered`：交进来的一批链接。 */
-  kind: "source" | "delivered";
+  /** `source`：插件列出来的；`delivered`：交进来的一批链接；`file`：别的工具导出的文件读出来的。 */
+  kind: "source" | "delivered" | "file";
   title: string;
+  /** `file` 的：交进来的文件名和读它的插件名。 */
+  file?: { name: string; reader: string };
   pluginId?: string;
   source?: string;
   /** 交进来的那个投递端的名字。 */
@@ -624,6 +989,27 @@ export interface ConfirmImportRequest {
   new: boolean;
   trashed: boolean;
   except?: number[];
+}
+
+/**
+ * 一个能读别的工具导出的文件的导入插件（第三类插件之外预装的那一样，和平台无关的「链接清单」也是一个）。
+ * 名字、读什么、文件长什么样都由插件清单给，应用里不写死任何平台。
+ */
+export interface FileReader {
+  /** `<插件 id>#<取法 id>`，交文件时原样给回；同一种取法也在插件的 `methods` 里时，第一次打开那一页靠它不重复列。 */
+  id: string;
+  /** 例如「官方归档」。 */
+  name: string;
+  /** 插件的名字。 */
+  plugin: string;
+  /** 给人看的一句：读哪个工具的哪种导出，例如「某平台设置里『下载你的数据』给的 zip」。 */
+  reads: string;
+  /** 文件名的样子，例如 `*.zip`；只用来提示和挑文件时过滤。 */
+  patterns: string[];
+  /** 读得出的清单，例如「喜欢」「书签」。 */
+  lists: string[];
+  /** 记下来的一句没核过的事，例如「归档里有没有书签没核」。只是信息。 */
+  note?: string;
 }
 
 // —— 投递 ——

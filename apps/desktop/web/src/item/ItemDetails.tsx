@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { FileText, Plus, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Button as AriaButton, Dialog, DialogTrigger, Input, Popover, TextField, ToggleButton } from "react-aria-components";
@@ -53,9 +54,11 @@ export function ItemMeta({ item, topics, keep }: { item: Item; topics: Topic[]; 
       <Row label="主题" top>
         <div className="flex min-h-ctl-sm flex-wrap items-center gap-1.5">
           {item.topicIds.map((t) => (
-            <TopicPill key={t} followed={followed.has(t)} size="md">
-              {names.get(t)}
-            </TopicPill>
+            <Link key={t} to="/topics/$id" params={{ id: t }} aria-label={`打开主题「${names.get(t) ?? t}」`} className="press rounded-full no-underline">
+              <TopicPill followed={followed.has(t)} size="md">
+                {names.get(t)}
+              </TopicPill>
+            </Link>
           ))}
           <DialogTrigger>
             <AriaButton className="press flex h-ctl-sm cursor-pointer items-center gap-1.5 rounded-full border border-dashed border-border2 bg-transparent px-3 font-sans text-small font-medium text-label outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent">

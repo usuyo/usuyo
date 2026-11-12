@@ -5,6 +5,7 @@ import {
   type CreateDeliverTokenRequest,
   type DeliverToken,
   type FetchPlugin,
+  type FileReader,
   type ImportEntry,
   type ImportView,
   type NewDeliverToken,
@@ -27,6 +28,24 @@ import {
   type Topic,
   type TrashView,
   type VisitorIdentity,
+  type CiteRequest,
+  type PagePatch,
+  type TopicMatch,
+  type TopicPage,
+  type Draft,
+  type DraftPatch,
+  type DraftSummary,
+  type NewDraftRequest,
+  type FollowPatch,
+  type FollowTrial,
+  type FollowTrialRequest,
+  type FollowView,
+  type FollowsView,
+  type NewFollowRequest,
+  type ChangeBatch,
+  type ChangesView,
+  type ExportRun,
+  type ExportView,
 } from "./endpoints";
 
 /** 页面要的全部读写。真的内核和开发用的样例库都实现它。 */
@@ -79,6 +98,10 @@ export interface Platforms {
   createDeliverToken(body: CreateDeliverTokenRequest): Promise<NewDeliverToken>;
   revokeDeliverToken(id: string): Promise<void>;
   inbox(): Promise<{ path: string }>;
+  /** 能读别的工具导出的文件的导入插件。 */
+  fileReaders(): Promise<FileReader[]>;
+  /** 交一个文件给某个导入插件读，回这一次导入。 */
+  importFile(readerId: string, file: File): Promise<ImportView>;
 }
 
 /** 转换插件和模型（feature 003 §8.1）。 */
@@ -96,8 +119,55 @@ export interface Settings {
   releaseHeld(): Promise<{ removed: number }>;
 }
 
+/** 主题页的读写（BUILD 004、005）。成员的加减走 `Library.setTopic`。 */
+export interface Topics {
+  topicPage(id: string): Promise<TopicPage>;
+  editTopicPage(id: string, patch: PagePatch): Promise<TopicPage>;
+  citeInTopic(id: string, body: CiteRequest): Promise<TopicPage>;
+  setTopicMatch(id: string, match: TopicMatch): Promise<TopicPage>;
+  dismissThread(id: string, threadId: string): Promise<void>;
+  addAngle(id: string, question: string): Promise<TopicPage>;
+  runAngle(id: string, angleId: string): Promise<TopicPage>;
+}
+
+/** 成稿的读写（BUILD 005）。 */
+export interface Drafts {
+  drafts(): Promise<DraftSummary[]>;
+  newDraft(body: NewDraftRequest): Promise<Draft>;
+  draft(id: string): Promise<Draft>;
+  changeDraft(id: string, patch: DraftPatch): Promise<Draft>;
+  editDraftPage(id: string, patch: PagePatch): Promise<Draft>;
+  citeInDraft(id: string, body: CiteRequest): Promise<Draft>;
+}
+
+/** 跟着收的读写（BUILD 009）。 */
+export interface Follows {
+  follows(): Promise<FollowsView>;
+  newFollow(body: NewFollowRequest): Promise<FollowView>;
+  changeFollow(id: string, patch: FollowPatch): Promise<FollowView>;
+  removeFollow(id: string): Promise<void>;
+  trialFollow(body: FollowTrialRequest): Promise<FollowTrial>;
+  setFollowPower(powerOnly: boolean): Promise<FollowsView>;
+}
+
+/** 改动记录与改动提议的读写（BUILD 006）。 */
+export interface Changes {
+  changes(): Promise<ChangesView>;
+  acceptChange(id: string, ops?: string[]): Promise<ChangeBatch>;
+  declineChange(id: string, ops?: string[]): Promise<ChangeBatch>;
+  undoChange(id: string): Promise<ChangeBatch>;
+  redoChange(id: string): Promise<ChangeBatch>;
+}
+
+/** 导出到 Obsidian 的读写（BUILD 007）。 */
+export interface Exports {
+  exportView(): Promise<ExportView>;
+  setExportFolder(folder: string): Promise<ExportView>;
+  exportNow(): Promise<ExportRun>;
+}
+
 /** 内核和样例库都实现的全部读写。 */
-export type Source = Library & Platforms & Transforms & Settings;
+export type Source = Library & Platforms & Transforms & Settings & Topics & Drafts & Follows & Changes & Exports;
 
 /** 内核今天回的一条：还没有 `pending`，每面还没有 `key`（feature 003 的 WP7、WP8 还没接上）。 */
 type KeylessFacet<F> = F extends Facet ? Omit<F, "key"> & { key?: string } : never;
@@ -141,6 +211,9 @@ const itemRequest = (path: string, method?: "POST") => request<WireItem>(path, m
 
 /** 列来源要调插件，内核最多等一分钟多一点。 */
 const SOURCES_TIMEOUT_MS = 75_000;
+
+/** 交文件是把整个文件抄给内核，大的归档要几分钟。 */
+const FILE_TIMEOUT_MS = 600_000;
 
 const daemon: Source = {
   health: () => request<Health>(paths.health),
@@ -186,10 +259,45 @@ const daemon: Source = {
   createDeliverToken: (body) => request<NewDeliverToken>(paths.deliverTokens, { method: "POST", body }),
   revokeDeliverToken: (id) => request<void>(paths.deliverToken(id), { method: "DELETE" }),
   inbox: () => request<{ path: string }>(paths.inbox),
+  fileReaders: () => request<FileReader[]>(paths.fileReaders),
+  importFile: (reader, file) =>
+    request<ImportView>(paths.fileImports, { method: "POST", file, query: { reader, name: file.name }, timeoutMs: FILE_TIMEOUT_MS }),
 
   settings: () => request<SettingsView>(paths.settings),
   changeSettings: (patch) => request<SettingsView>(paths.settings, { method: "PATCH", body: patch }),
   releaseHeld: () => request<{ removed: number }>(paths.trashReleaseHeld, { method: "POST" }),
+
+  topicPage: (id) => request<TopicPage>(paths.topic(id)),
+  editTopicPage: (id, patch) => request<TopicPage>(paths.topicPage(id), { method: "PUT", body: patch }),
+  citeInTopic: (id, body) => request<TopicPage>(paths.topicCite(id), { method: "POST", body }),
+  setTopicMatch: (id, match) => request<TopicPage>(paths.topicMatch(id), { method: "PUT", body: match }),
+  dismissThread: (id, threadId) => request<void>(paths.topicThreadDismiss(id, threadId), { method: "POST" }).then(() => undefined),
+  addAngle: (id, question) => request<TopicPage>(paths.topicAngles(id), { method: "POST", body: { question } }),
+  runAngle: (id, angleId) => request<TopicPage>(paths.topicAngleRun(id, angleId), { method: "POST" }),
+
+  drafts: () => request<DraftSummary[]>(paths.drafts),
+  newDraft: (body) => request<Draft>(paths.drafts, { method: "POST", body }),
+  draft: (id) => request<Draft>(paths.draft(id)),
+  changeDraft: (id, patch) => request<Draft>(paths.draft(id), { method: "PATCH", body: patch }),
+  editDraftPage: (id, patch) => request<Draft>(paths.draftPage(id), { method: "PUT", body: patch }),
+  citeInDraft: (id, body) => request<Draft>(paths.draftCite(id), { method: "POST", body }),
+
+  follows: () => request<FollowsView>(paths.follows),
+  newFollow: (body) => request<FollowView>(paths.follows, { method: "POST", body }),
+  changeFollow: (id, patch) => request<FollowView>(paths.follow(id), { method: "PATCH", body: patch }),
+  removeFollow: (id) => request<void>(paths.follow(id), { method: "DELETE" }).then(() => undefined),
+  trialFollow: (body) => request<FollowTrial>(paths.followTrials, { method: "POST", body, timeoutMs: SOURCES_TIMEOUT_MS }),
+  setFollowPower: (powerOnly) => request<FollowsView>(paths.followSettings, { method: "PATCH", body: { powerOnly } }),
+
+  changes: () => request<ChangesView>(paths.changes),
+  acceptChange: (id, ops) => request<ChangeBatch>(paths.changeAccept(id), { method: "POST", body: ops ? { ops } : {} }),
+  declineChange: (id, ops) => request<ChangeBatch>(paths.changeDecline(id), { method: "POST", body: ops ? { ops } : {} }),
+  undoChange: (id) => request<ChangeBatch>(paths.changeUndo(id), { method: "POST" }),
+  redoChange: (id) => request<ChangeBatch>(paths.changeRedo(id), { method: "POST" }),
+
+  exportView: () => request<ExportView>(paths.exportView),
+  setExportFolder: (folder) => request<ExportView>(paths.exportTarget, { method: "PUT", body: { folder } }),
+  exportNow: () => request<ExportRun>(paths.exportRuns, { method: "POST", timeoutMs: FILE_TIMEOUT_MS }),
 
   transforms: () => request<TransformsView>(paths.transforms),
   transform: (itemId, body) => request<void>(paths.itemTransform(itemId), { method: "POST", body }).then(() => undefined),
@@ -201,9 +309,10 @@ const daemon: Source = {
 const MOCK_FORCED = import.meta.env.VITE_USUYO_MOCK === "1";
 const MOCK_FALLBACK = import.meta.env.MODE === "development";
 
-// 地址栏带 ?mock=empty 时样例库从空的开始；要在路由改写地址之前读。
-const MOCK_EMPTY =
-  (MOCK_FORCED || MOCK_FALLBACK) && typeof location !== "undefined" && new URLSearchParams(location.search).get("mock") === "empty";
+// 地址栏带 ?mock=empty 时样例库从空的开始；?mock=fresh 是资料库空着、获取插件装好了（第一次打开）。要在路由改写地址之前读。
+const MOCK_PARAM = (MOCK_FORCED || MOCK_FALLBACK) && typeof location !== "undefined" ? new URLSearchParams(location.search).get("mock") : null;
+const MOCK_EMPTY = MOCK_PARAM === "empty" || MOCK_PARAM === "fresh";
+const MOCK_NO_PLUGINS = MOCK_PARAM === "empty";
 
 let mockLibrary: Promise<Source> | null = null;
 let usingMock = MOCK_FORCED;
@@ -214,10 +323,10 @@ export function usingMockLibrary(): boolean {
 }
 
 function mock(): Promise<Source> {
-  mockLibrary ??= Promise.all([import("../mock/library"), import("../mock/platforms")]).then(([l, p]) => ({
-    ...l.createMockLibrary(MOCK_EMPTY),
-    ...p.createMockPlatforms(MOCK_EMPTY),
-  }));
+  mockLibrary ??= Promise.all([import("../mock/library"), import("../mock/platforms"), import("../mock/pages"), import("../mock/follows"), import("../mock/changes"), import("../mock/exports")]).then(([l, p, w, f, c, e]) => {
+    const library = l.createMockLibrary(MOCK_EMPTY);
+    return { ...library, ...p.createMockPlatforms(MOCK_NO_PLUGINS), ...w.createMockPages(library, MOCK_EMPTY), ...f.createMockFollows(library, MOCK_EMPTY), ...c.createMockChanges(MOCK_EMPTY), ...e.createMockExports(MOCK_EMPTY) };
+  });
   return mockLibrary;
 }
 

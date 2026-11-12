@@ -1,7 +1,8 @@
 import { getRouteApi, Link } from "@tanstack/react-router";
 import { ArrowLeft, ExternalLink, Map as MapIcon } from "lucide-react";
 import type { Facet, Item, Topic } from "../api/endpoints";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import type { ItemSearch } from "../router";
 import { isGone, useItem, useItemChange, useTopics, useTransform, useTrash } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
 import { Rail } from "../frame/Rail";
@@ -21,6 +22,7 @@ const route = getRouteApi("/items/$id");
 /** 条目页：画面和这一条的几面并排；窗口窄时画面在上、几面在下。 */
 export function ItemPage() {
   const { id } = route.useParams();
+  const jump = route.useSearch();
   const item = useItem(id);
   const topics = useTopics();
   const followed = topics.data?.filter((t) => t.followed) ?? [];
@@ -40,7 +42,8 @@ export function ItemPage() {
           {followed.map((t) => (
             <Link
               key={t.id}
-              to="/"
+              to="/topics/$id"
+              params={{ id: t.id }}
               className="press flex h-ctl items-center gap-2.5 rounded-btn px-2.5 text-body text-label no-underline hover:bg-chip"
             >
               <span className="size-[7px] shrink-0 rounded-full bg-accent" aria-hidden="true" />
@@ -65,13 +68,13 @@ export function ItemPage() {
         ) : error ? (
           <ErrorLine error={error} className="mt-4" />
         ) : null}
-        {item.data && topics.data ? <ItemBody key={item.data.id} item={item.data} topics={topics.data} /> : null}
+        {item.data && topics.data ? <ItemBody key={item.data.id} item={item.data} topics={topics.data} jump={jump} /> : null}
       </main>
     </div>
   );
 }
 
-function ItemBody({ item, topics }: { item: Item; topics: Topic[] }) {
+function ItemBody({ item, topics, jump }: { item: Item; topics: Topic[]; jump: ItemSearch }) {
   const video = facetOf(item, "video");
   const firstImage = facetOf(item, "image")?.images[0]?.key ?? null;
   const player = usePlayer(video, firstImage, item.stored === "complete" || item.stored === "partial");
@@ -86,6 +89,16 @@ function ItemBody({ item, topics }: { item: Item; topics: Topic[] }) {
     // 整条在回收站里时，移出去的媒体跟着整条，不单列。
     gone: item.stored === "text-only" && trash.data !== undefined && !trash.data.entries.some((e) => e.itemId === item.id),
   };
+
+  // 从引用跳回来：打开时停到那一秒或那张图，只做一次。
+  const { go } = player;
+  const jumped = useRef(false);
+  useEffect(() => {
+    if (jumped.current) return;
+    jumped.current = true;
+    if (jump.t !== undefined) go({ kind: "time", sec: jump.t, snapshotId: "" });
+    else if (jump.img !== undefined) go({ kind: "image", imageKey: jump.img });
+  }, [jump, go]);
 
   // 打开这一条时，它还没转出来的几面挪到最前（在电池上也转）。没有在等的就不问内核。
   const waits = item.pending.some((p) => p.state === "later" || p.state === "on-power");
