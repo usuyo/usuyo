@@ -1,14 +1,16 @@
-//! 获取插件的宿主：发现、挑选、调用、校验（协议 §2.8、§3）。
+//! 插件的宿主：发现、挑选、调用、校验（协议 §2.8、§3、§4）。
 //!
-//! 宿主只负责「调一次」：起进程、管时长和环境、把插件交回的每个字节校验一遍。
+//! 获取插件一次一进程：宿主只负责「调一次」，起进程、管时长和环境、把插件交回的每个字节校验一遍。
 //! 按用户排的顺序换插件、平台节奏、暂停和各种锁由调用方（内核的编排）做，
 //! 判断需要的信息都在返回值里：错误码的 `tries_next`、`retryable`、`pause`，清单的 `pacing`。
+//! 转换插件常驻，见 `transform` 模块的 [`ResidentTransform`]。
 
 mod credentials;
 mod envelope_text;
 mod network;
 mod outdir;
 mod process;
+mod transform;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::{OsStr, OsString};
@@ -24,13 +26,16 @@ use tokio_util::sync::CancellationToken;
 pub use credentials::{DeclaredSite, DeclaredVisitor, LoginState, Vault};
 pub use outdir::OutFile;
 use process::{Ending, Finished, Spawn};
+pub use transform::{
+    ResidentTransform, TransformConfig, TransformLimits, TransformOutput, TransformRequest,
+};
 
 use crate::PluginError;
 use crate::protocol::{
     CallFailure, Canonicalized, CapabilityUse, Completeness, ErrorCode, FetchInputKind,
     FetchOutput, FetchSpec, Identity, ListPage, MANIFEST_FILE, OutputKind, PLUGIN_DIR_PLACEHOLDER,
     PluginEvent, PluginHeader, PluginId, PluginKind, PluginManifest, Rfc3339, Site, SourceInfo,
-    SourcesOutput, StorageState,
+    SourcesOutput, StorageState, TransformSpec,
 };
 
 /// 每次调用的上限。默认值照协议 §3.2、§3.4、§3.6；用户的「调用超时加长」「输出大小上限」改这里。
@@ -97,7 +102,23 @@ impl FetchPlugin {
     }
 }
 
-/// 装好的转换、导出插件；宿主现在只列出它们，不调用。
+/// 一个装好的转换插件。WP6（`usuyo-core` 的编排）拿它建 [`ResidentTransform`]；
+/// WP4（模型下载）从 `spec.models` 读它声明的模型。
+#[derive(Debug, Clone)]
+pub struct TransformPlugin {
+    pub header: PluginHeader,
+    pub spec: TransformSpec,
+    /// 安装目录 `${PLUGIN_DIR}`，绝对路径。
+    pub dir: PathBuf,
+}
+
+impl TransformPlugin {
+    pub fn id(&self) -> &PluginId {
+        &self.header.id
+    }
+}
+
+/// 装好的导出插件；宿主现在只列出它们，不调用。
 #[derive(Debug, Clone)]
 pub struct InstalledPlugin {
     pub manifest: PluginManifest,
@@ -114,6 +135,7 @@ pub struct Rejected {
 #[derive(Debug, Default)]
 pub struct Discovery {
     pub fetch: Vec<FetchPlugin>,
+    pub transform: Vec<TransformPlugin>,
     pub other: Vec<InstalledPlugin>,
     pub rejected: Vec<Rejected>,
 }
@@ -161,6 +183,11 @@ pub fn discover(root: &Path) -> Result<Discovery, PluginError> {
                     PluginKind::Fetch(spec) => found.fetch.push(FetchPlugin {
                         header: manifest.header,
                         spec: *spec,
+                        dir,
+                    }),
+                    PluginKind::Transform(spec) => found.transform.push(TransformPlugin {
+                        header: manifest.header,
+                        spec,
                         dir,
                     }),
                     kind => found.other.push(InstalledPlugin {
@@ -505,10 +532,12 @@ impl PluginHost {
         }
         let max = self.config.limits.fetch_dir_bytes;
         let dir = out.clone();
-        let files = tokio::task::spawn_blocking(move || outdir::inspect(&dir, max))
-            .await
-            .map_err(|e| invalid(format!("inspect output directory: {e}")))?
-            .map_err(invalid)?;
+        let files = tokio::task::spawn_blocking(move || {
+            outdir::inspect(&dir, max, outdir::FETCH_PATH_UTF16)
+        })
+        .await
+        .map_err(|e| invalid(format!("inspect output directory: {e}")))?
+        .map_err(invalid)?;
         let present: BTreeSet<_> = files.iter().map(|f| &f.path).collect();
         if let Some(missing) = output.referenced_files().find(|p| !present.contains(p)) {
             return Err(invalid(format!(
@@ -706,8 +735,8 @@ impl PluginHost {
             cap,
             total,
         } = inv;
-        let (program, mut command_args) =
-            resolve_command(plugin).map_err(|failure| call.fail(plugin, failure, Vec::new()))?;
+        let (program, mut command_args) = resolve_command(&plugin.header, &plugin.dir)
+            .map_err(|failure| call.fail(plugin, failure, Vec::new()))?;
         command_args.extend(args);
         let mut env = call_env(&self.config, plugin, call, input_file);
         // 凭据和密钥（§6、§2.11）：读钥匙串会阻塞，放到阻塞线程上；文件随 `handover` 在进程结束时删掉。
@@ -935,16 +964,18 @@ fn check_identity(plugin: &FetchPlugin, identity: &Identity) -> Result<(), Strin
 }
 
 /// 展开 `run.command`：`${PLUGIN_DIR}` 换成安装目录；不在安装目录里的第一项按运行时名字找。
-fn resolve_command(plugin: &FetchPlugin) -> Result<(OsString, Vec<OsString>), CallFailure> {
-    let dir = plugin.dir.to_string_lossy();
-    let mut parts = plugin
-        .header
+fn resolve_command(
+    header: &PluginHeader,
+    plugin_dir: &Path,
+) -> Result<(OsString, Vec<OsString>), CallFailure> {
+    let dir = plugin_dir.to_string_lossy();
+    let mut parts = header
         .run
         .command
         .iter()
         .map(|part| OsString::from(part.replace(PLUGIN_DIR_PLACEHOLDER, &dir)));
     let first = parts.next().unwrap_or_default();
-    let program = if plugin.header.run.command[0].starts_with(PLUGIN_DIR_PLACEHOLDER) {
+    let program = if header.run.command[0].starts_with(PLUGIN_DIR_PLACEHOLDER) {
         first
     } else {
         find_runtime(&first).ok_or_else(|| {
@@ -1005,32 +1036,60 @@ fn call_env(
     input_file: Option<&Path>,
 ) -> Vec<(OsString, OsString)> {
     let tmp = call.dir.path().join("tmp");
-    let home = tmp.join("home");
+    let mut env = plugin_env(
+        &plugin.header,
+        &PluginDirs {
+            plugin: &plugin.dir,
+            cache: &call.cache,
+            home: &tmp.join("home"),
+            tmp: &tmp,
+            bin: &tmp.join("bin"),
+        },
+        &config.locale,
+    );
+    env.insert("USUYO_CALL_ID".into(), call.id.clone().into());
+    if let Some(input) = input_file {
+        env.insert("USUYO_INPUT".into(), input.into());
+    }
+    env.into_iter().collect()
+}
+
+/// 一个插件进程看到的几个目录。
+struct PluginDirs<'a> {
+    plugin: &'a Path,
+    cache: &'a Path,
+    home: &'a Path,
+    tmp: &'a Path,
+    bin: &'a Path,
+}
+
+/// 获取插件和转换插件都有的那部分环境（§3.2、§4.1）：清单声明要透传的，再加宿主设的，同名以宿主为准。
+fn plugin_env(
+    header: &PluginHeader,
+    dirs: &PluginDirs<'_>,
+    locale: &str,
+) -> BTreeMap<OsString, OsString> {
     let mut env: BTreeMap<OsString, OsString> = BTreeMap::new();
     let mut set = |k: &str, v: OsString| {
         env.insert(k.into(), v);
     };
     // 先放清单声明要透传的，宿主自己设的随后覆盖
-    for name in &plugin.header.permissions.env {
+    for name in &header.permissions.env {
         if let Some(v) = std::env::var_os(name) {
             set(name, v);
         }
     }
     set("USUYO_PROTOCOL", "1".into());
-    set("USUYO_PLUGIN_DIR", plugin.dir.clone().into());
-    set("USUYO_CACHE_DIR", call.cache.clone().into());
-    set("USUYO_CALL_ID", call.id.clone().into());
-    set("USUYO_LOCALE", config.locale.clone().into());
-    if let Some(input) = input_file {
-        set("USUYO_INPUT", input.into());
-    }
-    set("HOME", home.clone().into());
-    set("XDG_CONFIG_HOME", home.join(".config").into());
-    set("XDG_CACHE_HOME", call.cache.clone().into());
+    set("USUYO_PLUGIN_DIR", dirs.plugin.into());
+    set("USUYO_CACHE_DIR", dirs.cache.into());
+    set("USUYO_LOCALE", locale.into());
+    set("HOME", dirs.home.into());
+    set("XDG_CONFIG_HOME", dirs.home.join(".config").into());
+    set("XDG_CACHE_HOME", dirs.cache.into());
     for k in ["TMPDIR", "TMP", "TEMP"] {
-        set(k, tmp.clone().into());
+        set(k, dirs.tmp.into());
     }
-    let mut path = vec![tmp.join("bin")];
+    let mut path = vec![dirs.bin.to_owned()];
     #[cfg(unix)]
     path.extend(["/usr/bin", "/bin", "/usr/sbin", "/sbin"].map(PathBuf::from));
     #[cfg(windows)]
@@ -1046,5 +1105,5 @@ fn call_env(
         Ok(joined) => set("PATH", joined),
         Err(e) => tracing::warn!("plugin PATH not set: {e}"),
     }
-    env.into_iter().collect()
+    env
 }

@@ -1,7 +1,7 @@
 //! 转换插件的 JSON-RPC 消息（协议 §4.1、§4.2）：stdio 上一行一条，JSON-RPC 2.0。
 //!
 //! 宿主 → 插件：`describe`、`health`、`run`，通知 `cancel`；插件 → 宿主：通知 `progress`。
-//! 插件一侧的循环在 plugin-kit 的 `transform` 模块；宿主一侧在 `host`（还没做）。
+//! 插件一侧的循环在 plugin-kit 的 `transform` 模块；宿主一侧是 `ResidentTransform`（`host` 的 `transform` 模块）。
 
 use std::collections::BTreeSet;
 use std::fmt;

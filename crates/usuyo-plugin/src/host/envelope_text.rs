@@ -2,7 +2,9 @@
 //! 正文（`text`）是平台原文，照收到的存，不改。
 //! 这些字会进 manifest、地图、`jobs.db` 和日志；往里走的代码不再查。
 
-use crate::protocol::{Author, CallFailure, FetchOutput, ListPage, MAX_PAUSE, SourceInfo};
+use crate::protocol::{
+    Author, CallFailure, FetchOutput, Health, ListPage, MAX_PAUSE, RunResult, SourceInfo,
+};
 
 /// 标题、作者、原因、提示这类一行的字段最多多少字节。
 const LINE_BYTES: usize = 1024;
@@ -72,6 +74,29 @@ pub(super) fn list(p: &mut ListPage) {
 pub(super) fn sources(s: &mut [SourceInfo]) {
     for source in s {
         line(&mut source.title, LINE_BYTES);
+    }
+}
+
+/// 转换的结果：工具名和版本、模型名、流的编码。`options` 原样记进 `run.json`，只受消息大小上限。
+pub(super) fn run(r: &mut RunResult) {
+    line(&mut r.tool.name, TAG_BYTES);
+    line(&mut r.tool.version, TAG_BYTES);
+    if let Some(m) = &mut r.model {
+        line(&mut m.name, TAG_BYTES);
+    }
+    for stream in r.probe.iter_mut().flat_map(|p| &mut p.streams) {
+        if let Some(codec) = &mut stream.codec {
+            line(codec, TAG_BYTES);
+        }
+    }
+}
+
+/// `health` 的各项检查：最多 64 项，名字和说明各一行。
+pub(super) fn health(h: &mut Health) {
+    h.checks.truncate(TAGS);
+    for check in &mut h.checks {
+        line(&mut check.name, TAG_BYTES);
+        opt_line(&mut check.message);
     }
 }
 

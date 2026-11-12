@@ -671,7 +671,7 @@ pub struct ListCapability {
     pub files: Vec<String>,
 }
 
-/// 转换插件的字段（协议 §2.9）。宿主还不跑转换插件，只读清单。消息见 [`super::transform`]。
+/// 转换插件的字段（协议 §2.9）。消息见 [`super::transform`]，宿主一侧是 `ResidentTransform`。
 #[derive(Debug, Clone, PartialEq)]
 pub struct TransformSpec {
     pub consumes: Vec<Consume>,

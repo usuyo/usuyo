@@ -20,8 +20,12 @@ pub struct OutFile {
 
 /// 每段名字最多多少字节（SPEC §0.6）。
 const NAME_BYTES: usize = 200;
-/// 相对输出目录的路径最多多少个 UTF-16 单位：条目文件夹以内 140，减去 `raw/<UUIDv7>/` 的 41。
-const PATH_UTF16: usize = 140 - "raw/".len() - 36 - 1;
+/// 条目文件夹以内的路径最多多少个 UTF-16 单位（SPEC §0.6）。
+const ITEM_PATH_UTF16: usize = 140;
+/// fetch 输出目录里的路径最多多少个 UTF-16 单位：减去 `raw/<UUIDv7>/` 的 41。
+pub(crate) const FETCH_PATH_UTF16: usize = ITEM_PATH_UTF16 - "raw/".len() - 36 - 1;
+/// 转换输出目录里的路径最多多少个 UTF-16 单位：减去 `derived/runs/<UUIDv7>/` 的 50。
+pub(crate) const RUN_PATH_UTF16: usize = ITEM_PATH_UTF16 - "derived/runs/".len() - 36 - 1;
 /// 输出目录里最多多少项（文件加目录）：上百万个空文件也要花内存、inode 和逐个哈希。
 const MAX_ENTRIES: usize = 10_000;
 /// Windows 的保留名，带扩展名也算。
@@ -30,8 +34,13 @@ const RESERVED: [&str; 22] = [
     "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
 ];
 
-/// 检查整个目录，返回里面的文件。错误是给日志看的原因，调用方记成 `invalid-output`。
-pub(crate) fn inspect(root: &Path, max_bytes: u64) -> Result<Vec<OutFile>, String> {
+/// 检查整个目录，返回里面的文件。`max_path_utf16` 是相对 `root` 的路径上限。
+/// 错误是给日志看的原因，只写相对 `root` 的名字；调用方记成 `invalid-output`。
+pub(crate) fn inspect(
+    root: &Path,
+    max_bytes: u64,
+    max_path_utf16: usize,
+) -> Result<Vec<OutFile>, String> {
     let meta = fs::symlink_metadata(root).map_err(|e| format!("output directory: {e}"))?;
     if !meta.file_type().is_dir() {
         return Err(
@@ -43,6 +52,7 @@ pub(crate) fn inspect(root: &Path, max_bytes: u64) -> Result<Vec<OutFile>, Strin
         total: 0,
         entries: 0,
         max_bytes,
+        max_path_utf16,
     };
     walk.dir(root, "")?;
     walk.files.sort_by(|a, b| a.path.cmp(&b.path));
@@ -54,6 +64,7 @@ struct Walk {
     total: u64,
     entries: usize,
     max_bytes: u64,
+    max_path_utf16: usize,
 }
 
 impl Walk {
@@ -79,9 +90,10 @@ impl Walk {
             if !folded.insert(name.nfc().collect::<String>().to_lowercase()) {
                 return Err(format!("`{rel}`: another name differs only in case"));
             }
-            if rel.encode_utf16().count() > PATH_UTF16 {
+            if rel.encode_utf16().count() > self.max_path_utf16 {
                 return Err(format!(
-                    "`{rel}`: path is longer than {PATH_UTF16} UTF-16 units"
+                    "`{rel}`: path is longer than {} UTF-16 units",
+                    self.max_path_utf16
                 ));
             }
             let meta = fs::symlink_metadata(entry.path()).map_err(|e| format!("`{rel}`: {e}"))?;

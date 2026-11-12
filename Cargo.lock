@@ -3388,6 +3388,7 @@ dependencies = [
  "tracing",
  "unicode-normalization",
  "url",
+ "usuyo-plugin-kit",
  "uuid",
 ]
 

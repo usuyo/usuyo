@@ -173,7 +173,7 @@ async fn cancelled(opts: &CallOptions) {
 }
 
 /// 收尾：要宽限时先 SIGTERM 整组、等一会儿；最后总是 SIGKILL 整组，插件留下的子进程一并结束。
-async fn stop_group(child: &mut Child, group: Option<u32>, grace: Option<Duration>) {
+pub(super) async fn stop_group(child: &mut Child, group: Option<u32>, grace: Option<Duration>) {
     #[cfg(unix)]
     {
         use nix::sys::signal::{Signal, killpg};

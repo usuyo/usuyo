@@ -24,6 +24,14 @@ pub enum PluginError {
     #[error("credentials for `{target}`: {message}")]
     Credentials { target: String, message: String },
 
+    /// 转换进程的暂存目录（协议 §7.1）建不起来、输入放不进去。`what` 只写相对这次调用的名字，不写绝对路径。
+    #[error("transform staging, {what}: {source}")]
+    Staging {
+        what: String,
+        #[source]
+        source: std::io::Error,
+    },
+
     /// 钥匙串（或它的替身）读写失败。消息里没有值。
     #[error("secret store: {0}")]
     Vault(String),
