@@ -159,8 +159,8 @@
 
 | 取法 | 拿到什么 | 账号 | 层级 | 做成什么样 | 你要装或给的 | 已有 | 记录到的情况 | 不用账号能试 |
 |---|---|---|---|---|---|---|---|---|
-| `page` | 单条：回答、文章 | 不要 | `public-web` | 自己写，读公开页；obsidian-zhihu-crawler 没有许可证，只参考做法 | — | 没有 | 调研里没有处罚记录 | 能 |
-| `collection` | 存过的：公开收藏夹 | 不要 | `public-web` | 自己写，收藏夹接口不签名（[层级笔记](../research/notes/tier-calls-weibo-zhihu-douban-x-ig-reddit-tg.md)） | 收藏夹地址（等[协议 §13](../protocol/open.md#13-待定) 第 21 项） | 没有 | — | 能 |
+| `page` | 单条：回答、文章、想法 | 访客身份 | `public-web` | 自己写，读公开页里自带的数据；正文转 Markdown，图按顺序存下 | 在 usuyo 里取一次知乎的访客身份 | 做了（`usuyo-fetch/zhihu`，11-12），改成用访客身份；只对本机的假站点测过 | 2026-11-12 不带账号实测：不带 cookie 的请求，文章页和回答页都回 403 的校验页（`zh-zse-ck`，要页面脚本算出 cookie），所以要访客身份；页面里各字段的名字没实测 | 这边不跑 |
+| `collection` | 存过的：公开收藏夹 | 没定（访客身份够不够不知道） | `public-web` | 自己写；清单里已经声明，带链接框 | 收藏夹地址 | 没有 | 2026-11-12 实测：收藏夹页面只带收藏夹自己的信息，条目由 `/api/v4/collections/<id>/items` 取，这个接口对不带 cookie 的请求回 401「身份未经过验证」，和[层级笔记](../research/notes/tier-calls-weibo-zhihu-douban-x-ig-reddit-tg.md)里「不签名也能取」不符 | 试过，取不到 |
 | `collection-private` | 存过的：私密收藏夹 | 要在 usuyo 里登录 | `session-api` | 同一个接口带 cookie | 登录知乎 | 没有 | 调研里没有处罚记录 | 不能 |
 
 没有列的：用户动态要算 `x-zse-96`（`private-api`，ParseHub `zhihu.py` 算的就是它）；关键词搜索是按额度计费的知乎开放平台。知乎视频由 `ytdlp` 取。
