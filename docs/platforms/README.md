@@ -1,7 +1,7 @@
 <a id="各平台怎么取"></a>
 # 各平台怎么取
 
-每个平台每一样东西要不要账号、走哪条路、做到哪，都在这一页。一个平台的细节（请求、身份、存下什么、错误怎么报）写在那个平台自己的设计里：小红书、视频号、B站在[调研 15](../research/15-fetch-design-xhs-sph-bili.md)，X 在 [x.md](x.md)。证据和来源在[调研 06](../research/06-platform-access-and-account-risk.md)，这里不重抄。
+每个平台每一样东西要不要账号、走哪条路、做到哪，都在这一页。一个平台的细节（请求、身份、存下什么、错误怎么报）写在那个平台自己的设计里：[小红书](xiaohongshu.md)、[视频号](wechat-channels.md)、[B站](bilibili.md)、[X](x.md)。小红书、视频号、B站这三份照 2026-11-11 用 `gh api` 读的源码、README、release 和 issue 写，没有登录任何账号，没有对平台发请求，没有运行第三方代码，也没有读本机的微信数据目录；标「推断」的没有实测。证据和来源在[调研 06](../research/06-platform-access-and-account-risk.md)，这里不重抄。
 
 <a id="1-怎么读这一页"></a>
 ## 1. 怎么读这一页
@@ -37,17 +37,17 @@
 
 | 平台 | 哪一样 | 要不要账号 | 走哪条路（层级） | 状态 | 在哪 |
 |---|---|---|---|---|---|
-| 小红书 | 图文 | 访客身份 | 公开笔记页，读页面里的状态对象，不签名（`public-web`） | 做了 | `usuyo-fetch/xiaohongshu`；[调研 15 §2.2](../research/15-fetch-design-xhs-sph-bili.md#22-取单条) |
+| 小红书 | 图文 | 访客身份 | 公开笔记页，读页面里的状态对象，不签名（`public-web`） | 做了 | `usuyo-fetch/xiaohongshu`；[xiaohongshu.md §2.2](xiaohongshu.md#22-取单条) |
 | 小红书 | 视频 | 访客身份 | 同一个 `fetch`，下载页面给的地址；不登录只有低清（`public-web`） | 做了 | 同上 |
-| 小红书 | 存过的 | 账号只在你自己的浏览器里 | 油猴脚本只记收藏页、赞过页自己的请求，交 `/v1/batches`（`browser-session`） | 做了 | `usuyo-fetch/xiaohongshu/userscript/`；[调研 15 §2.1](../research/15-fetch-design-xhs-sph-bili.md#21-列出你存过的) |
+| 小红书 | 存过的 | 账号只在你自己的浏览器里 | 油猴脚本只记收藏页、赞过页自己的请求，交 `/v1/batches`（`browser-session`） | 做了 | `usuyo-fetch/xiaohongshu/userscript/`；[xiaohongshu.md §2.1](xiaohongshu.md#21-列出你存过的) |
 | 小红书 | 创作者 / 关键词 | 不要（推断） | RSSHub 用不登录的无头浏览器截获主页请求（`public-web`）；搜索只找到要签名的（`private-api`） | 只有调研 | [多平台笔记 RSSHub 表](../research/notes/multi-platform-tier-table-and-base-deps.md#rsshub) |
-| 视频号 | 图文 | 不要 | 分享链接对应的匿名接口，只有作者、描述、封面（`public-web`） | 做了 | `usuyo-fetch/wechat-channels`；[调研 15 §3.2](../research/15-fetch-design-xhs-sph-bili.md#32-取单条) |
+| 视频号 | 图文 | 不要 | 分享链接对应的匿名接口，只有作者、描述、封面（`public-web`） | 做了 | `usuyo-fetch/wechat-channels`；[wechat-channels.md §3.2](wechat-channels.md#32-取单条) |
 | 视频号 | 视频 | 要在 usuyo 里登录（腾讯元宝，不是微信） | 元宝换临时凭证，再匿名要视频地址（`session-api`） | 做了 | 同上 |
-| 视频号 | 存过的 | 没有路 | 只有改写微信客户端的工具（`client-hook`），每次微信更新都失效；能做的是手机上逐条「复制链接」放进收件文件夹 | 只有调研 | [调研 15 §3.1](../research/15-fetch-design-xhs-sph-bili.md#31-列出你存过的) |
+| 视频号 | 存过的 | 没有路 | 只有改写微信客户端的工具（`client-hook`），每次微信更新都失效；能做的是手机上逐条「复制链接」放进收件文件夹 | 只有调研 | [wechat-channels.md §3.1](wechat-channels.md#31-列出你存过的) |
 | 视频号 | 创作者 / 关键词 | 没有路 | 调研没查到 | 只有调研 | — |
-| B站 | 图文 | 不要 | `view` 接口取标题、简介、封面、分 P（`public-web`） | 做了 | `usuyo-fetch/bilibili`；[调研 15 §4.2](../research/15-fetch-design-xhs-sph-bili.md#42-取单条) |
+| B站 | 图文 | 不要 | `view` 接口取标题、简介、封面、分 P（`public-web`） | 做了 | `usuyo-fetch/bilibili`；[bilibili.md §4.2](bilibili.md#42-取单条) |
 | B站 | 视频 | 不要 | 不签名的 `playurl` 取低清音视频（`public-web`）；高清和字幕要登录，不取，文字交给转写 | 做了 | 同上 |
-| B站 | 存过的 | 要在 usuyo 里登录 | 收藏夹、稍后再看的不签名接口（`session-api`）；公开收藏夹也许不登录就列得出（推断） | 做了 | 同上；[调研 15 §4.1](../research/15-fetch-design-xhs-sph-bili.md#41-列出你存过的) |
+| B站 | 存过的 | 要在 usuyo 里登录 | 收藏夹、稍后再看的不签名接口（`session-api`）；公开收藏夹也许不登录就列得出（推断） | 做了 | 同上；[bilibili.md §4.1](bilibili.md#41-列出你存过的) |
 | B站 | 创作者 / 关键词 | 不要，但要签名 | UP 主投稿列表要 WBI 签名（`private-api`） | 只有调研 | [多平台笔记 RSSHub 表](../research/notes/multi-platform-tier-table-and-base-deps.md#rsshub) |
 | X | 图文 | 不要 | 访客令牌调帖子接口，或嵌入用的 syndication 接口（`public-web`）；要登录才看得到的帖子除外 | 设计了 | [x.md](x.md#3-取单条) |
 | X | 视频 | 不要 | 同一次回答里的视频地址，不带 cookie 下载（`public-web`） | 设计了 | 同上 |

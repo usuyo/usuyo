@@ -1,7 +1,7 @@
 <a id="x推特获取设计"></a>
 # X（推特）：获取设计
 
-写给接手写 X 插件的模型和以后查。和[调研 15](../research/15-fetch-design-xhs-sph-bili.md) 里一个平台的那一节同样的写法。依据是 2026-11-11 用 `gh api` 读的上游源码、README 和 issue（版本写在[第 11 节](#11-依据)）；没有向 x.com、twitter.com、twimg.com 或 X 的任何主机发过请求，也没有读 X 自己的文档站（它也在 X 的主机上）。所以凡是线上行为，要么出自上游的代码和 issue，要么标「要你来核」。标「推断」的是没有证据的判断。
+写给接手写 X 插件的模型和以后查。和[小红书](xiaohongshu.md)、[视频号](wechat-channels.md)、[B站](bilibili.md)那几份同样的写法。依据是 2026-11-11 用 `gh api` 读的上游源码、README 和 issue（版本写在[第 11 节](#11-依据)）；没有向 x.com、twitter.com、twimg.com 或 X 的任何主机发过请求，也没有读 X 自己的文档站（它也在 X 的主机上）。所以凡是线上行为，要么出自上游的代码和 issue，要么标「要你来核」。标「推断」的是没有证据的判断。
 
 所有平台放在一起的总表、要不要账号的五个说法、怎么相对安全地试，在 [platforms/README](README.md)；这里不重复。
 

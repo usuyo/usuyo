@@ -626,4 +626,4 @@ usuyo daemon --port 47699 &
 - oar-ocr 0.10.2（Apache-2.0，经 `ort`）：<https://github.com/greatv/oar-ocr>；`ort` 2.0.0-rc.15：<https://github.com/pykeio/ort/releases>；ONNX Runtime 1.31.1：<https://github.com/microsoft/onnxruntime/releases>
 - FFmpeg 9.0.2（2026-09-18）和各平台构建：<https://ffmpeg.org/download.html>；macOS arm64 签名构建：<https://ffmpeg.martin-riedl.de/>
 - PySceneDetect v0.7.3（2026-11-08）：<https://github.com/Breakthrough/PySceneDetect/releases>
-- 早先的调研：[04 §2](../research/04-tech-options.md#2-ocr-sidecar)、[04 §3](../research/04-tech-options.md#3-asr-sidecar)、[05 §2](../research/05-note-apps-and-plugins.md#2-转换类插件与工具)、[15 §4](../research/15-fetch-design-xhs-sph-bili.md#4-b站)、[16 §2](../research/16-piecing-engine.md#2-每一步怎么指得回去怎么重做)
+- 早先的调研：[04 §2](../research/04-tech-options.md#2-ocr-sidecar)、[04 §3](../research/04-tech-options.md#3-asr-sidecar)、[05 §2](../research/05-note-apps-and-plugins.md#2-转换类插件与工具)、[bilibili.md §4](../platforms/bilibili.md#4-b站)、[16 §2](../research/16-piecing-engine.md#2-每一步怎么指得回去怎么重做)
