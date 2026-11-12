@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, expect, it, vi } from "vitest";
 import type { FetchMethod, FetchPlugin, PhoneDryRun, PhoneView, PluginsView } from "../api/endpoints";
 import { createMockPhone, type PhoneMock } from "../mock/phone";
+import { method as mockMethod } from "../mock/platforms";
 import { createAppRouter } from "../router";
 // 路由是用到才载入这一页的；先载入，免得第一次转译的时间算进等页面出现的那一秒里。
 import "./PhonePage";
@@ -15,15 +16,8 @@ afterEach(() => {
 
 const sample = (kind: PhoneMock) => createMockPhone(kind).phone();
 
-const method = (m: Partial<FetchMethod> & Pick<FetchMethod, "id" | "name">): FetchMethod => ({
-  access: "vision-ui",
-  account: { kind: "own-phone", where: "小红书" },
-  gets: { list: ["收藏"], delivers: "links" },
-  built: true,
-  enabled: true,
-  pauses: [],
-  ...m,
-});
+const method = (m: Partial<FetchMethod> & Pick<FetchMethod, "id" | "name">): FetchMethod =>
+  mockMethod({ access: "vision-ui", account: { kind: "own-phone", where: "小红书" }, gets: { list: ["收藏"], delivers: "links" }, ...m });
 
 const xhs: FetchPlugin = {
   id: "usuyo-fetch/xiaohongshu",
@@ -41,7 +35,7 @@ const xhs: FetchPlugin = {
   pauses: [],
   methods: [
     method({ id: "note-page", name: "笔记页", access: "public-web", account: { kind: "none" } }),
-    method({ id: "iphone", name: "iPhone", riskNote: { text: "镜像没有公开的识别接口。" } }),
+    method({ id: "iphone", name: "iPhone", riskNote: { text: "镜像没有公开的识别接口。", source: { label: "某个 issue", url: "https://example.com/1" } } }),
     method({ id: "android", name: "安卓", built: false }),
   ],
 };
@@ -82,7 +76,8 @@ it("says one calm sentence when the daemon does not look after phones yet, and s
   expect(screen.queryByRole("button", { name: "装上" })).toBeNull();
   expect(screen.queryByText(/mirroir v/)).toBeNull();
   const list = await screen.findByRole("list", { name: "用到手机的取法" });
-  expect(within(list).getAllByText("开着")).toHaveLength(1);
+  expect(within(list).getAllByText("插件这边用得上")).toHaveLength(1);
+  expect(within(list).getByText("插件写了，还没做好")).toBeTruthy();
 });
 
 it("offers to install the driver when nothing is installed, saying where it comes from", async () => {

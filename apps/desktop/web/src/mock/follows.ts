@@ -16,9 +16,9 @@ const OPTIONS: FollowOption[] = [
     methodName: "收藏夹和稍后再看",
     built: true,
     sources: [
-      { source: "bilibili:toview", title: "稍后再看" },
-      { source: "bilibili:fav:1", title: "默认收藏夹" },
-      { source: "bilibili:fav:2", title: "胶片" },
+      { source: "bilibili:toview", title: "稍后再看", method: "favorites" },
+      { source: "bilibili:fav:1", title: "默认收藏夹", method: "favorites" },
+      { source: "bilibili:fav:2", title: "胶片", method: "favorites" },
     ],
     minHours: 6,
   },

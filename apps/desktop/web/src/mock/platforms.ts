@@ -16,14 +16,31 @@ import type { Platforms } from "../api/source";
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const inMinutes = (m: number) => new Date(Date.now() + m * 60_000).toISOString();
 
-/** 一种取法的样例：没写的照常用默认值（做好了、开着、没停）。 */
-function method(m: Pick<FetchMethod, "id" | "name" | "access" | "account" | "gets"> & Partial<FetchMethod>): FetchMethod {
-  return { built: true, enabled: true, pauses: [], ...m };
+type MethodSpec = Pick<FetchMethod, "id" | "name" | "access" | "account" | "gets"> & Partial<FetchMethod>;
+
+/** `off`、`not-built` 由开关和做没做好算出来；别的原因（登录、访客身份、本机检查）照样例写的留着。 */
+function settle(m: FetchMethod): FetchMethod {
+  const kept = m.blockers.filter((b) => b.code !== "off" && b.code !== "not-built");
+  const blockers = !m.built
+    ? [{ code: "not-built", hint: "这种方法还没做" }]
+    : [...(m.enabled ? [] : [{ code: "off", hint: "你关掉了这种方法" }]), ...kept];
+  return { ...m, blockers, usable: blockers.length === 0 };
 }
 
-const notBuilt = (m: Pick<FetchMethod, "id" | "name" | "access" | "account" | "gets"> & Partial<FetchMethod>) => method({ ...m, built: false, enabled: false });
+/** 一种取法的样例：没写的照常用默认值（做好了、开着、没停、不用登录、在后台）。 */
+export function method(m: MethodSpec): FetchMethod {
+  return settle({ login: "none", interaction: "background", built: true, enabled: true, usable: true, blockers: [], pauses: [], ...m });
+}
 
-/** 样例的四个平台插件：一个平台一个插件，插件里几种取法。 */
+// 内核给没做好的取法的 `gets` 是空的（清单里没写能力）。
+const notBuilt = (m: MethodSpec) => method({ ...m, gets: {}, built: false, enabled: false });
+
+const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
+
+/**
+ * 样例的四个平台插件：一个平台一个插件，插件里几种取法。几种样子都有：用得上的、你关掉的、
+ * 要先登录的、要先取访客身份的、本机检查没过的、还没做好的、上一次调用没成的、被限流停着的。
+ */
 function basePlugins(): FetchPlugin[] {
   const base = {
     version: "0.1.0",
@@ -40,8 +57,8 @@ function basePlugins(): FetchPlugin[] {
       name: "X",
       description: "按链接取一条帖子的文字、图和视频；书签和点过赞的由你浏览器里的脚本交来，账号只留在你的浏览器里",
       platforms: [{ id: "x", name: "X" }],
-      access: "public-web",
-      login: "optional",
+      access: "official-export",
+      login: "none",
       canList: true,
       pacing: [{ platform: "x", batch: true, intervalSec: 10, daily: 200 }],
       methods: [
@@ -51,38 +68,34 @@ function basePlugins(): FetchPlugin[] {
           name: "访客接口",
           access: "public-web",
           account: { kind: "none" },
-          gets: { fetch: ["正文", "图", "视频", "被引用的帖子"] },
+          gets: { fetch: ["text", "images", "media:video", "meta"] },
+          lastCall: { at: minutesAgo(40), ok: true },
           riskNote: { text: "没有账号参与。访客令牌会被拒或被限流，此时改走嵌入接口。", source: { label: "gallery-dl #9505", url: "https://github.com/mikf/gallery-dl/issues/9505" } },
         }),
-        method({ id: "embed", name: "嵌入接口", access: "public-web", account: { kind: "none" }, gets: { fetch: ["正文", "图"] }, riskNote: { text: "没有账号参与。" } }),
+        // 你关掉的一种。
+        method({ id: "embed", name: "嵌入接口", access: "public-web", account: { kind: "none" }, gets: { fetch: ["text", "images"] }, enabled: false }),
         method({
           id: "userscript",
           name: "浏览器脚本",
           access: "browser-session",
-          account: { kind: "own-browser", where: "X" },
-          gets: { list: ["书签", "喜欢"], delivers: "links" },
-          riskNote: { text: "X 的自动化规则禁止以脚本操作网站。只读取页面回答、不操作页面的脚本，截至 2026-11 未找到账号因此受限的报告。" },
+          login: "required",
+          account: { kind: "own-browser" },
+          gets: { delivers: "links" },
         }),
-        method({ id: "archive", name: "官方归档", access: "official-export", account: { kind: "none" }, gets: { list: ["喜欢", "书签"] } }),
-        notBuilt({ id: "deliver", name: "内容投递", access: "browser-session", account: { kind: "own-browser", where: "X" }, gets: { fetch: ["登录后才可见的帖子", "帖子的下文", "长文章"] } }),
-        notBuilt({
-          id: "session",
-          name: "会话接口",
-          access: "session-api",
-          account: { kind: "in-usuyo", sites: ["x.com"] },
-          gets: { list: ["书签", "喜欢"] },
-          riskNote: { text: "账号交给程序以后，请求的节奏和出口都由平台看到。fieldtheory-cli 的 issue 中截至 2026-09 未找到账号受限的报告。" },
-        }),
+        method({ id: "archive", name: "官方归档", access: "official-export", account: { kind: "none" }, gets: { list: [] } }),
+        notBuilt({ id: "deliver", name: "内容投递", access: "browser-session", login: "required", account: { kind: "own-browser" }, gets: { fetch: ["text", "images", "media:video"] } }),
+        notBuilt({ id: "session", name: "会话接口", access: "session-api", login: "required", account: { kind: "in-usuyo", sites: ["x.com"], where: "X" }, gets: { list: ["书签", "喜欢"] } }),
         notBuilt({
           id: "signed",
           name: "签名接口",
           access: "private-api",
-          account: { kind: "in-usuyo", sites: ["x.com"] },
+          login: "required",
+          account: { kind: "in-usuyo", sites: ["x.com"], where: "X" },
           gets: { list: ["搜索", "用户时间线"] },
           riskNote: { text: "注册三年的账号一次取 800 个关注后被封。", source: { label: "twikit #338", url: "https://github.com/d60/twikit/issues/338" } },
         }),
-        notBuilt({ id: "api", name: "官方 API", access: "official-export", account: { kind: "developer", where: "X" }, gets: { list: ["书签", "喜欢"] } }),
-        notBuilt({ id: "mirror", name: "手机镜像", access: "vision-ui", account: { kind: "own-phone", where: "X" }, gets: { list: ["书签", "喜欢"], delivers: "links" } }),
+        notBuilt({ id: "api", name: "官方 API", access: "official-export", login: "required", account: { kind: "developer", where: "X" }, gets: { list: ["书签", "喜欢"] } }),
+        notBuilt({ id: "mirror", name: "手机镜像", access: "vision-ui", login: "required", account: { kind: "own-phone" }, interaction: "foreground", gets: { list: ["书签", "喜欢"], delivers: "links" } }),
       ],
     },
     {
@@ -93,27 +106,38 @@ function basePlugins(): FetchPlugin[] {
       platforms: [{ id: "xiaohongshu", name: "小红书" }],
       access: "public-web",
       login: "none",
-      canList: false,
+      canList: true,
       visitors: ["www.xiaohongshu.com"],
       pacing: [{ platform: "xiaohongshu", batch: true, intervalSec: 15, daily: 100 }],
       methods: [
+        // 要访客身份、这台电脑上还没有的一种。
         method({
           id: "note-page",
           name: "笔记页",
           access: "public-web",
-          account: { kind: "visitor", sites: ["www.xiaohongshu.com"] },
-          gets: { fetch: ["正文", "图", "视频"] },
+          account: { kind: "visitor", sites: ["www.xiaohongshu.com"], where: "小红书" },
+          gets: { fetch: ["text", "images", "media:video"] },
+          blockers: [{ code: "visitor-missing", hint: "要先开一次小红书首页，取一份访客身份" }],
           riskNote: { text: "不填 cookie 批量取约 108 条后，复制链接的账号被下线。", source: { label: "XHS-Downloader #305", url: "https://github.com/JoeanAmier/XHS-Downloader/issues/305" } },
         }),
         method({
           id: "userscript",
           name: "浏览器脚本",
           access: "browser-session",
-          account: { kind: "own-browser", where: "小红书" },
-          gets: { list: ["收藏", "赞过"], delivers: "links" },
+          login: "required",
+          account: { kind: "own-browser" },
+          gets: { delivers: "links" },
           riskNote: { text: "网页对采集类扩展弹「有害插件」；只截获、不发请求的脚本没有处罚报告。", source: { label: "XHS-Downloader #283", url: "https://github.com/JoeanAmier/XHS-Downloader/issues/283" } },
         }),
-        notBuilt({ id: "iphone", name: "iPhone", access: "vision-ui", account: { kind: "own-phone", where: "小红书" }, gets: { list: ["收藏", "赞过"], delivers: "links" }, riskNote: { text: "镜像没有公开的识别接口，没有处罚报告；分享链接带跟踪参数。" } }),
+        notBuilt({
+          id: "iphone",
+          name: "iPhone",
+          access: "vision-ui",
+          login: "required",
+          account: { kind: "own-phone" },
+          interaction: "foreground",
+          gets: { list: ["收藏", "赞过"], delivers: "links" },
+        }),
       ],
     },
     {
@@ -123,56 +147,86 @@ function basePlugins(): FetchPlugin[] {
       description: "用分享链接取一条：不登录只存作者、描述和封面；登录了腾讯元宝才取视频文件",
       platforms: [{ id: "wechat-channels", name: "微信视频号" }],
       access: "session-api",
-      login: "optional",
+      login: "required",
       canList: false,
       sites: ["yuanbao.tencent.com"],
       pacing: [{ platform: "wechat-channels", batch: true, intervalSec: 30, daily: 50 }],
       methods: [
-        method({ id: "feed-info", name: "分享信息", access: "public-web", account: { kind: "none" }, gets: { fetch: ["作者", "描述", "封面"] }, riskNote: { text: "匿名接口给的字段在收紧。" } }),
-        // 要在 usuyo 里登录的，登录了才开：样例里还没登录，所以关着。
+        // 插件的本机检查没过的一种。
+        method({
+          id: "feed-info",
+          name: "分享信息",
+          access: "public-web",
+          account: { kind: "none" },
+          gets: { fetch: ["meta", "images"] },
+          blockers: [{ code: "check-failed", hint: "这台电脑上没找到 Node 22，插件跑不起来" }],
+        }),
+        // 要在 usuyo 里登录、还没登录的一种。
         method({
           id: "yuanbao",
           name: "腾讯元宝",
           access: "session-api",
-          account: { kind: "in-usuyo", sites: ["yuanbao.tencent.com"] },
-          gets: { fetch: ["视频"] },
-          enabled: false,
+          login: "required",
+          account: { kind: "in-usuyo", sites: ["yuanbao.tencent.com"], where: "腾讯元宝" },
+          gets: { fetch: ["media:video"] },
+          blockers: [{ code: "login-missing", hint: "要先在 usuyo 里登录腾讯元宝" }],
           riskNote: { text: "公开部署的解析服务被大量调用后，元宝账号被封。", source: { label: "wx_channels_download #495", url: "https://github.com/ltaoo/wx_channels_download/issues/495" } },
         }),
-        notBuilt({ id: "iphone", name: "iPhone", access: "vision-ui", account: { kind: "own-phone", where: "微信" }, gets: { list: ["赞和收藏"], delivers: "links" }, riskNote: { text: "微信协议 8.2.1.6 禁止用第三方软件读界面、自动操作；处罚记录在 PC 微信 UI 自动化和安卓系统级注入上，镜像没有报告。" } }),
+        notBuilt({ id: "pc-client", name: "电脑微信", access: "client-hook", login: "required", account: { kind: "own-app" }, gets: { fetch: ["media:video"] } }),
+        notBuilt({
+          id: "iphone",
+          name: "iPhone",
+          access: "vision-ui",
+          login: "required",
+          account: { kind: "own-phone" },
+          interaction: "foreground",
+          gets: { list: ["赞和收藏"], delivers: "links" },
+        }),
       ],
     },
     {
       ...base,
       id: "usuyo-fetch/bilibili",
       name: "B站",
-      description: "按视频链接取元数据、封面、字幕和低画质音视频；列出存过的和稍后再看要登录",
+      description: "按视频链接取元数据、封面、字幕和低画质音视频；公开收藏夹从链接列，自己的收藏夹和稍后再看要登录",
       platforms: [{ id: "bilibili", name: "B站" }],
       access: "session-api",
-      login: "optional",
+      login: "required",
       canList: true,
-      sources: [{ source: "bilibili:toview", title: "稍后再看", action: "favorite" }],
+      sources: [{ source: "bilibili:toview", title: "稍后再看", action: "favorite", method: "favorites" }],
       sites: ["www.bilibili.com"],
       pacing: [{ platform: "bilibili", batch: true, intervalSec: 5, daily: 500 }],
       methods: [
         method({
           id: "view",
-          name: "视频页",
+          name: "公开接口",
           access: "public-web",
           account: { kind: "none" },
-          gets: { fetch: ["标题", "简介", "封面", "分 P", "低清音视频"] },
+          gets: { fetch: ["meta", "images", "subtitle", "media:video", "media:audio"] },
+          lastCall: { at: minutesAgo(8), ok: true },
           riskNote: { text: "2026-06 起缺指纹参数的部分接口回 412。", source: { label: "BiliNote #397", url: "https://github.com/JefferyHcool/BiliNote/issues/397" } },
+        }),
+        // 上一次调用没成的一种。
+        method({
+          id: "favorites-public",
+          name: "公开收藏夹",
+          access: "public-web",
+          account: { kind: "none" },
+          gets: { list: [], link: "收藏夹或个人空间的链接" },
+          lastCall: { at: minutesAgo(25), ok: false, code: "not-found", hint: "这个收藏夹不公开，或者已经删掉了" },
         }),
         method({
           id: "favorites",
-          name: "收藏夹和稍后再看",
+          name: "我的收藏夹和稍后再看",
           access: "session-api",
-          account: { kind: "in-usuyo", sites: ["www.bilibili.com"] },
-          gets: { list: ["收藏夹", "稍后再看"] },
+          login: "required",
+          account: { kind: "in-usuyo", sites: ["www.bilibili.com"], where: "B站" },
+          gets: { list: ["稍后再看"] },
           // 样例里这一种刚被限流：页面上写原因和什么时候再试
-          pauses: [{ scope: "bilibili", byYou: false, until: inMinutes(12), code: "rate-limited", hint: "B站说请求太频繁，过一会儿再试" }],
+          pauses: [{ method: "favorites", scope: "bilibili", byYou: false, until: inMinutes(12), code: "rate-limited", hint: "B站说请求太频繁，过一会儿再试" }],
           riskNote: { text: "一例大会员被冻结，因果不明。", source: { label: "yutto #452", url: "https://github.com/yutto-dev/yutto/issues/452" } },
         }),
+        notBuilt({ id: "yutto", name: "yutto（高清音视频、字幕）", access: "session-api", login: "required", account: { kind: "in-usuyo", sites: ["www.bilibili.com"], where: "B站" }, gets: { fetch: ["media:video", "subtitle"] } }),
       ],
     },
   ];
@@ -333,7 +387,8 @@ function advance(i: MockImport, now: number): void {
 }
 
 export function createMockPlatforms(empty = false): Platforms {
-  const plugins = empty ? [] : basePlugins();
+  // 插件上的 `pauses` 是各取法的合起来，同内核。
+  const plugins = empty ? [] : basePlugins().map((p) => ({ ...p, pauses: p.methods.flatMap((m) => m.pauses) }));
   const sites = empty ? [] : baseSites();
   const visitors = empty ? [] : baseVisitors();
   const imports = new Map<string, MockImport>();
@@ -355,6 +410,7 @@ export function createMockPlatforms(empty = false): Platforms {
         kind: "source",
         title: "稍后再看",
         pluginId: "usuyo-fetch/bilibili",
+        method: "favorites",
         source: "bilibili:toview",
         createdAt: "2026-11-11T09:00:00.000Z",
         state: "ready",
@@ -412,38 +468,50 @@ export function createMockPlatforms(empty = false): Platforms {
   return {
     async plugins() {
       await wait(40);
-      return { plugins: plugins.map((p) => ({ ...p })), notLoaded: [] };
+      return { plugins: plugins.map((p) => ({ ...p, methods: p.methods.map((m) => ({ ...m })) })), notLoaded: [] };
     },
-    async sources(pluginId) {
+    async sources(pluginId, methodId, link) {
       await wait(600);
       const p = plugin(pluginId);
-      if (!p.canList) throw new Error(`${p.name} 不能列出你存过的`);
+      const m = p.methods.find((x) => x.id === methodId);
+      if (!m || (m.gets.list === undefined && m.gets.link === undefined)) throw new ApiError(422, `${methodId} 不能列`, "unsupported-input");
+      if (!m.usable) throw new ApiError(422, m.blockers.map((b) => b.hint).join("；"), "unsupported-input");
+      if (m.gets.link !== undefined) {
+        if (link === undefined) throw new ApiError(422, "这种取法要先给一条链接", "unsupported-input");
+        return [{ source: `bilibili:fav-public:${link.length}`, title: "胶片（公开收藏夹）", action: "favorite", count: 36, method: m.id }];
+      }
+      if (link !== undefined) throw new ApiError(422, "这种取法不从链接开始", "unsupported-input");
+      if (p.id !== "usuyo-fetch/bilibili") return [];
       return [
-        ...p.sources,
-        { source: "bilibili:fav:50948568", title: "默认收藏夹", action: "favorite", count: 128 },
-        { source: "bilibili:fav:50948571", title: "做饭", action: "favorite", count: 36 },
+        ...p.sources.filter((s) => s.method === m.id),
+        { source: "bilibili:fav:50948568", title: "默认收藏夹", action: "favorite", count: 128, method: m.id },
+        { source: "bilibili:fav:50948571", title: "做饭", action: "favorite", count: 36, method: m.id },
       ];
     },
     async switchMethod(pluginId, methodId, enabled) {
       await wait(60);
       const p = plugin(pluginId);
-      const m = p.methods.find((x) => x.id === methodId);
-      if (!m) throw new Error(`样例里 ${pluginId} 没有取法 ${methodId}`);
-      if (!m.built) throw new Error("invalid-args: 这种取法还没做好");
-      m.enabled = enabled;
+      const at = p.methods.findIndex((x) => x.id === methodId);
+      const m = p.methods[at];
+      if (!m) throw new ApiError(404, `样例里 ${pluginId} 没有取法 ${methodId}`, "not-found");
+      if (!m.built) throw new ApiError(422, "这种取法还没做好", "unsupported-input");
+      p.methods[at] = settle({ ...m, enabled });
       return { ...p, methods: p.methods.map((x) => ({ ...x })) };
     },
     async tryNow(pluginId) {
       await wait(40);
       const p = plugin(pluginId);
       p.pauses = [];
-      for (const m of p.methods) m.pauses = [];
+      // 每次换新的对象，同内核每次回新的一份。
+      p.methods = p.methods.map((m) => ({ ...m, pauses: [] }));
       return { ...p };
     },
     async hold(pluginId) {
       await wait(40);
       const p = plugin(pluginId);
-      p.pauses = [{ scope: "*", byYou: true }];
+      const hold = { method: "*", scope: "*", byYou: true };
+      p.pauses = [...p.pauses.filter((x) => !x.byYou), hold];
+      p.methods = p.methods.map((m) => ({ ...m, pauses: [...m.pauses.filter((x) => !x.byYou), hold] }));
       return { ...p };
     },
     async sites() {
@@ -493,6 +561,7 @@ export function createMockPlatforms(empty = false): Platforms {
           kind: "source",
           title: body.title?.trim() || p.sources.find((s) => s.source === body.source)?.title || body.source,
           pluginId: body.pluginId,
+          method: body.method,
           source: body.source,
           createdAt: new Date().toISOString(),
           state: "listing",

@@ -1,5 +1,5 @@
 // 「手机」页上的话，和从插件里挑出用到手机的取法。
-import type { Access, AndroidDevice, FetchPlugin, GrantState, PhoneClipboardTest, PhoneView, PluginPause } from "../api/endpoints";
+import type { Access, AndroidDevice, FetchPlugin, GrantState, MethodBlocker, PhoneClipboardTest, PhoneView, PluginPause } from "../api/endpoints";
 import { timeText } from "../plugins/words";
 
 export const GRANT_TEXT: Record<GrantState, string> = {
@@ -55,7 +55,10 @@ export interface PhoneMethod {
   /** 契约里没写是哪种手机：照取法的 id 猜（phone.md §4 叫它们 `iphone`、`android`），不是 `android` 的都算 iPhone 镜像。 */
   phone: "iphone" | "android";
   built: boolean;
-  enabled: boolean;
+  /** 内核说的：插件这边用得上（做好了、开着、插件自查没挡它）。手机连没连上不在里面，看 `PhoneView`。 */
+  usable: boolean;
+  blockers: MethodBlocker[];
+  /** 这种取法的暂停，含「先别试」。 */
   pauses: PluginPause[];
   risk?: string;
 }
@@ -74,8 +77,9 @@ export function phoneMethods(plugins: FetchPlugin[]): PhoneMethod[] {
         access: m.access,
         phone: m.id === "android" ? ("android" as const) : ("iphone" as const),
         built: m.built,
-        enabled: m.enabled,
-        pauses: [...p.pauses, ...m.pauses],
+        usable: m.usable,
+        blockers: m.blockers,
+        pauses: m.pauses,
         ...(m.riskNote ? { risk: m.riskNote.text } : {}),
       })),
   );
@@ -84,9 +88,9 @@ export function phoneMethods(plugins: FetchPlugin[]): PhoneMethod[] {
 /** 这一种现在能不能用，不能的话差什么。`phone` 是 null 时内核还不给手机那一页。 */
 export function methodState(m: PhoneMethod, phone: PhoneView | null): string {
   if (!m.built) return "插件写了，还没做好";
-  if (!m.enabled) return "关着";
   if (m.pauses.length > 0) return "停着，见插件卡片";
-  if (phone === null) return "开着";
+  if (!m.usable) return m.blockers.map((b) => b.hint).join("；");
+  if (phone === null) return "插件这边用得上";
   if (m.phone === "android") {
     if (phone.android.adb === null) return "差：装上 adb";
     return phone.android.devices.some((d) => d.state === "device") ? "现在能用" : "差：连好一台安卓手机";

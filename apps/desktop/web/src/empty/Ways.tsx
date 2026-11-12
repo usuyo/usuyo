@@ -120,6 +120,7 @@ function WayRow({ way }: { way: Way }) {
           <AccessTag>{way.access}</AccessTag>
           <span className="text-small text-sub">{way.account}</span>
         </span>
+        {way.missing ? <span className="mt-0.5 block text-small text-sub">{way.missing}</span> : null}
       </span>
     </Link>
   );

@@ -1,6 +1,6 @@
 // 第一次打开时列出的「把存过的一批拿回来」的几种路子：照插件自己的取法，一样摆，不挑哪个。
 import type { FetchPlugin } from "../api/endpoints";
-import { accountText, ACCESS_TEXT, getsText } from "../plugins/words";
+import { accountText, ACCESS_TEXT, canList, getsText } from "../plugins/words";
 
 export interface Way {
   key: string;
@@ -10,7 +10,9 @@ export interface Way {
   gets: string[];
   access: string;
   account: string;
-  /** 从哪一页开始：开着的、能列或能交链接的去导入页，别的去获取插件页看。 */
+  /** 这台电脑上现在用不上时差什么（内核的原因，一句句）；用得上的没有。 */
+  missing?: string;
+  /** 从哪一页开始：现在用得上的去导入页，别的去获取插件页看。 */
   to: "/import" | "/plugins";
 }
 
@@ -30,7 +32,7 @@ export function waysOf(plugins: FetchPlugin[], readers: Set<string>, siteName: (
   return plugins
     .map((p) => {
       const all = p.methods.filter(
-        (m) => ((m.gets.list?.length ?? 0) > 0 || m.gets.delivers === "links") && !readers.has(`${p.id}#${m.id}`),
+        (m) => (canList(m) || m.gets.delivers === "links") && !readers.has(`${p.id}#${m.id}`),
       );
       return {
         plugin: p.name,
@@ -39,10 +41,11 @@ export function waysOf(plugins: FetchPlugin[], readers: Set<string>, siteName: (
           .map((m) => ({
             key: `${p.id}#${m.id}`,
             name: m.name,
-            gets: getsText({ ...(m.gets.list ? { list: m.gets.list } : {}), ...(m.gets.delivers ? { delivers: m.gets.delivers } : {}) }),
+            gets: getsText({ ...m.gets, fetch: [] }),
             access: ACCESS_TEXT[m.access],
-            account: accountText(m.account, (m.account.sites ?? []).map(siteName)),
-            to: m.enabled && m.account.kind !== "own-phone" ? ("/import" as const) : ("/plugins" as const),
+            account: accountText(m.account, m.account.sites ? m.account.sites.map(siteName) : p.platforms.map((x) => x.name)),
+            ...(m.usable ? {} : { missing: m.blockers.map((b) => b.hint).join("；") }),
+            to: m.usable && m.account.kind !== "own-phone" ? ("/import" as const) : ("/plugins" as const),
           })),
         later: all.filter((m) => !m.built).map((m) => m.name),
       };

@@ -1,6 +1,6 @@
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
-import { useImports } from "../api/hooks";
+import { useImports, usePlugins } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
 import { Rail } from "../frame/Rail";
 import { dayText } from "../item/format";
@@ -17,6 +17,9 @@ export function ImportPage() {
   const { open, from } = useSearch({ from: "/import" });
   const navigate = useNavigate();
   const imports = useImports();
+  const plugins = usePlugins();
+  const methodOf = (pluginId: string | undefined, method: string | undefined) =>
+    plugins.data?.plugins.find((p) => p.id === pluginId)?.methods.find((m) => m.id === method)?.name ?? method;
   const show = (id: string | undefined) => void navigate({ to: "/import", search: id ? { open: id } : {} });
   const half = (next: "platform" | "file") => void navigate({ to: "/import", search: next === "file" ? { from: "file" } : {}, replace: true });
 
@@ -79,7 +82,13 @@ export function ImportPage() {
                   >
                     <div className="mono text-tag text-faint">
                       {dayText(v.createdAt)}
-                      {v.kind === "delivered" ? ` · 交进来的${v.client ? ` · ${v.client}` : ""}` : v.kind === "file" ? " · 别的工具导出的文件" : ""}
+                      {v.kind === "delivered"
+                        ? ` · 交进来的${v.client ? ` · ${v.client}` : ""}`
+                        : v.kind === "file"
+                          ? " · 别的工具导出的文件"
+                          : v.method
+                            ? ` · ${methodOf(v.pluginId, v.method)}`
+                            : ""}
                     </div>
                     <div className="mt-0.5 truncate text-body font-medium text-text">{v.title}</div>
                     <div className="text-small text-sub">{stateLine(v)}</div>

@@ -79,7 +79,8 @@ export interface Library {
  */
 export interface Platforms {
   plugins(): Promise<PluginsView>;
-  sources(pluginId: string): Promise<PluginSource[]>;
+  /** 一种取法现在能列的来源；`link` 只给 `gets.link` 有的取法。 */
+  sources(pluginId: string, method: string, link?: string): Promise<PluginSource[]>;
   tryNow(pluginId: string): Promise<FetchPlugin>;
   hold(pluginId: string): Promise<FetchPlugin>;
   /** 开或关一种取法。 */
@@ -182,31 +183,6 @@ export interface Phone {
 /** 内核和样例库都实现的全部读写。 */
 export type Source = Library & Platforms & Transforms & Settings & Topics & Drafts & Follows & Changes & Exports & Phone;
 
-/** 内核今天回的插件：还没有 `methods`。 */
-type WirePlugin = Omit<FetchPlugin, "methods"> & { methods?: FetchPlugin["methods"] };
-
-/** 没有 `methods` 的插件，照它自己的档位和登录要求补成一种取法，开着。 */
-function pluginOf(wire: WirePlugin): FetchPlugin {
-  if (wire.methods) return { ...wire, methods: wire.methods };
-  const kind = wire.login === "none" ? (wire.visitors.length > 0 ? "visitor" : "none") : "in-usuyo";
-  return {
-    ...wire,
-    methods: [
-      {
-        id: "default",
-        name: wire.name,
-        access: wire.access,
-        account: { kind, ...(kind === "visitor" ? { sites: wire.visitors } : kind === "in-usuyo" ? { sites: wire.sites } : {}) },
-        gets: wire.canList ? { list: wire.sources.map((s) => s.title) } : {},
-        built: true,
-        enabled: true,
-        // 停着的写在插件上，这一种不再重复。
-        pauses: [],
-      },
-    ],
-  };
-}
-
 const itemRequest = (path: string, method?: "POST") => request<Item>(path, method ? { method } : {});
 
 /** 列来源要调插件，内核最多等一分钟多一点。 */
@@ -237,11 +213,12 @@ const daemon: Source = {
   trashList: () => request<TrashView>(paths.trash),
   purge: (trashId) => request<void>(paths.trashPurge(trashId), { method: "POST" }),
 
-  plugins: () => request<Omit<PluginsView, "plugins"> & { plugins: WirePlugin[] }>(paths.plugins).then((v) => ({ ...v, plugins: v.plugins.map(pluginOf) })),
-  sources: (id) => request<PluginSource[]>(paths.pluginSources(id), { timeoutMs: SOURCES_TIMEOUT_MS }),
-  tryNow: (id) => request<WirePlugin>(paths.pluginTryNow(id), { method: "POST" }).then(pluginOf),
-  hold: (id) => request<WirePlugin>(paths.pluginHold(id), { method: "POST" }).then(pluginOf),
-  switchMethod: (id, method, enabled) => request<WirePlugin>(paths.pluginMethod(id, method), { method: "PUT", body: { enabled } }).then(pluginOf),
+  plugins: () => request<PluginsView>(paths.plugins),
+  sources: (id, method, link) =>
+    request<PluginSource[]>(paths.pluginSources(id), { query: { method, ...(link === undefined ? {} : { link }) }, timeoutMs: SOURCES_TIMEOUT_MS }),
+  tryNow: (id) => request<FetchPlugin>(paths.pluginTryNow(id), { method: "POST" }),
+  hold: (id) => request<FetchPlugin>(paths.pluginHold(id), { method: "POST" }),
+  switchMethod: (id, method, enabled) => request<FetchPlugin>(paths.pluginMethod(id, method), { method: "PUT", body: { enabled } }),
   sites: () => request<SiteLogin[]>(paths.sites),
   forgetLogin: (site) => request<void>(paths.siteLogin(site), { method: "DELETE" }),
   visitors: () => request<VisitorIdentity[]>(paths.visitors),

@@ -6,31 +6,47 @@ afterEach(() => {
 });
 
 describe("mock platforms", () => {
-  it("lists one plugin per platform with its methods, and a paused method with its reason", async () => {
+  it("lists one plugin per platform with every method, and a spread of states the daemon gives", async () => {
     const { plugins } = await createMockPlatforms().plugins();
     expect(plugins.map((p) => p.name)).toEqual(["X", "小红书", "微信视频号", "B站"]);
     const x = plugins.find((p) => p.id === "usuyo-fetch/x");
     expect(x?.methods).toHaveLength(9);
     expect(x?.methods.filter((m) => m.built).map((m) => m.name)).toEqual(["访客接口", "嵌入接口", "浏览器脚本", "官方归档"]);
-    // 没做好的、要用私有接口或改客户端的都关着；要在 usuyo 里登录、还没登录的也关着。
-    expect(plugins.flatMap((p) => p.methods).filter((m) => m.access === "private-api" || m.access === "client-hook").every((m) => !m.enabled)).toBe(true);
-    expect(plugins.find((p) => p.id === "usuyo-fetch/wechat-channels")?.methods.find((m) => m.id === "yuanbao")?.enabled).toBe(false);
-    const lists = plugins.find((p) => p.id === "usuyo-fetch/bilibili")?.methods.find((m) => m.id === "favorites");
-    expect(lists?.pauses[0]).toMatchObject({ code: "rate-limited", byYou: false });
-    expect(lists?.pauses[0]?.until).toBeDefined();
+    const all = plugins.flatMap((p) => p.methods);
+    // 用得上的就是没有原因的。
+    expect(all.every((m) => m.usable === (m.blockers.length === 0))).toBe(true);
+    const codes = new Set(all.flatMap((m) => m.blockers.map((b) => b.code)));
+    for (const code of ["off", "not-built", "login-missing", "visitor-missing", "check-failed"]) expect(codes.has(code)).toBe(true);
+    expect(all.some((m) => m.lastCall?.ok === false)).toBe(true);
+    expect(all.some((m) => m.account.kind === "own-app")).toBe(true);
+    const bili = plugins.find((p) => p.id === "usuyo-fetch/bilibili");
+    expect(bili?.methods.find((m) => m.id === "favorites")?.pauses[0]).toMatchObject({ method: "favorites", code: "rate-limited", byYou: false });
+    expect(bili?.pauses.map((p) => p.method)).toEqual(["favorites"]);
   });
 
-  it("switches a built method, and refuses one that is not built", async () => {
+  it("switches a built method and its reasons follow, and refuses one that is not built", async () => {
     const m = createMockPlatforms();
-    const x = await m.switchMethod("usuyo-fetch/x", "embed", false);
-    expect(x.methods.find((y) => y.id === "embed")?.enabled).toBe(false);
+    const x = await m.switchMethod("usuyo-fetch/x", "embed", true);
+    expect(x.methods.find((y) => y.id === "embed")).toMatchObject({ enabled: true, usable: true, blockers: [] });
+    const off = await m.switchMethod("usuyo-fetch/x", "guest", false);
+    expect(off.methods.find((y) => y.id === "guest")).toMatchObject({ enabled: false, usable: false, blockers: [{ code: "off" }] });
     expect(x.methods.filter((y) => !y.built).map((y) => y.name)).toEqual(["内容投递", "会话接口", "签名接口", "官方 API", "手机镜像"]);
     await expect(m.switchMethod("usuyo-fetch/x", "signed", true)).rejects.toThrow();
   });
 
-  it("holds and tries a plugin again", async () => {
+  it("lists sources per method, from a link for a method that starts from one", async () => {
     const m = createMockPlatforms();
-    expect((await m.hold("usuyo-fetch/bilibili")).pauses).toEqual([{ scope: "*", byYou: true }]);
+    const fromLink = await m.sources("usuyo-fetch/bilibili", "favorites-public", "https://space.bilibili.com/1/favlist?fid=2");
+    expect(fromLink.every((s) => s.method === "favorites-public")).toBe(true);
+    await expect(m.sources("usuyo-fetch/bilibili", "favorites-public")).rejects.toThrow();
+    await expect(m.sources("usuyo-fetch/bilibili", "view")).rejects.toThrow();
+  });
+
+  it("holds a whole plugin and tries it again", async () => {
+    const m = createMockPlatforms();
+    const held = await m.hold("usuyo-fetch/bilibili");
+    expect(held.pauses).toContainEqual({ method: "*", scope: "*", byYou: true });
+    expect(held.methods.every((x) => x.pauses.some((p) => p.byYou))).toBe(true);
     expect((await m.tryNow("usuyo-fetch/bilibili")).pauses).toEqual([]);
   });
 
@@ -44,7 +60,7 @@ describe("mock platforms", () => {
   it("lists page by page, previews, then takes at the plugin's pace after you confirm", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     const m = createMockPlatforms();
-    const started = await m.startImport({ pluginId: "usuyo-fetch/bilibili", source: "bilibili:toview" });
+    const started = await m.startImport({ pluginId: "usuyo-fetch/bilibili", method: "favorites", source: "bilibili:toview" });
     expect(started).toMatchObject({ state: "listing", title: "稍后再看", pages: 0 });
     vi.advanceTimersByTime(1300);
     expect(await m.import(started.id)).toMatchObject({ state: "listing", pages: 1 });

@@ -102,11 +102,14 @@ export const paths = {
   // —— 获取插件（「获取插件」页）——
   /** GET：装着的获取插件、各自的标签和节奏、停着没有；还有没加载的和原因。 */
   plugins: "/plugins",
-  /** GET：这个插件现在能列的来源（会调插件，按平台的节奏可能要等几秒到一分钟）。 */
+  /**
+   * GET `PluginSource[]`，`?method=<取法 id>`（必给），`&link=<链接>`（只给 `gets.link` 有的取法）：这种取法现在能列的来源。
+   * 会调插件，按平台的节奏可能要等几秒到一分钟；这种取法不能列、这台机器上用不上、要等太久回 `unsupported-input`。
+   */
   pluginSources: (id: string) => `/plugins/${pluginPath(id)}/sources`,
   /** POST：「现在再试」，去掉这个插件的暂停。 */
   pluginTryNow: (id: string) => `/plugins/${pluginPath(id)}/try-now`,
-  /** PUT `MethodSwitchRequest`：开或关插件的一种取法，回整个插件。内核今天（11-12）还没有这条。 */
+  /** PUT `MethodSwitchRequest`：开或关插件的一种取法，回整个插件。没做好的取法回 `unsupported-input`。 */
   pluginMethod: (id: string, method: string) => `/plugins/${pluginPath(id)}/methods/${encodeURIComponent(method)}`,
   /** POST：「先别试」，到你点「现在再试」为止哪儿都不调它。 */
   pluginHold: (id: string) => `/plugins/${pluginPath(id)}/hold`,
@@ -776,6 +779,8 @@ export interface PluginSource {
   title: string;
   action?: "favorite" | "like" | "share" | "view" | "unknown";
   count?: number;
+  /** 属于哪种取法（`FetchMethod.id`），开始导入时一起交回。 */
+  method: string;
 }
 
 export interface PluginSetting {
@@ -797,6 +802,8 @@ export interface PluginPacing {
 
 /** 插件停在哪儿、为什么、到什么时候。 */
 export interface PluginPause {
+  /** 停的是哪种取法（`FetchMethod.id`）；`*` 是你点的「先别试」，整个插件。 */
+  method: string;
   /** 平台 id，或通用网页插件的网站；`*` 是你点的「先别试」。 */
   scope: string;
   /** 你点了「先别试」：到你点「现在再试」为止。 */
@@ -819,32 +826,50 @@ export interface FetchPlugin {
   login: LoginNeed;
   /** 能列出你存过的。 */
   canList: boolean;
-  /** 清单里写死的来源，登录前就能显示；以 `paths.pluginSources` 为准。 */
+  /** 清单里写死的来源，各带自己的取法，登录前就能显示；以 `paths.pluginSources` 为准。 */
   sources: PluginSource[];
-  /** 会用到哪些站点的账号，登录状态见 `paths.sites`。 */
+  /** 做好了的取法会用到哪些站点的账号，登录状态见 `paths.sites`。 */
   sites: string[];
   /** 会用到哪些站点的访客身份（不是账号），有没有见 `paths.visitors`。 */
   visitors: string[];
   settings: PluginSetting[];
   pacing: PluginPacing[];
+  /** 所有取法的暂停。 */
   pauses: PluginPause[];
-  /**
-   * 一个平台一个插件，插件里有几种取法，各有自己的档位、账号用在哪、开着没有、停着没有（11-12 定）。
-   * 内核今天还不给；`source.ts` 在边界上照插件自己的 `access`、`login` 补成一种。
-   */
+  /** 清单里的每一种取法，照清单的顺序，没做好的也在（协议 §2.3.1）。 */
   methods: FetchMethod[];
 }
 
 /**
  * 账号用在哪：`none` 不用；`visitor` 用访客身份（不是账号，`sites` 是 `paths.visitors` 的站点）；
  * `own-browser` 账号留在你自己的浏览器里，由脚本把链接交进来；`own-phone` 账号留在手机的 App 里；
- * `in-usuyo` 你在 usuyo 的窗口里登录（`sites` 是 `paths.sites` 的站点）；`developer` 用你自己申请的开发者凭据（平台的官方 API）。
- * `where` 是给人看的账号名，例如「X」。
+ * `own-app` 账号留在这台电脑上的客户端里；`in-usuyo` 你在 usuyo 的窗口里登录（`sites` 是 `paths.sites` 的站点）；
+ * `developer` 用你自己申请的开发者凭据（平台的官方 API）。`where` 是这些站点给人看的名字，取自清单。
  */
 export interface MethodAccount {
-  kind: "none" | "visitor" | "own-browser" | "own-phone" | "in-usuyo" | "developer";
+  kind: "none" | "visitor" | "own-browser" | "own-phone" | "own-app" | "in-usuyo" | "developer";
   sites?: string[];
   where?: string;
+}
+
+/** 取一条时拿得到的几样（协议的输出词表）；给人看的话在 `plugins/words.ts`。 */
+export type OutputKind = "text" | "html" | "images" | "media:video" | "media:audio" | "subtitle" | "meta" | "comments";
+
+/**
+ * 这种取法这台机器上为什么用不上，一项一句：`not-built`、`off`、`login-missing`、`login-expired`、`visitor-missing`、
+ * `visitor-expired`、`check-failed`（插件的本机检查没过）、`health-failed`（插件没能自查）。`hint` 是内核写好的中文。
+ */
+export interface MethodBlocker {
+  code: string;
+  hint: string;
+}
+
+/** 这种取法上一次调用：`ok` 为假时带错误码和一句话。 */
+export interface MethodCall {
+  at: string;
+  ok: boolean;
+  code?: string;
+  hint?: string;
 }
 
 /** 一种取法。`built: false` 是插件声明了、还没做好的：照样列出来，标明，开不了。 */
@@ -853,14 +878,25 @@ export interface FetchMethod {
   /** 例如「访客接口」「浏览器脚本」「官方归档」。 */
   name: string;
   access: Access;
+  login: LoginNeed;
   account: MethodAccount;
-  /** 取得到什么：`fetch` 是单条里有的（「正文」「图」「视频」），`list` 是能列的来源名，`delivers: "links"` 是由别处把链接交进来。 */
-  gets: { fetch?: string[]; list?: string[]; delivers?: "links" };
+  /** `foreground`：调用时你看得见（弹菜单、动剪贴板、占手机屏幕这一类）；只用来排程，不拦。 */
+  interaction: "background" | "foreground";
+  /**
+   * 取得到什么：`fetch` 是取一条时拿得到的几样，`list` 是清单里写死的来源名（能列、没有写死的是空的），
+   * `link` 是来源从一条链接开始时链接框上的那句，`delivers: "links"` 是由别处把链接交进来。
+   */
+  gets: { fetch?: OutputKind[]; list?: string[]; link?: string; delivers?: "links" };
   built: boolean;
   enabled: boolean;
+  /** 这台机器上现在用得上：做好了、开着、要的登录和访客身份都在、本机检查没挡它。不看暂停。 */
+  usable: boolean;
+  blockers: MethodBlocker[];
+  lastCall?: MethodCall;
+  /** 这种取法的暂停，加上你点的「先别试」。 */
   pauses: PluginPause[];
   /** 记下来的一句风险，带出处。只是信息，不拦。 */
-  riskNote?: { text: string; source?: { label: string; url: string } };
+  riskNote?: { text: string; source: { label: string; url: string } };
 }
 
 export interface PluginsView {
@@ -959,6 +995,8 @@ export interface ImportView {
   /** `file` 的：交进来的文件名和读它的插件名。 */
   file?: { name: string; reader: string };
   pluginId?: string;
+  /** 来源属于插件的哪种取法；交进来的没有。 */
+  method?: string;
   source?: string;
   /** 交进来的那个投递端的名字。 */
   client?: string;
@@ -992,6 +1030,8 @@ export interface ImportEntry {
 
 export interface StartImportRequest {
   pluginId: string;
+  /** `PluginSource.method`。 */
+  method: string;
   /** `PluginSource.source`。 */
   source: string;
   /** 不给就用来源的名字。 */

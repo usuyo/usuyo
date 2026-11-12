@@ -1,16 +1,10 @@
 import { expect, it } from "vitest";
 import type { FetchMethod, FetchPlugin } from "../api/endpoints";
+import { method as mockMethod } from "../mock/platforms";
 import { waysOf } from "./words";
 
-const method = (m: Partial<FetchMethod> & Pick<FetchMethod, "id" | "name">): FetchMethod => ({
-  access: "public-web",
-  account: { kind: "none" },
-  gets: {},
-  built: true,
-  enabled: true,
-  pauses: [],
-  ...m,
-});
+const method = (m: Partial<FetchMethod> & Pick<FetchMethod, "id" | "name">): FetchMethod =>
+  mockMethod({ access: "public-web", account: { kind: "none" }, gets: {}, ...m });
 
 const plugin = (methods: FetchMethod[]): FetchPlugin => ({
   id: "someone/site",
@@ -33,13 +27,13 @@ it("groups the methods that bring a batch in by plugin, in the plugin's own orde
   const groups = waysOf(
     [
       plugin([
-        method({ id: "page", name: "单条页面", gets: { fetch: ["正文"] } }),
+        method({ id: "page", name: "单条页面", gets: { fetch: ["text"] } }),
         method({ id: "script", name: "浏览器脚本", access: "browser-session", account: { kind: "own-browser", where: "某站" }, gets: { list: ["收藏"], delivers: "links" } }),
         method({ id: "login", name: "收藏夹", access: "session-api", account: { kind: "in-usuyo", sites: ["www.site.test"] }, gets: { list: ["收藏夹"] }, enabled: false }),
         method({ id: "archive", name: "官方归档", access: "official-export", gets: { list: ["收藏"] } }),
         method({ id: "phone", name: "手机", access: "vision-ui", account: { kind: "own-phone", where: "某站" }, gets: { list: ["赞过"] }, built: false }),
       ]),
-      plugin([method({ id: "page", name: "单条页面", gets: { fetch: ["正文"] } })]),
+      plugin([method({ id: "page", name: "单条页面", gets: { fetch: ["text"] } })]),
     ],
     new Set(["someone/site#archive"]),
     (site) => (site === "www.site.test" ? "某站" : site),

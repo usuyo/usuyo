@@ -13,7 +13,7 @@ export const queryKeys = {
   plugins: ["plugins"] as const,
   sites: ["sites"] as const,
   visitors: ["visitors"] as const,
-  sources: (pluginId: string) => ["sources", pluginId] as const,
+  sources: (pluginId: string, method: string, link?: string) => ["sources", pluginId, method, link ?? ""] as const,
   imports: ["imports"] as const,
   import: (id: string) => ["imports", id] as const,
   importEntries: (id: string, standing?: ImportEntry["standing"]) =>
@@ -351,13 +351,17 @@ export function useSites() {
   return useQuery({ queryKey: queryKeys.sites, queryFn: () => call((s) => s.sites()) });
 }
 
-/** 调插件列来源，可能要等几秒到一分钟；不自己重试，免得多打平台。 */
-export function useSources(pluginId: string | null) {
+/**
+ * 调插件列一种取法的来源，可能要等几秒到一分钟；不自己重试、不因重新挂上再问，免得多打平台。
+ * `ask` 是 null 时不问（例如从链接开始的取法还没填链接）。
+ */
+export function useSources(ask: { pluginId: string; method: string; link?: string } | null) {
   return useQuery({
-    queryKey: queryKeys.sources(pluginId ?? ""),
-    queryFn: () => call((s) => s.sources(pluginId ?? "")),
-    enabled: pluginId !== null,
+    queryKey: queryKeys.sources(ask?.pluginId ?? "", ask?.method ?? "", ask?.link),
+    queryFn: () => call((s) => s.sources(ask?.pluginId ?? "", ask?.method ?? "", ask?.link)),
+    enabled: ask !== null,
     retry: false,
+    refetchOnMount: false,
     staleTime: 5 * 60_000,
   });
 }

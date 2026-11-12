@@ -3,6 +3,7 @@ import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { FetchPlugin, MapView } from "../api/endpoints";
+import { method } from "../mock/platforms";
 import { createAppRouter } from "../router";
 
 afterEach(() => {
@@ -25,16 +26,7 @@ const PLUGIN: FetchPlugin = {
   pacing: [],
   pauses: [],
   methods: [
-    {
-      id: "script",
-      name: "浏览器脚本",
-      access: "browser-session",
-      account: { kind: "own-browser", where: "某站" },
-      gets: { list: ["收藏"], delivers: "links" },
-      built: true,
-      enabled: true,
-      pauses: [],
-    },
+    method({ id: "script", name: "浏览器脚本", access: "browser-session", account: { kind: "own-browser", where: "某站" }, gets: { list: ["收藏"], delivers: "links" } }),
   ],
 };
 

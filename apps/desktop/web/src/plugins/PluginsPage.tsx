@@ -5,7 +5,8 @@ import type { FetchPlugin, PluginsView, SiteLogin, VisitorIdentity as Visitor } 
 import { usePlugins, useSites, useVisitors } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
 import { Rail } from "../frame/Rail";
-import { PluginCard } from "./PluginCard";
+import { Choice } from "../ui/Choice";
+import { PluginCard, shown, type MethodFilter } from "./PluginCard";
 import { SiteLoginRow } from "./SiteLoginRow";
 import { TransformsPanel } from "./TransformsPanel";
 import { VisitorIdentity } from "./VisitorIdentity";
@@ -42,20 +43,23 @@ function groups(view: PluginsView, sites: SiteLogin[], visitors: Visitor[]): Pla
   return [...out.values()];
 }
 
-/** 左边那一行的小字：几个插件、登录着没有、停着没有。 */
-function groupSub(g: PlatformGroup): { text: string; warn: boolean } {
+/** 左边那一行的小字：停着的先说停着；不然写现在用得上的那几种的名字，一种都用不上就这么说。不数数。 */
+function groupSub(g: PlatformGroup, filter: MethodFilter): { text: string; warn: boolean } {
+  const pauses = g.plugins.flatMap((p) => p.pauses);
+  const pause = pauses.find((p) => p.byYou) ?? pauses[0];
+  if (pause) return { text: pause.byYou ? "你让它先别试" : pause.until ? `有一种停着，${timeText(pause.until)} 再试` : "有一种停着", warn: !pause.byYou };
   const methods = g.plugins.flatMap((p) => p.methods);
-  const parts = [`${methods.filter((m) => m.built && m.enabled).length} 种取法开着`];
-  const pause = [...g.plugins.flatMap((p) => p.pauses), ...methods.flatMap((m) => m.pauses)][0];
-  if (pause) {
-    parts.push(pause.byYou ? "你让它先别试" : pause.until ? `停着，${timeText(pause.until)} 再试` : "停着");
-    return { text: parts.join(" · "), warn: !pause.byYou };
-  }
-  const states = g.sites.map((s) => s.login);
-  if (states.includes("expired")) return { text: [...parts, "登录过期了"].join(" · "), warn: true };
-  if (states.length > 0) parts.push(states.every((s) => s === "present") ? "登录着" : "还没登录");
-  return { text: parts.join(" · "), warn: false };
+  // 只看还用不上的时，写的是那几种的名字。
+  if (filter === "blocked") return { text: `还用不上：${methods.filter((m) => !m.usable).map((m) => m.name).join("、")}`, warn: false };
+  const usable = methods.filter((m) => m.usable);
+  return { text: usable.length > 0 ? `能用：${usable.map((m) => m.name).join("、")}` : "现在都还用不上", warn: false };
 }
+
+const FILTERS: { id: MethodFilter; text: string }[] = [
+  { id: "all", text: "全部" },
+  { id: "usable", text: "现在能用的" },
+  { id: "blocked", text: "还用不上的" },
+];
 
 const route = getRouteApi("/plugins");
 
@@ -65,6 +69,7 @@ export function PluginsPage() {
   const visitors = useVisitors();
   const all = plugins.data ? groups(plugins.data, sites.data ?? [], visitors.data ?? []) : [];
   const [picked, setPicked] = useState<string | null>(null);
+  const [filter, setFilter] = useState<MethodFilter>("all");
   // 「变成文字」那一栏和开着的平台放在地址里：设置页、「手机」页能直接链过来。
   const search = route.useSearch();
   const text = search.show === "text";
@@ -73,7 +78,10 @@ export function PluginsPage() {
     setPicked(key);
     void navigate({ search: key === null ? { show: "text" } : {} });
   };
+  // 只看一类时，各平台的那几种从上到下排成一列，一眼扫完；左边点平台跳到它那一段。
+  const narrowed = filter === "all" || text ? null : all.filter((g) => g.plugins.some((p) => p.methods.some((m) => shown(m, filter))));
   const current = text ? undefined : (all.find((g) => g.key === (picked ?? search.platform)) ?? all[0]);
+  const jump = (key: string) => document.getElementById(`platform-${key}`)?.scrollIntoView({ block: "start" });
   const notLoaded = plugins.data?.notLoaded ?? [];
 
   return (
@@ -85,14 +93,26 @@ export function PluginsPage() {
           每个平台的获取插件有哪几种取法、账号用在哪儿、按什么节奏取；还有把口播和图里的字转成文字的插件。usuyo 自己不带任何平台的插件。
         </p>
         {plugins.error ? <ErrorLine error={plugins.error} className="mt-4" /> : null}
+        {all.length > 0 && !text ? (
+          <div className="mt-5">
+            <Choice label="看哪些取法" options={FILTERS} value={filter} onChange={setFilter} />
+          </div>
+        ) : null}
         <div className="mt-7 grid items-start gap-x-8 gap-y-6 @3xl:grid-cols-[232px_minmax(0,1fr)]">
           <nav aria-label="平台" className="flex min-w-0 flex-col gap-0.5 @3xl:sticky @3xl:top-0">
             <div className="px-3 pb-1.5 text-tag font-medium text-faint">获取</div>
             {plugins.data && all.length === 0 ? <div className="px-3 py-1.5 text-small text-sub">还没有装</div> : null}
-            {all.map((g) => {
-              const sub = groupSub(g);
+            {(narrowed ?? all).map((g) => {
+              const sub = groupSub(g, text ? "all" : filter);
               return (
-                <NavRow key={g.key} name={g.name} sub={sub.text} warn={sub.warn} current={g.key === current?.key} onPress={() => pick(g.key)} />
+                <NavRow
+                  key={g.key}
+                  name={g.name}
+                  sub={sub.text}
+                  warn={sub.warn}
+                  current={narrowed === null && g.key === current?.key}
+                  onPress={() => (narrowed === null ? pick(g.key) : jump(g.key))}
+                />
               );
             })}
             <div className="px-3 pt-4 pb-1.5 text-tag font-medium text-faint">变成文字</div>
@@ -100,7 +120,9 @@ export function PluginsPage() {
             {notLoaded.length > 0 ? <NotLoaded notLoaded={notLoaded} /> : null}
           </nav>
           <div className="min-w-0">
-            {current ? (
+            {narrowed ? (
+              <Narrowed matching={narrowed} filter={filter} />
+            ) : current ? (
               <PlatformDetail key={current.key} group={current} />
             ) : plugins.data ? (
               <>
@@ -135,11 +157,11 @@ function PlatformDetail({ group }: { group: PlatformGroup }) {
     <section aria-label={group.name} className="min-w-0 animate-fade">
       <h2 className="m-0 text-name font-semibold text-text">{group.name}</h2>
       <p className="m-0 mt-1.5 max-w-[720px] text-note text-sub">
-        一种取法一行，各自开关。不用账号能拿到的，一律不带账号去取；账号只用在非它不可的那几种上，每一种写着账号在哪儿。档位和记下的风险只是给你挑的，不拦什么。
+        一种取法一行，做好了的各自开关，每一种写着账号在哪儿、这台电脑上现在用不用得上、差什么。不用账号能拿到的，一律不带账号去取。档位和记下的风险只是给你挑的，不拦什么。
       </p>
       <div className="mt-4 flex flex-col gap-3">
         {group.plugins.map((p) => (
-          <PluginCard key={p.id} plugin={p} sites={group.sites} visitors={group.visitors} />
+          <PluginCard key={p.id} plugin={p} />
         ))}
       </div>
 
@@ -172,6 +194,29 @@ function PlatformDetail({ group }: { group: PlatformGroup }) {
         </>
       ) : null}
     </section>
+  );
+}
+
+/** 只看一类时：各平台一段，只列这一类的取法。 */
+function Narrowed({ matching, filter }: { matching: PlatformGroup[]; filter: MethodFilter }) {
+  if (matching.length === 0) {
+    return <p className="m-0 animate-fade text-note text-sub">{filter === "usable" ? "现在没有用得上的取法。" : "装着的取法这台电脑上都用得上。"}</p>;
+  }
+  return (
+    <div className="flex animate-fade flex-col gap-7">
+      {matching.map((g) => (
+        <section key={g.key} id={`platform-${g.key}`} aria-label={g.name} className="min-w-0 scroll-mt-4">
+          <h2 className="m-0 text-name font-semibold text-text">{g.name}</h2>
+          <div className="mt-3 flex flex-col gap-3">
+            {g.plugins
+              .filter((p) => p.methods.some((m) => shown(m, filter)))
+              .map((p) => (
+                <PluginCard key={p.id} plugin={p} filter={filter} />
+              ))}
+          </div>
+        </section>
+      ))}
+    </div>
   );
 }
 

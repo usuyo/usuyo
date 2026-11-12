@@ -24,13 +24,14 @@ export function ImportDetail({ id, onGone }: { id: string; onGone: () => void })
   if (!v) return null;
   const plugin = plugins.data?.plugins.find((p) => p.id === v.pluginId);
   const platform = plugin?.platforms[0]?.name;
+  const methodName = plugin?.methods.find((m) => m.id === v.method)?.name ?? v.method;
   const visitor = visitors.data?.find((x) => plugin?.visitors.includes(x.site))?.state;
   const from =
     v.kind === "delivered"
       ? `交进来的${v.client ? ` · ${v.client}` : ""}`
       : v.kind === "file" && v.file
         ? `${v.file.reader} · 读「${v.file.name}」`
-        : `${plugin?.name ?? v.pluginId ?? ""} · 从插件列出来的`;
+        : `${plugin?.name ?? v.pluginId ?? ""}${methodName ? ` · ${methodName}` : ""} · 从插件列出来的`;
 
   return (
     <div className="animate-fade">
