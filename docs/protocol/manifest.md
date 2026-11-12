@@ -125,6 +125,36 @@ run:
   serve: true
 ```
 
+<a id="231-方法-methods"></a>
+### 2.3.1 方法 methods
+
+定了（11-12），代码在做；做完以前 [§2.3](#23-获取插件的字段) 的顶层 `capabilities` 还在用。
+
+一个平台一个插件，插件里有几种方法：同一样东西可以由不带账号的接口取，也可以由你浏览器里的脚本、登录进 usuyo 的会话、手机上的 App 取，层级和用不用账号各不相同。清单把它们一种一种列出来，没做的也列。获取插件有了 `methods` 以后，顶层不再写 `access`、`login`、`capabilities`（最高的一层由宿主从做了的方法里算）；`platforms`、`match`、`sites`、`visitors`、`pacing`、`permissions`、`run` 还在顶层。
+
+| 字段 | 必填 | 含义 | 例子 |
+|---|---|---|---|
+| `id` | 是 | 方法的名字，小写字母、数字、连字符，一个插件里不重复；调用时经 `--method` 传给插件 | `guest` |
+| `name` | 是 | 给人看的名字 | `访客接口` |
+| `built` | 否，默认 `true` | `false` 是声明了、还没做的：照样列出来，开不了，宿主不调 | `false` |
+| `access` | 是 | 这种方法用到的那一层（[§2.4](#24-access-与-login)） | `public-web` |
+| `login` | 是 | `none`、`optional`、`required` | `none` |
+| `account` | 是 | 账号在哪里被用到：`none`、`visitor`（访客身份，不是账号）、`own-browser`（只在你自己的浏览器里）、`own-phone`（只在你手机的 App 里）、`own-app`（只在你电脑的客户端里）、`in-usuyo`（登录进 usuyo）、`developer`（你申请的开发者凭据） | `own-browser` |
+| `sites` | 有登录时必填 | 用到顶层 `sites` 里的哪几个。宿主只把这几个站点的凭据交给这种方法 | `[x.com]` |
+| `visitors` | 否 | 用到顶层 `visitors` 里的哪几个 | |
+| `interaction` | 否，默认 `background` | 同 [§2.3](#23-获取插件的字段) 能力表里的那一项 | `foreground` |
+| `delivers` | 否 | `links`：这种方法不在插件进程里跑（浏览器脚本、扩展），由它把链接交给本机接口（[§5](delivery.md#5-投递接口)）。这时没有 `capabilities` | `links` |
+| `capabilities` | 做了、又没写 `delivers` 时必填 | 能力名到能力声明：`fetch`（`outputs`、`input`、`timeout`、`provider`）、`list`（`order`、`sources`、`files`、`timeout`）和别的能力，字段同 [§2.3](#23-获取插件的字段) 的能力表，去掉已经挪到方法上的 `access`、`login`、`sites`、`visitors`、`interaction` | |
+| `risk` | 否 | 记录到的一句情况和出处，`{text, source: {label, url}}`。只是信息，宿主不拿它拦 | |
+
+**开和关。** 每种方法在获取插件页上有自己的开关，记在按机器的 `settings.json`（`plugins.<插件 id>.methods.<方法 id>.enabled`）。没写时：`private-api`、`client-hook` 两层关着，其余开着；要登录的方法开着但要等登录以后才用得上。`built: false` 的没有开关。
+
+**宿主怎么选。** 取一条链接时，候选是 `match` 对得上的插件里做了的、开着的、这台机器上现在用得上的、有 `fetch` 的方法，先层级低的，同一层先不带账号的（`account` 照上表的顺序），调第一个。它的回答 `missing` 里还有东西时，往后找 `outputs` 里声明了那几样的方法，只要那几样（`--want`）再调，直到不缺或没有方法了；每次调用是一份快照，第一份是主快照。前一种方法回 `not-found`、`login-required`、`unsupported-input`、`upstream-changed` 时换下一种；回 `rate-limited`、`network` 时照节奏等，不换。`list` 的来源各属于一种方法，由用户在导入页选。`canonicalize` 不分方法。
+
+**这台机器上用不用得上。** 一种方法用得上，是做了、开着、要的登录和访客身份都在、[`health`](fetch.md#310-health) 里没有落在它身上的没过的检查。`health` 的 `checks[]` 每一项可以带 `methods`（方法 id 的数组），没过时只挡这几种方法；不带就是挡整个插件。检查只看本机：系统版本、要的程序和版本、设备连没连上、系统授权给没给、要的本机服务在不在。获取插件页上每种方法一行，写明用得上，或者缺什么（一句话），和上一次调用的结果。
+
+**试跑和失败。** 插件的错误回答可以带 `detail`：平台原样回答的开头，至多 4 KB，宿主照别的字段一样洗掉凭据。宿主把每次失败记进按机器目录的 `logs/fetch-failures.jsonl`（时间、插件、方法、链接的主机、错误码、`message`、`hint`、`detail`），获取插件页上每种方法能看到最近一次。
+
 <a id="24-access-与-login"></a>
 ### 2.4 access 与 login
 
