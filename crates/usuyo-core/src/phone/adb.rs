@@ -12,7 +12,6 @@ use std::time::Duration;
 use super::probe::run;
 use crate::view::{AdbFound, AndroidDevice, DeviceState, DriverStep, PhoneAndroid};
 
-const VERSION_TIMEOUT: Duration = Duration::from_secs(5);
 /// 第一次要起 adb 的服务，慢一些。
 const DEVICES_TIMEOUT: Duration = Duration::from_secs(10);
 /// 连 adb 的服务、写请求、读回答，每一步最多这么久。
@@ -101,6 +100,7 @@ pub(crate) async fn android(
     path_var: Option<&OsStr>,
     dirs: &[PathBuf],
     server: SocketAddr,
+    limit: Duration,
 ) -> crate::Result<PhoneAndroid> {
     let Some(adb) = find(path_var, dirs) else {
         return Ok(PhoneAndroid {
@@ -109,7 +109,7 @@ pub(crate) async fn android(
             step: None,
         });
     };
-    let version = read_version(&adb).await?;
+    let version = read_version(&adb, limit).await?;
     let listed = match tokio::task::spawn_blocking(move || ask_server(server)).await {
         Ok(Ok(listed)) => listed,
         Ok(Err(e)) => {
@@ -125,9 +125,10 @@ pub(crate) async fn android(
 pub(crate) async fn look(
     path_var: Option<&OsStr>,
     dirs: &[PathBuf],
+    limit: Duration,
 ) -> crate::Result<PhoneAndroid> {
     let adb = find(path_var, dirs).ok_or(super::PhoneError::NoAdb)?;
-    let version = read_version(&adb).await?;
+    let version = read_version(&adb, limit).await?;
     let d = run(&adb, &["devices", "-l"], DEVICES_TIMEOUT).await?;
     if !d.status.success() {
         return Err(failed(&adb, d.status.code()));
@@ -139,8 +140,8 @@ pub(crate) async fn look(
     ))
 }
 
-async fn read_version(adb: &Path) -> crate::Result<String> {
-    let v = run(adb, &["version"], VERSION_TIMEOUT).await?;
+async fn read_version(adb: &Path, limit: Duration) -> crate::Result<String> {
+    let v = run(adb, &["version"], limit).await?;
     Ok(version(&String::from_utf8_lossy(&v.stdout)).unwrap_or_default())
 }
 

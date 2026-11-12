@@ -15,7 +15,7 @@ mod serve;
 mod tests;
 
 use std::ffi::OsString;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
@@ -57,10 +57,13 @@ pub struct PhoneConfig {
     /// 「mirroir serve」的 MCP 地址和它的令牌文件。
     pub serve_url: String,
     pub serve_token: PathBuf,
-    /// 发令牌之前认端口上的进程用的 `lsof`、`launchctl`、`id`（[`listener`] 模块开头）。
+    /// 发令牌之前认连接对面的进程用的 `lsof`、`launchctl`、`id`（[`listener`] 模块开头）。
     pub lsof: PathBuf,
     pub launchctl: PathBuf,
     pub id: PathBuf,
+    /// 这一页跑的小程序（`lsof`、`launchctl`、`id`、`sw_vers`、`pgrep`、剪贴板计数、`adb version`）
+    /// 每个最多跑多久，到点杀掉。
+    pub program_limit: Duration,
     /// `sw_vers`，读 macOS 的版本。
     pub sw_vers: PathBuf,
     /// 有它才算这台 Mac 有 iPhone 镜像；`iphone-mirroring` 打开的也是它。
@@ -103,6 +106,7 @@ impl PhoneConfig {
             lsof: "/usr/sbin/lsof".into(),
             launchctl: "/bin/launchctl".into(),
             id: "/usr/bin/id".into(),
+            program_limit: Duration::from_secs(5),
             sw_vers: "/usr/bin/sw_vers".into(),
             mirroring_app: "/System/Applications/iPhone Mirroring.app".into(),
             pgrep: "/usr/bin/pgrep".into(),
@@ -207,7 +211,7 @@ pub(crate) struct Phone {
     clipboard: Mutex<Option<ClipboardTest>>,
     /// 上一次 `check_health` 截没截到图，和什么时候问的。
     health: Mutex<Option<(Instant, bool)>>,
-    /// 这个守护进程的用户，第一次认端口上的人时问一次。
+    /// 这个守护进程的用户，第一次认连接对面的人时问一次。
     uid: tokio::sync::OnceCell<u32>,
 }
 
@@ -240,36 +244,47 @@ impl Phone {
             .find(|a| a.arch == self.config.arch)
     }
 
-    /// 先认端口上听的是不是驱动，是了才读令牌；认不出来的当「mirroir serve」没在跑，什么都不发。
+    /// 连上「mirroir serve」，认出这条连接的对面是驱动，才读令牌；认不出来的当它没在跑，什么都不发。
     async fn service(&self) -> Result<Service, PhoneError> {
-        let port = url::Url::parse(&self.config.serve_url)
-            .ok()
-            .and_then(|u| u.port_or_known_default())
+        let url = url::Url::parse(&self.config.serve_url)
+            .map_err(|e| PhoneError::Service(format!("the serve address: {e}")))?;
+        let ip = match url.host() {
+            Some(url::Host::Ipv4(ip)) => IpAddr::V4(ip),
+            Some(url::Host::Ipv6(ip)) => IpAddr::V6(ip),
+            _ => return Err(PhoneError::Service("the serve address is not an IP".into())),
+        };
+        if !ip.is_loopback() {
+            return Err(PhoneError::Service(
+                "the serve address is not loopback".into(),
+            ));
+        }
+        let port = url
+            .port_or_known_default()
             .ok_or_else(|| PhoneError::Service("the serve address has no port".into()))?;
-        // 没有令牌文件时「mirroir serve」从没登记过：不用去认端口上的人。这里只看它在不在，不读。
+        // 没有令牌文件时「mirroir serve」从没登记过：不用去连、去认。这里只看它在不在，不读。
         if !self.config.serve_token.is_file() {
             return Err(PhoneError::ServiceDown("no token file".into()));
         }
+        let limit = self.config.program_limit;
         let uid = *self
             .uid
-            .get_or_try_init(|| listener::me(&self.config.id))
+            .get_or_try_init(|| listener::me(&self.config.id, limit))
             .await
             .map_err(PhoneError::ServiceDown)?;
-        let binary = self.config.driver_dir.join(&self.config.release.binary);
-        let check = listener::Check {
-            lsof: &self.config.lsof,
-            launchctl: &self.config.launchctl,
-            uid,
-            label: driver::AGENT,
-            binary: &binary,
-        };
-        if let Err(why) = listener::is_driver(&check, port).await {
-            if !why.starts_with("nothing listens") {
-                tracing::warn!(reason = %why, "not sending the mirroir serve token");
-            }
-            return Err(PhoneError::ServiceDown(why));
-        }
-        Service::connect(&self.config.serve_url, &self.config.serve_token, &self.net)
+        Service::connect(serve::Dial {
+            addr: SocketAddr::new(ip, port),
+            path: url.path().to_owned(),
+            token_file: self.config.serve_token.clone(),
+            check: listener::Check {
+                lsof: self.config.lsof.clone(),
+                launchctl: self.config.launchctl.clone(),
+                uid,
+                label: driver::AGENT,
+                binary: self.config.driver_dir.join(&self.config.release.binary),
+                limit,
+            },
+        })
+        .await
     }
 
     /// 驱动那一行：装没装、能不能换新、没装上的原因、要你做的那一步。
@@ -330,16 +345,24 @@ impl Phone {
             return Ok((g, m, None));
         }
         let answer = match self.service().await {
-            Ok(service) => service.status().await.map(|a| (service, a)),
+            Ok(mut service) => match service.status().await {
+                Ok(a) => Ok((service, a)),
+                Err(e) => Err(e),
+            },
             Err(e) => Err(e),
         };
-        let (service, answer) = match answer {
+        let (mut service, answer) = match answer {
             Ok(a) => a,
             Err(e) => {
                 if !matches!(e, PhoneError::ServiceDown(_)) {
                     tracing::warn!(error = %e, "mirroir serve status");
                 }
-                let running = probe::running(&self.config.pgrep, "iPhone Mirroring").await?;
+                let running = probe::running(
+                    &self.config.pgrep,
+                    "iPhone Mirroring",
+                    self.config.program_limit,
+                )
+                .await?;
                 let (g, m) = unknown(if running {
                     Mirroring::Away
                 } else {
@@ -350,7 +373,7 @@ impl Phone {
         };
         let window = serve::window(&answer.status);
         let captured = match window {
-            serve::Window::Paused | serve::Window::Gone => self.captures(&service).await,
+            serve::Window::Paused | serve::Window::Gone => self.captures(&mut service).await,
             _ => None,
         };
         let (screen, accessibility) = serve::grants(window, captured);
@@ -366,7 +389,7 @@ impl Phone {
     }
 
     /// `check_health` 截没截到图；问不到是 `None`。`HEALTH_FOR` 里只问一次。
-    async fn captures(&self, service: &Service) -> Option<bool> {
+    async fn captures(&self, service: &mut Service) -> Option<bool> {
         if let Some((at, ok)) = *lock(&self.health)
             && at.elapsed() < HEALTH_FOR
         {
@@ -406,12 +429,13 @@ impl Engine {
         let p = self.phone()?;
         let has_mirroring = p.config.mirroring_app.is_dir();
         let (macos, reached, android) = tokio::join!(
-            probe::macos(&p.config.sw_vers),
+            probe::macos(&p.config.sw_vers, p.config.program_limit),
             p.reach(has_mirroring),
             adb::android(
                 p.config.adb_path.as_deref(),
                 &p.config.adb_dirs,
                 p.config.adb_server,
+                p.config.program_limit,
             ),
         );
         let (grants, mirroring, served) = reached?;
@@ -495,7 +519,12 @@ impl Engine {
     /// 它会起来、留在后台；回的页面里 `android.step` 说怎么停掉它。没找到 adb 回 424。
     pub async fn phone_android_devices(&self) -> Result<PhoneView> {
         let p = self.phone()?;
-        let android = adb::look(p.config.adb_path.as_deref(), &p.config.adb_dirs).await?;
+        let android = adb::look(
+            p.config.adb_path.as_deref(),
+            &p.config.adb_dirs,
+            p.config.program_limit,
+        )
+        .await?;
         let mut view = self.phone_view().await?;
         view.android = android;
         Ok(view)
@@ -522,7 +551,7 @@ impl Engine {
         {
             return self.phone_view().await;
         }
-        let start = probe::change_count(&p.config.pasteboard).await?;
+        let start = probe::change_count(&p.config.pasteboard, p.config.program_limit).await?;
         let test = ClipboardTest {
             state: ClipboardState::Waiting,
             at: jiff::Timestamp::now().to_string(),
@@ -537,7 +566,7 @@ impl Engine {
             let deadline = tokio::time::Instant::now() + p.config.clipboard_wait;
             let outcome = loop {
                 tokio::time::sleep(p.config.clipboard_every).await;
-                match probe::change_count(&p.config.pasteboard).await {
+                match probe::change_count(&p.config.pasteboard, p.config.program_limit).await {
                     Ok(n) if n != start => break Some(ClipboardState::Arrived),
                     Ok(_) if tokio::time::Instant::now() >= deadline => {
                         break Some(ClipboardState::Unchanged);

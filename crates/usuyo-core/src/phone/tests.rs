@@ -1,5 +1,6 @@
 //! 驱动的下载和解开对着本机起的假 release 服务器（好的包、sha256 不对、404、断流、包里不对），
-//! 和 mirroir、adb 回答的解析、演练的比对。不连外网，不跑真的程序。
+//! 和 mirroir、adb 回答的解析、演练的比对。不连外网；真的程序只在 macOS 上跑 `lsof` 和 `id`，
+//! 认这个测试自己开的一条回环连接。
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
@@ -454,17 +455,19 @@ fn broken_flow_files_are_skipped() {
 }
 
 #[test]
-fn reads_who_listens_and_what_launchd_runs() {
-    // `lsof -nP -iTCP:8765 -sTCP:LISTEN -Fpu`：同一个进程听 IPv4 和 IPv6
-    assert_eq!(
-        listener::owners("p4242\nu501\nf9\nf13\np4242\nu501\n"),
-        [(4242, 501)]
-    );
-    assert_eq!(
-        listener::owners("p1\nu0\nf3\np2\nu501\nf4\n"),
-        [(1, 0), (2, 501)]
-    );
-    assert!(listener::owners("").is_empty());
+fn reads_who_holds_the_other_end_and_what_launchd_runs() {
+    // `lsof -nP -iTCP@127.0.0.1:8765 -sTCP:ESTABLISHED -Fpun`（这台 Mac 上照真的连接看过的样子）：
+    // 我们自己那一头的名字方向相反，不算；只认另一头
+    let out = "p900\nu501\nf4\nn127.0.0.1:61374->127.0.0.1:8765\np4242\nu501\nf5\nn127.0.0.1:8765->127.0.0.1:61374\nf6\nn127.0.0.1:8765->127.0.0.1:61000\n";
+    let name = "127.0.0.1:8765->127.0.0.1:61374";
+    assert_eq!(listener::holders(out, name), [(4242, 501)]);
+    assert!(listener::holders(out, "127.0.0.1:8765->127.0.0.1:1").is_empty());
+    // 两个进程拿着同一个套接字（fork 以后）：两个都列出来；同一个进程拿两份只算一次
+    let two = format!("p1\nu501\nf3\nn{name}\nf7\nn{name}\np2\nu0\nf4\nn{name}\n");
+    assert_eq!(listener::holders(&two, name), [(1, 501), (2, 0)]);
+    // 没有 `u` 行的进程不算
+    assert!(listener::holders(&format!("p3\nf4\nn{name}\n"), name).is_empty());
+    assert!(listener::holders("", name).is_empty());
     // `lsof -a -p <pid> -d txt -Fn`：第一个 `n` 是程序本身
     assert_eq!(
         listener::executable("p416\nftxt\nn/usr/libexec/rapportd\nftxt\nn/usr/lib/dyld\n")
@@ -480,6 +483,40 @@ fn reads_who_listens_and_what_launchd_runs() {
         listener::top_level("gui/501/x = {\n\tstate = not running\n}", "pid"),
         None
     );
+}
+
+/// 照这台 Mac 上真的 `lsof` 认一条回环连接的另一头：接下以前看不到，接下以后是这个测试进程自己，
+/// 程序对得上才算。`launchctl` 指向不存在的路径，不去问 launchd。
+#[cfg(target_os = "macos")]
+#[tokio::test]
+async fn the_real_lsof_names_the_other_end_of_our_connection() {
+    let limit = Duration::from_secs(30);
+    let uid = listener::me(Path::new("/usr/bin/id"), limit).await.unwrap();
+    let server = TcpListener::bind("127.0.0.1:0").unwrap();
+    let service = server.local_addr().unwrap();
+    let client = TcpStream::connect(service).unwrap();
+    let ours = client.local_addr().unwrap();
+    let check = |binary: PathBuf| listener::Check {
+        lsof: "/usr/sbin/lsof".into(),
+        launchctl: "/nonexistent/launchctl".into(),
+        uid,
+        label: "dev.usuyo.test.none",
+        binary,
+        limit,
+    };
+    let me = std::env::current_exe().unwrap();
+    let why = listener::peer_is_driver(&check(me.clone()), service, ours)
+        .await
+        .unwrap_err();
+    assert!(why.starts_with("no process"), "{why}");
+    let (_accepted, _) = server.accept().unwrap();
+    listener::peer_is_driver(&check(me), service, ours)
+        .await
+        .unwrap();
+    let why = listener::peer_is_driver(&check("/usr/bin/true".into()), service, ours)
+        .await
+        .unwrap_err();
+    assert!(why.contains("not the driver"), "{why}");
 }
 
 #[test]

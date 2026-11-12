@@ -11,6 +11,10 @@ publish.workspace = true
 # 模型的压缩包：tar.bz2（纯 Rust 的 libbz2）、tar.gz、zip（只开 deflate）
 bzip2 = "0.6.1"
 flate2 = "1.1.11"
+# 「mirroir serve」的请求走认过对面的那一条连接（serve.rs）：在开着的 TCP 连接上讲 HTTP/1.1
+http-body-util = "0.1.5"
+hyper = { version = "1.12.0", features = ["client", "http1"] }
+hyper-util = { version = "0.1.21", features = ["tokio"] }
 imagesize = "0.15.0"
 jiff = "0.2.42"
 # 下载模型：每次读有自己的超时（断流）、每一跳只连查过的地址、Range 续传、和插件同一个代理；TLS 用 ring，同 plugin-kit
@@ -24,7 +28,7 @@ sha2 = "0.11.1"
 starship-battery = "0.12.0"
 tar = { version = "0.4.46", default-features = false }
 thiserror = "2.0.21"
-tokio = { version = "1.54.1", features = ["rt", "sync", "time", "macros", "fs", "io-util", "process"] }
+tokio = { version = "1.54.1", features = ["rt", "sync", "time", "macros", "fs", "io-util", "process", "net"] }
 tokio-util = "0.7.20"
 tracing = "0.1.44"
 url = "2.5.8"

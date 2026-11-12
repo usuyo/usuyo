@@ -45,7 +45,10 @@ fn release_server(routes: Vec<(&str, Reply)>) -> String {
             let Ok(mut stream) = stream else { return };
             let routes = routes.clone();
             std::thread::spawn(move || {
-                let (path, _, _) = read_request(&mut stream);
+                let mut reader = BufReader::new(stream.try_clone().unwrap());
+                let Some((path, _, _)) = read_request(&mut reader) else {
+                    return;
+                };
                 let head = |status: &str, len: usize| {
                     format!(
                         "HTTP/1.1 {status}\r\nContent-Length: {len}\r\nConnection: close\r\n\r\n"
@@ -75,11 +78,14 @@ fn release_server(routes: Vec<(&str, Reply)>) -> String {
     base
 }
 
-/// 请求行的路径、头（小写名字）、请求体。
-fn read_request(stream: &mut TcpStream) -> (String, HashMap<String, String>, Vec<u8>) {
-    let mut reader = BufReader::new(stream.try_clone().unwrap());
+/// 一个请求的路径、头（小写名字）、请求体；对面没发请求就关了（或连接断了）是 `None`。
+fn read_request(
+    reader: &mut BufReader<TcpStream>,
+) -> Option<(String, HashMap<String, String>, Vec<u8>)> {
     let mut line = String::new();
-    reader.read_line(&mut line).unwrap();
+    if reader.read_line(&mut line).unwrap_or(0) == 0 {
+        return None;
+    }
     let path = line.split(' ').nth(1).unwrap_or_default().to_owned();
     let mut headers = HashMap::new();
     loop {
@@ -98,7 +104,7 @@ fn read_request(stream: &mut TcpStream) -> (String, HashMap<String, String>, Vec
         .unwrap_or(0);
     let mut body = vec![0u8; len];
     reader.read_exact(&mut body).unwrap();
-    (path, headers, body)
+    Some((path, headers, body))
 }
 
 fn tar_gz(entries: &[(&str, &[u8])]) -> Vec<u8> {
@@ -139,74 +145,106 @@ struct Mirror {
     calls: Vec<String>,
     /// 收到的每一个请求（`initialize`、令牌不对被拒的都算）。
     requests: usize,
+    /// 接下的连接。
+    connections: usize,
+    /// 每答完一个请求就关掉连接（`Connection: close`）。
+    close: bool,
+    /// 一接下连接就关掉，什么都不读。
+    hang_up: bool,
 }
 
 type Shared = Arc<Mutex<Mirror>>;
 
-fn mirror_server(state: Shared) -> String {
+/// 每接下一条连接，把对面（守护进程那一头）的端口写进 `accepted`：假的 `lsof` 照它答这条连接的另一头。
+fn mirror_server(state: Shared, accepted: PathBuf) -> String {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}/mcp", listener.local_addr().unwrap());
     std::thread::spawn(move || {
         for stream in listener.incoming() {
-            let Ok(mut stream) = stream else { return };
-            let state = Arc::clone(&state);
-            std::thread::spawn(move || {
-                let (path, headers, body) = read_request(&mut stream);
-                state.lock().unwrap().requests += 1;
-                let reply = |status: &str, body: &str| {
-                    format!(
-                        "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-                        body.len()
-                    )
-                };
-                if path != "/mcp"
-                    || headers.get("authorization").map(String::as_str)
-                        != Some(&format!("Bearer {SERVE_TOKEN}"))
-                {
-                    let _ =
-                        stream.write_all(reply("401 Unauthorized", "Send the header").as_bytes());
-                    return;
-                }
-                let req: Value = serde_json::from_slice(&body).unwrap();
+            let Ok(stream) = stream else { return };
+            let hang_up = {
                 let mut s = state.lock().unwrap();
-                let result = match req["method"].as_str() {
-                    Some("initialize") => json!({
-                        "protocolVersion": "2025-11-25",
-                        "serverInfo": {"name": "mirroir-mcp", "version": s.version},
-                        "capabilities": {"tools": {}},
-                    }),
-                    Some("tools/call") => {
-                        let name = req["params"]["name"].as_str().unwrap().to_owned();
-                        s.calls.push(name.clone());
-                        let text = match name.as_str() {
-                            "status" => Some(s.status.clone()),
-                            "check_health" => Some(s.health.clone()),
-                            "describe_screen" => {
-                                assert_eq!(
-                                    req["params"]["arguments"],
-                                    json!({"text_only": true, "omit_screenshot": true})
-                                );
-                                s.screen.clone()
-                            }
-                            other => panic!("unexpected tool {other}"),
-                        };
-                        match text {
-                            Some(t) => {
-                                json!({"content": [{"type": "text", "text": t}], "isError": false})
-                            }
-                            None => {
-                                json!({"content": [{"type": "text", "text": "Target 'iPhone Mirroring' is not running"}], "isError": true})
-                            }
-                        }
-                    }
-                    other => panic!("unexpected method {other:?}"),
-                };
-                let body = json!({"jsonrpc": "2.0", "id": req["id"], "result": result}).to_string();
-                let _ = stream.write_all(reply("200 OK", &body).as_bytes());
-            });
+                s.connections += 1;
+                s.hang_up
+            };
+            if hang_up {
+                drop(stream);
+                continue;
+            }
+            let ours = stream.peer_addr().unwrap().port();
+            let fresh = accepted.with_extension("new");
+            std::fs::write(&fresh, ours.to_string()).unwrap();
+            std::fs::rename(&fresh, &accepted).unwrap();
+            let state = Arc::clone(&state);
+            std::thread::spawn(move || serve_mirror(&state, stream));
         }
     });
     url
+}
+
+/// 一条连接上的请求，一个一个答，直到对面关掉（或 `close` 时答完一个）。
+fn serve_mirror(state: &Shared, mut stream: TcpStream) {
+    let mut reader = BufReader::new(stream.try_clone().unwrap());
+    while let Some((path, headers, body)) = read_request(&mut reader) {
+        let close = {
+            let mut s = state.lock().unwrap();
+            s.requests += 1;
+            s.close
+        };
+        let reply = |status: &str, body: &str| {
+            format!(
+                "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n{}\r\n{body}",
+                body.len(),
+                if close { "Connection: close\r\n" } else { "" },
+            )
+        };
+        if path != "/mcp"
+            || headers.get("authorization").map(String::as_str)
+                != Some(&format!("Bearer {SERVE_TOKEN}"))
+        {
+            let _ = stream.write_all(reply("401 Unauthorized", "Send the header").as_bytes());
+            return;
+        }
+        let req: Value = serde_json::from_slice(&body).unwrap();
+        let mut s = state.lock().unwrap();
+        let result = match req["method"].as_str() {
+            Some("initialize") => json!({
+                "protocolVersion": "2025-11-25",
+                "serverInfo": {"name": "mirroir-mcp", "version": s.version},
+                "capabilities": {"tools": {}},
+            }),
+            Some("tools/call") => {
+                let name = req["params"]["name"].as_str().unwrap().to_owned();
+                s.calls.push(name.clone());
+                let text = match name.as_str() {
+                    "status" => Some(s.status.clone()),
+                    "check_health" => Some(s.health.clone()),
+                    "describe_screen" => {
+                        assert_eq!(
+                            req["params"]["arguments"],
+                            json!({"text_only": true, "omit_screenshot": true})
+                        );
+                        s.screen.clone()
+                    }
+                    other => panic!("unexpected tool {other}"),
+                };
+                match text {
+                    Some(t) => {
+                        json!({"content": [{"type": "text", "text": t}], "isError": false})
+                    }
+                    None => {
+                        json!({"content": [{"type": "text", "text": "Target 'iPhone Mirroring' is not running"}], "isError": true})
+                    }
+                }
+            }
+            other => panic!("unexpected method {other:?}"),
+        };
+        drop(s);
+        let body = json!({"jsonrpc": "2.0", "id": req["id"], "result": result}).to_string();
+        if stream.write_all(reply("200 OK", &body).as_bytes()).is_err() || close {
+            return;
+        }
+    }
 }
 
 // —— 假程序 ——
@@ -277,6 +315,10 @@ impl Fixture {
 
     fn requests(&self) -> usize {
         self.mirror.lock().unwrap().requests
+    }
+
+    fn connections(&self) -> usize {
+        self.mirror.lock().unwrap().connections
     }
 }
 
@@ -399,16 +441,21 @@ esac"#),
         ),
         calls: Vec::new(),
         requests: 0,
+        connections: 0,
+        close: false,
+        hang_up: false,
     }));
-    let serve_url = mirror_server(Arc::clone(&mirror));
-    // 端口上听的是谁：`lsof` 照 `listener`（问的不是这个端口就没人听）和 `program` 答，`launchctl print`
-    // 照 `launchd` 答（不在是没登记），`id -u` 是 501。默认是 launchd 里登记的「mirroir serve」在听。
+    let serve_url = mirror_server(Arc::clone(&mirror), bin.join("accepted"));
+    // 连接的另一头在谁手里：`lsof` 照假服务写下的 `accepted`（守护进程那一头的端口）和 `peers`（每行
+    // `<pid> <uid>`，空的是这个用户看不见）答，先列守护进程自己那一头；`-d txt` 照 `program` 答。
+    // `launchctl print` 照 `launchd` 答（不在是没登记），`id -u` 是 501。默认是 launchd 里登记的
+    // 「mirroir serve」接下了连接。端口上一直有驱动在听（`-sTCP:LISTEN` 答的那一行）。
     let port = serve_url
         .rsplit(':')
         .next()
         .unwrap()
         .trim_end_matches("/mcp");
-    std::fs::write(bin.join("listener"), "p4242\nu501\nf9\n").unwrap();
+    std::fs::write(bin.join("peers"), "4242 501\n").unwrap();
     std::fs::write(
         bin.join("launchd"),
         "gui/501/dev.mirroir.serve = {\n\tstate = running\n\tpid = 4242\n}\n",
@@ -424,7 +471,19 @@ esac"#),
         &bin,
         "lsof",
         &format!(
-            "case \"$*\" in\n*-iTCP:{port}\\ *) test -e '{b}/listener' || exit 1; cat '{b}/listener' ;;\n*-iTCP:*) exit 1 ;;\n*txt*) cat '{b}/program' ;;\n*) exit 2 ;;\nesac"
+            r#"case "$*" in
+*-iTCP@127.0.0.1:{port}\ *-sTCP:ESTABLISHED*)
+  test -e '{b}/accepted' || exit 1
+  ours=$(cat '{b}/accepted')
+  printf 'p999\nu501\nf20\nn127.0.0.1:%s->127.0.0.1:{port}\n' "$ours"
+  while read -r pid uid; do
+    printf 'p%s\nu%s\nf9\nn127.0.0.1:{port}->127.0.0.1:%s\n' "$pid" "$uid" "$ours"
+  done < '{b}/peers' ;;
+*-iTCP:{port}\ *-sTCP:LISTEN*) printf 'p4242\nu501\nf9\nn*:{port}\n' ;;
+*-iTCP*) exit 1 ;;
+*txt*) cat '{b}/program' ;;
+*) exit 2 ;;
+esac"#
         ),
     );
     let launchctl = script(
@@ -483,6 +542,7 @@ esac"#),
         lsof,
         launchctl,
         id,
+        program_limit: Duration::from_secs(30),
         sw_vers,
         mirroring_app,
         pgrep,
@@ -640,6 +700,7 @@ async fn the_page_reads_this_machine_with_nothing_installed() {
     // 看这一页只问了 adb 的版本，没跑 `adb devices`；没有令牌文件，什么也没发给端口上的服务
     assert_eq!(f.adb_calls(), ["version"]);
     assert_eq!(f.requests(), 0);
+    assert_eq!(f.connections(), 0);
     // iPhone 镜像开着、驱动不在：离开着
     std::fs::write(f.bin.join("mirroring-running"), "").unwrap();
     assert_eq!(view(&f.app).await["ios"]["mirroring"], "away");
@@ -1083,9 +1144,10 @@ async fn looking_for_phones_without_adb_says_so() {
     assert_eq!(v["hint"], "这台电脑上没找到 adb。");
 }
 
-/// 令牌只发给端口上认得出的驱动：别的用户的、别的程序的、没人听的，一个请求都不发。
+/// 令牌只发给认得出的那一条连接：连接的另一头要是你自己跑的驱动。看不见的（别的用户的）、别的用户的、
+/// 别的程序的、两个进程拿着的、认完以前就断了的，一个请求都不发。
 #[tokio::test]
-async fn the_token_goes_only_to_the_drivers_own_listener() {
+async fn the_token_goes_only_over_a_connection_the_driver_holds() {
     let f = fixture(Options {
         serving: true,
         ..Options::default()
@@ -1109,27 +1171,50 @@ async fn the_token_goes_only_to_the_drivers_own_listener() {
             "launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.mirroir.serve.plist"
         );
     };
+    let peers = |p: &str| std::fs::write(f.bin.join("peers"), p).unwrap();
 
-    // 别的用户在听
-    std::fs::write(f.bin.join("listener"), "p4242\nu0\n").unwrap();
+    // 另一头这个用户看不见（别的用户占着同一个地址），端口上照样有驱动在听
+    peers("");
+    not_sent(&view(&f.app).await);
+    // 另一头是别的用户的
+    peers("4242 0\n");
     not_sent(&view(&f.app).await);
     // 自己的用户、不是登记的那一项、程序也不是装着的驱动
-    std::fs::write(f.bin.join("listener"), "p777\nu501\n").unwrap();
+    peers("777 501\n");
     std::fs::write(f.bin.join("program"), "p777\nftxt\nn/tmp/catch-the-token\n").unwrap();
     not_sent(&view(&f.app).await);
     let (s, _) = call(&f.app, "POST", "/phone/ios/dry-run", None).await;
     assert_eq!(s, StatusCode::FAILED_DEPENDENCY);
-    // 两个进程都在听
-    std::fs::write(f.bin.join("listener"), "p4242\nu501\np777\nu501\n").unwrap();
+    // 两个进程都拿着另一头
+    peers("4242 501\n777 501\n");
     not_sent(&view(&f.app).await);
-    // 没人听
-    std::fs::remove_file(f.bin.join("listener")).unwrap();
-    not_sent(&view(&f.app).await);
+    // 认完以前服务就关了连接：平平地当它没在跑
+    peers("4242 501\n");
+    f.mirror.lock().unwrap().hang_up = true;
+    let (s, v) = call(&f.app, "GET", "/phone", None).await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    not_sent(&v);
     assert_eq!(f.requests(), 0);
+    assert!(f.connections() >= 6, "{}", f.connections());
 
-    // 听的是装着的那一份驱动（没登记进 launchd，自己起的）：发
+    // launchd 里登记的那一项接下了连接：发，一次看这一页（`initialize` 和 `status`）只用一条连接
+    f.mirror.lock().unwrap().hang_up = false;
+    let before = f.connections();
+    let v = view(&f.app).await;
+    assert_eq!(v["ios"]["mirroring"], "connected");
+    assert_eq!(f.requests(), 2);
+    assert_eq!(f.connections(), before + 1);
+
+    // 服务每答完一个就关：另开的那条从头再认，认不出就不发
+    f.mirror.lock().unwrap().close = true;
+    let v = view(&f.app).await;
+    assert_eq!(v["ios"]["mirroring"], "connected");
+    assert_eq!(f.requests(), 4);
+    assert_eq!(f.connections(), before + 3);
+
+    // 另一头是装着的那一份驱动（没登记进 launchd，自己起的）：发
     std::fs::remove_file(f.bin.join("launchd")).unwrap();
-    std::fs::write(f.bin.join("listener"), "p777\nu501\n").unwrap();
+    peers("777 501\n");
     std::fs::write(
         f.bin.join("program"),
         format!(
@@ -1141,5 +1226,5 @@ async fn the_token_goes_only_to_the_drivers_own_listener() {
     let v = view(&f.app).await;
     assert_eq!(v["ios"]["mirroring"], "connected");
     assert!(v["ios"]["driver"].get("step").is_none(), "{v}");
-    assert!(f.requests() > 0);
+    assert_eq!(f.requests(), 6);
 }

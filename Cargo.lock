@@ -3856,6 +3856,9 @@ version = "0.0.0"
 dependencies = [
  "bzip2",
  "flate2",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
  "imagesize",
  "jiff",
  "keyring",

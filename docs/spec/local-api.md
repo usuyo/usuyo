@@ -104,7 +104,7 @@
 **手机**（[手机那条路 §12](../platforms/phone.md#12-手机页做到的11-12-代码)）：只在 macOS 上的守护进程有，别处回 404 `not-found`（`hint`「这台电脑上的 usuyo 内核不管手机。」）。
 - `GET /phone` 回 `PhoneView`，现读：macOS 版本（`sw_vers`）、有没有 `/System/Applications/iPhone Mirroring.app`、驱动、两项授权、镜像、上一次剪贴板试验、adb 和设备。`ios.driver.step?: {text, commands}` 是要你自己在终端里做的那一步（登记、重新登记或停掉「mirroir serve」）。`driver.state` 没装上是 `failed`，`hint` 是一句原因；换新没成时 `state` 还是 `present`（旧的那份在），也带 `hint`。
   - 看这一页不起任何程序：`android.adb` 是 `{path, version, running}`，`adb version` 不连 adb 的服务；`running` 是 adb 自己的服务（127.0.0.1:5037）这会儿在不在听，只连一下这个口子，不起它。在跑时经这个口子问一次 `host:devices-l` 列 `devices`，带 `android.step`（服务留在后台，`'<adb>' kill-server` 停掉它）；不在跑时 `devices` 是空的，不跑 `adb devices`。
-  - 「mirroir serve」的令牌只发给认过的进程：先看令牌文件在不在（不读），再用 `lsof` 找端口上听的进程，要是这个守护进程的用户，而且是 launchd 里登记的 `dev.mirroir.serve` 的那个 `pid`，或程序就是按机器目录里装着的 `mirroir-mcp`，才读令牌、发请求。认不出来时什么都不发，授权是 `unknown`，镜像照 `pgrep` 看，当它没在跑（装着驱动时 `step` 是登记那一步）。
+  - 「mirroir serve」的令牌只发给认过的那一条连接：先看令牌文件在不在（不读），再连上服务地址，用 `lsof` 找这条连接的另一头在哪个进程手里，要正好一个、是这个守护进程的用户，而且是 launchd 里登记的 `dev.mirroir.serve` 的那个 `pid`，或程序就是按机器目录里装着的 `mirroir-mcp`，才读令牌，请求在这同一条连接上发；另开的连接从头再认。看不见的（别的用户的进程）算认不出。认不出来时什么都不发，授权是 `unknown`，镜像照 `pgrep` 看，当它没在跑（装着驱动时 `step` 是登记那一步）。
 - `POST /phone/ios/driver/install`、`…/update`：已经是钉的那一版就直接回；不然马上回 `installing`，在后台下，装好或没装上发 `phone-updated`。这台机器没有对应架构的包时回 422 `unsupported-input`。`…/remove`：删掉按机器目录里的驱动，回 `PhoneView`；正在装回 409 `conflict`。不停「mirroir serve」、不删它的登录项，也不动系统设置里的授权；它还在跑时 `step` 是停掉它的那一条。装和换新也不登记「mirroir serve」，那一步在 `step` 里交给你。
 - `POST /phone/open-settings`，`{pane}`（`screen-recording`、`accessibility`、`iphone-mirroring`，别的字段回 400），204；打不开回 500 `internal`。
 - `POST /phone/ios/clipboard-test`：马上回 `waiting`（`waitSec` 是 10），有结果发 `phone-updated`；还在等时再点回同一次。读不出 `changeCount` 回 500。

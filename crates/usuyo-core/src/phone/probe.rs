@@ -1,5 +1,5 @@
 //! 这台 Mac 上几个只读的小调用：macOS 的版本、一个 App 开没开、剪贴板的 `changeCount`，
-//! 和打开系统设置的一栏。每次都有时限，到点杀掉。
+//! 和打开系统设置的一栏。每次都有时限（小程序的照 `PhoneConfig::program_limit`），到点杀掉。
 
 use std::path::Path;
 use std::process::{Output, Stdio};
@@ -7,7 +7,6 @@ use std::time::Duration;
 
 use super::PhoneError;
 
-const QUICK: Duration = Duration::from_secs(5);
 const OPEN: Duration = Duration::from_secs(10);
 
 /// 跑一个程序到它退出，最多 `timeout`；stdin 是空的。
@@ -35,8 +34,8 @@ pub(crate) async fn run(
 }
 
 /// `sw_vers -productVersion`，例如 `15.6.1`。
-pub(crate) async fn macos(sw_vers: &Path) -> crate::Result<String> {
-    let out = run(sw_vers, &["-productVersion"], QUICK).await?;
+pub(crate) async fn macos(sw_vers: &Path, limit: Duration) -> crate::Result<String> {
+    let out = run(sw_vers, &["-productVersion"], limit).await?;
     let version = String::from_utf8_lossy(&out.stdout).trim().to_owned();
     if !out.status.success() || version.is_empty() {
         return Err(PhoneError::Program {
@@ -49,8 +48,8 @@ pub(crate) async fn macos(sw_vers: &Path) -> crate::Result<String> {
 }
 
 /// 叫 `name` 的进程在不在（`pgrep -x`：0 是在，1 是不在）。
-pub(crate) async fn running(pgrep: &Path, name: &str) -> crate::Result<bool> {
-    let out = run(pgrep, &["-x", name], QUICK).await?;
+pub(crate) async fn running(pgrep: &Path, name: &str, limit: Duration) -> crate::Result<bool> {
+    let out = run(pgrep, &["-x", name], limit).await?;
     match out.status.code() {
         Some(0) => Ok(true),
         Some(1) => Ok(false),
@@ -63,12 +62,12 @@ pub(crate) async fn running(pgrep: &Path, name: &str) -> crate::Result<bool> {
 }
 
 /// Mac 剪贴板的 `changeCount`：`argv` 打出一个整数。
-pub(crate) async fn change_count(argv: &[String]) -> Result<i64, PhoneError> {
+pub(crate) async fn change_count(argv: &[String], limit: Duration) -> Result<i64, PhoneError> {
     let (program, args) = argv
         .split_first()
         .ok_or_else(|| PhoneError::Pasteboard("no program".into()))?;
     let args: Vec<&str> = args.iter().map(String::as_str).collect();
-    let out = run(Path::new(program), &args, QUICK)
+    let out = run(Path::new(program), &args, limit)
         .await
         .map_err(|e| PhoneError::Pasteboard(e.to_string()))?;
     if !out.status.success() {

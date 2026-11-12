@@ -175,19 +175,6 @@ impl Net {
         Ok(n)
     }
 
-    /// 连本机服务的客户端：不走代理、不跟跳转，每次请求最多 `timeout`。
-    pub(crate) fn local_client(&self, timeout: Duration) -> Result<reqwest::Client, ModelError> {
-        reqwest::Client::builder()
-            .no_proxy()
-            .redirect(reqwest::redirect::Policy::none())
-            .connect_timeout(Duration::from_secs(2))
-            .timeout(timeout)
-            .user_agent(concat!("usuyo/", env!("CARGO_PKG_VERSION")))
-            .tls_backend_preconfigured((*self.tls).clone())
-            .build()
-            .map_err(|e| ModelError::Network(e.to_string()))
-    }
-
     /// 这次下载的地址策略和代理（`None` 是直连）。
     async fn policy(&self) -> Result<(Policy, Option<String>), ModelError> {
         if let Some(fixed) = &self.policy {
