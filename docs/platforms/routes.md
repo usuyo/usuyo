@@ -36,7 +36,7 @@
 | # | 仓库 · 取法 | 层级 | 做成什么样 | 等什么 |
 |---|---|---|---|---|
 | 1 | plugin-kit 视觉层 SDK · iPhone 驱动 | — | 包 mirroir-mcp，加自己的剪贴板和节奏（[phone.md §4](phone.md#4-驱动和流程分开)） | — |
-| 2 | `wechat-channels` · `iphone` | `vision-ui` | 自己写的流程 | 1；你看分享菜单里有没有「复制链接」 |
+| 2 | `wechat-channels` · `iphone` | `vision-ui` | 自己写的流程 | 1 |
 | 3 | `xiaohongshu` · `iphone` | `vision-ui` | 自己写的流程 | 1 |
 | 4 | `ytdlp` | 按平台 | 包 yt-dlp | — |
 | 5 | `douyin` · `share-page` | `public-web` | 移植 parse-video 的抖音解析 | — |
@@ -47,6 +47,8 @@
 | 10 | `weibo` · `status`、`userscript` | `public-web`、`browser-session` | 自己写的单条，改写的 Weibo-archiver 脚本 | — |
 
 不用账号能试的：4、5、7、9，和 10 的单条。1 在 iPhone 的「设置」「备忘录」里试，不碰平台账号。
+
+顺序（用户 11-12）：电脑上的取法先做先试，4、5、6、7、9、10 在前；用到 iPhone 驱动的 1、2、3、8 排在后面，手机上一条一条点比电脑上慢。
 
 <a id="3-小红书"></a>
 ## 3. 小红书
@@ -71,9 +73,9 @@
 
 | 取法 | 拿到什么 | 账号 | 层级 | 做成什么样 | 你要装或给的 | 已有 | 记录到的情况 | 不用账号能试 |
 |---|---|---|---|---|---|---|---|---|
-| `feed-info` | 单条：作者、描述、封面 | 不要 | `public-web` | 自己写，移植 ParseHub 的 `wxchannels.py`（MIT）（[wechat-channels.md §3.4](wechat-channels.md#34-插件做成的样子)） | — | 做了 | 匿名接口给的字段在收紧（[wechat-channels.md §3.2](wechat-channels.md#32-取单条)） | 能 |
+| `feed-info` | 单条：作者、描述、封面 | 不要 | `public-web` | 自己写，移植 ParseHub 的 `wxchannels.py`（MIT）（[wechat-channels.md §3.4](wechat-channels.md#34-插件做成的样子)） | — | 做了；2026-11-12 对真链接跑通 | 匿名接口给的字段在收紧（[wechat-channels.md §3.2](wechat-channels.md#32-取单条)） | 能 |
 | `yuanbao` | 单条视频 | 要在 usuyo 里登录腾讯元宝 | `session-api` | 同上，元宝换临时凭证 | 登录元宝 | 做了；账号只用在视频这一样，清单要等 `accountOutputs`（[README 第 1 节](README.md#1-怎么读这一页)） | 公开部署的解析服务被大量调用后，元宝账号被封（[ltaoo #495](https://github.com/ltaoo/wx_channels_download/issues/495)） | 不能 |
-| `iphone` | 存过的：「赞和收藏」 | 账号在你手机的微信里 | `vision-ui` | 自己写的流程，iPhone 驱动（[phone.md §7.1](phone.md#71-视频号赞和收藏)） | 同小红书 `iphone` | 没有；等你确认分享菜单里有「复制链接」（[BUILD §7](../BUILD.md#7-只有用户能答的和能验的)） | 微信协议 8.2.1.6 禁止用第三方软件读界面、自动操作；处罚记录在 PC 微信 UI 自动化和安卓系统级注入上，镜像没有报告（[06 §1.2](../research/06-platform-access-and-account-risk.md#12-视觉层的风险从哪里来)） | 不能 |
+| `iphone` | 存过的：「赞和收藏」 | 账号在你手机的微信里 | `vision-ui` | 自己写的流程，iPhone 驱动（[phone.md §7.1](phone.md#71-视频号赞和收藏)） | 同小红书 `iphone` | 没有；分享菜单里有「复制链接」，复制的东西 Mac 拿得到（用户 11-12） | 微信协议 8.2.1.6 禁止用第三方软件读界面、自动操作；处罚记录在 PC 微信 UI 自动化和安卓系统级注入上，镜像没有报告（[06 §1.2](../research/06-platform-access-and-account-risk.md#12-视觉层的风险从哪里来)） | 不能 |
 | `mac` | 存过的：「赞和收藏」 | 账号在你电脑的微信里 | `vision-ui` | 自己写的流程，资产里带 agent-desktop（Apache-2.0，v1.2.0，2026-11-05） | usuyo 的辅助功能 | 没有；等你看 Mac 微信里有没有「赞和收藏」（[调研 10 §0](../research/10-desktop-and-android-agents.md#0-结论) 问题 4） | 视频号窗口由 `WeChatAppEx` 承载，树里有什么没核；Mac 微信 4.1 在 macOS 26 上树只剩空按钮 | 不能 |
 | `android` | 存过的：「赞和收藏」 | 账号在你安卓手机的微信里 | `vision-ui` | adb 驱动上的流程 | 登录微信的那台手机是安卓 | 没有 | 微信同一时间只登录一台手机（推断，[phone.md §8](phone.md#8-安卓经-adb)） | 不能 |
 | `audio` | 单条的口播文字 | 账号在你手机的 App 里，或你电脑的微信里（播放在那里） | `vision-ui` | 自己写：录 iPhone 镜像或电脑微信播放时这一个 App 的声音，交预装的转写；macOS 26 上可用 mirroir-mcp 的 `listen` | usuyo 的「屏幕与系统录音」 | 没有 | 只有声音；`listen` 要 macOS 26，这台 Mac 是 15.6.1 | 不能 |

@@ -55,7 +55,9 @@
 
 **认字用哪一份。** 预装的 `builtin/ocr-vision` 是转换插件（图进、`ocr.json` 出），协议里获取插件调不了转换插件。iPhone 后端用 mirroir-mcp 的 `describe_screen`，它用的也是 Apple Vision；要和 `builtin/ocr-vision` 认出一样的字（同一个 revision、同一组语言），驱动另带一个小的 Swift 程序，用 `builtin/ocr-vision` 的识别代码（MIT，同一个作者），对 `screenshot` 截下的图再认一次。截图写 `${TMP}`，认完就删（[协议 §9.5](../protocol/wrapping.md#95-视觉层流程) 的隐私规则）。
 
-**怎么连 mirroir-mcp。** 你装好以后跑一次 `mirroir-mcp install-agent`，「mirroir serve」常驻在 127.0.0.1 上。插件按[协议 §9.2](../protocol/wrapping.md#92-包装本机-http-服务)、[§9.3](../protocol/wrapping.md#93-包装-mcp-服务) 当它的 MCP 客户端，地址和令牌是插件设置，令牌 `secret: true`。屏幕录制和辅助功能授给「mirroir serve」，不授给 usuyo。`health` 读它的 `tools/list`：`type_text`、`press_key`、`open_url`、`set_network`、`shake`、`generate_skill`、`run_steps`、`drag`、`long_press` 里有任何一个露出来，回 `dependency-missing`，`hint` 写要你在 `permissions.json` 里只留 `tap`、`swipe`、`press_back`、`press_home`、`scroll_to`；`launch_app` 也关掉。
+**装和管**（用户 11-12）。mirroir 不要你到终端里装。设置里有「手机」一页，做成设置那样：装（照[协议的资产](../protocol/distribution.md)取官方 release 的 `darwin-arm64` 包，钉版本、对 `SHA256SUMS`，放在按机器目录里）、屏幕录制和辅助功能各自给没给（给的那一下系统只认你自己点，页上有打开系统设置对应那一栏的按钮）、iPhone 镜像连没连上、试跑一次（演练模式，只读屏不点）、装的版本和有没有新的、卸掉。`install-agent` 不接受 npx 装的副本；接不接受 release 包里的那一份，还没核。
+
+**怎么连 mirroir-mcp。** 装好以后「mirroir serve」常驻在 127.0.0.1 上（`mirroir-mcp install-agent`，由那一页替你跑）。插件按[协议 §9.2](../protocol/wrapping.md#92-包装本机-http-服务)、[§9.3](../protocol/wrapping.md#93-包装-mcp-服务) 当它的 MCP 客户端，地址和令牌是插件设置，令牌 `secret: true`。屏幕录制和辅助功能授给「mirroir serve」，不授给 usuyo。`health` 读它的 `tools/list`：`type_text`、`press_key`、`open_url`、`set_network`、`shake`、`generate_skill`、`run_steps`、`drag`、`long_press` 里有任何一个露出来，回 `dependency-missing`，`hint` 写要你在 `permissions.json` 里只留 `tap`、`swipe`、`press_back`、`press_home`、`scroll_to`；`launch_app` 也关掉。
 
 **链接怎么到 usuyo。** 点「复制链接」之前，驱动记下 Mac 剪贴板的 `changeCount`；点完以后每 200 毫秒看一次，变了就读字符串，取第一个链接；8 秒没变，这一条记「没拿到链接」，接着下一条，连着三条没拿到，回 `upstream-changed`。不往剪贴板写任何东西（写进去的会经通用剪贴板同步到手机）。剪贴板的原内容由宿主在调用前后存、放回（整机锁和这一步还没做，[协议 §3.13](../protocol/fetch.md#313-宿主和-plugin-kit-现在做到的11-11)）（[协议 §3.1](../protocol/fetch.md#31-运行器与节奏)）。读剪贴板的是插件进程，macOS 26 的「程序读剪贴板先问」弹窗记在 usuyo 上（推断，[协议 §7](../protocol/isolation.md#7-权限与隔离)）。
 
@@ -215,9 +217,7 @@ permissions:
 
 - iPhone 镜像在你那里能不能用（中国大陆的可用性 Apple 文档没写）；接力和通用剪贴板开着。
 - 主屏上微信、小红书的图标名能不能按字点到；mirroir-mcp 的 `ocrLanguages` 加上简体中文以后认不认得。
-- 在 iPhone 的「备忘录」里手动复制一段字，看 Mac 的剪贴板几秒内有没有变：这决定[第 4 节](#4-驱动和流程分开)的读法能不能用。
 - macOS 15.6.1 上 mirroir-mcp 点按时抢不抢前台、动不动指针（它测的是 26.5）。
-- 视频号分享菜单里有没有「复制链接」，复制出来是不是 `weixin.qq.com/sph/` 链接。
 - 小红书笔记页的分享面板里「复制链接」的位置和字样；收藏页「笔记」「专辑」两级的字样。
 - 微信收藏的分类里有没有「链接」，文章页「…」菜单里的字样。
 - 每个流程的演练模式回报；真跑五条后第二天账号有没有提示。
