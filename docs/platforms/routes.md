@@ -251,6 +251,8 @@ yt-dlp --ignore-config --no-playlist --no-progress --fixup never \
 - **代理。** 宿主的本机代理和传给插件的代理变量还没做（[协议 §3.13](../protocol/fetch.md#313-宿主和-plugin-kit-现在做到的11-11)）；现在插件的出站直接出去，和已有的四个插件一样，命令里先不带 `--proxy`。代理做好以后，插件的网络只经它（[协议 §7](../protocol/isolation.md#7-权限与隔离)），yt-dlp 只用 `--proxy` 给的地址，`--ignore-config` 不读你的 `yt-dlp.conf`；宿主代理再按你的规则出去：国内平台直连，YouTube、X、Reddit、Instagram 走固定的一个出口（[README 第 4 节](README.md#4-怎么相对安全地试)）。
 - yt-dlp 没有写操作；`--` 在链接前。
 
+**MediaCrawler 的结果文件（11-12）。** 小红书、抖音、快手、B站、微博、知乎六个插件各有一种方法 `mediacrawler`：你自己跑 [MediaCrawler](https://github.com/NanmiCoder/MediaCrawler) 得到的帖子结果文件（JSON 或 JSON Lines，单个或整个输出文件夹打成的 zip），选给 usuyo，它列出里面每条的链接，内容再由那个平台自己的方法取。这种方法不联网、不调用也不附带 MediaCrawler，没有抄它的代码；层级写成 `private-api`、默认关着，因为文件是它带着你的登录采来的，封号记录在采集那一侧（[#865](https://github.com/NanmiCoder/MediaCrawler/issues/865)）。评论文件、CSV、SQLite 不读。手上没有真的结果文件，文件的样子照它存储部分的代码写（提交 `306ab4c`），没实测；作者名在它的文件里是打了码的；小红书的链接不带 `xsec_token`，取内容时可能被送回首页。
+
 <a id="16-依据"></a>
 ## 16. 依据
 
