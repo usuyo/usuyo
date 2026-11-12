@@ -48,6 +48,7 @@
 | 本机接口 | 一个口 127.0.0.1:47615；令牌、握手、只能交的令牌；事件流；列出回收站 | `crates/usuyo-api`、契约在 `apps/desktop/web/src/api/endpoints.ts` |
 | 桌面壳 | 起内核、登录窗口、访客身份窗口 | `apps/desktop/src-tauri` |
 | 平台插件 | 一个平台一个插件，插件里几种方法（[011](#011-更多平台)）：小红书（按链接取，清单由浏览器脚本交）、微信视频号（按分享链接取，视频另用元宝取）、B 站（取、列公开收藏夹、登录后列自己的）、X（按链接取，书签和喜欢由浏览器脚本交或读官方归档）；`just dev-plugins` 装 `usuyo-fetch/` 下每个编得过的 | 仓库旁边的 `usuyo-fetch/`，各是一个仓库；[platforms](platforms/README.md) |
+| 手机页 | 守护进程管「手机」那一页（只在 macOS 上）：系统、装换卸 mirroir（钉版本、对 sha256、放按机器目录）、经「mirroir serve」问授权和镜像、试剪贴板、只读屏的演练、adb 的设备；「mirroir serve」常驻那一步要用户在终端里做；没有对真的驱动和手机跑过 | `crates/usuyo-core/src/phone/`、[platforms/phone.md §12](platforms/phone.md#12-手机页做到的11-12-代码) |
 | 变成文字 | 格式、协议、plugin-kit 的循环、常驻转换进程、转录的写入和按层找、三个转换插件（`media`、`asr-sherpa`、`ocr-vision`）、模型下载、排任务、条目页的几面和索引、接口做了；界面还没做 | [feature 003](features/003-transforms.md) |
 
 ```mermaid
@@ -86,7 +87,7 @@ flowchart LR
 | 资料库格式（[SPEC §1](spec/library.md#1-资料库-v1第-1-层)） | v1 草案，`crates/usuyo-contract`、`crates/usuyo-library` 照它实现 | 联网后并身份；同步（[008](#008-文字同步)） |
 | 改动提议、改动记录（[SPEC §1.5](spec/library.md#15-改动提议)、[§1.6](spec/library.md#16-改动记录)） | v1 草案，资料库层能写能撤 | 接受提议的流程、界面（[006](#006-agent)） |
 | 宿主 ↔ 界面（[SPEC 本机接口](spec/local-api.md#本机接口第-2-层11-11-照代码)） | 照代码写了；契约文件是 `apps/desktop/web/src/api/endpoints.ts` | 窗口用的路径还不带 `/v1/`、分页、OpenAPI 描述 |
-| 内核推的事件 | server-sent events，九种事件（同上） | 补发、信封 |
+| 内核推的事件 | server-sent events，十种事件（同上） | 补发、信封 |
 | MCP 工具 | 没写，没实现 | 内核服务契约和工具（[006](#006-agent)） |
 | 命令行 | `init`、`add`、`get`、`search`、`reindex`、`daemon` | 不再加命令（[§1](#1-用户定下的做法)） |
 | 搜索语法 | tantivy 索引能搜；语法没写 | 查询串、筛选、分页（[006](#006-agent) 的契约里定） |

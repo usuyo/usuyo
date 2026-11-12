@@ -22,11 +22,11 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::services::ServeFile;
 use tower_http::set_header::SetResponseHeaderLayer;
 use usuyo_core::view::{
-    FileReaderView, ImportEntryView, ImportView, ItemView, MapView, PluginView, PluginsView,
-    SearchHit, SettingsView, SiteView, SourceView, TakeResponse, Topic, TransformsView, TrashView,
-    VisitorView,
+    FileReaderView, ImportEntryView, ImportView, ItemView, MapView, PhoneDryRun, PhoneView,
+    PluginView, PluginsView, SearchHit, SettingsPane, SettingsView, SiteView, SourceView,
+    TakeResponse, Topic, TransformsView, TrashView, VisitorView,
 };
-use usuyo_core::{DeliveredLink, Engine, ImportChoice, Links, SettingsPatch, Via};
+use usuyo_core::{DeliveredLink, DriverAction, Engine, ImportChoice, Links, SettingsPatch, Via};
 use usuyo_plugin::protocol::StorageState;
 
 use crate::clients::{Client, ClientKind};
@@ -106,6 +106,13 @@ pub(crate) fn build(engine: Engine, gate: Arc<Gate>, origins: &[String]) -> Rout
             "/transforms/{owner}/{repo}/models/{name}/remove",
             post(model_remove),
         )
+        .route("/phone", get(phone))
+        .route("/phone/ios/driver/install", post(phone_install))
+        .route("/phone/ios/driver/update", post(phone_update))
+        .route("/phone/ios/driver/remove", post(phone_remove))
+        .route("/phone/open-settings", post(phone_open_settings))
+        .route("/phone/ios/clipboard-test", post(phone_clipboard_test))
+        .route("/phone/ios/dry-run", post(phone_dry_run))
         .route("/settings", get(settings).patch(patch_settings))
         .route("/trash/release-held", post(release_held))
         .route("/search", get(search))
@@ -494,6 +501,46 @@ async fn model_remove(
 ) -> Result<StatusCode, Problem> {
     blocking(move || s.engine.remove_model(&plugin_id(&owner, &repo), &name)).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+async fn phone(State(s): State<AppState>) -> ApiResult<PhoneView> {
+    Ok(Json(s.engine.phone_view().await?))
+}
+
+async fn phone_install(State(s): State<AppState>) -> ApiResult<PhoneView> {
+    Ok(Json(s.engine.phone_driver(DriverAction::Install).await?))
+}
+
+async fn phone_update(State(s): State<AppState>) -> ApiResult<PhoneView> {
+    Ok(Json(s.engine.phone_driver(DriverAction::Update).await?))
+}
+
+async fn phone_remove(State(s): State<AppState>) -> ApiResult<PhoneView> {
+    Ok(Json(s.engine.phone_driver(DriverAction::Remove).await?))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PaneRequest {
+    pane: SettingsPane,
+}
+
+/// 打开系统设置的那一栏（或 iPhone 镜像这个 App），204。
+async fn phone_open_settings(
+    State(s): State<AppState>,
+    req: Result<Json<PaneRequest>, JsonRejection>,
+) -> Result<StatusCode, Problem> {
+    let PaneRequest { pane } = body(req)?;
+    s.engine.open_phone_settings(pane).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn phone_clipboard_test(State(s): State<AppState>) -> ApiResult<PhoneView> {
+    Ok(Json(s.engine.phone_clipboard_test().await?))
+}
+
+async fn phone_dry_run(State(s): State<AppState>) -> ApiResult<PhoneDryRun> {
+    Ok(Json(s.engine.phone_dry_run().await?))
 }
 
 async fn settings(State(s): State<AppState>) -> ApiResult<SettingsView> {

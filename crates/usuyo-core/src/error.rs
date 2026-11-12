@@ -16,6 +16,8 @@ pub enum Error {
     Json(#[from] serde_json::Error),
     #[error(transparent)]
     Model(#[from] crate::models::ModelError),
+    #[error(transparent)]
+    Phone(#[from] crate::phone::PhoneError),
     #[error("jobs database: {0}")]
     Jobs(#[from] rusqlite::Error),
     #[error("io error at {path}: {source}")]
@@ -62,6 +64,7 @@ impl Error {
             Error::Jobs(_) | Error::Json(_) | Error::Io { .. } | Error::Task(_) => "internal",
             Error::Model(crate::models::ModelError::Busy) | Error::Conflict(_) => "conflict",
             Error::Model(_) => "internal",
+            Error::Phone(e) => e.code(),
             Error::InvalidArgs(_) => "invalid-args",
             Error::NotFound(_) => "not-found",
             Error::UnsupportedInput(_) => "unsupported-input",
@@ -82,6 +85,7 @@ impl Error {
         match self {
             Error::Hinted { hint, .. } => Some(hint),
             Error::Plugin(PluginError::Call { failure, .. }) => failure.hint.as_deref(),
+            Error::Phone(e) => Some(e.hint()),
             _ => None,
         }
     }

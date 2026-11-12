@@ -32,6 +32,7 @@
 | `import-updated` | 一次导入变了：列了一页、认了一段身份、确认了、停下或接着、收下了一条、删掉了 | `id`（导入的） |
 | `plugins-updated` | 插件的暂停变了（被限流或拦住、「现在再试」「先别试」）、开关了一种方法、站点的登录、访客身份、密钥设置、设置里的 `network` 变了 | 无 |
 | `transforms-updated` | 模型开始下、下好了、没下成、删掉了；设置里的 `transforms.auto` 变了 | 无 |
+| `phone-updated` | 手机的驱动开始装、装好、没装上、卸掉；剪贴板试出了结果 | 无 |
 
 - **错误**：照 [§0.3](conventions.md#03-错误模型)：`application/problem+json`，字段 `type`（`urn:usuyo:problem:<code>`）、`title`、`status`、`detail`、`instance`（`urn:uuid:<随机>`）、`code`、`retryable`、`hint?`；插件报的另带 `plugin`，一律 502。`hint` 是给人看的一句中文：插件给了就是它的；内核自己报的，列来源、开始导入、翻预览、确认、从文件导入、交内容这几条的 400、422（还有找不到读文件的插件的 404、文件太大的 413）都带，这时 `detail` 是英文，留给日志。可重试的带 `Retry-After: 5`。没有的路径 404 `not-found`，方法不对 405 `invalid-args`。
 - **上限**：请求体 64 KiB，超了 413 `too-large`；握手 256 字节；登录和访客身份的 cookie 256 KiB；`/v1/batches` 4 MiB；交文件 `POST /file-imports` 16 GiB、`POST /v1/file-imports` 256 MiB（内核边收边数，超了 413 带 `hint`，写了一半的副本去掉）；每个请求 30 秒，超了 504 `timeout`，列来源（`GET /plugins/{owner}/{repo}/sources`）120 秒，交文件 30 分钟；搜索 `limit` 默认 50，限在 1 到 200。
@@ -81,6 +82,7 @@
 | `POST /transforms/{owner}/{repo}/models/{name}/download` | 下这个模型（[§1.1](library.md#11-目录树) 按机器目录的 `models/`）：已经在了回 200 `{state: "present"}`，开始下或已经在下回 202 `{state: "downloading"}`；插件或模型不在回 404。下完以后等它的转换回到排着，那些条目发 `item-updated` |
 | `POST /transforms/{owner}/{repo}/models/{name}/remove` | 删掉这个模型，204；正在下回 409 `conflict`。插件的进程在后台关掉，之后要它的转换等模型 |
 | `GET /settings`；`PATCH /settings` | 见下「设置」 |
+| `GET /phone` 和 `/phone/…` 六条 | 见下「手机」 |
 | `GET /v1/ping` | 投递：`{name: "usuyo", version, protocol: 1, client}`，`client` 是投递令牌的名字，主令牌是 `null` |
 | `POST /v1/deliver` | 投递：见下 |
 | `POST /v1/batches` | 投递：见下 |
@@ -97,6 +99,14 @@
 - `PATCH /settings`，`{trashDays?, network?: {mode, proxy?}, transforms?: {auto}}`，给了的几项才改，改好回整份，马上生效。`trashDays` 取 30、90 或 `null`，记一次资料库的 `set-setting`；`network` 写进按机器的 `settings.json` 的 `network.proxy`（`system`、`direct` 或代理地址，`custom` 才带 `proxy`，地址是 `http://`、`socks5://`、`socks5h://`，有主机、没有路径），之后的插件调用和模型下载照它走；`transforms.auto` 关上时自动排的转换（没在跑的）都删掉，打开时照启动那样补排。不认识的字段、不合的值回 400 `invalid-args`，原因里不写代理地址。`settings.json` 里别的键原样留着；这个文件只有自己能读（0600，先写同样 0600 的临时文件再改名），读回来的代理地址不带密码，交回一个不带密码、别处一样的地址时留着存着的密码。
 
 守护进程另有四条，不在 `endpoints.ts` 的 `paths` 里：`POST /handshake`（上面）；`POST /reindex`，命令行用，回 `{items, unreadable}`；`GET /media/<itemId>/<层>`，地址由 `ItemView` 给；`GET /events` 在 `paths` 里，但不走 30 秒的时限。
+
+<a id="手机"></a>
+**手机**（[手机那条路 §12](../platforms/phone.md#12-手机页做到的11-12-代码)）：只在 macOS 上的守护进程有，别处回 404 `not-found`（`hint`「这台电脑上的 usuyo 内核不管手机。」）。
+- `GET /phone` 回 `PhoneView`，现读：macOS 版本（`sw_vers`）、有没有 `/System/Applications/iPhone Mirroring.app`、驱动、两项授权、镜像、上一次剪贴板试验、adb 和设备。比 `endpoints.ts` 多一项 `ios.driver.step?: {text, commands}`：要你自己在终端里做的那一步（登记、重新登记或停掉「mirroir serve」）。`driver.state` 没装上是 `failed`，`hint` 是一句原因。
+- `POST /phone/ios/driver/install`、`…/update`：已经是钉的那一版就直接回；不然马上回 `installing`，在后台下，装好或没装上发 `phone-updated`。这台机器没有对应架构的包时回 422 `unsupported-input`。`…/remove`：删掉按机器目录里的驱动，回 `PhoneView`；正在装回 409 `conflict`。不停「mirroir serve」、不删它的登录项，也不动系统设置里的授权。
+- `POST /phone/open-settings`，`{pane}`（`screen-recording`、`accessibility`、`iphone-mirroring`，别的字段回 400），204；打不开回 500 `internal`。
+- `POST /phone/ios/clipboard-test`：马上回 `waiting`（`waitSec` 是 10），有结果发 `phone-updated`；还在等时再点回同一次。读不出 `changeCount` 回 500。
+- `POST /phone/ios/dry-run`：回 `PhoneDryRun`，没有 `cards`。「mirroir serve」不在（没有令牌文件、连不上）回 424 `dependency-missing`；它的工具报错（镜像没连上、没授权）也是 424；回话看不懂（令牌不对、不是 JSON）回 503 `unavailable`；超时 504。
 
 **链接从哪来**：你给的链接都可以是 App 的整段分享文字。整段就是一条 http(s) 链接就用它；不然取文字里第一段 `http://`、`https://` 开头的（不分大小写），到第一个空白、控制字符、非 ASCII 字符、引号或尖括号为止，末尾的 `.,;:!?)]}` 去掉；之后照常核 http(s)、主机、用户名密码、长度。没有链接的回错，带一句中文 `hint`；有几条时只看第一条，第一条没收下时 `hint` 里说「只看第一条链接」。`POST /items` 的 `input`、`POST /v1/deliver` 的 `url` 和 `text`、`POST /v1/batches` 每条的 `url`、列来源的 `link`、收件文件夹的 `.txt` 都照它（`usuyo-core` 的 `link_in`），插件拿到的总是一条干净的链接。
 

@@ -3799,6 +3799,7 @@ name = "usuyo-api"
 version = "0.0.0"
 dependencies = [
  "axum",
+ "flate2",
  "futures-util",
  "getrandom 0.4.3",
  "hmac",
@@ -3807,6 +3808,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "tar",
  "tempfile",
  "thiserror",
  "tokio",

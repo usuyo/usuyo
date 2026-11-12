@@ -98,6 +98,34 @@ async fn clear_login(
         .map_err(|e| plain("清掉这个站点的网页数据", &e))
 }
 
+/// `open_settings_pane` 能打开的，只有这三样：系统设置里屏幕录制、辅助功能那一栏，和 iPhone 镜像这个 App。
+/// 守护进程的 `POST /phone/open-settings` 用同一张表（`crates/usuyo-core/src/phone/mod.rs`）。
+fn settings_target(pane: &str) -> Option<&'static str> {
+    match pane {
+        "screen-recording" => {
+            Some("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
+        }
+        "accessibility" => {
+            Some("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+        }
+        "iphone-mirroring" => Some("/System/Applications/iPhone Mirroring.app"),
+        _ => None,
+    }
+}
+
+/// 打开系统设置的那一栏（或 iPhone 镜像），给授权的那一下由你自己点；壳不改任何设置。
+#[tauri::command]
+fn open_settings_pane(app: tauri::AppHandle, pane: String) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    let target = settings_target(&pane).ok_or_else(|| format!("没有这一栏：{pane}"))?;
+    let opened = if target.starts_with('/') {
+        app.opener().open_path(target, None::<&str>)
+    } else {
+        app.opener().open_url(target, None::<&str>)
+    };
+    opened.map_err(|e| plain("打开系统设置", &anyhow::Error::new(e)))
+}
+
 fn main() {
     let app = tauri::Builder::default()
         // 「打开原帖」经它交给系统浏览器；能开哪些网址由 capabilities/default.json 管（只有 http、https）。
@@ -108,7 +136,8 @@ fn main() {
             open_visitor,
             login_done,
             clear_login,
-            clear_visitor
+            clear_visitor,
+            open_settings_pane
         ])
         .setup(|app| {
             let plugins = app.path().resource_dir()?.join("plugins");
@@ -150,4 +179,32 @@ fn main() {
             handle.state::<Arc<Daemon>>().stop();
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::settings_target;
+
+    #[test]
+    fn only_the_three_panes_open() {
+        assert!(
+            settings_target("screen-recording")
+                .unwrap()
+                .ends_with("Privacy_ScreenCapture")
+        );
+        assert!(
+            settings_target("accessibility")
+                .unwrap()
+                .ends_with("Privacy_Accessibility")
+        );
+        assert_eq!(
+            settings_target("iphone-mirroring"),
+            Some("/System/Applications/iPhone Mirroring.app")
+        );
+        assert_eq!(settings_target("general"), None);
+        assert_eq!(
+            settings_target("x-apple.systempreferences:com.apple.Users"),
+            None
+        );
+    }
 }

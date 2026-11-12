@@ -53,5 +53,8 @@ usuyo-plugin = { version = "0.0.0", path = "../usuyo-plugin", default-features =
 workspace = true
 
 [dev-dependencies]
+# 手机那一页的测试：假 release 服务器上的 tar.gz
+flate2 = "1.1.11"
 http-body-util = "0.1.5"
+tar = { version = "0.4.46", default-features = false }
 tempfile = "3.27.0"

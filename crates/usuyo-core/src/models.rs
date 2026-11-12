@@ -159,6 +159,35 @@ impl Net {
         })
     }
 
+    /// 只连本机回环地址、可以走明文 http 的下载（测试对着本机起的假 release 服务器用）；
+    /// 断流 `stall` 就算断。
+    pub(crate) fn loopback(stall: Duration) -> Result<Net, ModelError> {
+        let mut n = Net::system(ProxySetting::Direct)?;
+        n.policy = Some((
+            Policy {
+                public: |ip| ip.is_loopback(),
+                ..Policy::strict()
+            },
+            None,
+        ));
+        n.https_only = false;
+        n.stall = stall;
+        Ok(n)
+    }
+
+    /// 连本机服务的客户端：不走代理、不跟跳转，每次请求最多 `timeout`。
+    pub(crate) fn local_client(&self, timeout: Duration) -> Result<reqwest::Client, ModelError> {
+        reqwest::Client::builder()
+            .no_proxy()
+            .redirect(reqwest::redirect::Policy::none())
+            .connect_timeout(Duration::from_secs(2))
+            .timeout(timeout)
+            .user_agent(concat!("usuyo/", env!("CARGO_PKG_VERSION")))
+            .tls_backend_preconfigured((*self.tls).clone())
+            .build()
+            .map_err(|e| ModelError::Network(e.to_string()))
+    }
+
     /// 这次下载的地址策略和代理（`None` 是直连）。
     async fn policy(&self) -> Result<(Policy, Option<String>), ModelError> {
         if let Some(fixed) = &self.policy {
@@ -194,7 +223,12 @@ impl Net {
 
     /// 把 `url` 下到 `part`：`part` 里已有的当成前面那一段，用 Range 接着下；服务器不认 Range 就从头来。
     /// 中途断了 `part` 留着，下次接着；多出清单大小的整个删掉。
-    async fn download(&self, url: &Url, part: &Path, size: u64) -> Result<(), ModelError> {
+    pub(crate) async fn download(
+        &self,
+        url: &Url,
+        part: &Path,
+        size: u64,
+    ) -> Result<(), ModelError> {
         let mut have = match tokio::fs::metadata(part).await {
             Ok(m) => m.len(),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => 0,
@@ -335,7 +369,7 @@ impl Net {
 }
 
 /// 日志里只写主机和路径，不写查询串。
-fn redact(url: &Url) -> String {
+pub(crate) fn redact(url: &Url) -> String {
     format!(
         "{}://{}{}",
         url.scheme(),
@@ -543,7 +577,7 @@ impl Models {
     }
 }
 
-fn hash_file(path: &Path) -> Result<String, ModelError> {
+pub(crate) fn hash_file(path: &Path) -> Result<String, ModelError> {
     let mut f = std::fs::File::open(path).map_err(io(path))?;
     let mut h = Sha256::new();
     let mut buf = vec![0u8; 1 << 16];

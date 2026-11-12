@@ -17,6 +17,7 @@ mod methods;
 mod models;
 mod owner_only;
 mod pace;
+mod phone;
 mod registry;
 mod settings;
 mod share_text;
@@ -35,6 +36,7 @@ pub use jobs::{TransformJob, TransformJobKind, TransformState};
 pub use layout::{HashLayout, Layout, LayoutItem, Placed};
 pub use models::{ModelError, ModelState};
 pub use owner_only::write_private;
+pub use phone::{Asset, Downloads, DriverAction, PhoneConfig, PhoneError, Release};
 pub use settings::{
     NetworkMode, NetworkPatch, SettingsPatch, TransformsPatch, proxy_setting, remember_library,
     transforms_auto,

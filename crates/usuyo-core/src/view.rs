@@ -1,6 +1,6 @@
 //! 给接口的视图，形状照 `apps/desktop/web/src/api/endpoints.ts`（camelCase、可缺的字段不写）。
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// 平台的显示名由获取插件给，内核不认识具体平台。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -867,6 +867,177 @@ pub enum Event {
     PluginsUpdated,
     /// 模型在下、下好了、没下成、删掉了。重新拉 `/transforms`。
     TransformsUpdated,
+    /// 手机那一页的事变了：驱动开始装、装好、没装上、卸掉，剪贴板试出了结果。重新拉 `/phone`。
+    PhoneUpdated,
+}
+
+// —— 手机（`endpoints.ts` 的 `PhoneView`、`PhoneDryRun`）——
+
+/// 系统给没给：`unknown` 是从驱动那里看不出来。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum GrantState {
+    Given,
+    Missing,
+    Unknown,
+}
+
+/// `POST /phone/open-settings` 能打开的：系统设置里两项授权那一栏，和 iPhone 镜像这个 App。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SettingsPane {
+    ScreenRecording,
+    Accessibility,
+    IphoneMirroring,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct PhoneView {
+    pub ios: PhoneIos,
+    pub android: PhoneAndroid,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct PhoneIos {
+    pub system: PhoneSystem,
+    pub driver: PhoneDriver,
+    pub grants: PhoneGrants,
+    pub mirroring: Mirroring,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub clipboard: Option<ClipboardTest>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct PhoneSystem {
+    pub macos: String,
+    pub mirroring: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct PhoneDriver {
+    pub state: DriverState,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub available: Option<DriverOffer>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hint: Option<String>,
+    /// 要你自己做的一步（契约之外多的一项）：登记、换新或停掉「mirroir serve」常驻。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub step: Option<DriverStep>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum DriverState {
+    Absent,
+    Installing,
+    Present,
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DriverOffer {
+    pub version: String,
+    pub size: u64,
+    pub source: String,
+}
+
+/// 一句话说要做什么、为什么不由 usuyo 做，和要在终端里一条条跑的命令。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DriverStep {
+    pub text: String,
+    pub commands: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct PhoneGrants {
+    pub to: String,
+    pub screen: GrantState,
+    pub accessibility: GrantState,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Mirroring {
+    NotSetUp,
+    Away,
+    Connected,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClipboardTest {
+    pub state: ClipboardState,
+    pub at: String,
+    pub wait_sec: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ClipboardState {
+    Waiting,
+    Arrived,
+    Unchanged,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct PhoneAndroid {
+    /// 没找到是 `null`。
+    pub adb: Option<AdbFound>,
+    pub devices: Vec<AndroidDevice>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AdbFound {
+    pub path: String,
+    pub version: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AndroidDevice {
+    /// 长的只留头尾四位。
+    pub serial: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    pub state: DeviceState,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum DeviceState {
+    Unauthorized,
+    Device,
+    Offline,
+}
+
+/// 演练一次：读到几段字，像哪个流程的第几步；什么都没点。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PhoneDryRun {
+    pub read: usize,
+    #[serde(rename = "match", skip_serializing_if = "Option::is_none")]
+    pub matched: Option<DryRunMatch>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DryRunMatch {
+    pub flow: String,
+    /// 从 1 数。
+    pub step: usize,
+    pub expect: ExpectCount,
+    pub targets: Vec<DryRunTarget>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct ExpectCount {
+    pub matched: usize,
+    pub total: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DryRunTarget {
+    pub label: String,
+    pub found: bool,
 }
 
 #[cfg(test)]

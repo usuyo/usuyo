@@ -1,0 +1,16 @@
+{
+  "name": "mirroir-mcp",
+  "version": "0.47.0",
+  "license": "Apache-2.0",
+  "page": "https://github.com/jfarcand/mirroir-mcp/releases/tag/v0.47.0",
+  "binary": "mirroir-mcp",
+  "assets": [
+    {
+      "arch": "aarch64",
+      "name": "mirroir-mcp-darwin-arm64.tar.gz",
+      "url": "https://github.com/jfarcand/mirroir-mcp/releases/download/v0.47.0/mirroir-mcp-darwin-arm64.tar.gz",
+      "size": 2518002,
+      "sha256": "d93492f4e8f38126c2043f5da6583041c79811685341d51bda2a1296c6c3d236"
+    }
+  ]
+}

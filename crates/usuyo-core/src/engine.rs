@@ -83,6 +83,8 @@ pub struct EngineConfig {
     pub transform_limits: TransformLimits,
     /// 按机器的 `network.proxy`：要联网的插件和模型下载怎么连出去（默认跟系统代理）。
     pub proxy: ProxySetting,
+    /// 手机那一页读什么、跑什么；`None`（默认）时 `/phone…` 回 `not-found`。守护进程换成 [`PhoneConfig::system`]。
+    pub phone: Option<crate::PhoneConfig>,
 }
 
 impl EngineConfig {
@@ -106,6 +108,7 @@ impl EngineConfig {
             power: Arc::new(SystemPower),
             transform_limits: TransformLimits::default(),
             proxy: ProxySetting::System,
+            phone: None,
         }
     }
 }
@@ -205,6 +208,8 @@ pub(crate) struct Inner {
     pub methods: crate::methods::Methods,
     /// 按机器的 `libraries/<libraryId>/imports/`：从文件导入时交进来的文件的副本，一次导入一个文件夹。
     pub import_copies: PathBuf,
+    /// 手机那一页；没配就是 `None`。
+    pub phone: Option<Arc<crate::phone::Phone>>,
 }
 
 #[derive(Clone)]
@@ -266,6 +271,12 @@ impl Engine {
             .or_insert_with(|| "文件".into());
 
         let pacing = crate::pace::combine(&plugins);
+        // 下模型和下手机的驱动共用一份：设置里换了代理，两边一起换。
+        let net = Net::system(config.proxy.clone())?;
+        let phone = config
+            .phone
+            .map(|c| crate::phone::Phone::new(c, &net).map(Arc::new))
+            .transpose()?;
         // 插件的输出目录要和资料库在同一个文件系统上，移进 raw/ 才是改名。
         let work_dir = library.root().join(".usuyo/tmp");
         let transforms = Transforms::new(TransformSetup {
@@ -277,10 +288,7 @@ impl Engine {
                 locale: config.locale.clone(),
                 limits: config.transform_limits,
             },
-            models: Models::new(
-                config.machine_root.join("models"),
-                Net::system(config.proxy.clone())?,
-            ),
+            models: Models::new(config.machine_root.join("models"), net.clone()),
             auto: config.transforms_auto,
             power: config.power,
             cache: config.machine_root.join("cache/transform"),
@@ -323,6 +331,7 @@ impl Engine {
                 settings_lock: Mutex::new(()),
                 methods,
                 import_copies: machine_dir.join("imports"),
+                phone,
             }),
         };
         if engine.inner.index.needs_rebuild() {

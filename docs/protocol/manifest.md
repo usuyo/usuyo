@@ -152,7 +152,7 @@ run:
 | `sites` | `account: in-usuyo` 又做了时必填 | 用到顶层 `sites` 里的哪几个。宿主只把这几个站点的凭据交给这种方法。只有 `account: in-usuyo` 的方法写得了登录站点；`own-phone`、`own-app` 的只能写 `credential: app` 的站点（宿主什么都不交，插件在 `health` 里报登录）；`login: none` 的不写；一种方法最多一个 `browser-profile` 站点 | `[www.bilibili.com]` |
 | `visitors` | `account: visitor` 又做了时必填 | 用到顶层 `visitors` 里的哪几个；和 `login` 无关 | `[www.xiaohongshu.com]` |
 | `perPlatform` | 否 | 多平台插件里某个平台走的路不同时，按平台覆盖这种方法的 `access`、`login`、`sites` | `{bilibili: {access: private-api, login: optional}}` |
-| `drives` | 否 | 驱动哪一样：`iphone`（经 iPhone 镜像）、`android`（经 adb）配 `account: own-phone`，`desktop-app`（这台电脑上一个客户端的窗口）配 `account: own-app`；别的配法不合格。手机页照它说要哪种手机 | `iphone` |
+| `drives` | 否 | 驱动哪一样：`iphone`（经 iPhone 镜像）、`android`（经 adb）配 `account: own-phone`，`desktop-app`（这台电脑上一个客户端的窗口）配 `account: own-app`；别的配法不合格。手机页照它说要哪种手机，只列写了 `iphone`、`android` 的方法；不写也合格，只是不上手机页，所以驱动手机的方法要写上 | `iphone` |
 | `interaction` | 否，默认 `background` | 这次调用用户看不看得见：`background` 只读，不弹菜单、不改剪贴板、不抢焦点、不动指针、不占手机屏幕；`foreground` 是上面任何一样会发生。宿主只拿它排程和加锁（[§3.1](fetch.md#31-运行器与节奏)），不拦、不弹确认 | `foreground` |
 | `delivers` | 否 | `links`：这种方法不在插件进程里跑（浏览器脚本、扩展），由它把链接交给本机接口（[§5](delivery.md#5-投递接口)）。这时不能写 `capabilities` | `links` |
 | `capabilities` | 做了、又没写 `delivers` 时必填 | 能力名到能力声明：`fetch`、`list`、`unfavorite`，字段见 [§2.3](#23-获取插件的字段) 的能力表；做了的至少有 `fetch` 或 `list`。没做的可以写，用来说它做好以后会取得什么（宿主从不调它，`GET /plugins` 照它给 `gets`）；写了也照样检查，只是 `list.order` 可以不写 | |
