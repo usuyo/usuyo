@@ -1647,3 +1647,987 @@ fn staged_files_that_change_after_hashing_are_refused() {
     fs::write(staged.join("images/002.jpg"), b"late").unwrap();
     assert_eq!(lib.add_item(&user(), c).unwrap_err().code(), "invalid-args");
 }
+
+// —— 转录（feature 003 §5、WP5） ——
+
+/// 一次转录的记录；`outputs` 空的写成 `empty`。id 隔一毫秒取，新的一定排在后面。
+fn run_record(
+    job: &str,
+    inputs: &[(&str, &str, &str)],
+    outputs: Vec<usuyo_contract::RunOutput>,
+) -> usuyo_contract::RunRecord {
+    std::thread::sleep(std::time::Duration::from_millis(2));
+    let empty = outputs.is_empty();
+    usuyo_contract::RunRecord {
+        id: usuyo_library::uuid7(),
+        job: job.into(),
+        by: "builtin/test".into(),
+        version: "0.1.0".into(),
+        tool: Some(usuyo_contract::Tool {
+            name: "test".into(),
+            version: "1".into(),
+            extra: Extra::new(),
+        }),
+        model: None,
+        options: serde_json::Map::new(),
+        at: "2026-11-12T03:00:01.123Z".into(),
+        device: usuyo_library::uuid7(),
+        trigger: "auto".into(),
+        redo_of: None,
+        inputs: inputs
+            .iter()
+            .map(|(path, sha256, snapshot)| usuyo_contract::RunInput {
+                path: (*path).into(),
+                sha256: (*sha256).into(),
+                snapshot: (*snapshot).into(),
+                via: vec![],
+                extra: Extra::new(),
+            })
+            .collect(),
+        outputs,
+        empty,
+        reason: empty.then(|| "no-speech".into()),
+        marks: vec![],
+        extra: Extra::new(),
+    }
+}
+
+fn run_output(path: &str, kind: &str, bytes: &[u8]) -> usuyo_contract::RunOutput {
+    usuyo_contract::RunOutput {
+        path: path.into(),
+        kind: kind.into(),
+        size: bytes.len() as u64,
+        sha256: usuyo_library::sha256_hex(bytes),
+        lang: (kind == "asr").then(|| "zh".into()),
+        extra: Extra::new(),
+    }
+}
+
+/// 暂存一个转录文件夹，放进这些文件，连同记录交给 `write_run`。
+fn stage_run(
+    lib: &Library,
+    files: &[(&str, &[u8])],
+    record: usuyo_contract::RunRecord,
+) -> usuyo_library::NewRun {
+    let staged = lib.staging_dir().unwrap();
+    for (path, bytes) in files {
+        let p = staged.join(path);
+        fs::create_dir_all(p.parent().unwrap()).unwrap();
+        fs::write(p, bytes).unwrap();
+    }
+    usuyo_library::NewRun {
+        files: usuyo_library::hash_run_products(&staged).unwrap(),
+        staged,
+        record,
+    }
+}
+
+/// 一条带视频的条目，回它的 id、主快照和画面文件的 (路径, sha256)。
+fn video_item(lib: &mut Library, url: &str) -> (ItemId, String, String, String) {
+    let id = lib
+        .add_item(&user(), capture(lib, url, "正文"))
+        .unwrap()
+        .id()
+        .clone();
+    let sid = lib.item(&id).unwrap().manifest.primary_snapshot.unwrap();
+    let sha = lib
+        .fetch_record(&id, &sid)
+        .unwrap()
+        .files
+        .iter()
+        .find(|f| f.path == "media/video.mp4")
+        .unwrap()
+        .sha256
+        .clone();
+    let path = format!("raw/{sid}/media/video.mp4");
+    (id, sid, path, sha)
+}
+
+fn write_asr(lib: &mut Library, id: &ItemId, input: (&str, &str, &str), text: &str) -> String {
+    let vtt = format!("WEBVTT\n\n00:00.000 --> 00:01.000\n{text}\n");
+    let rec = run_record(
+        "asr",
+        &[input],
+        vec![run_output("asr.vtt", "asr", vtt.as_bytes())],
+    );
+    let rid = rec.id.clone();
+    let run = stage_run(lib, &[("asr.vtt", vtt.as_bytes())], rec);
+    lib.write_run(id, run).unwrap();
+    rid
+}
+
+fn file_of(src: usuyo_library::LayerSource) -> PathBuf {
+    match src {
+        usuyo_library::LayerSource::File(p) => p,
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn a_written_run_is_listed_and_resolves() {
+    let e = env();
+    let mut lib = Library::init(&e.root, &e.machine).unwrap();
+    let (id, sid, path, sha) = video_item(&mut lib, "https://example.com/v");
+    let staged_parent = e.root.join(".usuyo/tmp");
+    let rid = write_asr(&mut lib, &id, (&path, &sha, &sid), "手冲咖啡");
+
+    let runs = lib.runs(&id).unwrap();
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0].id, rid);
+    let dir = e.root.join(id.rel_dir()).join("derived/runs").join(&rid);
+    let written: Value = serde_json::from_slice(&fs::read(dir.join("run.json")).unwrap()).unwrap();
+    assert_valid("run", &written);
+    assert_eq!(
+        fs::read_dir(&staged_parent).unwrap().count(),
+        0,
+        "暂存的已经改名进去"
+    );
+
+    let asr = file_of(lib.resolve_layer(&id, "asr", None).unwrap());
+    assert_eq!(asr, dir.join("asr.vtt").canonicalize().unwrap());
+    assert!(fs::read_to_string(&asr).unwrap().contains("手冲咖啡"));
+    assert_eq!(
+        file_of(lib.resolve_layer(&id, &format!("asr/{rid}"), None).unwrap()),
+        asr
+    );
+    assert_eq!(lib.run_output(&id, &rid, "asr").unwrap(), asr);
+    assert_eq!(
+        lib.resolve_layer(&id, "asr", Some(&usuyo_library::uuid7()))
+            .unwrap_err()
+            .code(),
+        "not-found",
+        "别的快照没有转录"
+    );
+    assert_eq!(
+        lib.resolve_layer(&id, &format!("ocr/{rid}"), None)
+            .unwrap_err()
+            .code(),
+        "not-found",
+        "asr 的那次不当 ocr 给"
+    );
+    assert!(lib.job_done(&id, "asr", &[sha]).unwrap());
+    assert!(!lib.job_done(&id, "ocr", &[]).unwrap());
+}
+
+#[test]
+fn bad_runs_are_refused_and_leave_nothing_behind() {
+    let e = env();
+    let mut lib = Library::init(&e.root, &e.machine).unwrap();
+    let (id, sid, path, sha) = video_item(&mut lib, "https://example.com/v");
+    let vtt: &[u8] = b"WEBVTT\n\n00:00.000 --> 00:01.000\nx\n";
+    let input = (path.as_str(), sha.as_str(), sid.as_str());
+    let good = || run_record("asr", &[input], vec![run_output("asr.vtt", "asr", vtt)]);
+
+    let mut cases: Vec<(&str, usuyo_library::NewRun, &str)> = Vec::new();
+    let mut r = good();
+    r.outputs[0].sha256 = "0".repeat(64);
+    cases.push((
+        "wrong hash",
+        stage_run(&lib, &[("asr.vtt", vtt)], r),
+        "invalid-args",
+    ));
+    let mut r = good();
+    r.outputs[0].size += 1;
+    cases.push((
+        "wrong size",
+        stage_run(&lib, &[("asr.vtt", vtt)], r),
+        "invalid-args",
+    ));
+    cases.push((
+        "undeclared file",
+        stage_run(&lib, &[("asr.vtt", vtt), ("extra.bin", b"x")], good()),
+        "invalid-args",
+    ));
+    cases.push((
+        "run.json from the plugin",
+        stage_run(&lib, &[("asr.vtt", vtt), ("run.json", b"{}")], good()),
+        "invalid-args",
+    ));
+    cases.push((
+        "declared but missing",
+        stage_run(&lib, &[], good()),
+        "invalid-args",
+    ));
+    let mut r = good();
+    r.outputs[0].path = "/etc/hosts".into();
+    cases.push((
+        "absolute output",
+        stage_run(&lib, &[("asr.vtt", vtt)], r),
+        "invalid-args",
+    ));
+    let mut r = good();
+    r.outputs[0].path = "../asr.vtt".into();
+    cases.push((
+        "`..` output",
+        stage_run(&lib, &[("asr.vtt", vtt)], r),
+        "invalid-args",
+    ));
+    let mut r = good();
+    r.inputs[0].path = "raw/../../../x".into();
+    cases.push((
+        "`..` input",
+        stage_run(&lib, &[("asr.vtt", vtt)], r),
+        "invalid-args",
+    ));
+    let mut r = good();
+    r.empty = true;
+    r.reason = Some("no-speech".into());
+    cases.push((
+        "output for an empty run",
+        stage_run(&lib, &[("asr.vtt", vtt)], r),
+        "invalid-args",
+    ));
+    let mut r = run_record("asr", &[input], vec![]);
+    r.reason = None;
+    cases.push((
+        "empty without reason",
+        stage_run(&lib, &[], r),
+        "invalid-args",
+    ));
+    let mut r = good();
+    r.id = "not-a-uuid".into();
+    cases.push((
+        "bad id",
+        stage_run(&lib, &[("asr.vtt", vtt)], r),
+        "invalid-args",
+    ));
+    let run = stage_run(&lib, &[("asr.vtt", vtt)], good());
+    fs::write(run.staged.join("asr.vtt"), b"changed after hashing").unwrap();
+    cases.push(("changed after hashing", run, "invalid-args"));
+    let mut r = good();
+    let long = format!("{}.vtt", "a".repeat(120));
+    r.outputs[0].path = long.clone();
+    cases.push((
+        "path too long",
+        stage_run(&lib, &[(long.as_str(), vtt)], r),
+        "too-large",
+    ));
+    #[cfg(unix)]
+    {
+        let run = stage_run(&lib, &[("asr.vtt", vtt)], good());
+        fs::remove_file(run.staged.join("asr.vtt")).unwrap();
+        std::os::unix::fs::symlink(
+            e.root.join(id.rel_dir()).join("manifest.json"),
+            run.staged.join("asr.vtt"),
+        )
+        .unwrap();
+        cases.push(("symlink", run, "invalid-args"));
+    }
+
+    for (what, run, code) in cases {
+        let staged = run.staged.clone();
+        let err = lib.write_run(&id, run).unwrap_err();
+        assert_eq!(err.code(), code, "{what}: {err}");
+        assert!(!staged.exists(), "{what}: staged folder left behind");
+    }
+    assert!(lib.runs(&id).unwrap().is_empty());
+    assert!(!e.root.join(id.rel_dir()).join("derived/runs").exists());
+    assert_eq!(fs::read_dir(e.root.join(".usuyo/tmp")).unwrap().count(), 0);
+
+    // 同一个 id 不写第二次；条目不在了的不写。
+    let rec = good();
+    lib.write_run(&id, stage_run(&lib, &[("asr.vtt", vtt)], rec.clone()))
+        .unwrap();
+    let again = stage_run(&lib, &[("asr.vtt", vtt)], rec);
+    assert_eq!(lib.write_run(&id, again).unwrap_err().code(), "conflict");
+    lib.apply(
+        &user(),
+        &item_target(&id),
+        Op::MoveToTrash {
+            reason: "delete".into(),
+        },
+    )
+    .unwrap();
+    let late = stage_run(&lib, &[("asr.vtt", vtt)], good());
+    let staged = late.staged.clone();
+    assert_eq!(lib.write_run(&id, late).unwrap_err().code(), "not-found");
+    assert!(!staged.exists());
+
+    // 不是这个库暂存区里的文件夹：不收，也不去删它。
+    let outside = e._dir.path().join("outside");
+    fs::create_dir_all(&outside).unwrap();
+    fs::write(outside.join("asr.vtt"), vtt).unwrap();
+    let run = usuyo_library::NewRun {
+        files: usuyo_library::hash_run_products(&outside).unwrap(),
+        staged: outside.clone(),
+        record: good(),
+    };
+    assert_eq!(lib.write_run(&id, run).unwrap_err().code(), "invalid-args");
+    assert!(outside.join("asr.vtt").exists());
+}
+
+#[test]
+fn a_run_interrupted_before_the_rename_is_cleared_on_open() {
+    let e = env();
+    let mut lib = Library::init(&e.root, &e.machine).unwrap();
+    let (id, sid, path, sha) = video_item(&mut lib, "https://example.com/v");
+    let rec = run_record(
+        "asr",
+        &[(&path, &sha, &sid)],
+        vec![run_output("asr.vtt", "asr", b"WEBVTT\n")],
+    );
+    let run = stage_run(&lib, &[("asr.vtt", b"WEBVTT\n")], rec.clone());
+    // 写到一半：run.json 已经写进暂存，还没改名进去。
+    fs::write(
+        run.staged.join("run.json"),
+        serde_json::to_vec(&rec).unwrap(),
+    )
+    .unwrap();
+    drop(lib);
+    let lib = Library::open(&e.root, &e.machine).unwrap();
+    assert!(!run.staged.exists());
+    assert!(lib.runs(&id).unwrap().is_empty());
+}
+
+#[test]
+fn runs_of_one_job_coexist_and_the_newest_comes_first() {
+    let e = env();
+    let mut lib = Library::init(&e.root, &e.machine).unwrap();
+    let (id, sid, path, sha) = video_item(&mut lib, "https://example.com/v");
+    let first = write_asr(&mut lib, &id, (&path, &sha, &sid), "第一次");
+    let second = write_asr(&mut lib, &id, (&path, &sha, &sid), "第二次");
+    let ids: Vec<String> = lib.runs(&id).unwrap().into_iter().map(|r| r.id).collect();
+    assert_eq!(ids, vec![second.clone(), first.clone()]);
+    let asr = file_of(lib.resolve_layer(&id, "asr", None).unwrap());
+    assert!(fs::read_to_string(asr).unwrap().contains("第二次"));
+    let old = file_of(
+        lib.resolve_layer(&id, &format!("asr/{first}"), None)
+            .unwrap(),
+    );
+    assert!(fs::read_to_string(old).unwrap().contains("第一次"));
+
+    // 同一层是同一个 job、同样的输入；输入不同的另成一层。
+    let other = write_asr(
+        &mut lib,
+        &id,
+        ("raw/x/media/audio.m4a", &"b".repeat(64), &sid),
+        "另一段",
+    );
+    let layers = lib.run_layers(&id).unwrap();
+    assert_eq!(layers.len(), 2);
+    assert_eq!(
+        layers[0]
+            .runs
+            .iter()
+            .map(|r| r.id.clone())
+            .collect::<Vec<_>>(),
+        vec![other]
+    );
+    assert_eq!(
+        layers[1]
+            .runs
+            .iter()
+            .map(|r| r.id.clone())
+            .collect::<Vec<_>>(),
+        vec![second, first]
+    );
+    assert_eq!(layers[1].inputs, vec![sha]);
+    assert_eq!(lib.job_runs(&id, "asr").unwrap().len(), 3);
+    assert!(lib.job_runs(&id, "play").unwrap().is_empty());
+
+    // 最新一次是空的：回 not-found，不往回找旧的；空的也算做好。
+    let empty = run_record("asr", &[(&path, &"c".repeat(64), &sid)], vec![]);
+    lib.write_run(&id, stage_run(&lib, &[], empty)).unwrap();
+    assert_eq!(
+        lib.resolve_layer(&id, "asr", None).unwrap_err().code(),
+        "not-found"
+    );
+    assert!(lib.job_done(&id, "asr", &["c".repeat(64)]).unwrap());
+}
+
+#[test]
+fn done_follows_input_hashes_not_plugin_versions() {
+    let e = env();
+    let mut lib = Library::init(&e.root, &e.machine).unwrap();
+    let (id, sid, path, sha) = video_item(&mut lib, "https://example.com/v");
+    write_asr(&mut lib, &id, (&path, &sha, &sid), "转好了");
+    assert!(
+        lib.job_done(&id, "asr", std::slice::from_ref(&sha))
+            .unwrap()
+    );
+
+    // 再取一次，画面换了：现在要的输入是新文件的哈希，没做好。
+    let mut s = snapshot(&lib, "https://example.com/v", "换过的画面");
+    fs::write(s.staged.join("media/video.mp4"), b"another video").unwrap();
+    s.files = usuyo_library::hash_staged(&s.staged).unwrap();
+    let sid2 = lib.add_snapshot(&id, s).unwrap().unwrap();
+    let sha2 = lib
+        .fetch_record(&id, &sid2)
+        .unwrap()
+        .files
+        .iter()
+        .find(|f| f.path == "media/video.mp4")
+        .unwrap()
+        .sha256
+        .clone();
+    assert_ne!(sha, sha2);
+    assert!(
+        !lib.job_done(&id, "asr", std::slice::from_ref(&sha2))
+            .unwrap()
+    );
+    assert!(
+        lib.job_done(&id, "asr", std::slice::from_ref(&sha))
+            .unwrap()
+    );
+
+    // 换了插件、换了版本做的也算。
+    let mut rec = run_record(
+        "asr",
+        &[(&format!("raw/{sid2}/media/video.mp4"), &sha2, &sid2)],
+        vec![run_output("asr.vtt", "asr", b"WEBVTT\n")],
+    );
+    rec.by = "builtin/other".into();
+    rec.version = "9.9.9".into();
+    lib.write_run(&id, stage_run(&lib, &[("asr.vtt", b"WEBVTT\n")], rec))
+        .unwrap();
+    assert!(
+        lib.job_done(&id, "asr", std::slice::from_ref(&sha2))
+            .unwrap()
+    );
+
+    // 一次转录要盖住要的每一个输入。
+    assert!(!lib.job_done(&id, "asr", &[sha, sha2]).unwrap());
+}
+
+/// `play`、`keyframes`、`asr` 各一次；回 (play 的 id, keyframes 的 id)。
+fn media_runs(
+    lib: &mut Library,
+    id: &ItemId,
+    sid: &str,
+    path: &str,
+    sha: &str,
+) -> (String, String) {
+    let play = run_record(
+        "play",
+        &[(path, sha, sid)],
+        vec![run_output("play.mp4", "play", b"merged")],
+    );
+    let play_id = play.id.clone();
+    lib.write_run(id, stage_run(lib, &[("play.mp4", b"merged")], play))
+        .unwrap();
+    let jpg: &[u8] = b"jpeg bytes";
+    let kf = json!({
+        "snapshot": sid,
+        "durationSec": 7.5,
+        "frames": [{"sec": 0.5, "path": "keyframes/00000500.jpg", "sha256": usuyo_library::sha256_hex(jpg), "width": 320, "height": 180, "scene": null}],
+        "frozenSec": 0.0
+    });
+    let kf_bytes = serde_json::to_vec(&kf).unwrap();
+    let rec = run_record(
+        "keyframes",
+        &[(path, sha, sid)],
+        vec![run_output("keyframes.json", "keyframes", &kf_bytes)],
+    );
+    let kf_id = rec.id.clone();
+    lib.write_run(
+        id,
+        stage_run(
+            lib,
+            &[
+                ("keyframes.json", &kf_bytes),
+                ("keyframes/00000500.jpg", jpg),
+            ],
+            rec,
+        ),
+    )
+    .unwrap();
+    write_asr(lib, id, (path, sha, sid), "口播");
+    (play_id, kf_id)
+}
+
+#[test]
+fn video_prefers_play_and_keyframes_resolve_by_run_and_millisecond() {
+    let e = env();
+    let mut lib = Library::init(&e.root, &e.machine).unwrap();
+    let (id, sid, path, sha) = video_item(&mut lib, "https://example.com/v");
+    let raw = file_of(lib.resolve_layer(&id, "video", None).unwrap());
+    assert!(raw.ends_with("media/video.mp4"));
+    let (play_id, kf_id) = media_runs(&mut lib, &id, &sid, &path, &sha);
+    let play = file_of(lib.resolve_layer(&id, "video", None).unwrap());
+    assert!(
+        play.ends_with(format!("derived/runs/{play_id}/play.mp4")),
+        "{}",
+        play.display()
+    );
+    assert_eq!(
+        file_of(lib.resolve_layer(&id, "video", Some(&sid)).unwrap()),
+        play
+    );
+
+    let frame = file_of(
+        lib.resolve_layer(&id, &format!("frame/{kf_id}/500"), None)
+            .unwrap(),
+    );
+    assert!(frame.ends_with("keyframes/00000500.jpg"));
+    assert_eq!(fs::read(&frame).unwrap(), b"jpeg bytes");
+    for (layer, code) in [
+        (format!("frame/{kf_id}/501"), "not-found"),
+        (format!("frame/{play_id}/500"), "not-found"),
+        (format!("frame/{}/500", usuyo_library::uuid7()), "not-found"),
+        (format!("frame/{kf_id}/../../manifest.json"), "invalid-args"),
+        (format!("frame/{kf_id}/-1"), "invalid-args"),
+        (format!("frame/{kf_id}/99999999999"), "invalid-args"),
+        (format!("frame/{kf_id}"), "invalid-args"),
+        ("frame/../../../x/500".to_owned(), "invalid-args"),
+        ("frame/../runs/500".to_owned(), "invalid-args"),
+        ("asr/../../manifest.json".to_owned(), "invalid-args"),
+    ] {
+        assert_eq!(
+            lib.resolve_layer(&id, &layer, None).unwrap_err().code(),
+            code,
+            "{layer}"
+        );
+    }
+
+    // keyframes.json 在 usuyo 外被改成指到转录文件夹外：算写坏了。
+    let index = e
+        .root
+        .join(id.rel_dir())
+        .join("derived/runs")
+        .join(&kf_id)
+        .join("keyframes.json");
+    let original = fs::read_to_string(&index).unwrap();
+    fs::write(
+        &index,
+        original.replace("keyframes/00000500.jpg", "../../../manifest.json"),
+    )
+    .unwrap();
+    assert_eq!(
+        lib.resolve_layer(&id, &format!("frame/{kf_id}/500"), None)
+            .unwrap_err()
+            .code(),
+        "internal"
+    );
+    fs::write(&index, &original).unwrap();
+
+    // play.mp4 被换成指到条目外的符号链接：不给，也不悄悄换成原样的画面。
+    #[cfg(unix)]
+    {
+        fs::remove_file(&play).unwrap();
+        std::os::unix::fs::symlink("/etc/hosts", &play).unwrap();
+        assert_eq!(
+            lib.resolve_layer(&id, "video", None).unwrap_err().code(),
+            "not-found"
+        );
+    }
+}
+
+#[test]
+fn keyframes_runs_declare_their_frames() {
+    let e = env();
+    let mut lib = Library::init(&e.root, &e.machine).unwrap();
+    let (id, sid, path, sha) = video_item(&mut lib, "https://example.com/v");
+    let jpg: &[u8] = b"jpeg bytes";
+    let index = |frame_path: &str, sha256: &str| {
+        serde_json::to_vec(&json!({
+            "snapshot": sid, "durationSec": 1.0, "frozenSec": 0.0,
+            "frames": [{"sec": 0.5, "path": frame_path, "sha256": sha256, "width": 1, "height": 1, "scene": null}]
+        }))
+        .unwrap()
+    };
+    let try_write = |lib: &mut Library, kf: Vec<u8>, files: &[(&str, &[u8])]| {
+        let rec = run_record(
+            "keyframes",
+            &[(&path, &sha, &sid)],
+            vec![run_output("keyframes.json", "keyframes", &kf)],
+        );
+        let mut all: Vec<(&str, &[u8])> = vec![("keyframes.json", &kf)];
+        all.extend_from_slice(files);
+        let run = stage_run(lib, &all, rec);
+        lib.write_run(&id, run).map_err(|e| e.code())
+    };
+    let good = usuyo_library::sha256_hex(jpg);
+    assert_eq!(
+        try_write(
+            &mut lib,
+            index("keyframes/00000500.jpg", &"0".repeat(64)),
+            &[("keyframes/00000500.jpg", jpg)]
+        ),
+        Err("invalid-args"),
+        "帧的哈希不对"
+    );
+    assert_eq!(
+        try_write(&mut lib, index("keyframes/00000500.jpg", &good), &[]),
+        Err("invalid-args"),
+        "列了的帧不在"
+    );
+    assert_eq!(
+        try_write(
+            &mut lib,
+            index("frames/00000500.jpg", &good),
+            &[("frames/00000500.jpg", jpg)]
+        ),
+        Err("invalid-args"),
+        "帧不在 keyframes/ 下"
+    );
+    assert_eq!(
+        try_write(
+            &mut lib,
+            index("keyframes/00000500.jpg", &good),
+            &[
+                ("keyframes/00000500.jpg", jpg),
+                ("keyframes/00001000.jpg", jpg)
+            ]
+        ),
+        Err("invalid-args"),
+        "没列的帧"
+    );
+    assert_eq!(
+        try_write(&mut lib, b"not json".to_vec(), &[]),
+        Err("invalid-args"),
+        "keyframes.json 读不懂"
+    );
+    assert!(lib.runs(&id).unwrap().is_empty());
+    assert_eq!(
+        try_write(
+            &mut lib,
+            index("keyframes/00000500.jpg", &good),
+            &[("keyframes/00000500.jpg", jpg)]
+        ),
+        Ok(())
+    );
+}
+
+#[test]
+fn ocr_resolves_by_run_and_by_image_key() {
+    let e = env();
+    let mut lib = Library::init(&e.root, &e.machine).unwrap();
+    let (id, sid, _, _) = video_item(&mut lib, "https://example.com/v");
+    let img = lib
+        .fetch_record(&id, &sid)
+        .unwrap()
+        .files
+        .iter()
+        .find(|f| f.path == "images/001.jpg")
+        .unwrap()
+        .clone();
+    let key = &img.sha256[..16];
+    let ocr = |text: &str| {
+        serde_json::to_vec(
+            &json!({"images": [{"input": 0, "imageKey": key, "width": 10, "height": 10,
+            "lines": [{"text": text, "bbox": [0.1, 0.1, 0.5, 0.1], "confidence": 0.9}]}]}),
+        )
+        .unwrap()
+    };
+    let mut ids = Vec::new();
+    for text in ["旧的", "新的"] {
+        let bytes = ocr(text);
+        let rec = run_record(
+            "ocr",
+            &[(&format!("raw/{sid}/images/001.jpg"), &img.sha256, &sid)],
+            vec![run_output("ocr.json", "ocr", &bytes)],
+        );
+        ids.push(rec.id.clone());
+        lib.write_run(&id, stage_run(&lib, &[("ocr.json", &bytes)], rec))
+            .unwrap();
+    }
+    let by_key = file_of(lib.resolve_layer(&id, &format!("ocr/{key}"), None).unwrap());
+    assert!(fs::read_to_string(&by_key).unwrap().contains("新的"));
+    assert_eq!(
+        file_of(lib.resolve_layer(&id, "ocr", None).unwrap()),
+        by_key
+    );
+    let old = file_of(
+        lib.resolve_layer(&id, &format!("ocr/{}", ids[0]), None)
+            .unwrap(),
+    );
+    assert!(fs::read_to_string(old).unwrap().contains("旧的"));
+    assert_eq!(
+        lib.resolve_layer(&id, &format!("ocr/{}", "0".repeat(16)), None)
+            .unwrap_err()
+            .code(),
+        "not-found"
+    );
+    assert_eq!(
+        lib.resolve_layer(&id, "frames", None).unwrap_err().code(),
+        "not-found"
+    );
+}
+
+#[test]
+fn keep_text_moves_exactly_the_binary_products_and_restore_brings_them_back() {
+    let e = env();
+    let mut lib = Library::init(&e.root, &e.machine).unwrap();
+    let (id, sid, path, sha) = video_item(&mut lib, "https://example.com/v");
+    let (play_id, kf_id) = media_runs(&mut lib, &id, &sid, &path, &sha);
+    let before = visible(&e.root);
+    let item_dir = e.root.join(id.rel_dir());
+
+    let b = user();
+    lib.apply(&b, &item_target(&id), Op::KeepText {}).unwrap();
+    let removed = lib.item(&id).unwrap().manifest.text_only.unwrap().removed;
+    let mut expected = vec![
+        format!("derived/runs/{kf_id}/keyframes/00000500.jpg"),
+        format!("derived/runs/{play_id}/play.mp4"),
+        format!("raw/{sid}/images/001.jpg"),
+        format!("raw/{sid}/media/video.mp4"),
+    ];
+    expected.sort();
+    assert_eq!(removed, expected);
+    let entry = lib
+        .trash_entries()
+        .unwrap()
+        .into_iter()
+        .find(|t| t.reason == "keep-text")
+        .unwrap();
+    assert_eq!(entry.files, expected);
+    for rel in &expected {
+        assert!(!item_dir.join(rel).exists(), "{rel}");
+        assert!(
+            e.root
+                .join(".usuyo/trash")
+                .join(&entry.id)
+                .join(rel)
+                .is_file(),
+            "{rel}"
+        );
+    }
+    // run.json 和文字产物留着，转录照样列得出、口播照样找得到。
+    let runs = lib.runs(&id).unwrap();
+    assert_eq!(runs.len(), 3);
+    for r in &runs {
+        assert!(
+            item_dir
+                .join("derived/runs")
+                .join(&r.id)
+                .join("run.json")
+                .is_file()
+        );
+    }
+    assert!(
+        item_dir
+            .join("derived/runs")
+            .join(&kf_id)
+            .join("keyframes.json")
+            .is_file()
+    );
+    assert!(lib.resolve_layer(&id, "asr", None).is_ok());
+    assert_eq!(
+        lib.resolve_layer(&id, "video", None).unwrap_err().code(),
+        "not-found"
+    );
+    assert_eq!(
+        lib.resolve_layer(&id, &format!("frame/{kf_id}/500"), None)
+            .unwrap_err()
+            .code(),
+        "not-found"
+    );
+    assert!(
+        lib.job_done(&id, "play", std::slice::from_ref(&sha))
+            .unwrap()
+    );
+
+    // 撤销：逐字节回来。
+    lib.undo(&b.id, &user()).unwrap();
+    assert_same(&visible(&e.root), &before);
+    assert!(file_of(lib.resolve_layer(&id, "video", None).unwrap()).ends_with("play.mp4"));
+
+    // 在回收站里点「恢复」也一样。
+    lib.apply(&user(), &item_target(&id), Op::KeepText {})
+        .unwrap();
+    let tid = lib.trash_entries().unwrap()[0].id.clone();
+    lib.apply(
+        &user(),
+        &OpTarget {
+            kind: "trash".into(),
+            id: tid,
+        },
+        Op::Restore {},
+    )
+    .unwrap();
+    for rel in &expected {
+        assert!(item_dir.join(rel).is_file(), "{rel}");
+    }
+    assert!(
+        file_of(
+            lib.resolve_layer(&id, &format!("frame/{kf_id}/500"), None)
+                .unwrap()
+        )
+        .is_file()
+    );
+}
+
+#[test]
+fn purging_a_deleted_item_clears_its_runs_and_keep_text_entry() {
+    let e = env();
+    let mut lib = Library::init(&e.root, &e.machine).unwrap();
+    let (id, sid, path, sha) = video_item(&mut lib, "https://example.com/v");
+    media_runs(&mut lib, &id, &sid, &path, &sha);
+    lib.apply(&user(), &item_target(&id), Op::KeepText {})
+        .unwrap();
+    lib.apply(
+        &user(),
+        &item_target(&id),
+        Op::MoveToTrash {
+            reason: "delete".into(),
+        },
+    )
+    .unwrap();
+    let entries = lib.trash_entries().unwrap();
+    assert_eq!(entries.len(), 2);
+    let deleted = entries.iter().find(|t| t.reason == "delete").unwrap();
+    assert!(
+        deleted
+            .files
+            .iter()
+            .any(|f| f.starts_with("derived/runs/") && f.ends_with("/run.json"))
+    );
+    let tid = deleted.id.clone();
+    lib.purge(&user(), &tid).unwrap();
+    assert!(lib.trash_entries().unwrap().is_empty());
+    assert_eq!(
+        fs::read_dir(e.root.join(".usuyo/trash")).unwrap().count(),
+        0
+    );
+    assert!(!e.root.join(id.rel_dir()).exists());
+}
+
+#[test]
+fn platform_subtitles_are_listed_with_language() {
+    let e = env();
+    let mut lib = Library::init(&e.root, &e.machine).unwrap();
+    let mut c = capture(&lib, "https://example.com/v", "正文");
+    let s = c.snapshot.as_mut().unwrap();
+    fs::write(s.staged.join("media/subtitle.zh.vtt"), b"WEBVTT\n").unwrap();
+    fs::write(s.staged.join("media/en.vtt"), b"WEBVTT\n").unwrap();
+    fs::write(s.staged.join("media/notes.vtt"), b"WEBVTT\n").unwrap();
+    let mut en = MediaFile {
+        path: "media/en.vtt".into(),
+        kind: "subtitle".into(),
+        group: None,
+        extra: Extra::new(),
+    };
+    en.extra.insert("lang".into(), json!("en"));
+    s.fetch.media.push(MediaFile {
+        path: "media/subtitle.zh.vtt".into(),
+        kind: "subtitle".into(),
+        group: None,
+        extra: Extra::new(),
+    });
+    s.fetch.media.push(en);
+    s.fetch.media.push(MediaFile {
+        path: "media/notes.vtt".into(),
+        kind: "subtitle".into(),
+        group: None,
+        extra: Extra::new(),
+    });
+    s.files = usuyo_library::hash_staged(&s.staged).unwrap();
+    let id = lib.add_item(&user(), c).unwrap().id().clone();
+    let sid = lib.item(&id).unwrap().manifest.primary_snapshot.unwrap();
+    let subs = lib.platform_subtitles(&id).unwrap();
+    let got: Vec<(&str, Option<&str>)> = subs
+        .iter()
+        .map(|s| (s.path.as_str(), s.lang.as_deref()))
+        .collect();
+    assert_eq!(
+        got,
+        vec![
+            ("media/subtitle.zh.vtt", Some("zh")),
+            ("media/en.vtt", Some("en")),
+            ("media/notes.vtt", None),
+        ]
+    );
+    assert!(subs.iter().all(|s| s.snapshot == sid && s.file.is_file()));
+    assert_eq!(fs::read(&subs[0].file).unwrap(), b"WEBVTT\n");
+    // 只留文字以后字幕还在。
+    lib.apply(&user(), &item_target(&id), Op::KeepText {})
+        .unwrap();
+    assert_eq!(lib.platform_subtitles(&id).unwrap().len(), 3);
+}
+
+#[test]
+fn video_without_a_snapshot_finds_play_in_any_snapshot() {
+    let e = env();
+    let mut lib = Library::init(&e.root, &e.machine).unwrap();
+    let (id, sid, _, _) = video_item(&mut lib, "https://example.com/v");
+    // 再取一次只拿到分开的画面：新快照的输出少，主快照还是第一份。
+    let mut s = snapshot(&lib, "https://example.com/v", "x");
+    fs::remove_file(s.staged.join("page.html")).unwrap();
+    fs::remove_file(s.staged.join("images/001.jpg")).unwrap();
+    fs::write(s.staged.join("media/video.mp4"), b"split video").unwrap();
+    s.fetch.extra.remove("html");
+    s.fetch.images.clear();
+    s.fetch.text = None;
+    s.files = usuyo_library::hash_staged(&s.staged).unwrap();
+    let sid2 = lib.add_snapshot(&id, s).unwrap().unwrap();
+    assert_eq!(
+        lib.item(&id).unwrap().manifest.primary_snapshot.as_deref(),
+        Some(sid.as_str())
+    );
+    let play = run_record(
+        "play",
+        &[(
+            &format!("raw/{sid2}/media/video.mp4"),
+            &"d".repeat(64),
+            &sid2,
+        )],
+        vec![run_output("play.mp4", "play", b"merged")],
+    );
+    let play_id = play.id.clone();
+    lib.write_run(&id, stage_run(&lib, &[("play.mp4", b"merged")], play))
+        .unwrap();
+    let any = file_of(lib.resolve_layer(&id, "video", None).unwrap());
+    assert!(any.ends_with(format!("{play_id}/play.mp4")));
+    assert_eq!(
+        file_of(lib.resolve_layer(&id, "video", Some(&sid2)).unwrap()),
+        any
+    );
+    let first = file_of(lib.resolve_layer(&id, "video", Some(&sid)).unwrap());
+    assert!(first.ends_with(format!("raw/{sid}/media/video.mp4")));
+}
+
+#[test]
+fn keep_text_entry_restores_after_the_item_comes_back_from_the_trash() {
+    let e = env();
+    let mut lib = Library::init(&e.root, &e.machine).unwrap();
+    let (id, sid, path, sha) = video_item(&mut lib, "https://example.com/v");
+    let (play_id, kf_id) = media_runs(&mut lib, &id, &sid, &path, &sha);
+    lib.apply(&user(), &item_target(&id), Op::KeepText {})
+        .unwrap();
+    lib.apply(
+        &user(),
+        &item_target(&id),
+        Op::MoveToTrash {
+            reason: "delete".into(),
+        },
+    )
+    .unwrap();
+    let entries = lib.trash_entries().unwrap();
+    let tid = |reason: &str| {
+        entries
+            .iter()
+            .find(|t| t.reason == reason)
+            .unwrap()
+            .id
+            .clone()
+    };
+    let restore = |lib: &mut Library, tid: String| {
+        lib.apply(
+            &user(),
+            &OpTarget {
+                kind: "trash".into(),
+                id: tid,
+            },
+            Op::Restore {},
+        )
+        .unwrap();
+    };
+    restore(&mut lib, tid("delete"));
+    let m = lib.item(&id).unwrap().manifest;
+    assert_eq!(m.state, usuyo_contract::ItemState::TextOnly);
+    assert_eq!(lib.runs(&id).unwrap().len(), 3);
+    assert_eq!(
+        lib.resolve_layer(&id, "video", None).unwrap_err().code(),
+        "not-found"
+    );
+    restore(&mut lib, tid("keep-text"));
+    let dir = e.root.join(id.rel_dir()).join("derived/runs");
+    assert!(dir.join(&play_id).join("play.mp4").is_file());
+    assert!(dir.join(&kf_id).join("keyframes/00000500.jpg").is_file());
+    assert!(file_of(lib.resolve_layer(&id, "video", None).unwrap()).ends_with("play.mp4"));
+    assert_eq!(
+        lib.item(&id).unwrap().manifest.state,
+        usuyo_contract::ItemState::Normal
+    );
+    assert!(lib.trash_entries().unwrap().is_empty());
+}

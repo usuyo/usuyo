@@ -238,8 +238,8 @@ impl Library {
         Ok(e)
     }
 
-    /// 只留文字：`raw/` 里的图片、视频、音频和 `derived/keyframes/`、`derived/audio/` 进回收站。
-    /// 缩略图 `derived/thumb.jpg` 归调用方先生成。
+    /// 只留文字：`raw/` 里的图片、视频、音频和各次转录里的 `play.mp4`、`keyframes/` 进回收站；
+    /// `run.json` 和文字产物留着。缩略图 `derived/thumb.jpg` 归调用方先生成。
     pub(crate) fn keep_text(&mut self, id: &ItemId) -> Result<Step> {
         let mut item = self.item(id)?;
         let dir = self.item_dir(id);
@@ -261,11 +261,7 @@ impl Library {
                 }
             }
         }
-        for sub in ["derived/keyframes", "derived/audio"] {
-            for f in list_files(&dir.join(sub))? {
-                moved.insert(format!("{sub}/{f}"));
-            }
-        }
+        moved.extend(self.run_binaries(id)?);
         let tid = uuid7();
         let tdir = self.trash_path(&tid)?;
         for rel in &moved {

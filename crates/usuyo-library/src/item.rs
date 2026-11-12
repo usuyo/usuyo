@@ -18,7 +18,7 @@ use crate::text::{angle_url, markdown_is_inert, md_inline, plain_to_markdown, re
 use crate::{Error, Library, Result, time};
 
 /// 条目文件夹以内的相对路径不超过的 UTF-16 单位。
-const ITEM_PATH_MAX: usize = 140;
+pub(crate) const ITEM_PATH_MAX: usize = 140;
 /// 从库根起的相对路径不超过的 UTF-16 单位。
 pub(crate) const ROOT_PATH_MAX: usize = 200;
 
@@ -534,7 +534,7 @@ impl Library {
         Ok(())
     }
 
-    fn check_staged(&self, staged: &Path) -> Result<()> {
+    pub(crate) fn check_staged(&self, staged: &Path) -> Result<()> {
         let tmp = self.path(".usuyo/tmp");
         if staged.starts_with(&tmp) && staged != tmp {
             Ok(())
@@ -695,6 +695,16 @@ impl Library {
 
     /// 一栏在哪（SPEC §1.2.3 的表）：`text` 回原文的字（主快照的 `text`，没有就是
     /// `derived/readable.md`），其余回文件路径。`snapshot` 照 §0.4 哪些层带。
+    ///
+    /// 转录的层（feature 003 §7.1）：`asr`、`ocr`、`frames` 回这一层最新一次转录的产物，
+    /// `<层>/<runId>` 回指定的那次，`ocr/<imageKey>` 回盖到这张图的最新一次；给了 `snapshot` 时
+    /// 只看输入在这个快照里的转录。最新一次是空的（没有人声、没认出字）回 `not-found`，
+    /// 不往回找旧的。`video` 有合起来的 `play.mp4` 时给它，没有给原样的画面。
+    /// `frame/<runId>/<毫秒>` 回那次 `keyframes` 转录里的一帧。
+    /// `layer` 来自调用方（本机接口的 `/media/{id}/{*layer}`），不可信：路径只经过各记录拼，
+    /// 拼出来的都要解析掉符号链接以后还在条目文件夹里。
+    ///
+    /// 调用方：`usuyo-core` 的 `Engine::media`（本机接口给媒体文件，WP8）、条目页（WP7）。
     pub fn resolve_layer(
         &self,
         id: &ItemId,
@@ -714,29 +724,17 @@ impl Library {
                 Err(Error::NotFound(format!("snapshot {s}")))
             }
         };
+        let not_found = || Error::NotFound(format!("{layer} of {id}"));
         let existing = |p: PathBuf| -> Result<LayerSource> {
-            let not_found = || Error::NotFound(format!("{layer} of {id}"));
-            // 解析掉符号链接以后还得是条目文件夹里的文件。
-            let real = p.canonicalize().map_err(|_| not_found())?;
-            let root = dir.canonicalize().map_err(|e| Error::io(&dir, e))?;
-            // 回解析后的路径：之后打开它的不再跟着符号链接走。
-            if real.is_file() && real.starts_with(&root) {
-                Ok(LayerSource::File(real))
-            } else {
-                Err(not_found())
-            }
+            contained_file(&dir, &p, not_found).map(LayerSource::File)
         };
         let (name, key) = match layer.split_once('/') {
             Some((n, k)) => (n, Some(k)),
             None => (layer, None),
         };
         let image_key = || -> Result<&str> {
-            key.filter(|k| {
-                k.len() == 16
-                    && k.bytes()
-                        .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase())
-            })
-            .ok_or_else(|| Error::InvalidArgs(format!("bad image key in `{layer}`")))
+            key.filter(|k| is_image_key(k))
+                .ok_or_else(|| Error::InvalidArgs(format!("bad image key in `{layer}`")))
         };
         match name {
             "text" => {
@@ -747,10 +745,9 @@ impl Library {
                     None => existing(dir.join("derived/readable.md")),
                 }
             }
-            "ocr" => existing(
-                dir.join("derived/ocr")
-                    .join(format!("{}.json", image_key()?)),
-            ),
+            "asr" | "ocr" | "frames" | "frame" => self
+                .resolve_run_layer(id, layer, name, key, snapshot)
+                .map(LayerSource::File),
             "image" => {
                 let k = image_key()?;
                 for s in &item.manifest.snapshots {
@@ -765,8 +762,12 @@ impl Library {
                 }
                 Err(Error::NotFound(format!("{layer} of {id}")))
             }
-            "asr" => existing(dir.join("derived/asr.vtt")),
             "video" | "audio" => {
+                if name == "video"
+                    && let Some(play) = self.play_file(id, snapshot)?
+                {
+                    return Ok(LayerSource::File(play));
+                }
                 let s = snap()?;
                 let rec = self.fetch_record(id, &s)?;
                 let m = rec
@@ -857,6 +858,29 @@ pub enum Whereabouts {
     Stored(ItemId),
     Trashed(ItemId),
     Absent(ItemId),
+}
+
+/// `imageKey`：图片字节 SHA-256 的前 16 位小写十六进制（SPEC §1.2.2）。
+pub(crate) fn is_image_key(k: &str) -> bool {
+    k.len() == 16
+        && k.bytes()
+            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase())
+}
+
+/// `p` 解析掉符号链接以后还得是 `root` 里的普通文件，不然回 `not_found()`。
+/// 回解析后的路径：之后打开它的不再跟着符号链接走。
+pub(crate) fn contained_file(
+    root: &Path,
+    p: &Path,
+    not_found: impl Fn() -> Error,
+) -> Result<PathBuf> {
+    let real = p.canonicalize().map_err(|_| not_found())?;
+    let root = root.canonicalize().map_err(|e| Error::io(root, e))?;
+    if real.is_file() && real.starts_with(&root) {
+        Ok(real)
+    } else {
+        Err(not_found())
+    }
 }
 
 pub(crate) fn read_dirs(dir: &Path) -> Result<Vec<PathBuf>> {

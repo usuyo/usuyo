@@ -74,7 +74,7 @@ fn clear_readonly_for_rename(_path: &Path) -> Result<()> {
 }
 
 /// 改名以后 fsync 目录；Windows 不支持打开目录，跳过。
-fn sync_dir(dir: &Path) {
+pub(crate) fn sync_dir(dir: &Path) {
     #[cfg(unix)]
     if let Ok(d) = fs::File::open(dir) {
         // 目录 fsync 失败不改变改名已经生效的事实。
@@ -82,6 +82,17 @@ fn sync_dir(dir: &Path) {
     }
     #[cfg(not(unix))]
     let _ = dir;
+}
+
+/// 把别人写好的文件落到盘上（转录改名进资料库之前）。Windows 上只读打开的文件不能 fsync，跳过。
+pub(crate) fn sync_file(path: &Path) -> Result<()> {
+    #[cfg(unix)]
+    fs::File::open(path)
+        .and_then(|f| f.sync_all())
+        .map_err(|e| Error::io(path, e))?;
+    #[cfg(not(unix))]
+    let _ = path;
+    Ok(())
 }
 
 /// 文件不在时回 `None`。
