@@ -185,7 +185,7 @@
 | 取法 | 拿到什么 | 账号 | 层级 | 做成什么样 | 你要装或给的 | 已有 | 记录到的情况 | 不用账号能试 |
 |---|---|---|---|---|---|---|---|---|
 | `transcript` | 单条字幕 | 不要 | `private-api` | 包 [youtube-transcript-api](https://github.com/jdepoix/youtube-transcript-api)（MIT，v1.2.5，2026-11-05）；命令待核 | 安装它 | 没有 | 云服务器 IP 常被拦（[06 §1.3](../research/06-platform-access-and-account-risk.md#13-混合路径视觉层拿链接公开页面取内容)） | 能 |
-| `takeout` | 存过的：稍后观看、喜欢的视频 | 不要（导出时你登录 Google） | `official-export` | 自己写的导入，照 [google_takeout_parser](https://github.com/purarue/google_takeout_parser)（MIT，v0.1.13）和 WatchNow 读 Takeout 的 CSV | 一份 Takeout | 没有 | — | 不能（要你的文件） |
+| `takeout` | 存过的：稍后观看、喜欢的视频 | 不要（导出时你登录 Google） | `official-export` | 自己写的导入，照 [google_takeout_parser](https://github.com/purarue/google_takeout_parser)（MIT，v0.1.13）和 WatchNow 读 Takeout 的 CSV | 一份 Takeout | 做了（11-12）；只对手写的样例测过，手上没有真的导出文件，文件的样子照公开文档写；播放列表 CSV 的两列布局没有可靠出处 | — | 不能（要你的文件） |
 | `channel-feed` | 按创作者列 | 不要 | `public-web` | 自己写，读频道的公开订阅源 | 频道地址 | 没有；等[协议 §13](../protocol/open.md#13-待定) 第 21、26 项 | — | 能 |
 
 <a id="13-公众号和微信收藏"></a>
@@ -211,8 +211,8 @@
 |---|---|---|---|---|---|---|---|---|
 | `douban` · `rss` | 你标记的书影音 | 不要 | `public-web` | 自己写，读你主页的公开 RSS，照 [douban-sync-skill](https://github.com/cosformula/douban-sync-skill)（MIT，v0.2.2） | 豆瓣 id（等[协议 §13](../protocol/open.md#13-待定) 第 21 项） | 没有 | 全量翻页出算力验证（[06 §1.3](../research/06-platform-access-and-account-risk.md#13-混合路径视觉层拿链接公开页面取内容)） | 能 |
 | `reddit` · `saved` | 存过的：saved | 你自己的 Reddit 应用凭据 | `official-export` | 照 [rexport](https://github.com/karlicoss/rexport)（MIT）调官方接口；命令待核 | 一个个人应用 | 没有 | 官方接口有配额 | 不能 |
-| `telegram` · `export` | 存过的：Saved Messages | 不要（你在 Telegram Desktop 里导出） | `official-export` | 自己写的导入，读 Telegram Desktop「导出聊天记录」的 JSON；字段没核 | 一份导出 | 没有 | — | 不能（要你的文件） |
-| `instagram` · `export` | 存过的：收藏、赞过 | 不要（你申请导出） | `official-export` | 自己写的导入，照 [scrollback](https://github.com/meizuflux/scrollback)（MIT） | 一份数据导出 | 没有 | 不登录取单条常回 429、401（[instaloader #2726](https://github.com/instaloader/instaloader/issues/2726)、[#2501](https://github.com/instaloader/instaloader/issues/2501)） | 不能（要你的文件） |
+| `telegram` · `export` | 存过的：Saved Messages | 不要（你在 Telegram Desktop 里导出） | `official-export` | 自己写的导入，读 Telegram Desktop「导出聊天记录」的 JSON；字段没核 | 一份导出 | 做了（11-12）；只对手写的样例测过，手上没有真的导出文件，文件的样子照公开文档写 | — | 不能（要你的文件） |
+| `instagram` · `export` | 存过的：收藏、赞过 | 不要（你申请导出） | `official-export` | 自己写的导入，照 [scrollback](https://github.com/meizuflux/scrollback)（MIT） | 一份数据导出 | 做了（11-12）；只对手写的样例测过，手上没有真的导出文件，文件的样子照公开文档写；合集文件的样子是猜的 | 不登录取单条常回 429、401（[instaloader #2726](https://github.com/instaloader/instaloader/issues/2726)、[#2501](https://github.com/instaloader/instaloader/issues/2501)） | 不能（要你的文件） |
 | `podcast` · `feed` | 单集音频和节目说明 | 不要 | `public-web` | 自己写，读节目的公开 RSS；[podcast-dl](https://github.com/lightpohl/podcast-dl)（MIT，v12.1.5，官方 release 有 macOS 二进制）可包，命令待核 | 节目地址 | 没有；等[协议 §13](../protocol/open.md#13-待定) 第 21–23 项 | — | 能 |
 
 <a id="15-yt-dlp-通用视频"></a>
