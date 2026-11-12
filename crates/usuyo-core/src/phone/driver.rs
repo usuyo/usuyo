@@ -26,7 +26,7 @@ const BINARY_CAP: u64 = 256 << 20;
 const MAX_ENTRIES: usize = 64;
 const RECORD: &str = "driver.json";
 /// 「mirroir serve」的 launchd 名字（mirroir-mcp `InstallAgentCommand.label`）。
-const AGENT: &str = "dev.mirroir.serve";
+pub(crate) const AGENT: &str = "dev.mirroir.serve";
 
 /// 钉住的那一版。
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -343,7 +343,7 @@ pub(crate) fn remove(dir: &Path) -> crate::Result<()> {
 }
 
 /// 给 shell 的一个参数：单引号括起来（路径里有「Application Support」的空格）。
-fn quoted(path: &Path) -> String {
+pub(crate) fn quoted(path: &Path) -> String {
     format!("'{}'", path.display().to_string().replace('\'', r"'\''"))
 }
 

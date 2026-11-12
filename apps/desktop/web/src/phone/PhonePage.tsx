@@ -1,8 +1,9 @@
 import { Link } from "@tanstack/react-router";
+import { Copy } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button as AriaButton } from "react-aria-components";
 import { isNotServed } from "../api/client";
-import type { GrantState, PhoneAndroid, PhoneDryRun, PhoneIos, PhoneView, SettingsPane } from "../api/endpoints";
+import type { GrantState, PhoneAndroid, PhoneDryRun, PhoneIos, PhoneStep, PhoneView, SettingsPane } from "../api/endpoints";
 import { useDryRun, usePhone, usePhoneAction, usePlugins } from "../api/hooks";
 import { ErrorLine, NotServedLine } from "../components/ErrorLine";
 import { Rail } from "../frame/Rail";
@@ -11,7 +12,8 @@ import { ACCESS_TEXT } from "../plugins/words";
 import { Row } from "../settings/Row";
 import { openExternal } from "../shell";
 import { Button } from "../ui/Button";
-import { clipboardText, DEVICE_TEXT, GRANT_TEXT, iosMissing, methodState, phoneMethods, shortSerial } from "./words";
+import { FlashLine, useFlash } from "../ui/Flash";
+import { clipboardText, DEVICE_TEXT, GRANT_TEXT, iosMissing, methodState, needsRegister, phoneMethods } from "./words";
 
 const SECTIONS = [
   { id: "iphone", name: "iPhone" },
@@ -100,6 +102,7 @@ function Fact({ children, action, warn }: { children: ReactNode; action?: ReactN
 
 function Ios({ ios }: { ios: PhoneIos }) {
   const present = ios.driver.state === "present";
+  const unregistered = needsRegister(ios);
   return (
     <>
       <Row label="系统">
@@ -111,10 +114,19 @@ function Ios({ ios }: { ios: PhoneIos }) {
         state={ios.grants.screen}
         pane="screen-recording"
         present={present}
+        unregistered={unregistered}
         to={ios.grants.to}
         why={`让「${ios.grants.to}」截下镜像窗口，认出上面的字。`}
       />
-      <Grant label="辅助功能" state={ios.grants.accessibility} pane="accessibility" present={present} to={ios.grants.to} why={`让「${ios.grants.to}」替你点按和滑动。`} />
+      <Grant
+        label="辅助功能"
+        state={ios.grants.accessibility}
+        pane="accessibility"
+        present={present}
+        unregistered={unregistered}
+        to={ios.grants.to}
+        why={`让「${ios.grants.to}」替你点按和滑动。`}
+      />
       <Mirroring ios={ios} />
       <Clipboard ios={ios} />
       <DryRun ios={ios} />
@@ -135,13 +147,21 @@ function Driver({ ios }: { ios: PhoneIos }) {
       >
         官方 release
       </AriaButton>
-      取 v{offer.version}，约 {sizeText(offer.size)}，和官方的 SHA256SUMS 对上了才放进这台电脑自己的目录。不用开终端。
+      取 v{offer.version}，约 {sizeText(offer.size)}，和官方的 SHA256SUMS 对上了才放进这台电脑自己的目录。装好以后，让它常驻的那一步要你在「终端」里做。
     </>
   ) : null;
-  const serving = `它以「${ios.grants.to}」常驻在这台电脑上，只听本机；只开点按、滑动、返回、回主屏和滚动，不开打字。`;
+  const serving = `它以「${ios.grants.to}」常驻在这台电脑上，只听本机。usuyo 没替它写权限文件，它只开看屏幕的工具，不点、不打字。`;
+  const sub =
+    d.state === "present"
+      ? `${d.step ? "" : serving}卸掉只删 usuyo 放进这台电脑目录里的这一份：在跑的「${ios.grants.to}」不停，它的登录项和证书也留着。`
+      : d.state === "installing"
+        ? "装好以后，让它常驻的那一步要你在「终端」里做。"
+        : from;
   const busy = action.isPending;
+  // 登记那一步跑完以后这台 Mac 上多出来的东西；换新、停掉的那两步不加这一句。
+  const registers = needsRegister(ios);
   return (
-    <Row label="驱动" sub={d.state === "present" ? serving : d.state === "installing" ? `装好以后，${serving}` : from}>
+    <Row label="驱动" sub={sub}>
       {d.state === "absent" ? (
         <Fact
           action={
@@ -184,16 +204,75 @@ function Driver({ ios }: { ios: PhoneIos }) {
           {offer ? `，有新的 v${offer.version}` : ""}。
         </Fact>
       )}
+      {d.state === "present" && d.hint ? <p className="m-0 mt-1 text-note text-warn">没换成新的，装着的这一份还在：{d.hint}</p> : null}
       {action.error ? <ErrorLine error={action.error} className="mt-1" /> : null}
+      {d.step ? (
+        <StepBox
+          step={d.step}
+          label="要你在终端里做的一步"
+          after={registers ? "跑完以后，这台 Mac 上多两样：登录钥匙串里一张 mirroir 自己生成的签名证书（钥匙串会问你，选「始终允许」），和一个登录时启动的后台项。" : undefined}
+        />
+      ) : null}
     </Row>
   );
 }
 
-function Grant({ label, state, pane, present, to, why }: { label: string; state: GrantState; pane: SettingsPane; present: boolean; to: string; why: string }) {
+/** 内核给的一步：它的那句话，一条命令一行，各带「复制」。usuyo 不替你跑。 */
+function StepBox({ step, label, after }: { step: PhoneStep; label: string; after?: string }) {
+  const flash = useFlash();
+  return (
+    <div role="group" aria-label={label} className="mt-2 rounded-btn bg-card px-3 py-2.5">
+      <p className="m-0 text-note text-label">{step.text}</p>
+      <ul className="m-0 mt-2 flex list-none flex-col gap-1.5 p-0">
+        {step.commands.map((c, i) => (
+          <li key={i} className="flex min-w-0 items-center gap-2">
+            <code className="mono min-w-0 flex-1 rounded-sm bg-chip px-3 py-1.5 text-tag break-all text-text select-text">{c}</code>
+            <Button
+              variant="quiet"
+              size="sm"
+              aria-label={`复制第 ${i + 1} 条命令`}
+              onPress={() => {
+                navigator.clipboard.writeText(c).then(
+                  () => flash.show("复制好了"),
+                  () => flash.show("没能复制，手动选中抄一下"),
+                );
+              }}
+            >
+              <Copy size={14} aria-hidden="true" />
+              复制
+            </Button>
+          </li>
+        ))}
+      </ul>
+      {after ? <p className="m-0 mt-2 text-small text-sub">{after}</p> : null}
+      <FlashLine flash={flash} className="mt-1 block text-small text-sub" />
+    </div>
+  );
+}
+
+function Grant({
+  label,
+  state,
+  pane,
+  present,
+  unregistered,
+  to,
+  why,
+}: {
+  label: string;
+  state: GrantState;
+  pane: SettingsPane;
+  present: boolean;
+  unregistered: boolean;
+  to: string;
+  why: string;
+}) {
   const action = usePhoneAction();
   return (
     <Row label={label} sub={`${why}授权给的是「${to}」，不是 usuyo；这一下只有你自己能在系统设置里打开。`}>
-      {present ? (
+      {unregistered ? (
+        <Fact>先做完「驱动」那一行要你在终端里做的那一步，系统设置里才有「{to}」。</Fact>
+      ) : present ? (
         <Fact
           action={
             state === "given" ? null : (
@@ -224,7 +303,7 @@ function Mirroring({ ios }: { ios: PhoneIos }) {
     );
   }
   const sub = {
-    "not-set-up": "第一次打开时照它说的做：iPhone 是 iOS 18 或更新的、设了密码，两边登同一个 Apple 账户，蓝牙和 Wi-Fi 都开着。",
+    "not-set-up": "打开它；第一次打开时照它说的做：iPhone 是 iOS 18 或更新的、设了密码，两边登同一个 Apple 账户，蓝牙和 Wi-Fi 都开着。",
     away: "把 iPhone 锁上，放在这台 Mac 旁边就会连上。你拿起手机解锁，镜像就断开。",
     connected: "你拿起手机解锁，镜像就断开。usuyo 只在你让它取的时候用。",
   }[ios.mirroring];
@@ -238,7 +317,7 @@ function Mirroring({ ios }: { ios: PhoneIos }) {
             </Button>
           }
         >
-          这台 Mac 上还没设置过 iPhone 镜像。
+          iPhone 镜像没开着，或者这台 Mac 上还没设置过它。
         </Fact>
       ) : (
         <Fact>{ios.mirroring === "away" ? "iPhone 没连上：手机解锁着，或者不在旁边。" : "iPhone 连着。"}</Fact>
@@ -304,7 +383,6 @@ function DryRunResult({ report }: { report: PhoneDryRun }) {
         `像是「${m.flow}」的第 ${m.step} 步。`,
         m.expect.matched === m.expect.total ? `这一步该有的 ${m.expect.total} 段字都对上了。` : `这一步该有的 ${m.expect.total} 段字，对上了 ${m.expect.matched} 段。`,
         ...m.targets.map((t) => `要点的「${t.label}」${t.found ? "找到了" : "没找到"}。`),
-        ...(m.cards === undefined ? [] : [`列表里读到 ${m.cards} 张卡片。`]),
       ]
     : [`认不出这一屏：读到 ${report.read} 段字，对不上哪个流程的哪一步。`];
   return (
@@ -320,13 +398,15 @@ function DryRunResult({ report }: { report: PhoneDryRun }) {
 }
 
 function Android({ android }: { android: PhoneAndroid }) {
+  const action = usePhoneAction();
+  const adb = android.adb;
   return (
     <>
       <Row
         label="adb"
         sub={
-          android.adb ? (
-            <span className="mono break-all text-tag">{android.adb.path}</span>
+          adb ? (
+            <span className="mono break-all text-tag">{adb.path}</span>
           ) : (
             <>
               装上 Android 的平台工具就有：
@@ -335,26 +415,46 @@ function Android({ android }: { android: PhoneAndroid }) {
           )
         }
       >
-        <Fact>{android.adb ? `找到了 adb ${android.adb.version}。` : "没找到 adb。"}</Fact>
+        <Fact>{adb ? `找到了 adb ${adb.version}。` : "没找到 adb。"}</Fact>
       </Row>
-      <Row label="手机" sub={android.adb && android.devices.length === 0 ? "用 USB 连上，在手机的「开发者选项」里打开「USB 调试」。" : undefined}>
-        {android.adb === null ? (
+      <Row
+        label="手机"
+        sub={
+          adb && !adb.running
+            ? "要找的时候 adb 会起它自己的服务，之后留在这台电脑的后台，直到你停掉它。usuyo 只在你点这里时起它。"
+            : adb && android.devices.length === 0
+              ? "用 USB 连上，在手机的「开发者选项」里打开「USB 调试」。"
+              : undefined
+        }
+      >
+        {adb === null ? (
           <Fact>装上 adb 以后，这里列出连着的安卓手机。</Fact>
+        ) : !adb.running ? (
+          <Fact
+            action={
+              <Button variant="outline" size="sm" isDisabled={action.isPending} onPress={() => action.mutate({ kind: "android" })}>
+                找一下连着的手机
+              </Button>
+            }
+          >
+            {action.isPending ? "在找连着的安卓手机。" : "还没找过连着的安卓手机。"}
+          </Fact>
         ) : android.devices.length === 0 ? (
           <Fact>没有连着的安卓手机。</Fact>
         ) : (
           <ul aria-label="连着的安卓手机" className="m-0 flex list-none flex-col gap-1.5 p-0 pt-1">
-            {android.devices.map((d) => (
-              <li key={d.serial} className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 rounded-btn bg-card px-3 py-2">
+            {android.devices.map((d, i) => (
+              // 序列号是内核缩短过的，两台可能一样：按位置排。
+              <li key={i} className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 rounded-btn bg-card px-3 py-2">
                 <span className="text-note font-medium text-text">{d.model ?? "安卓手机"}</span>
-                <span className="mono text-tag text-faint" title={d.serial}>
-                  {shortSerial(d.serial)}
-                </span>
+                <span className="mono text-tag text-faint">{d.serial}</span>
                 <span className="text-small text-label">{DEVICE_TEXT[d.state]}</span>
               </li>
             ))}
           </ul>
         )}
+        {action.error ? <ErrorLine error={action.error} className="mt-1" /> : null}
+        {android.step ? <StepBox step={android.step} label="怎么停掉 adb 的服务" /> : null}
       </Row>
     </>
   );

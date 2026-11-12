@@ -178,6 +178,7 @@ export interface Phone {
   openSettings(pane: SettingsPane): Promise<void>;
   testClipboard(): Promise<PhoneView>;
   dryRun(): Promise<PhoneDryRun>;
+  lookForAndroid(): Promise<PhoneView>;
 }
 
 /** 内核和样例库都实现的全部读写。 */
@@ -190,6 +191,9 @@ const SOURCES_TIMEOUT_MS = 75_000;
 
 /** 演练要截一屏、认一遍字，比平常的请求慢。 */
 const DRY_RUN_TIMEOUT_MS = 30_000;
+
+/** 找连着的安卓手机：内核读 adb 的版本（5 秒）、跑 `adb devices -l`（第一次要起 adb 的服务，最多 10 秒），再读一遍这一页。 */
+const ADB_LOOK_TIMEOUT_MS = 25_000;
 
 /** 交文件是把整个文件抄给内核，大的归档要几分钟。 */
 const FILE_TIMEOUT_MS = 600_000;
@@ -284,6 +288,7 @@ const daemon: Source = {
   openSettings: (pane) => request<void>(paths.phoneOpenSettings, { method: "POST", body: { pane } }).then(() => undefined),
   testClipboard: () => request<PhoneView>(paths.phoneClipboardTest, { method: "POST" }),
   dryRun: () => request<PhoneDryRun>(paths.phoneDryRun, { method: "POST", timeoutMs: DRY_RUN_TIMEOUT_MS }),
+  lookForAndroid: () => request<PhoneView>(paths.phoneAndroidDevices, { method: "POST", timeoutMs: ADB_LOOK_TIMEOUT_MS }),
 
   transforms: () => request<TransformsView>(paths.transforms),
   transform: (itemId, body) => request<void>(paths.itemTransform(itemId), { method: "POST", body }).then(() => undefined),

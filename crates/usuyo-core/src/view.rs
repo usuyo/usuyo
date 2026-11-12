@@ -985,13 +985,19 @@ pub enum ClipboardState {
 pub struct PhoneAndroid {
     /// 没找到是 `null`。
     pub adb: Option<AdbFound>,
+    /// 只在 adb 的服务已经在跑时列。
     pub devices: Vec<AndroidDevice>,
+    /// adb 的服务在跑时：它留在后台，怎么停掉它。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub step: Option<DriverStep>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct AdbFound {
     pub path: String,
     pub version: String,
+    /// adb 自己的服务这会儿在不在跑；看的时候不起它。
+    pub running: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

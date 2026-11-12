@@ -14,11 +14,6 @@ export const DEVICE_TEXT: Record<AndroidDevice["state"], string> = {
   offline: "连着，但不回话：拔下来再插上",
 };
 
-/** 序列号长的只留头尾四位。 */
-export function shortSerial(serial: string): string {
-  return serial.length > 10 ? `${serial.slice(0, 4)}…${serial.slice(-4)}` : serial;
-}
-
 /** 剪贴板试的结果，一句话；拷的字从不出现。 */
 export function clipboardText(t: PhoneClipboardTest | undefined): string {
   if (t === undefined) return "链接从手机经通用剪贴板回到这台 Mac。";
@@ -32,11 +27,17 @@ export function clipboardText(t: PhoneClipboardTest | undefined): string {
   }
 }
 
+/** 装好了、「mirroir serve」还没登记：内核给的是登记那一步（`launchctl bootstrap`）。这时系统设置里还没有它。 */
+export function needsRegister(ios: PhoneView["ios"]): boolean {
+  return ios.driver.state === "present" && (ios.driver.step?.commands.some((c) => c.startsWith("launchctl bootstrap")) ?? false);
+}
+
 /** iPhone 那条路还差什么，按要先做的排；都好了是空的。看不出来给没给的授权不算差，试了才知道。 */
 export function iosMissing(ios: PhoneView["ios"]): string[] {
   const out: string[] = [];
   if (!ios.system.mirroring) return ["升级到 macOS 15"];
   if (ios.driver.state !== "present") out.push("装上 mirroir");
+  if (needsRegister(ios)) out.push("在终端里登记「mirroir serve」");
   if (ios.driver.state === "present" && ios.grants.screen === "missing") out.push("给屏幕录制");
   if (ios.driver.state === "present" && ios.grants.accessibility === "missing") out.push("给辅助功能");
   if (ios.mirroring !== "connected") out.push("连上 iPhone");

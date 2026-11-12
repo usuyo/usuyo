@@ -137,6 +137,8 @@ struct Mirror {
     screen: Option<String>,
     /// 收到的工具调用，按顺序。
     calls: Vec<String>,
+    /// 收到的每一个请求（`initialize`、令牌不对被拒的都算）。
+    requests: usize,
 }
 
 type Shared = Arc<Mutex<Mirror>>;
@@ -150,6 +152,7 @@ fn mirror_server(state: Shared) -> String {
             let state = Arc::clone(&state);
             std::thread::spawn(move || {
                 let (path, headers, body) = read_request(&mut stream);
+                state.lock().unwrap().requests += 1;
                 let reply = |status: &str, body: &str| {
                     format!(
                         "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
@@ -258,6 +261,54 @@ struct Fixture {
     mirror: Shared,
     bin: PathBuf,
     driver_dir: PathBuf,
+    /// 假的 adb 服务收到的请求。
+    adb_server: Arc<Mutex<Vec<String>>>,
+}
+
+impl Fixture {
+    /// 假 `adb` 每次被调的参数，一行一次。
+    fn adb_calls(&self) -> Vec<String> {
+        std::fs::read_to_string(self.tmp.path().join("adb/calls"))
+            .unwrap_or_default()
+            .lines()
+            .map(str::to_owned)
+            .collect()
+    }
+
+    fn requests(&self) -> usize {
+        self.mirror.lock().unwrap().requests
+    }
+}
+
+const ADB_LIST: &str = "R58N70ABC3K2A          unauthorized usb:1-1 transport_id:1\n2B1F0C7E9A4D           device usb:1-2 product:husky model:Pixel_8 device:husky transport_id:2\n";
+
+/// 假的 adb 服务：每个连接读一个 `<四位十六进制长度><服务名>`，记下服务名，答 `OKAY` 加设备表。
+fn adb_server(seen: Arc<Mutex<Vec<String>>>) -> std::net::SocketAddr {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { return };
+            let mut len = [0u8; 4];
+            stream.read_exact(&mut len).unwrap();
+            let n = usize::from_str_radix(std::str::from_utf8(&len).unwrap(), 16).unwrap();
+            let mut service = vec![0u8; n];
+            stream.read_exact(&mut service).unwrap();
+            seen.lock()
+                .unwrap()
+                .push(String::from_utf8(service).unwrap());
+            let _ = stream.write_all(format!("OKAY{:04x}{ADB_LIST}", ADB_LIST.len()).as_bytes());
+        }
+    });
+    addr
+}
+
+/// 一个没人听的本机端口。
+fn closed_port() -> std::net::SocketAddr {
+    TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
 }
 
 struct Options {
@@ -267,6 +318,8 @@ struct Options {
     /// 「mirroir serve」在跑（令牌文件在）。
     serving: bool,
     adb: bool,
+    /// adb 自己的服务已经在跑（本机起一个答 `host:devices-l` 的假服务）。
+    adb_running: bool,
 }
 
 impl Default for Options {
@@ -276,6 +329,7 @@ impl Default for Options {
             arch: "aarch64",
             serving: false,
             adb: true,
+            adb_running: false,
         }
     }
 }
@@ -325,11 +379,12 @@ fn fixture(o: Options) -> Fixture {
         script(
             &adb_dir,
             "adb",
-            r#"case "$1" in
+            &(format!("echo \"$*\" >> '{}/calls'\n", adb_dir.display())
+                + r#"case "$1" in
 version) printf 'Android Debug Bridge version 1.0.41\nVersion 36.0.0-13206524\n' ;;
 devices) printf 'List of devices attached\nR58N70ABC3K2A          unauthorized usb:1-1 transport_id:1\n2B1F0C7E9A4D           device usb:1-2 product:husky model:Pixel_8 device:husky transport_id:2\n\n' ;;
 *) exit 2 ;;
-esac"#,
+esac"#),
         );
     }
     let mirroring_app = tmp.path().join("iPhone Mirroring.app");
@@ -343,8 +398,49 @@ esac"#,
             "Screen elements (tap coordinates in points):\n- \"喜欢\"\n- \"作品\"\n- \"某人\"\n\n_meta: element_count=3".into(),
         ),
         calls: Vec::new(),
+        requests: 0,
     }));
     let serve_url = mirror_server(Arc::clone(&mirror));
+    // 端口上听的是谁：`lsof` 照 `listener`（问的不是这个端口就没人听）和 `program` 答，`launchctl print`
+    // 照 `launchd` 答（不在是没登记），`id -u` 是 501。默认是 launchd 里登记的「mirroir serve」在听。
+    let port = serve_url
+        .rsplit(':')
+        .next()
+        .unwrap()
+        .trim_end_matches("/mcp");
+    std::fs::write(bin.join("listener"), "p4242\nu501\nf9\n").unwrap();
+    std::fs::write(
+        bin.join("launchd"),
+        "gui/501/dev.mirroir.serve = {\n\tstate = running\n\tpid = 4242\n}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        bin.join("program"),
+        "p4242\nftxt\nn/Users/a/.mirroir-mcp/mirroir serve.app/Contents/MacOS/mirroir-mcp\n",
+    )
+    .unwrap();
+    let b = bin.display();
+    let lsof = script(
+        &bin,
+        "lsof",
+        &format!(
+            "case \"$*\" in\n*-iTCP:{port}\\ *) test -e '{b}/listener' || exit 1; cat '{b}/listener' ;;\n*-iTCP:*) exit 1 ;;\n*txt*) cat '{b}/program' ;;\n*) exit 2 ;;\nesac"
+        ),
+    );
+    let launchctl = script(
+        &bin,
+        "launchctl",
+        &format!(
+            "test \"$1 $2\" = 'print gui/501/dev.mirroir.serve' && test -e '{b}/launchd' || exit 113; cat '{b}/launchd'"
+        ),
+    );
+    let id = script(&bin, "id", "echo 501");
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let adb_addr = if o.adb_running {
+        adb_server(Arc::clone(&seen))
+    } else {
+        closed_port()
+    };
     let serve_token = tmp.path().join("serve-token");
     if o.serving {
         std::fs::write(&serve_token, SERVE_TOKEN).unwrap();
@@ -384,6 +480,9 @@ esac"#,
         },
         serve_url,
         serve_token,
+        lsof,
+        launchctl,
+        id,
         sw_vers,
         mirroring_app,
         pgrep,
@@ -391,6 +490,7 @@ esac"#,
         pasteboard: vec![pasteboard.display().to_string()],
         adb_path: Some(adb_dir.clone().into_os_string()),
         adb_dirs: Vec::new(),
+        adb_server: adb_addr,
         clipboard_wait: Duration::from_secs(1),
         clipboard_every: Duration::from_millis(50),
     };
@@ -406,6 +506,7 @@ esac"#,
         mirror,
         bin,
         driver_dir,
+        adb_server: seen,
     }
 }
 
@@ -501,6 +602,7 @@ async fn without_a_phone_config_every_route_is_not_found() {
         ),
         ("POST", "/phone/ios/clipboard-test", None),
         ("POST", "/phone/ios/dry-run", None),
+        ("POST", "/phone/android/devices", None),
     ] {
         let (s, v) = call(&app, m, p, b).await;
         assert_eq!(s, StatusCode::NOT_FOUND, "{p}");
@@ -530,14 +632,14 @@ async fn the_page_reads_this_machine_with_nothing_installed() {
                 "mirroring": "not-set-up",
             },
             "android": {
-                "adb": {"path": f.tmp.path().join("adb/adb").display().to_string(), "version": "36.0.0"},
-                "devices": [
-                    {"serial": "R58N…3K2A", "state": "unauthorized"},
-                    {"serial": "2B1F…9A4D", "model": "Pixel 8", "state": "device"},
-                ],
+                "adb": {"path": f.tmp.path().join("adb/adb").display().to_string(), "version": "36.0.0", "running": false},
+                "devices": [],
             },
         })
     );
+    // 看这一页只问了 adb 的版本，没跑 `adb devices`；没有令牌文件，什么也没发给端口上的服务
+    assert_eq!(f.adb_calls(), ["version"]);
+    assert_eq!(f.requests(), 0);
     // iPhone 镜像开着、驱动不在：离开着
     std::fs::write(f.bin.join("mirroring-running"), "").unwrap();
     assert_eq!(view(&f.app).await["ios"]["mirroring"], "away");
@@ -701,7 +803,7 @@ async fn grants_come_from_mirroir_serve_itself() {
     assert_eq!(v["ios"]["mirroring"], "away");
     assert_eq!(v["ios"]["grants"]["screen"], "missing");
     assert_eq!(v["ios"]["grants"]["accessibility"], "given");
-    // 十秒里不再截第二张
+    // 三十秒里不再截第二张
     view(&f.app).await;
     assert_eq!(
         f.mirror.lock().unwrap().calls,
@@ -907,4 +1009,137 @@ async fn update_replaces_an_older_driver_or_keeps_it_with_the_reason() {
         let parent = f.driver_dir.parent().unwrap();
         assert_eq!(std::fs::read_dir(parent).unwrap().count(), 1);
     }
+}
+
+/// 只有点了「找一下连着的手机」才跑 `adb devices`；回的页面里有设备，和怎么停掉留在后台的 adb 服务。
+#[tokio::test]
+async fn only_the_look_action_runs_adb_devices() {
+    let f = fixture(Options::default());
+    view(&f.app).await;
+    view(&f.app).await;
+    assert!(
+        f.adb_calls().iter().all(|c| c == "version"),
+        "{:?}",
+        f.adb_calls()
+    );
+    let (s, v) = call(&f.app, "POST", "/phone/android/devices", None).await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    assert_eq!(
+        f.adb_calls().iter().filter(|c| *c == "devices -l").count(),
+        1
+    );
+    let adb = f.tmp.path().join("adb/adb");
+    assert_eq!(
+        v["android"],
+        json!({
+            "adb": {"path": adb.display().to_string(), "version": "36.0.0", "running": true},
+            "devices": [
+                {"serial": "R58N…3K2A", "state": "unauthorized"},
+                {"serial": "2B1F…9A4D", "model": "Pixel 8", "state": "device"},
+            ],
+            "step": {
+                "text": "adb 的服务在这台电脑的后台跑着，会一直留着，usuyo 不去停它。要停掉它，在「终端」里跑：",
+                "commands": [format!("'{}' kill-server", adb.display())],
+            },
+        })
+    );
+    // 动作不发 `phone-updated`，回的就是整页
+    assert_eq!(v["ios"]["system"]["macos"], "15.6.1");
+}
+
+/// adb 的服务已经在跑：经它的口子读设备，不跑 `adb devices`。
+#[tokio::test]
+async fn a_running_adb_server_is_asked_over_its_port() {
+    let f = fixture(Options {
+        adb_running: true,
+        ..Options::default()
+    });
+    let v = view(&f.app).await;
+    assert_eq!(v["android"]["adb"]["running"], true);
+    assert_eq!(
+        v["android"]["devices"],
+        json!([
+            {"serial": "R58N…3K2A", "state": "unauthorized"},
+            {"serial": "2B1F…9A4D", "model": "Pixel 8", "state": "device"},
+        ])
+    );
+    assert_eq!(
+        v["android"]["step"]["commands"][0],
+        format!("'{}' kill-server", f.tmp.path().join("adb/adb").display())
+    );
+    assert_eq!(f.adb_calls(), ["version"]);
+    assert_eq!(*f.adb_server.lock().unwrap(), ["host:devices-l"]);
+}
+
+#[tokio::test]
+async fn looking_for_phones_without_adb_says_so() {
+    let f = fixture(Options {
+        adb: false,
+        ..Options::default()
+    });
+    let (s, v) = call(&f.app, "POST", "/phone/android/devices", None).await;
+    assert_eq!(s, StatusCode::FAILED_DEPENDENCY);
+    assert_eq!(v["code"], "dependency-missing");
+    assert_eq!(v["hint"], "这台电脑上没找到 adb。");
+}
+
+/// 令牌只发给端口上认得出的驱动：别的用户的、别的程序的、没人听的，一个请求都不发。
+#[tokio::test]
+async fn the_token_goes_only_to_the_drivers_own_listener() {
+    let f = fixture(Options {
+        serving: true,
+        ..Options::default()
+    });
+    // 装着驱动：认不出时页面说要你登记「mirroir serve」
+    std::fs::create_dir_all(&f.driver_dir).unwrap();
+    std::fs::write(f.driver_dir.join("mirroir-mcp"), b"driver").unwrap();
+    std::fs::write(
+        f.driver_dir.join("driver.json"),
+        br#"{"version": "0.47.0", "asset": "a", "sha256": "b"}"#,
+    )
+    .unwrap();
+    let not_sent = |v: &Value| {
+        assert_eq!(
+            v["ios"]["grants"],
+            json!({"to": "mirroir serve", "screen": "unknown", "accessibility": "unknown"})
+        );
+        assert_eq!(v["ios"]["mirroring"], "not-set-up");
+        assert_eq!(
+            v["ios"]["driver"]["step"]["commands"][1],
+            "launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.mirroir.serve.plist"
+        );
+    };
+
+    // 别的用户在听
+    std::fs::write(f.bin.join("listener"), "p4242\nu0\n").unwrap();
+    not_sent(&view(&f.app).await);
+    // 自己的用户、不是登记的那一项、程序也不是装着的驱动
+    std::fs::write(f.bin.join("listener"), "p777\nu501\n").unwrap();
+    std::fs::write(f.bin.join("program"), "p777\nftxt\nn/tmp/catch-the-token\n").unwrap();
+    not_sent(&view(&f.app).await);
+    let (s, _) = call(&f.app, "POST", "/phone/ios/dry-run", None).await;
+    assert_eq!(s, StatusCode::FAILED_DEPENDENCY);
+    // 两个进程都在听
+    std::fs::write(f.bin.join("listener"), "p4242\nu501\np777\nu501\n").unwrap();
+    not_sent(&view(&f.app).await);
+    // 没人听
+    std::fs::remove_file(f.bin.join("listener")).unwrap();
+    not_sent(&view(&f.app).await);
+    assert_eq!(f.requests(), 0);
+
+    // 听的是装着的那一份驱动（没登记进 launchd，自己起的）：发
+    std::fs::remove_file(f.bin.join("launchd")).unwrap();
+    std::fs::write(f.bin.join("listener"), "p777\nu501\n").unwrap();
+    std::fs::write(
+        f.bin.join("program"),
+        format!(
+            "p777\nftxt\nn{}\n",
+            f.driver_dir.join("mirroir-mcp").display()
+        ),
+    )
+    .unwrap();
+    let v = view(&f.app).await;
+    assert_eq!(v["ios"]["mirroring"], "connected");
+    assert!(v["ios"]["driver"].get("step").is_none(), "{v}");
+    assert!(f.requests() > 0);
 }

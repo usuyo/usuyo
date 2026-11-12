@@ -10,6 +10,7 @@ use std::time::Duration;
 use super::adb;
 use super::driver::{self, Asset, InstallError, Release};
 use super::flows;
+use super::listener;
 use super::serve::{self, Window};
 use crate::models::{ModelError, Net};
 use crate::view::{DeviceState, GrantState, Mirroring};
@@ -450,4 +451,43 @@ fn broken_flow_files_are_skipped() {
     let got = flows::load(&[tmp.path().to_owned(), tmp.path().join("missing")]);
     assert_eq!(got.len(), 1);
     assert_eq!(got[0].name, "n");
+}
+
+#[test]
+fn reads_who_listens_and_what_launchd_runs() {
+    // `lsof -nP -iTCP:8765 -sTCP:LISTEN -Fpu`：同一个进程听 IPv4 和 IPv6
+    assert_eq!(
+        listener::owners("p4242\nu501\nf9\nf13\np4242\nu501\n"),
+        [(4242, 501)]
+    );
+    assert_eq!(
+        listener::owners("p1\nu0\nf3\np2\nu501\nf4\n"),
+        [(1, 0), (2, 501)]
+    );
+    assert!(listener::owners("").is_empty());
+    // `lsof -a -p <pid> -d txt -Fn`：第一个 `n` 是程序本身
+    assert_eq!(
+        listener::executable("p416\nftxt\nn/usr/libexec/rapportd\nftxt\nn/usr/lib/dyld\n")
+            .as_deref(),
+        Some("/usr/libexec/rapportd")
+    );
+    assert_eq!(listener::executable("p416\n"), None);
+    // `launchctl print gui/<uid>/<label>` 的样子：顶层一个制表符，里面的块两个
+    let print = "gui/501/dev.mirroir.serve = {\n\tactive count = 1\n\tpath = /Users/a/Library/LaunchAgents/dev.mirroir.serve.plist\n\tstate = running\n\n\tprogram = /Users/a/.mirroir-mcp/mirroir serve.app/Contents/MacOS/mirroir-mcp\n\tendpoints = {\n\t\tpid = 1\n\t}\n\tpid = 65366\n}\n";
+    assert_eq!(listener::top_level(print, "pid"), Some("65366"));
+    assert_eq!(listener::top_level(print, "state"), Some("running"));
+    assert_eq!(
+        listener::top_level("gui/501/x = {\n\tstate = not running\n}", "pid"),
+        None
+    );
+}
+
+#[test]
+fn the_adb_stop_step_quotes_the_path() {
+    let s = adb::stop_step(Path::new("/Users/a/Library/Android/sdk/platform-tools/adb"));
+    assert_eq!(
+        s.commands,
+        ["'/Users/a/Library/Android/sdk/platform-tools/adb' kill-server"]
+    );
+    assert!(s.text.contains("后台"));
 }

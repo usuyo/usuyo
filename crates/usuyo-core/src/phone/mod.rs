@@ -8,12 +8,14 @@
 mod adb;
 mod driver;
 mod flows;
+mod listener;
 mod probe;
 mod serve;
 #[cfg(test)]
 mod tests;
 
 use std::ffi::OsString;
+use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
@@ -33,8 +35,8 @@ pub(crate) use serve::Service;
 
 /// 授权给的是这个名字（`install-agent` 做的那个 App），不是 usuyo。
 const SERVE_NAME: &str = "mirroir serve";
-/// `check_health` 要真截一张图：这么久里只问一次。
-const HEALTH_FOR: Duration = Duration::from_secs(10);
+/// `check_health` 要真截一张图：这么久里只问一次（页面看得见时每 10 秒重拉一次）。
+const HEALTH_FOR: Duration = Duration::from_secs(30);
 
 /// 系统设置里两项授权那一栏的地址（mirroir-mcp `PermissionGuidance.swift` 用的同一对）。
 const SCREEN_RECORDING_PANE: &str =
@@ -55,6 +57,10 @@ pub struct PhoneConfig {
     /// 「mirroir serve」的 MCP 地址和它的令牌文件。
     pub serve_url: String,
     pub serve_token: PathBuf,
+    /// 发令牌之前认端口上的进程用的 `lsof`、`launchctl`、`id`（[`listener`] 模块开头）。
+    pub lsof: PathBuf,
+    pub launchctl: PathBuf,
+    pub id: PathBuf,
     /// `sw_vers`，读 macOS 的版本。
     pub sw_vers: PathBuf,
     /// 有它才算这台 Mac 有 iPhone 镜像；`iphone-mirroring` 打开的也是它。
@@ -68,6 +74,8 @@ pub struct PhoneConfig {
     /// 找 `adb` 的目录：先 `PATH`（这里是它的值），再这几个。
     pub adb_path: Option<OsString>,
     pub adb_dirs: Vec<PathBuf>,
+    /// adb 自己的服务听的地方；看这一页只连它，不起它。
+    pub adb_server: SocketAddr,
     /// 试剪贴板：等多久、多久看一次。
     pub clipboard_wait: Duration,
     pub clipboard_every: Duration,
@@ -92,6 +100,9 @@ impl PhoneConfig {
             downloads: Downloads::System,
             serve_url: "http://127.0.0.1:8765/mcp".into(),
             serve_token: home.join(".mirroir-mcp").join("serve-token"),
+            lsof: "/usr/sbin/lsof".into(),
+            launchctl: "/bin/launchctl".into(),
+            id: "/usr/bin/id".into(),
             sw_vers: "/usr/bin/sw_vers".into(),
             mirroring_app: "/System/Applications/iPhone Mirroring.app".into(),
             pgrep: "/usr/bin/pgrep".into(),
@@ -111,6 +122,7 @@ impl PhoneConfig {
                 "/usr/local/bin".into(),
                 home.join("Library/Android/sdk/platform-tools"),
             ],
+            adb_server: SocketAddr::from(([127, 0, 0, 1], 5037)),
             clipboard_wait: Duration::from_secs(10),
             clipboard_every: Duration::from_millis(500),
         })
@@ -140,6 +152,8 @@ pub enum PhoneError {
     Pasteboard(String),
     #[error("cannot open {0}")]
     Open(String),
+    #[error("no adb on this computer")]
+    NoAdb,
 }
 
 impl PhoneError {
@@ -148,7 +162,9 @@ impl PhoneError {
             PhoneError::NotServed => "not-found",
             PhoneError::Unsupported(_) => "unsupported-input",
             PhoneError::Busy => "conflict",
-            PhoneError::ServiceDown(_) | PhoneError::Tool { .. } => "dependency-missing",
+            PhoneError::ServiceDown(_) | PhoneError::Tool { .. } | PhoneError::NoAdb => {
+                "dependency-missing"
+            }
             PhoneError::Service(_) => "unavailable",
             PhoneError::ServiceTimeout => "timeout",
             PhoneError::Program { .. } | PhoneError::Pasteboard(_) | PhoneError::Open(_) => {
@@ -171,6 +187,7 @@ impl PhoneError {
             PhoneError::Program { .. } => "这台 Mac 上的一个系统程序没有回话。",
             PhoneError::Pasteboard(_) => "看不了这台 Mac 的剪贴板变没变。",
             PhoneError::Open(_) => "没能打开系统设置。",
+            PhoneError::NoAdb => "这台电脑上没找到 adb。",
         }
     }
 }
@@ -190,6 +207,8 @@ pub(crate) struct Phone {
     clipboard: Mutex<Option<ClipboardTest>>,
     /// 上一次 `check_health` 截没截到图，和什么时候问的。
     health: Mutex<Option<(Instant, bool)>>,
+    /// 这个守护进程的用户，第一次认端口上的人时问一次。
+    uid: tokio::sync::OnceCell<u32>,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -209,6 +228,7 @@ impl Phone {
             busy: Mutex::new(Busy::Idle),
             clipboard: Mutex::new(None),
             health: Mutex::new(None),
+            uid: tokio::sync::OnceCell::new(),
         })
     }
 
@@ -220,8 +240,36 @@ impl Phone {
             .find(|a| a.arch == self.config.arch)
     }
 
-    fn service(&self) -> Service {
-        Service::new(&self.config.serve_url, &self.config.serve_token, &self.net)
+    /// 先认端口上听的是不是驱动，是了才读令牌；认不出来的当「mirroir serve」没在跑，什么都不发。
+    async fn service(&self) -> Result<Service, PhoneError> {
+        let port = url::Url::parse(&self.config.serve_url)
+            .ok()
+            .and_then(|u| u.port_or_known_default())
+            .ok_or_else(|| PhoneError::Service("the serve address has no port".into()))?;
+        // 没有令牌文件时「mirroir serve」从没登记过：不用去认端口上的人。这里只看它在不在，不读。
+        if !self.config.serve_token.is_file() {
+            return Err(PhoneError::ServiceDown("no token file".into()));
+        }
+        let uid = *self
+            .uid
+            .get_or_try_init(|| listener::me(&self.config.id))
+            .await
+            .map_err(PhoneError::ServiceDown)?;
+        let binary = self.config.driver_dir.join(&self.config.release.binary);
+        let check = listener::Check {
+            lsof: &self.config.lsof,
+            launchctl: &self.config.launchctl,
+            uid,
+            label: driver::AGENT,
+            binary: &binary,
+        };
+        if let Err(why) = listener::is_driver(&check, port).await {
+            if !why.starts_with("nothing listens") {
+                tracing::warn!(reason = %why, "not sending the mirroir serve token");
+            }
+            return Err(PhoneError::ServiceDown(why));
+        }
+        Service::connect(&self.config.serve_url, &self.config.serve_token, &self.net)
     }
 
     /// 驱动那一行：装没装、能不能换新、没装上的原因、要你做的那一步。
@@ -281,8 +329,11 @@ impl Phone {
             let (g, m) = unknown(Mirroring::NotSetUp);
             return Ok((g, m, None));
         }
-        let service = self.service();
-        let answer = match service.status().await {
+        let answer = match self.service().await {
+            Ok(service) => service.status().await.map(|a| (service, a)),
+            Err(e) => Err(e),
+        };
+        let (service, answer) = match answer {
             Ok(a) => a,
             Err(e) => {
                 if !matches!(e, PhoneError::ServiceDown(_)) {
@@ -314,7 +365,7 @@ impl Phone {
         ))
     }
 
-    /// `check_health` 截没截到图；问不到是 `None`。十秒里只问一次。
+    /// `check_health` 截没截到图；问不到是 `None`。`HEALTH_FOR` 里只问一次。
     async fn captures(&self, service: &Service) -> Option<bool> {
         if let Some((at, ok)) = *lock(&self.health)
             && at.elapsed() < HEALTH_FOR
@@ -357,7 +408,11 @@ impl Engine {
         let (macos, reached, android) = tokio::join!(
             probe::macos(&p.config.sw_vers),
             p.reach(has_mirroring),
-            adb::android(p.config.adb_path.as_deref(), &p.config.adb_dirs),
+            adb::android(
+                p.config.adb_path.as_deref(),
+                &p.config.adb_dirs,
+                p.config.adb_server,
+            ),
         );
         let (grants, mirroring, served) = reached?;
         Ok(PhoneView {
@@ -436,6 +491,16 @@ impl Engine {
         self.phone_view().await
     }
 
+    /// `POST /phone/android/devices`：你点了「找一下连着的手机」才跑 `adb devices -l`。adb 的服务没在跑时
+    /// 它会起来、留在后台；回的页面里 `android.step` 说怎么停掉它。没找到 adb 回 424。
+    pub async fn phone_android_devices(&self) -> Result<PhoneView> {
+        let p = self.phone()?;
+        let android = adb::look(p.config.adb_path.as_deref(), &p.config.adb_dirs).await?;
+        let mut view = self.phone_view().await?;
+        view.android = android;
+        Ok(view)
+    }
+
     /// `POST /phone/open-settings`：打开系统设置的那一栏，或 iPhone 镜像这个 App。不改任何设置。
     pub async fn open_phone_settings(&self, pane: SettingsPane) -> Result<()> {
         let p = self.phone()?;
@@ -494,7 +559,7 @@ impl Engine {
     /// 什么都不点；读到的字只在这里比，不存、不进日志。
     pub async fn phone_dry_run(&self) -> Result<PhoneDryRun> {
         let p = self.phone()?;
-        let texts = p.service().screen_texts().await?;
+        let texts = p.service().await?.screen_texts().await?;
         let dirs: Vec<PathBuf> = self
             .inner
             .host

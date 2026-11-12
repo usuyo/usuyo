@@ -1,5 +1,6 @@
 //! 「mirroir serve」的 MCP 客户端（协议 §9.3 的包装，经它的 Streamable HTTP：一次 POST 一个 JSON-RPC，
-//! 一个 JSON 回答，带 `Authorization: Bearer`，令牌在 `~/.mirroir-mcp/serve-token`）。
+//! 一个 JSON 回答，带 `Authorization: Bearer`，令牌在 `~/.mirroir-mcp/serve-token`）。令牌只发给认过的
+//! 进程：端口上听的是你自己跑的驱动（[`super::listener`]），才读令牌、发请求。
 //!
 //! 只调三个只读的工具：`status`（连没连上）、`check_health`（截一张图试屏幕录制）、
 //! `describe_screen`（只要字，不要截图和坐标）。认的字样照 mirroir-mcp v0.47.0 的源码
@@ -23,9 +24,10 @@ const DESCRIBE_TIMEOUT: Duration = Duration::from_secs(25);
 const ANSWER_CAP: usize = 1 << 20;
 const TOKEN_CAP: u64 = 4096;
 
+/// 认过人（[`super::listener`]）以后才建：令牌在这时才读，不进日志、不进错误。
 pub(crate) struct Service {
     url: String,
-    token_file: std::path::PathBuf,
+    token: String,
     net: Net,
 }
 
@@ -115,18 +117,11 @@ pub(crate) fn texts(answer: &str) -> Vec<String> {
 }
 
 impl Service {
-    pub(crate) fn new(url: &str, token_file: &Path, net: &Net) -> Service {
-        Service {
-            url: url.to_owned(),
-            token_file: token_file.to_owned(),
-            net: net.clone(),
-        }
-    }
-
-    fn token(&self) -> Result<String, PhoneError> {
+    /// 读令牌文件：没有、空的都算「mirroir serve」没在跑。只在认过端口上的进程以后调。
+    pub(crate) fn connect(url: &str, token_file: &Path, net: &Net) -> Result<Service, PhoneError> {
         use std::io::Read;
-        let file = std::fs::File::open(&self.token_file).map_err(|e| {
-            PhoneError::ServiceDown(format!("token file {}: {e}", self.token_file.display()))
+        let file = std::fs::File::open(token_file).map_err(|e| {
+            PhoneError::ServiceDown(format!("token file {}: {e}", token_file.display()))
         })?;
         let mut token = String::new();
         file.take(TOKEN_CAP)
@@ -136,7 +131,11 @@ impl Service {
         if token.is_empty() {
             return Err(PhoneError::ServiceDown("the token file is empty".into()));
         }
-        Ok(token)
+        Ok(Service {
+            url: url.to_owned(),
+            token,
+            net: net.clone(),
+        })
     }
 
     /// 一次 JSON-RPC：回 `result`。
@@ -146,7 +145,6 @@ impl Service {
         params: Value,
         timeout: Duration,
     ) -> Result<Value, PhoneError> {
-        let token = self.token()?;
         let client = self
             .net
             .local_client(timeout)
@@ -154,7 +152,7 @@ impl Service {
         let body = json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params});
         let mut response = client
             .post(&self.url)
-            .bearer_auth(token)
+            .bearer_auth(&self.token)
             .header("MCP-Protocol-Version", PROTOCOL)
             .header(
                 reqwest::header::ACCEPT,

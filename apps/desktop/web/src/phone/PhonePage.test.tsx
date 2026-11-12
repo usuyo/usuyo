@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 import type { FetchMethod, FetchPlugin, PhoneDryRun, PhoneView, PluginsView } from "../api/endpoints";
 import { createMockPhone, type PhoneMock } from "../mock/phone";
 import { method as mockMethod } from "../mock/platforms";
@@ -45,14 +45,19 @@ const xhs: FetchPlugin = {
 /** `phone` 是 null 时内核没有这几条（兜底路由的 404）。记下发出去的动作和它们带的身子。 */
 const SEEN: PhoneDryRun = { read: 31, match: { flow: "小红书 · 收藏", step: 4, expect: { matched: 2, total: 2 }, targets: [{ label: "分享", found: true }, { label: "复制链接", found: false }] } };
 
+/** 读过几次 `GET /phone`。 */
+const reads: string[] = [];
+
 function serve(phone: PhoneView | null, plugins: PluginsView = { plugins: [xhs], notLoaded: [] }, dryRun: PhoneDryRun = SEEN) {
   const sent: string[] = [];
+  reads.length = 0;
   vi.stubGlobal("scrollTo", vi.fn());
   vi.stubGlobal(
     "fetch",
     vi.fn((input: URL | string, init?: RequestInit) => {
       const path = new URL(input).pathname;
       if (init?.method === "POST") sent.push(`POST ${path}${typeof init.body === "string" ? ` ${init.body}` : ""}`);
+      else if (path.endsWith("/phone")) reads.push(path);
       if (path.endsWith("/plugins")) return Promise.resolve(Response.json(plugins));
       if (path.endsWith("/events")) return new Promise(() => {});
       if (phone && path.endsWith("/phone/ios/dry-run")) {
@@ -85,7 +90,8 @@ it("says one calm sentence when the daemon does not look after phones yet, and s
 it("offers to install the driver when nothing is installed, saying where it comes from", async () => {
   const sent = serve(await sample("phone-none"));
   expect(await screen.findByText("还没装 mirroir。")).toBeTruthy();
-  expect(screen.getByText(/取 v0\.47\.0，约 12 MB，和官方的 SHA256SUMS 对上了/)).toBeTruthy();
+  expect(screen.getByText(/取 v0\.47\.0，约 .+，和官方的 SHA256SUMS 对上了才放进这台电脑自己的目录。装好以后，让它常驻的那一步要你在「终端」里做。/)).toBeTruthy();
+  expect(screen.getByText("iPhone 镜像没开着，或者这台 Mac 上还没设置过它。")).toBeTruthy();
   expect(screen.getAllByText("装上 mirroir 以后再给。")).toHaveLength(2);
   expect(screen.getByText("没找到 adb。")).toBeTruthy();
   expect(screen.getByText("brew install android-platform-tools")).toBeTruthy();
@@ -133,13 +139,14 @@ it("says plainly when a dry run recognises nothing", async () => {
   expect(within(result).getByText("什么都没点。")).toBeTruthy();
 });
 
-it("shows missing grants with a way to the right settings pane, and the update and remove actions", async () => {
-  const sent = serve(await sample("phone-grants"));
-  expect(await screen.findByText(/装着 mirroir v0\.46\.2，有新的 v0\.47\.0/)).toBeTruthy();
-  expect(screen.getByText(/还没给。在系统设置里找到「mirroir serve」/)).toBeTruthy();
-  expect(screen.getByText(/看不出来给没给。/)).toBeTruthy();
+it("shows missing grants with a way to the right settings pane, and the remove action with what it leaves", async () => {
+  const grants = await sample("phone-grants");
+  const sent = serve({ ...grants, ios: { ...grants.ios, grants: { ...grants.ios.grants, accessibility: "missing" } } });
+  expect(await screen.findByText("装着 mirroir v0.47.0。")).toBeTruthy();
+  expect(screen.getAllByText(/还没给。在系统设置里找到「mirroir serve」/)).toHaveLength(2);
   expect(screen.getByText("iPhone 没连上：手机解锁着，或者不在旁边。")).toBeTruthy();
-  expect(screen.getByText("没有连着的安卓手机。")).toBeTruthy();
+  expect(screen.getByText(/卸掉只删 usuyo 放进这台电脑目录里的这一份：在跑的「mirroir serve」不停，它的登录项和证书也留着。/)).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "更新" })).toBeNull();
   const [screenPane, accessibilityPane, more] = screen.getAllByRole("button", { name: "打开系统设置" });
   expect(more).toBeUndefined();
   if (!screenPane || !accessibilityPane) throw new Error("两项授权各有一个打开系统设置");
@@ -147,10 +154,54 @@ it("shows missing grants with a way to the right settings pane, and the update a
   await waitFor(() => expect(sent).toContain('POST /api/phone/open-settings {"pane":"screen-recording"}'));
   fireEvent.click(accessibilityPane);
   await waitFor(() => expect(sent).toContain('POST /api/phone/open-settings {"pane":"accessibility"}'));
-  fireEvent.click(screen.getByRole("button", { name: "更新" }));
-  await waitFor(() => expect(sent).toContain("POST /api/phone/ios/driver/update"));
   fireEvent.click(screen.getByRole("button", { name: "卸掉" }));
   await waitFor(() => expect(sent).toContain("POST /api/phone/ios/driver/remove"));
+});
+
+it("shows the registration step with each command to copy and what it changes on this Mac, and nothing that runs it", async () => {
+  const writeText = vi.fn(() => Promise.resolve());
+  const sent = serve(await sample("phone-register"));
+  Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+  onTestFinished(() => {
+    Reflect.deleteProperty(navigator, "clipboard");
+  });
+  const box = await screen.findByRole("group", { name: "要你在终端里做的一步" });
+  expect(within(box).getByText(/还差一步要你自己在「终端」里做/)).toBeTruthy();
+  const commands = within(box).getAllByText(/install-agent|launchctl bootstrap/);
+  expect(commands.map((c) => c.textContent)).toEqual([
+    "'/Users/you/Library/Application Support/usuyo/drivers/mirroir-mcp/mirroir-mcp' install-agent",
+    "launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.mirroir.serve.plist",
+  ]);
+  expect(within(box).getByText(/登录钥匙串里一张 mirroir 自己生成的签名证书（钥匙串会问你，选「始终允许」），和一个登录时启动的后台项/)).toBeTruthy();
+  // 只有「复制」：没有替你跑的按钮
+  expect(within(box).getAllByRole("button").map((b) => b.textContent)).toEqual(["复制", "复制"]);
+  // 还没常驻：不说它常驻着
+  expect(screen.queryByText(/它以「mirroir serve」常驻在这台电脑上/)).toBeNull();
+  // 系统设置里还没有它：授权两行指回这一步，不给打开系统设置
+  expect(screen.getAllByText("先做完「驱动」那一行要你在终端里做的那一步，系统设置里才有「mirroir serve」。")).toHaveLength(2);
+  expect(screen.queryByRole("button", { name: "打开系统设置" })).toBeNull();
+  expect(screen.getByText("先要在终端里登记「mirroir serve」、连上 iPhone。")).toBeTruthy();
+  fireEvent.click(within(box).getByRole("button", { name: "复制第 2 条命令" }));
+  await waitFor(() => expect(writeText).toHaveBeenCalledWith("launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.mirroir.serve.plist"));
+  expect(sent).toEqual([]);
+});
+
+it("after removing, shows the step that stops the still-running service, without the keychain sentence", async () => {
+  const phone = createMockPhone("phone-grants");
+  const removed = await phone.removeDriver();
+  serve(removed);
+  expect(await screen.findByText("还没装 mirroir。")).toBeTruthy();
+  const box = screen.getByRole("group", { name: "要你在终端里做的一步" });
+  expect(within(box).getByText("launchctl bootout gui/$(id -u)/dev.mirroir.serve")).toBeTruthy();
+  expect(within(box).queryByText(/签名证书（钥匙串会问你/)).toBeNull();
+});
+
+it("keeps the reason when an update failed and the old copy stays, still offering the update", async () => {
+  const sent = serve(await sample("phone-update-failed"));
+  expect(await screen.findByText(/装着 mirroir v0\.46\.2，有新的 v0\.47\.0/)).toBeTruthy();
+  expect(screen.getByText("没换成新的，装着的这一份还在：连不到 GitHub（看看设置里的代理），什么都没放进这台电脑。")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "更新" }));
+  await waitFor(() => expect(sent).toContain("POST /api/phone/ios/driver/update"));
 });
 
 it("when everything is ready, tests the clipboard and reports a dry run without tapping", async () => {
@@ -173,16 +224,42 @@ it("when everything is ready, tests the clipboard and reports a dry run without 
 
 it("keeps the reason when the install failed and offers to try again", async () => {
   const sent = serve(await sample("phone-failed"));
-  expect(await screen.findByText(/没装上：下载下来的包和 SHA256SUMS 对不上/)).toBeTruthy();
+  expect(await screen.findByText(/没装上：下载下来的包和钉住的 SHA256 对不上/)).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "再装一次" }));
   await waitFor(() => expect(sent).toEqual(["POST /api/phone/ios/driver/install"]));
 });
 
-it("tells you to accept the USB debugging prompt on an Android phone, with the serial shortened", async () => {
-  serve(await sample("phone-android"));
-  expect(await screen.findByText("在手机上点「允许 USB 调试」")).toBeTruthy();
-  expect(screen.getByText("R58N…3K2A")).toBeTruthy();
+it("tells you to accept the USB debugging prompt on an Android phone, showing the serial as the daemon sent it, and how to stop adb's server", async () => {
+  const android = await sample("phone-android");
+  // 两台缩短以后一样：都列出来
+  const twin = android.android.devices[0];
+  if (!twin) throw new Error("样例里有安卓手机");
+  serve({ ...android, android: { ...android.android, devices: [...android.android.devices, twin] } });
+  expect(await screen.findAllByText("在手机上点「允许 USB 调试」")).toHaveLength(2);
+  expect(screen.getAllByText("R58N…3K2A")).toHaveLength(2);
+  expect(screen.getByText("emul…5554")).toBeTruthy();
   expect(screen.getByText("连着，但不回话：拔下来再插上")).toBeTruthy();
+  const box = screen.getByRole("group", { name: "怎么停掉 adb 的服务" });
+  expect(within(box).getByText("'/opt/homebrew/bin/adb' kill-server")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "找一下连着的手机" })).toBeNull();
+});
+
+it("when adb's server is not running, lists nothing and looks for phones only when you press it", async () => {
+  const sent = serve(await sample("phone-grants"));
+  expect(await screen.findByText("还没找过连着的安卓手机。")).toBeTruthy();
+  expect(screen.getByText(/adb 会起它自己的服务，之后留在这台电脑的后台，直到你停掉它/)).toBeTruthy();
+  expect(screen.queryByRole("list", { name: "连着的安卓手机" })).toBeNull();
+  expect(sent).toEqual([]);
+  fireEvent.click(screen.getByRole("button", { name: "找一下连着的手机" }));
+  await waitFor(() => expect(sent).toEqual(["POST /api/phone/android/devices"]));
+});
+
+it("reads the page again when the window comes back to the front", async () => {
+  serve(await sample("phone-grants"));
+  await screen.findByText("装着 mirroir v0.47.0。");
+  const before = reads.length;
+  window.dispatchEvent(new Event("focus"));
+  await waitFor(() => expect(reads.length).toBeGreaterThan(before));
 });
 
 it("lists the methods that use a phone, what each still needs, and links to its plugin card", async () => {

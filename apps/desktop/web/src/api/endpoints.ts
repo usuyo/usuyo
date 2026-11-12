@@ -133,14 +133,14 @@ export const paths = {
   /** POST：删掉这个模型；之后要它的转换等着模型。 */
   modelRemove: (pluginId: string, name: string) => `/transforms/${pluginPath(pluginId)}/models/${encodeURIComponent(name)}/remove`,
 
-  // —— 手机（「手机」页，docs/platforms/phone.md §4）。内核今天（11-12）还没有这几条。——
-  /** GET `PhoneView`：这台电脑上 iPhone 镜像那条路和安卓 adb 那条路各自怎样。用到手机的取法不在这里，在 `paths.plugins`。 */
+  // —— 手机（「手机」页，docs/platforms/phone.md §4、§12）。只在 macOS 上的内核有，别处回 404 `not-found`。——
+  /** GET `PhoneView`：这台电脑上 iPhone 镜像那条路和安卓 adb 那条路各自怎样。看它不起任何程序（不起 adb 的服务）。用到手机的取法不在这里，在 `paths.plugins`。 */
   phone: "/phone",
-  /** POST：装 mirroir（官方 release 的 `darwin-arm64` 包，钉版本、对 `SHA256SUMS`，放按机器目录，再跑 `install-agent`），马上回 `PhoneView`（`installing`）；装好或没装上发 `phone-updated`。 */
+  /** POST：装 mirroir（官方 release 的 `darwin-arm64` 包，钉版本、对 `SHA256SUMS`，放按机器目录），马上回 `PhoneView`（`installing`）；装好或没装上发 `phone-updated`。不登记「mirroir serve」：那一步改这台 Mac 的设置，写在 `PhoneDriver.step` 里交给你。 */
   phoneDriverInstall: "/phone/ios/driver/install",
   /** POST：换成 `PhoneDriver.available` 那一版，同上。 */
   phoneDriverUpdate: "/phone/ios/driver/update",
-  /** POST：停掉「mirroir serve」、卸掉 mirroir 和它的常驻项，回 `PhoneView`。系统设置里给它的授权由系统留着。 */
+  /** POST：删掉按机器目录里的 mirroir，回 `PhoneView`。不停「mirroir serve」、不删它的登录项；它还在跑时 `PhoneDriver.step` 是停掉它的那一步。系统设置里给它的授权由系统留着。 */
   phoneDriverRemove: "/phone/ios/driver/remove",
   /** POST `{pane: SettingsPane}`：打开系统设置的那一栏（或 iPhone 镜像这个 App），204。 */
   phoneOpenSettings: "/phone/open-settings",
@@ -148,6 +148,8 @@ export const paths = {
   phoneClipboardTest: "/phone/ios/clipboard-test",
   /** POST：演练模式读一次镜像的这一屏，回 `PhoneDryRun`。什么都不点；读到的字和截图不存、不进日志。 */
   phoneDryRun: "/phone/ios/dry-run",
+  /** POST：「找一下连着的手机」，跑一次 `adb devices -l`，回 `PhoneView`。adb 的服务没在跑时会起来、留在后台（`PhoneAndroid.step` 说怎么停）；别处都不起它。没找到 adb 回 424。不发 `phone-updated`。 */
+  phoneAndroidDevices: "/phone/android/devices",
 
   /** GET：装着的插件会用到的访客身份（不是账号）和有没有存着。访客窗口照它开；不出现在 `paths.sites` 里。 */
   visitors: "/visitors",
@@ -233,7 +235,7 @@ export type PlatformEvent =
   | { type: "plugins-updated" }
   /** 模型开始下、下好了、没下成、删掉了，或设置里的 `transforms.auto` 变了。重新拉 `paths.transforms`、`paths.settings`。 */
   | { type: "transforms-updated" }
-  /** 手机那一页的事变了：mirroir 装好、没装上、卸掉，授权、镜像连上断开，剪贴板试出了结果，adb 的设备来去。重新拉 `paths.phone`。 */
+  /** 手机那一页的事变了：mirroir 开始装、装好、没装上、卸掉，剪贴板试出了结果。重新拉 `paths.phone`。授权、镜像、adb 在 usuyo 外面变，不发这一条：页面看得见时自己隔一会儿重拉。 */
   | { type: "phone-updated" };
 
 /** 平台的显示名由获取插件给，内核不认识具体平台。 */
@@ -1190,8 +1192,16 @@ export interface PhoneDriver {
   version?: string;
   /** usuyo 钉的那一版：没装时是要装的，装着的旧了是能换的；装着的就是它时省略。`size` 是字节，`source` 是官方 release 的地址。 */
   available?: { version: string; size: number; source: string };
-  /** 没装上的原因，一句话（`failed`）。 */
+  /** 没装上的原因，一句话：`failed` 时，或换新没成、旧的那份还在（`present`）时。 */
   hint?: string;
+  /** 要你自己在「终端」里做的那一步：装好了、「mirroir serve」没在跑时登记它；跑的是旧的一版时重新登记；卸掉以后它还在跑时停掉它。 */
+  step?: PhoneStep;
+}
+
+/** 一句话说要做什么、为什么不由 usuyo 做，和要在终端里一条条跑的命令。 */
+export interface PhoneStep {
+  text: string;
+  commands: string[];
 }
 
 /** 试一下通用剪贴板：在等、到了、`waitSec` 秒里没变。拷的字从不回出来。 */
@@ -1208,7 +1218,7 @@ export interface PhoneIos {
   driver: PhoneDriver;
   /** 授权给的是 `to`（「mirroir serve」），不是 usuyo。驱动没装时两项都是 `unknown`。 */
   grants: { to: string; screen: GrantState; accessibility: GrantState };
-  /** iPhone 镜像：没设置过、手机不在（解锁着或不在旁边）、连着。 */
+  /** iPhone 镜像：`not-set-up` 是没设置过，或者 iPhone 镜像这个 App 没开；`away` 是开着、手机没连上（解锁着或不在旁边）；`connected` 连着。 */
   mirroring: "not-set-up" | "away" | "connected";
   /** 最近一次试剪贴板；没试过省略。 */
   clipboard?: PhoneClipboardTest;
@@ -1216,6 +1226,7 @@ export interface PhoneIos {
 
 /** `adb devices` 的一台：要在手机上点允许 USB 调试、连好了、连着但不回话。 */
 export interface AndroidDevice {
+  /** 内核已经缩短过（长的只留头尾四位），照着显示；两台可能缩成一样的。 */
   serial: string;
   /** 型号，例如 `Pixel 8`；没授权前读不到。 */
   model?: string;
@@ -1223,9 +1234,12 @@ export interface AndroidDevice {
 }
 
 export interface PhoneAndroid {
-  /** 找到的 adb；没找到是 null。 */
-  adb: { path: string; version: string } | null;
+  /** 找到的 adb；没找到是 null。`running` 是 adb 自己的服务这会儿在不在跑（看的时候不起它）。 */
+  adb: { path: string; version: string; running: boolean } | null;
+  /** 只在 adb 的服务在跑时列；不在跑时是空的，要你点 `paths.phoneAndroidDevices`。 */
   devices: AndroidDevice[];
+  /** adb 的服务在跑时：它留在后台，怎么停掉它。 */
+  step?: PhoneStep;
 }
 
 export interface PhoneView {
@@ -1235,7 +1249,7 @@ export interface PhoneView {
 
 /**
  * 演练一次：读这一屏，说它像哪个流程的第几步，什么都没点。`read` 是读到几段字；认不出时没有 `match`。
- * `expect` 是这一步该有的字对上了几段，`targets` 是这一步要点的每个字找没找到，`cards` 是列表里读到几张卡片。
+ * `expect` 是这一步该有的字对上了几段，`targets` 是这一步要点的每个字找没找到。
  */
 export interface PhoneDryRun {
   read: number;
@@ -1246,7 +1260,6 @@ export interface PhoneDryRun {
     step: number;
     expect: { matched: number; total: number };
     targets: { label: string; found: boolean }[];
-    cards?: number;
   };
 }
 

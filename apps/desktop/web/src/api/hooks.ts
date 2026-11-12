@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import type { PhoneView, SettingsPane, ChangesView, FollowPatch, FollowTrialRequest, NewFollowRequest, Draft, DraftPatch, NewDraftRequest, CiteRequest, PagePatch, TopicMatch, TopicPage, SettingsPatch, TransformRequest, ConfirmImportRequest, CreateDeliverTokenRequest, ImportEntry, ImportView, Item, StartImportRequest, TakeRequest } from "./endpoints";
 import { ApiError, DaemonUnreachableError, isNotServed } from "./client";
 import { call } from "./source";
@@ -621,19 +622,33 @@ export function useReleaseHeld() {
 
 // —— 手机 ——
 
+/** 授权、镜像、adb 在 usuyo 外面变，没有事件：页面看得见时隔这么久重拉一次。 */
+const PHONE_CALM_MS = 10_000;
+
 export function usePhone() {
-  return useQuery({
+  const query = useQuery({
     queryKey: queryKeys.phone,
     queryFn: () => call((s) => s.phone()),
     retry: retryUnlessMissing,
-    // 在装、在等剪贴板时隔一会儿重拉：事件流断了（或样例库没有事件流）也看得到结果。
-    refetchInterval: (q) => (q.state.data?.ios.driver.state === "installing" || q.state.data?.ios.clipboard?.state === "waiting" ? 1500 : false),
+    // 页面看不见时不拉（`refetchIntervalInBackground` 是 false）；回到看得见时马上拉一次。
+    refetchOnWindowFocus: true,
+    // 在装、在等剪贴板时拉得勤些：事件流断了（或样例库没有事件流）也看得到结果。内核不管手机时不拉。
+    refetchInterval: (q) =>
+      q.state.data?.ios.driver.state === "installing" || q.state.data?.ios.clipboard?.state === "waiting" ? 1500 : isNotServed(q.state.error) ? false : PHONE_CALM_MS,
   });
+  // 从系统设置切回来时窗口一直看得见，只有 `focus`：这时也重拉，刚给的授权马上显示。
+  const { refetch } = query;
+  useEffect(() => {
+    const again = () => void refetch({ cancelRefetch: false });
+    window.addEventListener("focus", again);
+    return () => window.removeEventListener("focus", again);
+  }, [refetch]);
+  return query;
 }
 
-type PhoneAction = { kind: "install" | "update" | "remove" | "clipboard" } | { kind: "open"; pane: SettingsPane };
+type PhoneAction = { kind: "install" | "update" | "remove" | "clipboard" | "android" } | { kind: "open"; pane: SettingsPane };
 
-/** 装、换新、卸掉 mirroir，试剪贴板：回来的整页放进缓存。打开系统设置不改什么，之后授权变了由 `phone-updated` 重拉。 */
+/** 装、换新、卸掉 mirroir，试剪贴板，找连着的安卓手机：回来的整页放进缓存。打开系统设置不改什么，授权给了以后由窗口回到前面时的重拉看到。 */
 export function usePhoneAction() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -648,12 +663,17 @@ export function usePhoneAction() {
             return s.removeDriver();
           case "clipboard":
             return s.testClipboard();
+          case "android":
+            return s.lookForAndroid();
           default:
             return s.openSettings(a.pane);
         }
       }),
-    onSuccess: (view) => {
-      if (view) queryClient.setQueryData(queryKeys.phone, view);
+    onSuccess: async (view) => {
+      if (!view) return;
+      // 正在路上的那次重拉回来得晚，会盖回旧的样子：先停下它。
+      await queryClient.cancelQueries({ queryKey: queryKeys.phone });
+      queryClient.setQueryData(queryKeys.phone, view);
     },
   });
 }

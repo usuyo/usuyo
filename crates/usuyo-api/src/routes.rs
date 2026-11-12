@@ -113,6 +113,7 @@ pub(crate) fn build(engine: Engine, gate: Arc<Gate>, origins: &[String]) -> Rout
         .route("/phone/open-settings", post(phone_open_settings))
         .route("/phone/ios/clipboard-test", post(phone_clipboard_test))
         .route("/phone/ios/dry-run", post(phone_dry_run))
+        .route("/phone/android/devices", post(phone_android_devices))
         .route("/settings", get(settings).patch(patch_settings))
         .route("/trash/release-held", post(release_held))
         .route("/search", get(search))
@@ -541,6 +542,11 @@ async fn phone_clipboard_test(State(s): State<AppState>) -> ApiResult<PhoneView>
 
 async fn phone_dry_run(State(s): State<AppState>) -> ApiResult<PhoneDryRun> {
     Ok(Json(s.engine.phone_dry_run().await?))
+}
+
+/// 跑一次 `adb devices -l`（会起 adb 的服务，之后留在后台），回 `PhoneView`。
+async fn phone_android_devices(State(s): State<AppState>) -> ApiResult<PhoneView> {
+    Ok(Json(s.engine.phone_android_devices().await?))
 }
 
 async fn settings(State(s): State<AppState>) -> ApiResult<SettingsView> {
