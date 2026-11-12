@@ -34,7 +34,7 @@ ln -s /opt/homebrew/bin/ffprobe "$PLUGIN_DIR/ffprobe"
 <a id="跑起来是什么样"></a>
 ## 跑起来是什么样
 
-照[协议 §4.2](../../docs/plugin-protocol.md#42-转换的-run) 在 stdio 上说 JSON-RPC；循环由 plugin-kit 管。一次 `run` 的 `want` 只有一项，输入和产物：
+照[协议 §4.2](../../docs/protocol/transform-export.md#42-转换的-run) 在 stdio 上说 JSON-RPC；循环由 plugin-kit 管。一次 `run` 的 `want` 只有一项，输入和产物：
 
 | `want` | 输入 | 产物 | 做法 |
 |---|---|---|---|

@@ -6,29 +6,29 @@
 <a id="1-怎么读这一页"></a>
 ## 1. 怎么读这一页
 
-**层级。** 表里的 `public-web`、`browser-session`、`session-api` 这些词照[插件协议 §2.4](../plugin-protocol.md#24-access-与-login) 的定义，这里不再解释；它们是给你挑的标签，不拦。
+**层级。** 表里的 `public-web`、`browser-session`、`session-api` 这些词照[插件协议 §2.4](../protocol/manifest.md#24-access-与-login) 的定义，这里不再解释；它们是给你挑的标签，不拦。
 
 **要不要账号**，表里用五个说法：
 
 | 说法 | 意思 |
 |---|---|
 | 不要 | 不登录，也不用任何身份 |
-| 访客身份 | 不登录，但要一份站点给任何访客的 cookie，usuyo 开一个不登录的窗口取（[协议 §2.5.1](../plugin-protocol.md#251-访客身份-visitors)） |
-| 账号只在你自己的浏览器里 | 你在日常浏览器里登录着，脚本只看页面自己拿回来的东西，把链接交给 usuyo（[协议 §9.4](../plugin-protocol.md#94-浏览器扩展与油猴脚本)）；usuyo 碰不到你的 cookie |
-| 要在 usuyo 里登录 | 你在 usuyo 的登录窗口里登录，插件带你的 cookie 调平台接口（[协议 §2.5](../plugin-protocol.md#25-登录站点-sites)） |
+| 访客身份 | 不登录，但要一份站点给任何访客的 cookie，usuyo 开一个不登录的窗口取（[协议 §2.5.1](../protocol/manifest.md#251-访客身份-visitors)） |
+| 账号只在你自己的浏览器里 | 你在日常浏览器里登录着，脚本只看页面自己拿回来的东西，把链接交给 usuyo（[协议 §9.4](../protocol/wrapping.md#94-浏览器扩展与油猴脚本)）；usuyo 碰不到你的 cookie |
+| 要在 usuyo 里登录 | 你在 usuyo 的登录窗口里登录，插件带你的 cookie 调平台接口（[协议 §2.5](../protocol/manifest.md#25-登录站点-sites)） |
 | 没有路 | 调研里没找到可用的做法 |
 
 **账号只用在非它不可的地方**（[BUILD §1](../BUILD.md#1-用户定下的做法)）。每个平台按「这一样要不要账号」拆开：不要账号能拿到的，一律不带账号去取，你登录过也不带；账号只用在没有别的办法的那几样上，多半是「列出你存过的」。这是分路的规矩，不是一个共用的下载器：每个平台还是一个插件，插件按能力声明各走各的路。
 
-**清单现在怎么写出这个拆分。** 按能力分开声明（[协议 §2.3](../plugin-protocol.md#23-获取插件的字段)）：不要账号的写在 `fetch` 上，`login: none`；要账号的写在 `list` 上，`login: required`，`sites` 写是哪个账号；只要访客身份的写 `visitors`，它不算账号，`login: none` 也能写。B站的样子就是 `fetch` 不登录、`list` 要登录。
+**清单现在怎么写出这个拆分。** 按能力分开声明（[协议 §2.3](../protocol/manifest.md#23-获取插件的字段)）：不要账号的写在 `fetch` 上，`login: none`；要账号的写在 `list` 上，`login: required`，`sites` 写是哪个账号；只要访客身份的写 `visitors`，它不算账号，`login: none` 也能写。B站的样子就是 `fetch` 不登录、`list` 要登录。
 
-**协议还说不出的一处：同一个能力里只有某一样要账号。** 视频号的 `fetch` 不登录能取作者、描述、封面，只有视频要借元宝账号。现在只能把整个 `fetch` 写成 `login: optional`，宿主不知道哪一样用得到账号：宿主的代码（`crates/usuyo-plugin/src/host/credentials.rs` 的 `handover`）只看能力的 `login` 不是 `none`、站点存着登录，就把凭据交给这次调用，不看 `--want`，靠插件自己只在那一步用。协议照上面的规矩写了：`login: optional` 时你登录过也不带，账号只用在非它不可的那几样上（[协议 §2.4](../plugin-protocol.md#24-access-与-login)）；宿主不知道是哪几样，所以还做不到。
+**协议还说不出的一处：同一个能力里只有某一样要账号。** 视频号的 `fetch` 不登录能取作者、描述、封面，只有视频要借元宝账号。现在只能把整个 `fetch` 写成 `login: optional`，宿主不知道哪一样用得到账号：宿主的代码（`crates/usuyo-plugin/src/host/credentials.rs` 的 `handover`）只看能力的 `login` 不是 `none`、站点存着登录，就把凭据交给这次调用，不看 `--want`，靠插件自己只在那一步用。协议照上面的规矩写了：`login: optional` 时你登录过也不带，账号只用在非它不可的那几样上（[协议 §2.4](../protocol/manifest.md#24-access-与-login)）；宿主不知道是哪几样，所以还做不到。
 
-现行写法能做到的：把要账号的那一样拆成另一个插件，`fetch` 只声明那一样的 `outputs`，宿主照[协议 §3.1](../plugin-protocol.md#31-运行器与节奏) 在第一个插件回 `partial` 时带 `--want=<缺的>` 去试它。代价是同一个平台装两个插件、身份和节奏要对齐。
+现行写法能做到的：把要账号的那一样拆成另一个插件，`fetch` 只声明那一样的 `outputs`，宿主照[协议 §3.1](../protocol/fetch.md#31-运行器与节奏) 在第一个插件回 `partial` 时带 `--want=<缺的>` 去试它。代价是同一个平台装两个插件、身份和节奏要对齐。
 
-补法定了，还没做（[协议 §13 第 42 项](../plugin-protocol.md#13-待定)）：能力声明加一个可选字段 `accountOutputs`，值是 `outputs` 的子集，列出只有带账号才拿得到的几样。宿主只在 `--want` 和它有交集时才传 `USUYO_CREDENTIALS`，别的调用照 `login: none` 处理，不传任何账号凭据；`login: optional` 而没写 `accountOutputs` 的，当作每一样都可能用到账号。视频号写 `accountOutputs: [media:video]`。
+补法定了，还没做（[协议 §13 第 42 项](../protocol/open.md#13-待定)）：能力声明加一个可选字段 `accountOutputs`，值是 `outputs` 的子集，列出只有带账号才拿得到的几样。宿主只在 `--want` 和它有交集时才传 `USUYO_CREDENTIALS`，别的调用照 `login: none` 处理，不传任何账号凭据；`login: optional` 而没写 `accountOutputs` 的，当作每一样都可能用到账号。视频号写 `accountOutputs: [media:video]`。
 
-按创作者主页列、按关键词列，协议也还没有对应的能力，记在[协议 §13](../plugin-protocol.md#13-待定) 第 26 项；表里这一行只写调研查到的路。
+按创作者主页列、按关键词列，协议也还没有对应的能力，记在[协议 §13](../protocol/open.md#13-待定) 第 26 项；表里这一行只写调研查到的路。
 
 <a id="2-总表"></a>
 ## 2. 总表
@@ -52,7 +52,7 @@
 | X | 图文 | 不要 | 访客令牌调帖子接口，或嵌入用的 syndication 接口（`public-web`）；要登录才看得到的帖子除外 | 做了 | `usuyo-fetch/x`；[x.md](x.md#3-取单条) |
 | X | 视频 | 不要 | 同一次回答里的视频地址，不带 cookie 下载（`public-web`） | 做了 | 同上 |
 | X | 存过的 | 账号只在你自己的浏览器里 | 油猴脚本只记书签页、喜欢页自己的请求，交 `/v1/batches`（`browser-session`）；或读官方归档（`official-export`） | 做了 | `usuyo-fetch/x/userscript/`；[x.md](x.md#2-列出你存过的) |
-| X | 创作者 / 关键词 | 账号只在你自己的浏览器里 | 不登录看不到主页时间线和搜索；只能由脚本记你自己翻到的 | 设计了（等[协议 §13](../plugin-protocol.md#13-待定) 第 26 项） | [x.md](x.md#4-按创作者或关键词列) |
+| X | 创作者 / 关键词 | 账号只在你自己的浏览器里 | 不登录看不到主页时间线和搜索；只能由脚本记你自己翻到的 | 设计了（等[协议 §13](../protocol/open.md#13-待定) 第 26 项） | [x.md](x.md#4-按创作者或关键词列) |
 | 抖音 | 图文 | 不要 | 分享页服务端渲染的数据（`public-web`） | 只有调研 | [调研 06 §1.3](../research/06-platform-access-and-account-risk.md#13-混合路径视觉层拿链接公开页面取内容) |
 | 抖音 | 视频 | 不要 | 同一个分享页给的播放地址（`public-web`）；yt-dlp 那条路要一份新的访客 cookie | 只有调研 | 同上；[yt-dlp 笔记](../research/notes/tier-ytdlp-and-sph-attribution.md) |
 | 抖音 | 存过的 | 账号只在你自己的浏览器里 | 在真抖音页面里发请求取收藏（`browser-session`）；页面外的请求 2026 下半年被拦；另有官方「个人信息下载」，包里有什么没核实 | 只有调研 | [抖音笔记](../research/notes/douyin-direction-findings.md) |

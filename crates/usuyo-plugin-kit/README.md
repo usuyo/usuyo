@@ -90,7 +90,7 @@ fn local_policy() -> Policy {
 <a id="转换插件只写-run"></a>
 ## 转换插件：只写 `run`
 
-转换插件是常驻进程，在 stdin、stdout 上一行一条 JSON-RPC 2.0（[协议 §4.1](../../docs/plugin-protocol.md#41-分帧与生命周期)、[§4.2](../../docs/plugin-protocol.md#42-转换的-run)）。`transform::serve` 管整个循环：读行、`describe`、`health`、`cancel`、`progress`、错误码。你交一份 `Describe` 和一个处理函数：
+转换插件是常驻进程，在 stdin、stdout 上一行一条 JSON-RPC 2.0（[协议 §4.1](../../docs/protocol/transform-export.md#41-分帧与生命周期)、[§4.2](../../docs/protocol/transform-export.md#42-转换的-run)）。`transform::serve` 管整个循环：读行、`describe`、`health`、`cancel`、`progress`、错误码。你交一份 `Describe` 和一个处理函数：
 
 ```rust
 use usuyo_plugin_kit::protocol::{CallFailure, Describe, RunParams, RunResult};

@@ -24,7 +24,7 @@
 
 1. **wx-cli 推断指 jackwener/wx-cli。** 原仓库 2026-07-15 起因腾讯的 DMCA 通知返回 451。通知以反规避条款（17 U.S.C. 1201）为主、服务条款为辅，没有主张商标；只点名这一个仓库，GitHub 按 1,464 个仓库的派生网络处理。2026 年针对微信本地数据的通知共 37 份。同作者的 wx-cli-again 是真代码，但只是 0.6.3 的单提交快照。见 [§1.1](#11-是哪个-wx-cli)、[§1.2](#12-dmca-通知)。
 2. **你的电脑现在用不上。** 这类工具都只支持微信 4.x，本机是 3.8.8.19。层级是 `client-hook`，登录必须。见 [§1.4](#14-收藏能拿到什么)、[§1.5](#15-层级)。
-3. **建议：你的 `{fetch-org}` 不放微信专用的 client-hook 插件**（[R5](../plugin-protocol.md#85-添加来源更新与权限扩大) 的 B）。
+3. **建议：你的 `{fetch-org}` 不放微信专用的 client-hook 插件**（[R5](../protocol/distribution.md#85-添加来源更新与权限扩大) 的 B）。
    - 理由有三条：用户要改的系统设置多；上游不稳；账号会被处理（WeFlow #411）。
    - 「包装也会被点名」不是理由：只调用用户自装工具的仓库，到今天一个都没被点名。
    - 官方组织按 P3 放一个和平台无关的「链接清单导入」插件，读 JSON、CSV 链接清单。
@@ -136,9 +136,9 @@ xiaotianhu/wx-cli 只是同名：一个扫码登录的远程 Shell 机器人，�
 
 **`client-hook`，登录 `required`。**
 
-- **为什么是这一层**：附加或读微信进程内存拿密钥、解密本地库，正是 [插件协议 §2.4](../plugin-protocol.md#24-access-与-login) 里 client-hook 的定义。
+- **为什么是这一层**：附加或读微信进程内存拿密钥、解密本地库，正是 [插件协议 §2.4](../protocol/manifest.md#24-access-与-login) 里 client-hook 的定义。
 - **r266 的「只读」不改变层级**：它指的是不写库、不发消息。取密钥那一步照样附加进程；协议规定按实际默认路径填。
-- **为什么要登录**：取密钥时微信要开着并已登录，读的也是这个账号的数据。`sites` 的 `credential` 写 `app`（[§2.5](../plugin-protocol.md#25-登录站点-sites)）。
+- **为什么要登录**：取密钥时微信要开着并已登录，读的也是这个账号的数据。`sites` 的 `credential` 写 `app`（[§2.5](../protocol/manifest.md#25-登录站点-sites)）。
 - **和 06 一致**：[06 §8](06-platform-access-and-account-risk.md#8-微信生态) 现有的 wx-cli-again 一行也是 client-hook、必须。
 
 <a id="16-做成插件"></a>
@@ -147,11 +147,11 @@ xiaotianhu/wx-cli 只是同名：一个扫码登录的远程 Shell 机器人，�
 | 做法 | 插件做什么 | 仓库里有没有取密钥代码 | 层级 | 协议能不能表达 |
 |---|---|---|---|---|
 | A 包装你自装的 wx-cli | `list` 调 `wx favorites --json`，把文章类转成只带 `url` 的条目，正文交给公众号插件（[06 §1.3](06-platform-access-and-account-risk.md#13-混合路径视觉层拿链接公开页面取内容) 的混合路径） | 没有，取密钥由你自己跑 | client-hook | 部分能，缺三处，见下 |
-| B 导入 wx-cli 导出的文件 | 你自己导出 JSON，拖进来；插件按 [§3.9](../plugin-protocol.md#39-从文件导入) 读 | 没有，只解析 JSON | `official-export` | 能 |
+| B 导入 wx-cli 导出的文件 | 你自己导出 JSON，拖进来；插件按 [§3.9](../protocol/fetch.md#39-从文件导入) 读 | 没有，只解析 JSON | `official-export` | 能 |
 | C 插件自己取密钥 | — | 有，这正是 37 份通知点名的行为 | client-hook | 不能：`devices` 里没有「附加调试器、读别的进程内存」这一项；要 sudo，宿主管不住 |
 
 **B 的层级已经写定。**
-- [插件协议 §9.4](../plugin-protocol.md#94-浏览器扩展与油猴脚本) 规定：导入插件按自己做的事填 `official-export`；文件怎么来的，写进 `description` 和插件 README。
+- [插件协议 §9.4](../protocol/wrapping.md#94-浏览器扩展与油猴脚本) 规定：导入插件按自己做的事填 `official-export`；文件怎么来的，写进 `description` 和插件 README。
 - 所以 B 的 `description` 写：清单由你用自己装的工具导出，导出那一步属于 client-hook。
 - 要改成 client-hook，就是一条改协议的提案。而且要把 xhs-vault（browser-session）、手机 Agent（vision-ui）导出的清单一起改，不能只改微信。
 
@@ -191,7 +191,7 @@ xiaotianhu/wx-cli 只是同名：一个扫码登录的远程 Shell 机器人，�
 <a id="18-建议"></a>
 ### 1.8 建议
 
-1. **`{fetch-org}` 不放微信专用的 client-hook 插件**：A、C 不放，B 也不做成微信专用的。和 [R5](../plugin-protocol.md#85-添加来源更新与权限扩大) 的建议 B 一致。理由有三条：
+1. **`{fetch-org}` 不放微信专用的 client-hook 插件**：A、C 不放，B 也不做成微信专用的。和 [R5](../protocol/distribution.md#85-添加来源更新与权限扩大) 的建议 B 一致。理由有三条：
    - **系统改动大**：sudo；开发者工具授权；关 SIP 或重签微信；管理员密码进钥匙串。
    - **上游不稳**：
      - 公开代码是单提交快照，后续在私有仓库；
@@ -201,7 +201,7 @@ xiaotianhu/wx-cli 只是同名：一个扫码登录的远程 Shell 机器人，�
      - 0.3 到 0.6 改过输出外壳，插件得锁版本，B 也一样。
    - **账号风险**：WeFlow #411、pandorafuture #16。
 2. **官方组织放一个和平台无关的「链接清单导入」插件**，按 [P3](../answers.md)：
-   - 读任何工具导出的 JSON、CSV 链接清单，`official-export`、`login: none`、`network: none`，现行 [§3.9](../plugin-protocol.md#39-从文件导入) 就够。
+   - 读任何工具导出的 JSON、CSV 链接清单，`official-export`、`login: none`、`network: none`，现行 [§3.9](../protocol/fetch.md#39-从文件导入) 就够。
    - 文档写「微信收藏可以用你自己装的工具导出成清单再导入」，不点名、不链接 wx-cli。这样官方组织里没有微信专用的东西（推断）。
 3. **你自己装第三方插件照常能装**：A 这类别人写的插件，按 [D-b](../answers.md) 和 [R-i](../answers.md) 能装。你 11-04 那句话也是这个意思：协议对七层都开放，`{fetch-org}` 收什么另定。
 4. **先要升微信**：不论 A 还是 B，都要先把微信升到 4.x；升级会影响视觉层那条路（[P10](../PRD.md#72-获取插件)）。
@@ -295,10 +295,10 @@ xiaotianhu/wx-cli 只是同名：一个扫码登录的远程 Shell 机器人，�
 | 路 | 走哪 | 成本 | 建议 |
 |---|---|---|---|
 | 读它发布的 Atom | 通用 feed 插件；一篇日报是一条 entry | 小（feed 插件做好以后） | 建议 |
-| 读 `horizon-*.md` | 投递文件夹，或一个导入插件（[§3.9](../plugin-protocol.md#39-从文件导入)、[§5.2](../plugin-protocol.md#52-监听文件夹)） | 小 | 建议 |
-| Agent Skill | 你的 Agent 跑 Horizon、读日报，把你想要的链接逐条 `{name} add`（[§5.3](../plugin-protocol.md#53-各种入口怎么接)，能不能直接收下等 [discussion 第 15 条](../answers.md#15-agent-能不能直接收下)） | 小 | 可以 |
-| 包装它的 MCP（[§9.3](../plugin-protocol.md#93-包装-mcp-服务)） | 获取插件启动 `horizon-mcp` | 大 | **不建议**：要在 `requires.runtime` 里带一整套 Python；它用自己配的密钥调模型，[§4.3](../plugin-protocol.md#43-模型与密钥由宿主代发) 的宿主代发管不到；`hz_send_webhook` 会往外发，插件得写明不调 |
-| 它的 Webhook 推到投递接口 | [§5.1](../plugin-protocol.md#51-本机-http-接口) | — | **不合适**：`api` 令牌只收链接，一段 `text` 只取第一个链接，整篇日报会变成一个链接 |
+| 读 `horizon-*.md` | 投递文件夹，或一个导入插件（[§3.9](../protocol/fetch.md#39-从文件导入)、[§5.2](../protocol/delivery.md#52-监听文件夹)） | 小 | 建议 |
+| Agent Skill | 你的 Agent 跑 Horizon、读日报，把你想要的链接逐条 `{name} add`（[§5.3](../protocol/delivery.md#53-各种入口怎么接)，能不能直接收下等 [discussion 第 15 条](../answers.md#15-agent-能不能直接收下)） | 小 | 可以 |
+| 包装它的 MCP（[§9.3](../protocol/wrapping.md#93-包装-mcp-服务)） | 获取插件启动 `horizon-mcp` | 大 | **不建议**：要在 `requires.runtime` 里带一整套 Python；它用自己配的密钥调模型，[§4.3](../protocol/transform-export.md#43-模型与密钥由宿主代发) 的宿主代发管不到；`hz_send_webhook` 会往外发，插件得写明不调 |
+| 它的 Webhook 推到投递接口 | [§5.1](../protocol/delivery.md#51-本机-http-接口) | — | **不合适**：`api` 令牌只收链接，一段 `text` 只取第一个链接，整篇日报会变成一个链接 |
 
 - **要标出「机器挑的」**：
   - 日报的原文本身是模型写的；里面每条为什么在那，是模型打的分。
@@ -320,10 +320,10 @@ xiaotianhu/wx-cli 只是同名：一个扫码登录的远程 Shell 机器人，�
 <a id="31-现状"></a>
 ### 3.1 现状
 
-- **自己的收藏夹已经是 B 的样子**：跟着收的新条目直接收下、不逐次预览，记 `origin.entry: sync`（[插件协议 §3.8](../plugin-protocol.md#38-list-与跟着收)）。量由你自己的动作决定。
+- **自己的收藏夹已经是 B 的样子**：跟着收的新条目直接收下、不逐次预览，记 `origin.entry: sync`（[插件协议 §3.8](../protocol/fetch.md#38-list-与跟着收)）。量由你自己的动作决定。
 - **PRD 写过 RSS**：PRD v0.3 的同步一行写「订阅收藏夹/账号/公众号/RSS」。
 - **[C6](../PRD.md#71-收下) 的建议是 B**：别人的公开账号只收订阅之后的新内容，不回溯。
-- **第一次拉没有定义**：[§3.8](../plugin-protocol.md#38-list-与跟着收) 只写了增量什么时候停，没写第一次拉时窗口里已有的条目收不收。
+- **第一次拉没有定义**：[§3.8](../protocol/fetch.md#38-list-与跟着收) 只写了增量什么时候停，没写第一次拉时窗口里已有的条目收不收。
 - **一处说法打架**：07 写跟着收新来的「只是地图上稍亮的一个点」，[M4](../PRD.md#76-地图) 写「点更淡，或单独一层」。等地图原型定，这里不定。
 
 <a id="32-用什么来比"></a>
@@ -478,7 +478,7 @@ xiaotianhu/wx-cli 只是同名：一个扫码登录的远程 Shell 机器人，�
 ## 4. 兼容矩阵
 
 **工作量**按要动的接口算，不按小时：
-- **小**：用现有能力就能做，只写一个插件。现有能力指 `list`、`fetch`、[§3.9](../plugin-protocol.md#39-从文件导入) 导入、[§5.1](../plugin-protocol.md#51-本机-http-接口) 投递、[§5.2](../plugin-protocol.md#52-监听文件夹) 投递文件夹；
+- **小**：用现有能力就能做，只写一个插件。现有能力指 `list`、`fetch`、[§3.9](../protocol/fetch.md#39-从文件导入) 导入、[§5.1](../protocol/delivery.md#51-本机-http-接口) 投递、[§5.2](../protocol/delivery.md#52-监听文件夹) 投递文件夹；
 - **中**：加一个字段或子命令，或者宿主加一个小功能；
 - **大**：SPEC 里加新概念，或者加一种新的插件类别。
 
@@ -490,7 +490,7 @@ xiaotianhu/wx-cli 只是同名：一个扫码登录的远程 Shell 机器人，�
 | 入口 | 在设计里吗 | 走哪 | 工作量 | 备注 |
 |---|---|---|---|---|
 | 粘贴链接 | 在 | `{name} add`、`POST /v1/deliver`；通用网页获取随安装包预装（P1） | 小 | — |
-| 分享菜单 | 一部分 | iOS 快捷指令写投递文件夹；Android 经 HTTP Shortcuts 局域网直传；macOS 分享扩展没写 | 中 | [§5.3](../plugin-protocol.md#53-各种入口怎么接) |
+| 分享菜单 | 一部分 | iOS 快捷指令写投递文件夹；Android 经 HTTP Shortcuts 局域网直传；macOS 分享扩展没写 | 中 | [§5.3](../protocol/delivery.md#53-各种入口怎么接) |
 | 浏览器扩展 | 在 | `extension` 令牌 `POST /v1/deliver`，带正文和文件 | 中（单独的扩展项目） | — |
 | 阅读器星标（Google Reader API、Fever） | 不在 | `list` 读星标流 | 小到中：插件小，`sites` 要能填你的主机 | 选项 A；Miniflux 的 Webhook 用 HMAC 签名，接不上投递接口，用拉取 |
 | RSS、Atom、JSON Feed | PRD 写了，协议没接上 | `list`，来源 `feed:<url>` | 中：协议缺 [§6.2 第 1–6 条](#62-要补的地方)，插件本身小 | 解析的是格式不是平台，推断照 P1 进官方组织，要你点头 |
@@ -522,7 +522,7 @@ Mastodon、Bluesky 的路径出处：
 | JSON Feed 1.1 | 不在 | 读同上；导出成 feed 时首选 | `id` 必填、长期不变、不能复用；扩展用 `_` 开头的对象（[规范](https://www.jsonfeed.org/version/1.1/)） |
 | OPML 2.0 | 不在（只有播客导入提过） | 导入订阅（可以不做）、导出订阅列表 | `type="rss"` 的 outline 用 `xmlUrl`（[规范](http://opml.org/spec2.opml)） |
 | Google Reader API、Fever | 不在 | 读阅读器的星标（A） | Miniflux README、FreshRSS 文档都写了兼容 |
-| MCP 2026-07-28 | 在 | 作服务端：[SPEC §10](../SPEC.md#10-mcp-工具m0)；作客户端：[§9.3](../plugin-protocol.md#93-包装-mcp-服务) 包装 | — |
+| MCP 2026-07-28 | 在 | 作服务端：[SPEC §10](../SPEC.md#10-mcp-工具m0)；作客户端：[§9.3](../protocol/wrapping.md#93-包装-mcp-服务) 包装 | — |
 | Markdown 加 front matter | 在 | 条目的 `content.md`、导出 | — |
 | Obsidian vault | 在 | 导出和读回；资料库直接当 vault 等 [E2](../PRD.md#79-导出与互通) | — |
 | Netscape 书签 HTML | 在 | 导入（P3）、导出（E1） | — |
@@ -608,7 +608,7 @@ Mastodon、Bluesky 的路径出处：
 <a id="6-对插件协议的影响"></a>
 ## 6. 对插件协议的影响
 
-11-04 那句「之前调研的所有的方案都可以作为一种插件去弄」，按窄读处理：协议对七个获取层级都开放，client-hook 也能写成插件。你自己的 `{fetch-org}` 收哪些，是 [R5](../plugin-protocol.md#85-添加来源更新与权限扩大)、[R11](../plugin-protocol.md#85-添加来源更新与权限扩大) 的事，另问（[discussion 第 9 条](../answers.md#9-自己的获取插件组织收什么)）。
+11-04 那句「之前调研的所有的方案都可以作为一种插件去弄」，按窄读处理：协议对七个获取层级都开放，client-hook 也能写成插件。你自己的 `{fetch-org}` 收哪些，是 [R5](../protocol/distribution.md#85-添加来源更新与权限扩大)、[R11](../protocol/distribution.md#85-添加来源更新与权限扩大) 的事，另问（[discussion 第 9 条](../answers.md#9-自己的获取插件组织收什么)）。
 
 <a id="61-插件化覆盖表"></a>
 ### 6.1 插件化覆盖表
@@ -640,18 +640,18 @@ Mastodon、Bluesky 的路径出处：
 - 14–16 只在别人写 wx-cli 包装插件时才用得到。
 
 1. **你自己填的来源。**
-   - 现状：`sources` 只能列出插件自己知道的来源，`settings` 也没有列表类型（[§2.11](../plugin-protocol.md#211-插件设置-settings)）。
+   - 现状：`sources` 只能列出插件自己知道的来源，`settings` 也没有列表类型（[§2.11](../protocol/manifest.md#211-插件设置-settings)）。
    - 提议：加一个子命令 `resolve-source <输入>`。输入一个链接或账号，返回 `{match, source, title, order, owner}`，宿主存成一个跟着收。
    - 它能接住「贴一个页面链接，自动找出 feed」，也带上了下一条要的 `owner`。另一种提议「`sources` 返回带参数的模板」只当设置表单的提示。先例是 RSSHub 的路由参数和 Radar 规则（[02 §7](02-adapter-ecosystems.md#7-rsshub-与-rsshub-radar)）。
 2. **来源归属**：`owner: self | other`。C6（别人的不回溯）和 M4（分开画）都要用。
-3. **第一次拉**：`owner: other` 的来源，第一次拉时把已有条目的身份都记下、不收，以后只收新出现的；`owner: self` 照旧全量。[§3.8](../plugin-protocol.md#38-list-与跟着收) 要补这一条。
+3. **第一次拉**：`owner: other` 的来源，第一次拉时把已有条目的身份都记下、不收，以后只收新出现的；`owner: self` 照旧全量。[§3.8](../protocol/fetch.md#38-list-与跟着收) 要补这一条。
 4. **feed 条目的身份。**
    - plugin-kit 要求每个平台有 `contentId` 的正则，可 `guid`、`atom:id`、JSON Feed `id` 是任意字符串。
    - 提议：不设 `feed` 平台。条目身份由条目链接经能接住它的平台插件 `canonicalize` 得出，接不住就按通用网页。
    - feed 自己的 id 写进 `list` 条目的新字段 `sourceItemId`，只在这个来源内部去重。
 5. **同时带 `url` 和 `ref` 时先用哪个**：先按 `url` 找平台插件取全文；取不到或只取到一部分，再回到 feed 插件 `fetch <ref>`，用 feed 里的正文。两份快照都留，和 P5 补全的规则一致。
 6. **条件请求**：feed 轮询要 ETag 和 Last-Modified 才不浪费。提议 `list` 返回一个不透明的 `state`，宿主按跟着收保存，下次用 `--state` 传回，和游标一个思路。
-7. **你自己跑的服务当登录站点**：阅读器的星标要登录，可 `sites[].site` 是写死的主机名（[§2.5](../plugin-protocol.md#25-登录站点-sites)）。提议允许 `site` 引用一个设置项，像 [§9.2](../plugin-protocol.md#92-包装本机-http-服务) 的 `${setting.endpoint}`。
+7. **你自己跑的服务当登录站点**：阅读器的星标要登录，可 `sites[].site` 是写死的主机名（[§2.5](../protocol/manifest.md#25-登录站点-sites)）。提议允许 `site` 引用一个设置项，像 [§9.2](../protocol/wrapping.md#92-包装本机-http-服务) 的 `${setting.endpoint}`。
 8. **OPML 导入**（只有选 B 才要）：做成宿主自己的功能，把每个 `xmlUrl` 依次交给 `resolve-source`。解析 OPML 是格式层面的事，照 P1、P3 的先例。
 9. **记下是哪个跟着收收下的**（D37）：
    - `origin.entry` 照旧记入口的种类：现在写 `sync`，词表提议改成 `subscription`；
@@ -663,9 +663,9 @@ Mastodon、Bluesky 的路径出处：
     - 上游算好的打分和摘要：fetch 输出加可选的 `derived: [{produces, path, by}]`，宿主照转换插件的规矩移进 `derived/`。
 12. **导出成 feed**：导出插件 `target: feed`、`writes: files`。默认排除私密，正文只给纯文本，身份放 `_{name}`。读端点等本机 HTTP 读接口一起定。
 13. **feed 的节奏**：节奏按平台算（D-e），可 feed 散在很多主机上。提议 `feed:` 来源按主机算，默认沿用跟着收的频率：每天一次，最快 6 小时（推断）。
-14. **连本机 socket**：协议里没有「连本机 Unix socket」的权限项。二选一：加一项，或者要求这类插件走本机 HTTP（[§9.2](../plugin-protocol.md#92-包装本机-http-服务)）。
-15. **私有 `HOME` 和钉死在家目录的 socket**：上游把 socket 写死在 `$HOME` 下时，插件连不到沙箱外的常驻进程（[§2.7](../plugin-protocol.md#27-权限-permissions)）。要么写明「这类上游只支持一次一进程」，要么和上一条一起解决。
-16. **插件起的后台进程**：上游自己脱离进程组时，宿主怎么收掉它，[§7.1](../plugin-protocol.md#71-常驻进程的路径) 没写。
+14. **连本机 socket**：协议里没有「连本机 Unix socket」的权限项。二选一：加一项，或者要求这类插件走本机 HTTP（[§9.2](../protocol/wrapping.md#92-包装本机-http-服务)）。
+15. **私有 `HOME` 和钉死在家目录的 socket**：上游把 socket 写死在 `$HOME` 下时，插件连不到沙箱外的常驻进程（[§2.7](../protocol/manifest.md#27-权限-permissions)）。要么写明「这类上游只支持一次一进程」，要么和上一条一起解决。
+16. **插件起的后台进程**：上游自己脱离进程组时，宿主怎么收掉它，[§7.1](../protocol/isolation.md#71-常驻进程的路径) 没写。
 
 ---
 

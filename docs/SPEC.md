@@ -20,7 +20,7 @@
 | 资料库里的隐藏目录 | `.usuyo/`，只放跟着资料库走的；`tmp/`、`lock` 例外，原子改名和锁要在同一个文件系统上，不同步 |
 | 按机器的目录 | macOS `~/Library/Application Support/usuyo/`，Windows `%LOCALAPPDATA%\usuyo\`，Linux `$XDG_STATE_HOME/usuyo/`；每个库一个 `libraries/<libraryId>/` |
 | URL scheme | 打开 `usuyo://<名词>/<id>[/<层>[@<snapshotId>]][#片段]`，名词 `item` `topic` `card` `draft` `changeset`；`usuyo://add?url=…` 只填好窗口，你点了才做 |
-| JSON、YAML 字段、front matter 键 | camelCase（[协议 §2.1](plugin-protocol.md#21-文件名与位置)），MCP、前端同；不加前缀。导出文件里的属性键归导出插件（[协议 §4.4](plugin-protocol.md#44-导出的-run-与-readback)） |
+| JSON、YAML 字段、front matter 键 | camelCase（[协议 §2.1](protocol/manifest.md#21-文件名与位置)），MCP、前端同；不加前缀。导出文件里的属性键归导出插件（[协议 §4.4](protocol/transform-export.md#44-导出的-run-与-readback)） |
 | 枚举值、错误码、命令行选项 | 小写 kebab-case：`login-required`、`media:video`、`--dry-run` |
 | 别的工具加的 JSON 字段 | `x-` 开头，我们不用 |
 
@@ -45,14 +45,14 @@ semver：patch 改错；minor 加可选字段、枚举值、错误码、接口�
 - 开始时 `extensions` 写 `migrating`，没升级的旧程序（库在 iCloud 里的另一台）见了就只读；最后写 `formatVersion`，再去掉 `migrating`。
 - 结果确定：新 id 由旧 id 算（推断：UUIDv8 或哈希），不读时钟，两台各迁各的一样。同步的记录带 `formatVersion`：远端新就不同步，拉到旧格式的先迁再合并。
 
-**JSON 演进**：读到不认识的字段不报错，资料库文件原样写回，插件信封照[协议 §0.1](plugin-protocol.md#01-读者与状态) 忽略并记日志。收到的命令（HTTP 请求体、MCP 参数）有不认识的字段回 `invalid-args`，新功能在旧内核上看得见地失败。schema 不写 `additionalProperties: false`（加字段会变成 major）：运行时容忍，`usuyo plugin check` 和测试拒绝，怎么实现归第 3 层。
+**JSON 演进**：读到不认识的字段不报错，资料库文件原样写回，插件信封照[协议 §0.1](protocol/README.md#01-读者与状态) 忽略并记日志。收到的命令（HTTP 请求体、MCP 参数）有不认识的字段回 `invalid-args`，新功能在旧内核上看得见地失败。schema 不写 `additionalProperties: false`（加字段会变成 major）：运行时容忍，`usuyo plugin check` 和测试拒绝，怎么实现归第 3 层。
 
 **弃用**：只在下个 major 删，之前至少两个 minor、6 个月；标 `deprecated: true`，HTTP 带 `Deprecation`（RFC 9745）、`Sunset`（RFC 8594）头。插件协议的旧主版本再加载 12 个月。
 
 <a id="03-错误模型"></a>
 ### 0.3 错误模型
 
-错误对象就是[协议 §3.3](plugin-protocol.md#33-信封与错误码) 的 `error`，宿主另填 `retryable`（不改什么、过会儿再发可能成功）和 `plugin`（哪个插件报的）。`needs` 加前缀 `version:`，例 `version:usuyo>=1.3`。
+错误对象就是[协议 §3.3](protocol/fetch.md#33-信封与错误码) 的 `error`，宿主另填 `retryable`（不改什么、过会儿再发可能成功）和 `plugin`（哪个插件报的）。`needs` 加前缀 `version:`，例 `version:usuyo>=1.3`。
 
 | 面 | 写法 |
 |---|---|
@@ -97,7 +97,7 @@ itemId      = <platform> "-" base32(sha256(identityKey) 前 16 字节)
 - **web 身份**：插件规范化后，宿主再按 [RFC 3986 §6.2.2](https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2) 做一遍：scheme、主机小写，去默认端口和 `#` 片段，空路径写成 `/`（`https://a.com` 和 `https://a.com/` 是同一条，`https://a.com?q=1` 写成 `https://a.com/?q=1`），路径和查询串不动（不改大小写、不解百分号编码、不去 `.`、`..` 段）。11-11 代码：只认 `http`、`https`；带用户名或密码的链接收下时就拒绝（`unsupported-input`），不进身份、标题和 `content.md`；收下的输入里取第一个 `http(s)://` 链接，到空白或非 ASCII 标点为止。没有插件命中的 http(s) 链接，和命中了插件、`canonicalize` 却因 `network`、`timeout` 失败的短链（下一条），宿主自己这样算，没装 web 插件也一样。
 - **短链要联网展开**：`canonicalize` 因 `network` 或 `timeout` 失败时，宿主先拿短链本身照上一条算 `web:` 身份，马上建文件夹（`completeness: link`，之后的快照照记 `inputUrl`），只把重试放本机 `jobs.db`。联网后拿到平台身份，照下面「拿到更好的身份时」并过去，`web-` id 进 `aliases`；平台身份的 id 还没有条目时，这一步就是改名。并过去时撞上回收站或私密的，见下一条。两台离线收下同一条短链得到同一个 id；同一视频的两条不同短链先是两条，联网后并成一条。11-11 还没做：联网后拿到平台身份不并过去，fetch 交回的平台身份也不进 `identities`。
 - **展开后撞上回收站或私密**（推断）：`jobs.db` 里的重试记下当初是哪个入口。主动收的照 [§1.7](#17-删掉)：在回收站里的拿回来，`restore` 和这次并过去（或改名）记在同一批，撤销那批时照 [§1.7](#17-删掉) 原样放回回收站。目标私密、当初是 Agent、`api` 令牌或终端外的命令行收的：`web-` 条目并进它，`origins` 不并过去（同直接收下时跳过），撤销那批不动这一条（`web-` id 成了别名，私密的对 Agent 照 [§1.3](#13-条目的四个维度) 回 `not-found`）。跟着收遇到 `canonicalize` 因 `network`、`timeout` 失败的不建短链条目，这一次不算跑完，联网后整次重跑。
-- **没有身份的**（文件、聊天记录；fetch 输出省略 `identity` 或写 `{"platform": "file"}`，[协议 §3.7](plugin-protocol.md#37-fetch-输出)）：平台记 `file`，`file-` 加 26 位随机 base32（同样形状），放 `items/file/`，只靠内容层去重。`{platform: file}` 不算身份，不进 `identityKey` 和自动合并。不带 `contentId` 的身份只有 `web`，必带 `url`；`web`、`file` 以外的平台缺 `contentId` 照[协议 §3.1](plugin-protocol.md#31-运行器与节奏) 按 `invalid-output` 处理（feed 条目等[协议 §13 第 22 项](plugin-protocol.md#13-待定)）。
+- **没有身份的**（文件、聊天记录；fetch 输出省略 `identity` 或写 `{"platform": "file"}`，[协议 §3.7](protocol/fetch.md#37-fetch-输出)）：平台记 `file`，`file-` 加 26 位随机 base32（同样形状），放 `items/file/`，只靠内容层去重。`{platform: file}` 不算身份，不进 `identityKey` 和自动合并。不带 `contentId` 的身份只有 `web`，必带 `url`；`web`、`file` 以外的平台缺 `contentId` 照[协议 §3.1](protocol/fetch.md#31-运行器与节奏) 按 `invalid-output` 处理（feed 条目等[协议 §13 第 22 项](protocol/open.md#13-待定)）。
 - **id 不改**，只能经合并换，被并掉的进 `aliases`。宿主自动合并两处（推断）：拿到更好的身份时（平台 > web > 随机），并进那个身份算出的 id；同步时两个 `itemId` 对上同一个 `identityKey`，并进由身份算出的那个。同一个 id 对上不同的 `identityKey` 不合并，报告。
 - **算法冻住**：平台列表里 `contentId` 格式的改动（`BV…` 和 `BV…:p1` 算不算一个）算资料库的 major。web 身份尽力而为，对不上靠 `sameAs`；`inputUrl`、`resolvedUrl` 也进索引，查库里和回收站里的条目时再按它们查（推断）。
 - **文件夹名就是 `itemId`**，引用只用 id，不用路径。
@@ -145,10 +145,10 @@ SHA-256，小写十六进制，算存下来的字节。字段名叫 `sha256` 时
 <a id="08-分页和游标"></a>
 ### 0.8 分页和游标
 
-- 请求 `limit`（默认 50，最多 500）、`cursor`；响应 `items`、`nextCursor`（最后一页 `null`），和[协议 §3.8](plugin-protocol.md#38-list-与跟着收)、MCP 同名。
+- 请求 `limit`（默认 50，最多 500）、`cursor`；响应 `items`、`nextCursor`（最后一页 `null`），和[协议 §3.8](protocol/fetch.md#38-list-与跟着收)、MCP 同名。
 - 11-11 还没做：本机接口回的是普通数组，没有 `cursor`；搜索的 `limit` 默认 50，限在 1 到 200（[本机接口](#本机接口第-2-层11-11-照代码)）。
 - 游标是不透明的 base64url，和查询绑定；查询变了或索引重建过回 `cursor-invalid`。按键分页，最后按 id 定序，新收下的不会让条目跳过或重复。有效期归第 2 层。
-- 响应不带总数（按键分页算总数要另扫一遍）；另给哪些计数（搜到多少条、磁盘占用），第 2 层按视图定。永远不出现的数：几条没看过、几条没整理、几个提议没决定（[原则 4](PRD.md#4-原则)）。插件 `sources` 的 `count` 是平台页面上的数（[插件协议 L5](plugin-protocol.md#31-运行器与节奏)）。
+- 响应不带总数（按键分页算总数要另扫一遍）；另给哪些计数（搜到多少条、磁盘占用），第 2 层按视图定。永远不出现的数：几条没看过、几条没整理、几个提议没决定（[原则 4](PRD.md#4-原则)）。插件 `sources` 的 `count` 是平台页面上的数（[插件协议 L5](protocol/fetch.md#31-运行器与节奏)）。
 
 <a id="09-要你看一眼"></a>
 ### 0.9 要你看一眼
@@ -200,7 +200,7 @@ SHA-256，小写十六进制，算存下来的字节。字段名叫 `sha256` 时
 |---|---|
 | `libraries/<libraryId>/` | `device.json`（`deviceId`、库路径）、`index/`、`clock-mark`（回收站到期用的时钟记录，见 [§1.7](#17-删掉)）、`jobs.db`（任务状态、转换任务 `transform_jobs`（feature 003，还没做）、跟着收列过的身份、翻页游标和 `--since`、还没展开的短链（重试）、上次写的 `content.md` 的哈希）、`sync.db`（游标、底本（你写的那层和 manifest 上次见过的那份，没开同步也存，[§1.4](#14-你写的那一层) 外面改了靠它合并）、上次见过的路径）、`activity/`（Agent 搜过、读过什么，一行一次，不给 Agent、不同步；格式和留多久归第 2 层，推断）、`exports/<target>.json`（每个对象 `{path, hash, base}`，`base` 是上次和 vault 对上的那份用户层：写出去了就是交给导出插件的那份，没写出去就是那次读回的值，私密脚注已换成占位；[§1.4](#14-你写的那一层) 导出读回靠它合并）、`imports/<importBatch>/`（导入文件副本）、`backups/` |
 | 根目录 | `settings.json`（外观、模型端点、插件启用和设置，`transforms.auto`（自动转换，默认 `true`）；11-11 代码只用 `library` 和 `plugins.<插件 id>.settings`）、`plugins/`、`profiles/`、`models/<owner>/<repo>/<名字>/`（转换插件的模型，宿主下载、校验后放这里，旁边写 `model.json`：`{name, sha256, size, license, files: [{path, size, sha256}]}`）、`cache/plugins/<owner>/<repo>/`、`cache/transform/<itemId>/<runId>/`（一条转换链的中间产物，例如给转写用的 16 kHz WAV，链跑完就删）、本机接口令牌 `api-token`、投递令牌 `deliver-tokens.json`、`daemon.json`、登录索引 `logins.json`、`run/`、`inbox/`、日志 `logs/daemon.log`（各项见下面「11-11 代码」） |
-| 系统钥匙串 | 同步令牌和库钥匙、模型和插件密钥、平台登录态（[协议 §6](plugin-protocol.md#6-凭据)） |
+| 系统钥匙串 | 同步令牌和库钥匙、模型和插件密钥、平台登录态（[协议 §6](protocol/credentials.md#6-凭据)） |
 
 11-11 代码：
 
@@ -210,7 +210,7 @@ SHA-256，小写十六进制，算存下来的字节。字段名叫 `sha256` 时
 - `daemon.json` 是 `{port, pid}`。`api-token`、`daemon.json` 的来去见[本机接口](#本机接口第-2-层11-11-照代码)。根目录 `settings.json` 现在只有 `library`（当前资料库）和 `plugins.<插件 id>.settings`，别的键读写时原样留着。
 - `deliver-tokens.json`：投递令牌的清单，一个数组，每项 `{id, name, kind, secret, createdAt}`，`kind` 取 `extension`、`mobile`、`api`。`secret` 是明文（读文件的权限只有本人），令牌整个只在发的那一次回给调用方；撤销马上生效。
 - `logins.json`：登录站点、访客身份和密钥设置的索引，不含任何值。站点和访客身份各按主机记存下的时间和每个 cookie 的名字、域名、过期时间；密钥设置记每个插件填了哪几项。看登录状态、过期没有只读它，不碰钥匙串。
-- `run/`：一次调用要交凭据给插件时，在这里建这次自己的文件夹 `usuyo-cred-<随机>`（0700），文件 0600：`credentials.json` 和 `cookies.txt`（账号站点）、`visitor.json`（访客身份）、`secrets.json`（密钥设置），路径经 `USUYO_CREDENTIALS`、`USUYO_COOKIES_TXT`、`USUYO_VISITOR`、`USUYO_SECRETS` 传给插件（[协议 §6](plugin-protocol.md#6-凭据)）；进程结束整个文件夹删掉，守护进程启动时再清一遍上次被杀留下的 `usuyo-cred-*`。没有可交的就不建。
+- `run/`：一次调用要交凭据给插件时，在这里建这次自己的文件夹 `usuyo-cred-<随机>`（0700），文件 0600：`credentials.json` 和 `cookies.txt`（账号站点）、`visitor.json`（访客身份）、`secrets.json`（密钥设置），路径经 `USUYO_CREDENTIALS`、`USUYO_COOKIES_TXT`、`USUYO_VISITOR`、`USUYO_SECRETS` 传给插件（[协议 §6](protocol/credentials.md#6-凭据)）；进程结束整个文件夹删掉，守护进程启动时再清一遍上次被杀留下的 `usuyo-cred-*`。没有可交的就不建。
 - `inbox/`：收件文件夹，手机经云盘放进来。只认顶层的 `.txt` 普通文件；点开头的、别的扩展名、子文件夹都不碰；每 5 秒看一轮，一个文件 10 秒没变才处理；最多读 1 MiB、收 500 条链接，文件里每个 http(s) 链接收下一条（整段分享文字也行），入口记 `mobile`，放进去本身就是确认，不进导入预览。全收成了移到 `.usuyo-done/<日期>/`；没有链接、有链接没收成、或是符号链接的移到 `.usuyo-failed/`，旁边一个 `<名字>.error.json`（`{errors: […]}`，原因只写主机和错误码）。`GET /inbox` 回它在哪。
 - `libraries/<libraryId>/clock-mark`：回收站到期检查记下的最大时间，见 [§1.7](#17-删掉)。
 - 钥匙串（macOS、Windows）：服务名 `usuyo`，账户名是 `<12 位十六进制>/<键>`，前一段是按机器根目录（取规范路径）的 SHA-256 前 12 位，所以不同的 `USUYO_HOME` 各管各的，开发用的另一套不会盖掉正式那套。键有三类：`site:<主机>`（这个站点的登录，storageState 的 JSON）、`visitor:<主机>`（这个站点的访客身份，不是账号，和同一主机的 `site:` 分开）、`secret:<插件 id>:<设置键>`（一个密钥设置）。Linux 还没接 Secret Service，换成根目录里 0600 的 `secrets.json`，键一样，是替身：挡得住别的用户，挡不住以你的身份跑的程序。壳的登录窗口在 macOS 上用系统的网页数据仓库，Windows、Linux 上放在根目录的 `webviews/` 下，见 [apps/desktop/README.md](../apps/desktop/README.md#登录窗口)。
@@ -270,12 +270,12 @@ items/douyin/douyin-4plrcxk343onmyxibmrr672kga/
 | `machinePicked` | `null`、`{"by": "keywords"}`、`{"by": "similarity"}`、`{"by": "upstream", "name": "horizon"}`、`{"by": "agent", "name": "<连接名>"}`；只有你给的具体链接（Agent 收下时说明是你点名的链接，参数名归第 2 层）和你自己平台上的收藏、列表为 `null`；你给关键词让 Agent 去找的也算机器挑的（11-06 定，[§1.10 第 14 条](#110-要你看一眼)） |
 | `matched` | 命中关注时 `[{topic, by: "keywords" \| "similarity"}]`，可以命中几个 |
 | `subscription`、`importBatch` | 从哪个跟着收、哪一批来 |
-| `action` `actedAt` `actedAtOriginal` | 平台上的动作和时间（[协议 §3.8](plugin-protocol.md#38-list-与跟着收)） |
+| `action` `actedAt` `actedAtOriginal` | 平台上的动作和时间（[协议 §3.8](protocol/fetch.md#38-list-与跟着收)） |
 | `at`、`device` | 时间、哪台；转换在 `at` 最早那一项（一样早比 `id`）的 `device` 做（[调研 14 §0](research/14-sync-like-hatoba.md#0-结论) 第 10 问），那台不在了怎么换归同步 feature |
 
 你在跟着收的预览里自己点收下的，`takenBy: user`、`machinePicked: null`（推断：你一条条挑过）。跟着收按关键词或相似度命中收下的都标「机器挑的」。界面标「机器挑的」：每一项 `origins` 都带 `machinePicked`（你自己也收过一次就不标）；写过、放进主题、引用过都不去掉，它是来历（11-05 定，[§1.10 第 19 条](#110-要你看一眼)）；地图上怎么分开等 [M4](PRD.md#76-地图)。
 
-**`snapshots[]`**（[协议 §3.5](plugin-protocol.md#35-canonicalize-与身份)–[§3.7](plugin-protocol.md#37-fetch-输出)）：`id`（UUIDv7）；`plugin`、`pluginVersion`（交来已取到的内容时：投递接口记 `deliver:<令牌名>`，收件文件夹记 `deliver:inbox`；链接和交给导入插件的文件，记去取它的那个插件）；`at`、`inputUrl`（你给的原链接）、`resolvedUrl`（`canonicalize` 展开的完整链接）；`access`（投递为 `deliver`）、`site`、`upstream`；`outputs`（实际拿到的，比完整度只比它）；`missing`、`missingReason`、`completeness`（宿主在取的时候算，`missing` 是这次的 `--want` − 实际拿到的，之后不改）；`textOrigin`（`platform` 或 `machine`，等[协议 §13](plugin-protocol.md#13-待定) 第 24 项）。
+**`snapshots[]`**（[协议 §3.5](protocol/fetch.md#35-canonicalize-与身份)–[§3.7](protocol/fetch.md#37-fetch-输出)）：`id`（UUIDv7）；`plugin`、`pluginVersion`（交来已取到的内容时：投递接口记 `deliver:<令牌名>`，收件文件夹记 `deliver:inbox`；链接和交给导入插件的文件，记去取它的那个插件）；`at`、`inputUrl`（你给的原链接）、`resolvedUrl`（`canonicalize` 展开的完整链接）；`access`（投递为 `deliver`）、`site`、`upstream`；`outputs`（实际拿到的，比完整度只比它）；`missing`、`missingReason`、`completeness`（宿主在取的时候算，`missing` 是这次的 `--want` − 实际拿到的，之后不改）；`textOrigin`（`platform` 或 `machine`，等[协议 §13](protocol/open.md#13-待定) 第 24 项）。
 
 11-11 代码：快照的 `outputs` 由 `usuyo.fetch.json` 算：有 `text`、`html`、`images`、`media` 里的 `video`、`audio`、`subtitle`，标题、作者、发布时间有一样就算 `meta`，有 `comments`。快照的 `completeness`：没有输出是 `link`，没缺的是 `full`，否则 `partial`。只有 `missing`、`missingReason`，没有别的「缺」字段。11-11 还没做：`inputUrl` 记的是 `canonicalize` 给的 `resolvedUrl`（没有就是收下的链接），`resolvedUrl` 不写。
 
@@ -285,7 +285,7 @@ items/douyin/douyin-4plrcxk343onmyxibmrr672kga/
 <a id="122-raw-和-derived"></a>
 #### 1.2.2 raw 和 derived
 
-- **`raw/<snapshotId>/`** 是插件的输出目录整个移进来（[协议 §3.6](plugin-protocol.md#36-fetch-与输出目录)），之后不改。宿主只加 `usuyo.fetch.json`：fetch 输出去掉 `credentialsUpdate`，加 `files: [{path, size, sha256}]`。同步前和「检查与修复」时按它比对，对不上就报「原样被改过」、不上传。只有你选「只留文字」或「删掉」，里面的文件才移去回收站。
+- **`raw/<snapshotId>/`** 是插件的输出目录整个移进来（[协议 §3.6](protocol/fetch.md#36-fetch-与输出目录)），之后不改。宿主只加 `usuyo.fetch.json`：fetch 输出去掉 `credentialsUpdate`，加 `files: [{path, size, sha256}]`。同步前和「检查与修复」时按它比对，对不上就报「原样被改过」、不上传。只有你选「只留文字」或「删掉」，里面的文件才移去回收站。
 - **放进 `raw/` 之前**（11-11 代码）：插件的输出先在 `.usuyo/tmp/` 下暂存，不在那里的不收。暂存的文件夹里不能有符号链接（`invalid-args`）；`raw/<snapshotId>/<路径>` 不超过 140 个 UTF-16 单位（`too-large`）。宿主在拿资料库的锁之前按 1 MiB 一块算好各文件的哈希，拿到锁以后再比一次文件名和大小，变了就拒（「hash 之后改过」）。逐个哈希和已有快照一样时不新建快照。
 - **`usuyo.fetch.json` 里的路径**（`images`、`media[].path`、`files[].path`）只能是快照文件夹里的相对路径：不空、没有 `.`、`..`、绝对路径和盘符。加快照时不合的回 `invalid-args`，读到不合的当这个文件写坏了。
 - **`derived/runs/<runId>/`：一次转换一个文件夹**（feature 003 [§5](features/003-transforms.md#5-存在哪怎么重做)）。`runId` 是 UUIDv7。宿主先在 `.usuyo/tmp/` 拼好整个文件夹（插件的产出、宿主算的哈希、`run.json`），再改名进来；写进去以后不改，要改就是再转一次，新的一次和旧的并排。哪一次排在前面按 `runId`（就是时间）算，不另存「现在是哪份」；引用按秒、按 `imageKey` 找回，不认 `runId`，换了一次转录，写过的引用不断。改名进来之前先核：`runId` 是 UUIDv7、还没有这一次；文件夹里没有符号链接，文件和拿锁之前算好的哈希一样；声明的产物都在、大小和 sha256 对得上，`keyframes.json` 列的帧都在；没有声明以外的文件；`empty`、`outputs`、`reason` 对得上。不合的回 `invalid-args`，已有同一个 `runId` 回 `conflict`，条目不在回 `not-found`，暂存的文件夹删掉。核过以后各产物和 `run.json` 先 fsync，再整个改名；中途崩溃的只留在 `.usuyo/tmp/`，下次打开库时清掉，所以不会有没有 `run.json` 的转录。
@@ -300,7 +300,7 @@ items/douyin/douyin-4plrcxk343onmyxibmrr672kga/
 | `id` | UUIDv7，等于文件夹名 |
 | `job` | `play` `asr` `keyframes` `ocr`（图文的图、封面）`frames`（关键帧上的字）；以后 `readable` `vision` `summary` `embeddings` 照这个形状加 |
 | `by`、`version` | 插件 id 和版本；宿主自己判出来的写 `host` 和内核版本 |
-| `tool` | 插件里干活的程序 `{name, version}`，插件在 `run` 的结果里报（[协议 §4.2](plugin-protocol.md#42-转换的-run)）；`by: host` 为 `null` |
+| `tool` | 插件里干活的程序 `{name, version}`，插件在 `run` 的结果里报（[协议 §4.2](protocol/transform-export.md#42-转换的-run)）；`by: host` 为 `null` |
 | `model` | `{name, sha256}`，sha256 是宿主核过的；没用模型为 `null` |
 | `options` | 这次实际用的参数，含插件补上的默认值；重做时原样交回 |
 | `at`、`device` | 什么时候、哪台转的 |
@@ -312,7 +312,7 @@ items/douyin/douyin-4plrcxk343onmyxibmrr672kga/
 | `marks[]` | 很明显的标记 `{code, speechSec?, durationSec?, frozenSec?}`，`code` 是 `no-audio-track` `no-speech` `static-picture` `no-text`（feature 003 [§6](features/003-transforms.md#6-很明显的标记)）；只提示，不藏任何东西 |
 
 - 词表（`job`、`trigger`、`kind`、`reason`、`code`）在类型里是字符串：别的设备上新版本写的转录，旧版本照样读得进来、照样写回。`inputs[].path`、`outputs[].path` 只能是普通相对路径，规则同 `usuyo.fetch.json`，读到不合的当这个文件写坏了。
-- **`no-audio-track`** 不经转写插件：宿主让抽音轨的插件做一次 `probe`（[协议 §4.2](plugin-protocol.md#42-转换的-run)），看不到音频流就自己写一次 `job: asr` 的转录：`by: host`，`inputs` 是那个画面文件，`via` 记那次 `probe`，`empty: true`，`reason: no-audio-track`。
+- **`no-audio-track`** 不经转写插件：宿主让抽音轨的插件做一次 `probe`（[协议 §4.2](protocol/transform-export.md#42-转换的-run)），看不到音频流就自己写一次 `job: asr` 的转录：`by: host`，`inputs` 是那个画面文件，`via` 记那次 `probe`，`empty: true`，`reason: no-audio-track`。
 - `imageKey` 是图片字节 SHA-256 的前 16 位十六进制，两份快照里同一张图只认一次。`readable.md`（网页抽出的正文）由转换插件产出，现在没有插件产出它，做的时候照转录的规矩；`thumb.jpg`、`fingerprints.json` 由宿主产出；`embeddings.bin` 的格式归 plugin-kit，不同步。
 
 **产物的格式**（schema 在 `crates/usuyo-contract/schema/`，[§1.9](#19-schema-和-usuyo-contract)）。时间是秒，最多 3 位小数（[§0.5](#05-时间)）；**图上的框**是 `[x, y, w, h]`，0–1，按图的宽高算，**原点在左上角**，引用链接里换成百分数（[§0.4](#04-id)）。
@@ -345,7 +345,7 @@ items/douyin/douyin-4plrcxk343onmyxibmrr672kga/
 - 标题、作者照 [§0.6](#06-文本和文件) 的 Markdown 链接文字转义。
 - **正文**（11-11 代码）：插件给的 `textFormat: markdown` 只有两条都满足才照原样写：全文没有 `<`；每个链接目标（`](` 或 `]:` 后面，跳过空白）以 `http://`、`https://`、`mailto:`、`usuyo://` 或 `#` 开头，不分大小写。不满足的和 `plain` 一样照 [§0.6](#06-文本和文件) 转义成纯文字。原样还在 `raw/`。
 
-主快照或头部用到的字段变了就重写，原样在 `raw/`，不违背 [PRD 原则 2](PRD.md#4-原则)（[K5 A](PRD.md#710-存储删除与联网)）；CLAUDE.md 的措辞见 [§1.10 第 10 条](#110-要你看一眼)。应用里的原文栏和 `text` 引用读主快照的 `text` 或 `derived/readable.md`（下表），不读 `content.md`。**能看不能改**（11-05 定，[回答表](answers.md)）：宿主把它写成只读文件（系统支持时），总照主快照重写；重写前发现外面改过（和本机记下的上次写的哈希不一样，也不等于这台照现在的 manifest 和主快照会生成的字节；等于的话是另一台经云盘写来的，照收、记下哈希），先把改过的那份放进回收站（`kind: content`），再换回原样（推断）。要写字写在 `notes.md`、主题页里，或者导出到你的 vault 再写（[协议 §4.4](plugin-protocol.md#44-导出的-run-与-readback)）。它不同步，各台照原样自己生成。这改了 v0「机器永不改写正文」，也偏离[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突) 把它归「原样」层，调研 14 跟着改（[总纲](BUILD.md#5-功能线)）。
+主快照或头部用到的字段变了就重写，原样在 `raw/`，不违背 [PRD 原则 2](PRD.md#4-原则)（[K5 A](PRD.md#710-存储删除与联网)）；CLAUDE.md 的措辞见 [§1.10 第 10 条](#110-要你看一眼)。应用里的原文栏和 `text` 引用读主快照的 `text` 或 `derived/readable.md`（下表），不读 `content.md`。**能看不能改**（11-05 定，[回答表](answers.md)）：宿主把它写成只读文件（系统支持时），总照主快照重写；重写前发现外面改过（和本机记下的上次写的哈希不一样，也不等于这台照现在的 manifest 和主快照会生成的字节；等于的话是另一台经云盘写来的，照收、记下哈希），先把改过的那份放进回收站（`kind: content`），再换回原样（推断）。要写字写在 `notes.md`、主题页里，或者导出到你的 vault 再写（[协议 §4.4](protocol/transform-export.md#44-导出的-run-与-readback)）。它不同步，各台照原样自己生成。这改了 v0「机器永不改写正文」，也偏离[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突) 把它归「原样」层，调研 14 跟着改（[总纲](BUILD.md#5-功能线)）。
 
 | 栏 | 文件 | 来源 | 链接里的层 |
 |---|---|---|---|
@@ -383,12 +383,12 @@ items/douyin/douyin-4plrcxk343onmyxibmrr672kga/
 
 - 本机为避免撞名加的「 2」不同步，不算改标题；两个同名时 `id` 字符串序大的那份在本机加，每台算出同一结果；同名的不自动合并，界面提示一行。
 
-**usuyo 外改了资料库里的文件**：不是支持的用法，改东西走应用、MCP，或导出再读回（[协议 §4.4](plugin-protocol.md#44-导出的-run-与-readback)）。宿主只保证不丢、不悄悄复活。
+**usuyo 外改了资料库里的文件**：不是支持的用法，改东西走应用、MCP，或导出再读回（[协议 §4.4](protocol/transform-export.md#44-导出的-run-与-readback)）。宿主只保证不丢、不悄悄复活。
 
 - **怎么发现**：每次写回前比哈希（[§0.6](#06-文本和文件)），加上启动时和定时按大小、修改时间扫一遍；文件监听只是让它快一点（第 2 层）。等文件不再变了再处理，等多久归第 2 层。「外面改过」指和本机上次写的、读到的不一样。底本是 `sync.db` 里上次见过的那份，没开内置同步也存；没有底本就以文件现在的样子为准（[原则 3](PRD.md#4-原则)），改动记录那条不带 `change`。
 - 下面三类每一类都拿这个情形试过：库在 iCloud、Dropbox 里时，另一台 usuyo 改这些文件是正常的。
 
-1. **读进来**（同步的文件都是）：主题、卡片、成稿的 `.md` 和 `notes.md` 的 front matter 和正文；`highlights.md`；`manifest.json`，先过 schema，再按 [§1.2.1](#121-manifestjson-v1) 最后一列逐字段合并。和底本照 [§1.8](#18-同步) 三方合并，记 `actor: external`、`via: file`，能撤销。导出读回走同一条路：另一边是导出插件转回来的用户层（[协议 §4.4](plugin-protocol.md#44-导出的-run-与-readback)），底本取导出记录里的 `base`（[§1.1](#11-目录树)），不取 `sync.db`，没有底本照 [§1.8](#18-同步)「云盘的冲突副本」那条：集合取并集，标量和正文两边不一样就算合不上，留库里这份，vault 那份进回收站、出卡片；记 `via: readback:<插件 id>`。只合并插件交回的这几项值，下面挪动、改名、删掉、解析不了这几条不用于读回：标题和文件名不读回，vault 里删掉的下次导出重新生成，解析不了的照[协议 §4.4](plugin-protocol.md#44-导出的-run-与-readback) 列进这次导出的问题列表。
+1. **读进来**（同步的文件都是）：主题、卡片、成稿的 `.md` 和 `notes.md` 的 front matter 和正文；`highlights.md`；`manifest.json`，先过 schema，再按 [§1.2.1](#121-manifestjson-v1) 最后一列逐字段合并。和底本照 [§1.8](#18-同步) 三方合并，记 `actor: external`、`via: file`，能撤销。导出读回走同一条路：另一边是导出插件转回来的用户层（[协议 §4.4](protocol/transform-export.md#44-导出的-run-与-readback)），底本取导出记录里的 `base`（[§1.1](#11-目录树)），不取 `sync.db`，没有底本照 [§1.8](#18-同步)「云盘的冲突副本」那条：集合取并集，标量和正文两边不一样就算合不上，留库里这份，vault 那份进回收站、出卡片；记 `via: readback:<插件 id>`。只合并插件交回的这几项值，下面挪动、改名、删掉、解析不了这几条不用于读回：标题和文件名不读回，vault 里删掉的下次导出重新生成，解析不了的照[协议 §4.4](protocol/transform-export.md#44-导出的-run-与-readback) 列进这次导出的问题列表。
    - 主题、卡片、成稿挪到自己文件夹里的另一个子文件夹：记 `move`。
    - 主题、卡片、成稿改了文件名：去掉本机后缀后不等于 `sanitize(title)`，且 `title` 和底本一样，就当改标题，`title` 取新文件名；`title` 也变了以 `title` 为准，文件名照 `title` 改。front matter 没跟着变的改名先等一会儿再判，云盘常先送到改名（多久归第 2 层）。文件名对得上 front matter 的 `title` 就照收，另一台改了标题、经云盘过来的就是这样。
    - 删掉了，或移出 `topics/`、`cards/`、`drafts/`：记 `move-to-trash`，底本里的文本进回收站，能恢复；回收站里已经有它（库在云盘里，另一台已经挪进去）就不再记。
@@ -478,7 +478,7 @@ takeaway: "闷蒸 30 秒比水温要紧"
 <a id="15-改动提议"></a>
 ### 1.5 改动提议
 
-Agent（经 MCP）或宿主调的模型改已有内容，一个提议一个文件 `.usuyo/changes/<id>.json`；放 `jobs.db` 会跟着机器丢（[第 14 条的回答](answers.md#14-资料库能不能放进同步盘)）。模型起草由宿主照[协议 §4.3](plugin-protocol.md#43-模型与密钥由宿主代发) 自己调 provider，不经转换插件。
+Agent（经 MCP）或宿主调的模型改已有内容，一个提议一个文件 `.usuyo/changes/<id>.json`；放 `jobs.db` 会跟着机器丢（[第 14 条的回答](answers.md#14-资料库能不能放进同步盘)）。模型起草由宿主照[协议 §4.3](protocol/transform-export.md#43-模型与密钥由宿主代发) 自己调 provider，不经转换插件。
 
 <a id="151-op-词表"></a>
 #### 1.5.1 op 词表
@@ -568,14 +568,14 @@ Agent（经 MCP）或宿主调的模型改已有内容，一个提议一个文�
 | 你或 Agent 主动收的：窗口（粘贴、拖入、快捷键、`usuyo://add`）、命令行、扩展、手机、Agent（`mcp`）、本机接口令牌（`api`）、批量导入 | 拿回来，记 `restore`，能撤销；不提醒 | 窗口、终端里的命令行、扩展、手机、批量导入照常，多一项 `origins`；Agent、`api`、终端外的命令行跳过（11-11 还没做：`POST /items` 一律记窗口里收的，命令行从不跳过；导入不跳私密，扩展、手机和 `api` 令牌的投递会跳过。见 [总纲](BUILD.md#5-功能线)） |
 | 跟着收（这个订阅没列过的） | 跳过 | 照常 |
 
-- **跟着收**只收这个订阅没列过的（[§1.1](#11-目录树)）：列过的一律跳过，它列过、你删掉的，到期移除以后也不会被它收回来；它没列过的（比如你自己粘贴过、删掉、已经到期移除的），以后它第一次列出来就照新的收（这是代价）。库里已有、它没列过的不新建，只多一项 `origins`（推断）。`newest-first` 的来源翻到一整页都是这个订阅列过的就停（[协议 §3.8](plugin-protocol.md#38-list-与跟着收)）。
+- **跟着收**只收这个订阅没列过的（[§1.1](#11-目录树)）：列过的一律跳过，它列过、你删掉的，到期移除以后也不会被它收回来；它没列过的（比如你自己粘贴过、删掉、已经到期移除的），以后它第一次列出来就照新的收（这是代价）。库里已有、它没列过的不新建，只多一项 `origins`（推断）。`newest-first` 的来源翻到一整页都是这个订阅列过的就停（[协议 §3.8](protocol/fetch.md#38-list-与跟着收)）。
 - 跳过的回 `skipped`，不加 `origins`；主动收的只有 Agent、`api`、终端外的命令行遇到私密条目这一种。又私密又在回收站里的：Agent、`api`、终端外的命令行照私密那一列跳过；别的入口拿回来（记 `restore`），多一项 `origins`，`private` 不变（推断）。代价：`skipped` 现在只在私密时出现，Agent 和 `api` 令牌能据此知道这条在库里、是私密的（11-05 以前和删过的、在回收站的不区分）；11-06 定照这样（[§1.10 第 20 条](#110-要你看一眼)），内容、标题都不给。
 - **撤销收下**：新建的进回收站（`reason: undo`）；从回收站拿回来的原样放回：同一个回收站项（`trashId`），`trashedAt`、`stateAt` 照拿回来之前的，到期照原来的算（应用里、命令行、MCP 都一样）。原来的到期时间已经过了的，`trashedAt`、`stateAt` 记放回的时间，再留 `trashDays`（推断：不然一撤销就被移除，Agent 经 MCP 撤就成了删除，[原则 5](PRD.md#4-原则)）。
 - **撤销那批的例外**：原因是 `undo` 的条目，和撤销收下时原样放回回收站的条目，同步带来你写的改动（`actor` 是 `user` 或 `external` 的记一句、改笔记、划线、放进主题、引用）时恢复它，记 `restore`（`actor: sync`），出一行「撤销时跳过了这条，你在另一台写过」。
 - **清干净**（11-06，原来的「彻底忘掉」并进这里，[§1.10 第 16 条](#110-要你看一眼)）：改动记录里提到它（含它 `aliases` 里的 id）的各行（包括封口的段和这次记的 `purge`），`targets[].id`、`targets[].path`、`change` 换成 `{"redacted": true}`，其余字段不动；所有提议里它的 op 删掉；本机 `sync.db` 底本、`backups/`、`exports/`、`imports/`、索引里它的部分去掉。条目另外：`facts/` 里它（含 `aliases`）的行删掉；并进它的（`reason: merge`）和它只留文字时移出来的（`reason: keep-text`）回收站项一起移除；别的条目 manifest 的 `sameAs`、`notSameAs`、`aliases` 去掉它；你的主题页、卡片、成稿、笔记里原话和标题留着，链接里的 id 是它或它的 `aliases` 的，换成 `usuyo://item/forgotten`（`actor: host`），应用里写「来源已删掉」（[§1.4.3](#143-引用)）；`jobs.db` 里跟着收列过的只有身份的哈希，不去掉（推断：去掉了，跟着收会把它再收回来）。云端推墓碑，多久后云端也没有了照[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突)（D1 时间回溯、R2 桶锁），界面写明。
 - **移除时写什么**（11-11 代码）：只在本机的（`keep-text`、`merge`、`conflict`、`kind: notes`、`kind: content`）删掉文件夹，记一行普通的 `purge`，`change` 是 `{trashId}`。整个离开的记一行 `purge`，`targets[].id`、`targets[].path`、`change` 都是 `{"redacted": true}`；再照上面清干净：所有设备的段里，`targets[].id` 是它、路径里或 `change` 里出现它（含 `aliases`）的行都脱敏；提议里它的 op 删掉，删空了的提议文件删掉；页面里的链接换成 `usuyo://item/forgotten`，回收站里的副本也换，记一行 `purge`（`actor: host`，`targets` 是改过的文件）。索引、`sync.db`、`backups/`、`exports/` 由调用方清。还不推墓碑（同步还没做）。
 - 别的台拉到墓碑后照上面移除自己的文件、清干净自己手上的。条目、主题、卡片、成稿的墓碑只在清干净时推，不另带标记，移除时不在线的那台回来拉到也照办（推断）；它离线时改过或拿回来的照下面「和同步」，那一份等它自己到期再清干净。改写是确定的：每台先改自己手上全部段的副本（包括别的台写的）；各段的主人再把改过的段推一次，记录换成新的 blob id，旧 blob 照[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突) 的清理规则清掉，以后加入的设备拉到的就是改过的。主人已被撤销（`devices/<deviceId>.json` 有 `revokedAt`）时由推墓碑的那台推，这是「每段只有一台写」唯一的例外。同一条一台重新收下、一台移除：拉到对方的版本后条目还在的，那台不做这些改写，界面一行「另一台又收下了，没清掉」（推断）。
-- **导出到 Obsidian 的那份**（11-06 定，[§1.10 第 15 条](#110-要你看一眼)）：归那边，usuyo 删掉时不去动它。读回遇到库里没有或在回收站的 `usuyo_id`，由宿主判成 `item-deleted`（不由插件报），那份文件不读也不写，只在这次导出的问题列表里写一行，不重建文件夹；插件报的 `problems` 里的文件同样不读也不写（[协议 §4.4](plugin-protocol.md#44-导出的-run-与-readback)）。
+- **导出到 Obsidian 的那份**（11-06 定，[§1.10 第 15 条](#110-要你看一眼)）：归那边，usuyo 删掉时不去动它。读回遇到库里没有或在回收站的 `usuyo_id`，由宿主判成 `item-deleted`（不由插件报），那份文件不读也不写，只在这次导出的问题列表里写一行，不重建文件夹；插件报的 `problems` 里的文件同样不读也不写（[协议 §4.4](protocol/transform-export.md#44-导出的-run-与-readback)）。
 - **只留文字**：先生成 `derived/thumb.jpg`，再把 `raw/` 里的图片、视频、音频和各次转录里的 `play.mp4`、`keyframes/` 移进回收站（`reason: keep-text`），`run.json` 和文字产物（`asr.vtt`、`ocr.json`、`keyframes.json`）留着，字都留着（11-11 代码：照各快照 `usuyo.fetch.json` 里的 `images` 和 `kind` 是 `video`、`audio` 的 `media` 移，加各次 `play` 转录合成的视频和各次转录 `keyframes/` 下的图片；只移解析掉符号链接以后还在条目文件夹里的，指到外面的留在原处、记日志；`keyframes` 本身是符号链接的不跟进去；字幕和 `other` 留着；算文字类的输出是 `text`、`html`、`subtitle`、`meta`、`comments`；`thumb.jpg` 还没生成）；`state: text-only`，以后只 `--want` 文字类。回收站里还在时能恢复，之后点「重新取视频」存新快照。
 - **和同步**：一台删、另一台同时改了笔记，回收站赢（撤销那批例外），改动并进回收站那份，出「两边都改过的」卡片。已移除、离线的那台回来时改过它：推的时候撞上墓碑，就放进它自己的回收站再留 `trashDays`，不悄悄复活。离线那台主动收下、从回收站拿回来的不算这种：照 [§1.8](#18-同步) 以墓碑的 `revision` 为底写新版本（推断）。
 
@@ -732,7 +732,7 @@ schema 先定这几条：
 
 守护进程另有四条，不在 `endpoints.ts` 的 `paths` 里：`POST /handshake`（上面）；`POST /reindex`，命令行用，回 `{items, unreadable}`；`GET /media/<itemId>/<层>`，地址由 `ItemView` 给；`GET /events` 在 `paths` 里，但不走 30 秒的时限。
 
-**投递**（[协议 §5.1](plugin-protocol.md#51-本机-http-接口)）：
+**投递**（[协议 §5.1](protocol/delivery.md#51-本机-http-接口)）：
 - `POST /v1/deliver`，`{url?, text?}`，给一个（两个都给取 `url`）。`text` 是手机分享出来的整段文字，从里面找第一个链接。只收链接，已经取到的内容（multipart）还不收。回 202 `{id, state: "accepted", duplicate}`，`duplicate` 为真是以前收下过。条目的入口取令牌的 `kind`，取内容照常排任务。遇到私密条目不收、不加来源，现在的回答和「收下过」一样（`duplicate: true`），没有单独的 `skipped`。
 - `POST /v1/batches`，`{name?, action?, links: [{url, title?, actedAt?}]}`，进导入的预览，你确认了才按节奏去收。`links` 1 到 5000 条；`action` 取 `favorite`、`like`、`share`、`view`、`unknown`；每条 `url` 要是带主机的 http(s)、不带用户名密码，`actedAt` 要是 RFC 3339，`title` 超过 500 字截掉；`name` 不给写「交进来的一批」，最多 200 字。不合的回 400 `invalid-args`，说是第几条。回 202 `{id}`，是新建的导入的 id（`kind: delivered`，`client` 是令牌名）。每条的身份由宿主重新算，不信交来的；认不出的这一条去掉，记日志；清单里身份相同的合成一条。
 
@@ -744,7 +744,7 @@ schema 先定这几条：
 
 列的时候的错：联网、超时、插件崩了这一类，等 60 秒乘 2 的次方再试，试满 6 次就停下等你；被限流、被拦住记在插件的暂停上（见下），导入照它显示原因，暂停一去掉就接着列；别的错停在这次导入上，`waiting.code` 是错误码（例如 `login-required`，或页面把没有访客身份的请求送回首页时插件报的 `visitor-required`），没有 `until`，等你重新登录或取到访客身份以后点「接着导入」。`waiting.code` 还可能是 `pacing`（等间隔）、`daily-limit`（今天批量的次数用完了）、`held`（你让插件先别试）、`batch-off`（这个平台不做导入）。
 
-**节奏和暂停**（[协议 §3.1](plugin-protocol.md#31-运行器与节奏)）：
+**节奏和暂停**（[协议 §3.1](protocol/fetch.md#31-运行器与节奏)）：
 - 节奏来自装着的插件清单里的 `pacing`，同一平台的几个插件取最严的：间隔取最长的，`daily` 取最小的，有一个写了 `batch: false` 就不做导入。没声明的平台不等。
 - `interval`：上一次调用结束到下一次开始的最短间隔，`fetch`、`list` 的一页、`sources` 都算，你手动收下的也守，导入的和手动的在同一个平台上排队。`daily`：批量（导入）的调用一个本地日期最多几次，到本地零点重新数；你手动收下的单条不计入，也不被它挡住，只守间隔。同一平台同一时间只跑一个调用。记账在 `jobs.db`，重启后照旧。`canonicalize` 不计。
 - 列一页要等的超过 60 秒就不等，记下到点的时间，到点再来。
@@ -854,7 +854,7 @@ bleve（纯 Go）。中文用 CJK 双字分析器（解决二字词），同时�
 <a id="附v0-各节和-18-处的去向"></a>
 ## 附：v0 各节和 18 处的去向
 
-v0 的「1. 仓库布局」「6. 标签规则」「7. 去重」「9. CLI」「10. MCP 工具」「11. 索引」留在 [§2](#2-留着的-v0第-2-层重写前保留)；「2. 资料库目录」「3. manifest.json」「4. content.md」「5. derived/」由第 1 层取代（[§1.1](#11-目录树)、[§1.2.1](#121-manifestjson-v1)、[§1.2.3](#123-contentmd-和各栏)、[§1.2.2](#122-raw-和-derived)）；「8. 适配器协议 v0」删掉，由[插件协议 v1](plugin-protocol.md) 取代，v0 没发布过，不做兼容，清单见[协议 §2](plugin-protocol.md#2-清单)；「12. M0 范围」删掉，不再分 M0，第一版范围见 [PRD §12](PRD.md#12-开发顺序)，feature 001 重写（[总纲](BUILD.md#5-功能线)）。
+v0 的「1. 仓库布局」「6. 标签规则」「7. 去重」「9. CLI」「10. MCP 工具」「11. 索引」留在 [§2](#2-留着的-v0第-2-层重写前保留)；「2. 资料库目录」「3. manifest.json」「4. content.md」「5. derived/」由第 1 层取代（[§1.1](#11-目录树)、[§1.2.1](#121-manifestjson-v1)、[§1.2.3](#123-contentmd-和各栏)、[§1.2.2](#122-raw-和-derived)）；「8. 适配器协议 v0」删掉，由[插件协议 v1](protocol/README.md) 取代，v0 没发布过，不做兼容，清单见[协议 §2](protocol/manifest.md#2-清单)；「12. M0 范围」删掉，不再分 M0，第一版范围见 [PRD §12](PRD.md#12-开发顺序)，feature 001 重写（[总纲](BUILD.md#5-功能线)）。
 
 v0 附录记的 18 处对不上：
 
@@ -866,15 +866,15 @@ v0 附录记的 18 处对不上：
 | 4 | 任务状态 | 这里了结 | 搬进本机 `jobs.db`，资料库只看 `derived/` |
 | 5 | 注意力 | 这里了结 | `attention.json` 去掉，只记「打开过」 |
 | 6 | 存在和私密 | 这里了结 | `state` 三个值，加 `private` |
-| 7 | 通用网页获取 | 插件协议 | 预装照[协议 §8.4](plugin-protocol.md#84-三种来源)；没装时宿主自己算 `web:` 身份（[§0.4](#04-id)） |
+| 7 | 通用网页获取 | 插件协议 | 预装照[协议 §8.4](protocol/distribution.md#84-三种来源)；没装时宿主自己算 `web:` 身份（[§0.4](#04-id)） |
 | 8 | MCP 不可信标记 | 第 2 层 | — （11-11 MCP 还没做） |
 | 9 | 配置目录 | 这里了结 | 按机器目录；库里只留库级的 `settings.json` |
 | 10 | 本机接口的令牌 | 这里了结 | 11-11 代码：按机器目录的 `api-token` 存令牌本身，每次启动换，见 [§1.1](#11-目录树) 和[本机接口](#本机接口第-2-层11-11-照代码) |
-| 11 | `.meta.json` | 这里了结 | [§1.2.2](#122-raw-和-derived)；[协议 §4.2](plugin-protocol.md#42-转换的-run) 已跟着改 |
+| 11 | `.meta.json` | 这里了结 | [§1.2.2](#122-raw-和-derived)；[协议 §4.2](protocol/transform-export.md#42-转换的-run) 已跟着改 |
 | 12 | 快照字段 | 这里了结 | [§1.2.1](#121-manifestjson-v1)；`additionalProperties` 见 [§0.2](#02-版本与兼容) |
 | 13 | `missing` | 这里了结 | 用 `outputs` 词表 |
-| 14 | 导出身份键和导出记录 | 这里了结 | `usuyo_id` 一致；导出记录搬到按机器目录，[协议 §4.4](plugin-protocol.md#44-导出的-run-与-readback) 已跟着改 |
-| 15 | 插件来源怎么显示 | 插件协议 | [协议 §8.4](plugin-protocol.md#84-三种来源) |
+| 14 | 导出身份键和导出记录 | 这里了结 | `usuyo_id` 一致；导出记录搬到按机器目录，[协议 §4.4](protocol/transform-export.md#44-导出的-run-与-readback) 已跟着改 |
+| 15 | 插件来源怎么显示 | 插件协议 | [协议 §8.4](protocol/distribution.md#84-三种来源) |
 | 16 | GitHub App | 插件协议 | [O3](BUILD.md#7-只有用户能答的和能验的) 已定 A；部署写进 ADR-003 和协议，见 [总纲](BUILD.md#012-插件的安装和分发) |
 | 17 | 改动提议多久作废 | 这里了结 | 不作废（[§1.10 第 6 条](#110-要你看一眼)） |
 | 18 | 插件清单是 v0 还是 v1 | 第 3 层 | `crates/usuyo-contract`（原 `pkg/contract`）只留资料库类型；插件协议的类型 11-11 在 `crates/usuyo-plugin`，`crates/usuyo-plugin-kit` 转出给插件用，schema 文件还没有 |

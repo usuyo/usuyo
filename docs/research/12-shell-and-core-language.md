@@ -63,7 +63,7 @@
 | 全文索引、向量 | 相关：进程内的库 | [04 §1](04-tech-options.md#1-搜索索引与向量检索) |
 | 文件监听 | 相关：资料库一开就要监听 | [§3](#3-对比表) 表下说明 |
 | 插件运行器与隔离 | 相关；但 macOS、Linux 上两种语言都是起外部程序 | [§2.3](#23-插件隔离) |
-| 安装校验（sigstore） | 相关 | [插件协议 §8.3](../plugin-protocol.md#83-校验与来源证明) |
+| 安装校验（sigstore） | 相关 | [插件协议 §8.3](../protocol/distribution.md#83-校验与来源证明) |
 | 手机端 | 相关 | [§2.6](#26-手机端) |
 
 所以要比的是这几样：壳、索引、文件监听、隔离、手机端，再加编译循环。
@@ -123,7 +123,7 @@
 <a id="24-调原生库"></a>
 ### 2.4 调原生库
 
-- agent-desktop 按 [插件协议 §2.8](../plugin-protocol.md#28-安装与启动) 打进视觉层插件的资产，按命令行调用，不进内核（[10 §1.1](10-desktop-and-android-agents.md#11-是什么)）。
+- agent-desktop 按 [插件协议 §2.8](../protocol/manifest.md#28-安装与启动) 打进视觉层插件的资产，按命令行调用，不进内核（[10 §1.1](10-desktop-and-android-agents.md#11-是什么)）。
 - wx-cli 一系是 Rust 写的，但没有 C ABI，原仓库 2026-07-15 起被屏蔽（[11 §1](11-subscriptions-compat-and-wx-cli.md#1-wx-cli)）。平台逻辑本来也不能进内核（[CLAUDE.md](../../CLAUDE.md) 原则 1）。
 - cgo 的代价（失去一台机器交叉编译、每个平台要 C 工具链）只在内核要链 C 库时才付。Go 还有 [purego](https://github.com/ebitengine/purego)，不开 cgo 也能调 C 库。
 
@@ -293,7 +293,7 @@
 | 你不愿意让内核用 Rust | A′，不选 B | A′ 只有一套工具链，Wails v3 也已是稳定版。B 留作 A′ 的后备 |
 | 骨架的编译循环太慢 | A′ | 你同意 C 以后先搭空骨架：Tauri 2 + tantivy + rusqlite + rmcp + tokio。在本机改一行内核代码，量 `cargo build` 的增量重编，顺手记一轮 `cargo test` 的时间。增量重编超过约 10 秒就退回 A′。阈值是推断，你可以改（[TODO](../BUILD.md#5-功能线)） |
 | 为迷雾选了 Electron（要 120fps 或一致的 WebGPU） | Go 内核 + Electron | Tauri 生态这条理由没了，只按内核本身比，编译快的分量变重。这是 ADR-001 原来列的回退 |
-| sigstore-verify 做不到 [插件协议 §8.3](../plugin-protocol.md#83-校验与来源证明) 的要求（按 TUF 更新信任根、离线验证 GitHub attestation bundle、按工作流核对签发者） | C 里带一个 Go 写的小校验进程，或重新比 C 和 A′ | 校验是装插件的门，不能打折扣 |
+| sigstore-verify 做不到 [插件协议 §8.3](../protocol/distribution.md#83-校验与来源证明) 的要求（按 TUF 更新信任根、离线验证 GitHub attestation bundle、按工作流核对签发者） | C 里带一个 Go 写的小校验进程，或重新比 C 和 A′ | 校验是装插件的门，不能打折扣 |
 | 手机端确定只做薄客户端，Windows 也确定只做 Job Object | 单凭这一项不改；和编译偏慢叠在一起时改 A′ | C「以后」的两条好处没了，「眼下」的几条还在 |
 
 **不会改变推荐的：**
@@ -316,7 +316,7 @@
 | `go.mod` | `go 1.26.0`，三个直接依赖 | 换成 `Cargo.toml` | Go 版本按 Wails v3 的要求改 |
 | `cmd/`、`internal/`、`pkg/` | `cmd/xiecun` 11 个文件；`internal/` 下 7 个占位文件；`pkg/contract` 4 个 `.go` 加 `schema/`、`testdata/` | 用 serde + clap 重写；`schema/`、`testdata/` 原样保留 | 不改 |
 | [SPEC §1](../SPEC.md#1-仓库布局monorepo) 仓库布局 | Go 标准布局 | 按 cargo 工作区改 | 不改 |
-| [插件协议 §8.3](../plugin-protocol.md#83-校验与来源证明) | 点名 sigstore-go | 改成 sigstore-verify，或带 Go 校验进程 | 不改 |
+| [插件协议 §8.3](../protocol/distribution.md#83-校验与来源证明) | 点名 sigstore-go | 改成 sigstore-verify，或带 Go 校验进程 | 不改 |
 | feature 001 | bleve 方案 | 改索引方案 | 不改 |
 | CI | Go | cargo + pnpm，按平台跑矩阵 | 加 cgo 的各平台构建 |
 | 调研 01–10 | 历史记录 | 正文不改，只加一行「语言已改，见新 ADR」 | 只在提到 MyGo 的地方加同样一行 |
@@ -331,7 +331,7 @@
 1. **本机 Rust 骨架的编译循环。** Tauri 2 + tantivy + rusqlite + rmcp + tokio 的增量重编和一轮测试各要多久。这一轮不许构建，没量。这是 C 的第一条退出条件（[§5](#5-什么会改变推荐)）。
 2. Tauri 的应用代码能否拿到 WKWebView 句柄、调私有 SPI 解除 60fps（推断能，没找到先例）。
 3. WebView2 从哪个运行时版本起默认开 WebGPU。
-4. sigstore-verify 能否按 [插件协议 §8.3](../plugin-protocol.md#83-校验与来源证明) 离线验证 GitHub attestation bundle。
+4. sigstore-verify 能否按 [插件协议 §8.3](../protocol/distribution.md#83-校验与来源证明) 离线验证 GitHub attestation bundle。
 5. launchd 启动的 GUI 应用默认软 fd 上限是多少；fsnotify 在多大的资料库上会顶到。
 6. bleve + gse 对 tantivy + jieba：在真实中英混排样本上的召回和延迟（[04 §1.4](04-tech-options.md#14-推荐与风险搜索) 要的实测）。
 7. Tauri 3 正式版的日期；CEF 运行时在 Linux 上的问题（[#16189](https://github.com/tauri-apps/tauri/issues/16189)、[#16251](https://github.com/tauri-apps/tauri/issues/16251)）。

@@ -20,7 +20,7 @@
 <a id="跑起来是什么样"></a>
 ## 跑起来是什么样
 
-插件是常驻进程，照[协议 §4.2](../../docs/plugin-protocol.md#42-转换的-run) 在 stdio 上说 JSON-RPC；循环由 plugin-kit 管（[只写 `run`](../../crates/usuyo-plugin-kit/README.md#转换插件只写-run)）。
+插件是常驻进程，照[协议 §4.2](../../docs/protocol/transform-export.md#42-转换的-run) 在 stdio 上说 JSON-RPC；循环由 plugin-kit 管（[只写 `run`](../../crates/usuyo-plugin-kit/README.md#转换插件只写-run)）。
 
 - **启动**：读 `USUYO_PLUGIN_DIR`、`USUYO_MODELS_DIR`，缺一个就退出。核 `${PLUGIN_DIR}/silero_vad_v5.onnx` 的 sha256（`6b99cbfd39246b6706f98ec13c7c50c6b299181f2474fa05cbc8046acc274396`，2,313,101 字节），对不上就退出。`describe` 的 `models` 是启动时已经在的模型。
 - **模型在哪**：插件要宿主把压缩包原样解进 `${MODELS}/sense-voice-int8-2024-07-17/`、不去掉顶层那一层目录（宿主的模型下载还没做，协议也还没写明这一点），所以文件在 `…/sense-voice-int8-2024-07-17/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17/model.int8.onnx` 和 `tokens.txt`。插件只查这两个文件在、字节数对；不在或不全回 `dependency-missing`，`needs: ["model:sense-voice-int8-2024-07-17"]`。插件不联网，不下载任何东西。

@@ -655,7 +655,7 @@ You could call it a personal knowledge base, but it isn't one: a knowledge base 
 说明：
 
 - 中文版状态行以下的三段合计 327 字。「可以说它是个人知识库，但是实际上也不是」是用户原话，README 算作者自己的话，所以不加引号，只补了「它」「是」和一个逗号。「让自己的注意力去专注于个人认为重要的事」不放进 README，放进去容易被读成「帮你专注」的承诺，只放在叙事里。
-- 声明（用途是个人备份、离线阅读、注意力整理；平台账号和法律上的后果由用户自己承担；链到 [调研 06 §16](06-platform-access-and-account-risk.md#16-账号风险的证据)）在 README 里另起一节，放在开头之后，草稿见 [插件协议 附录 A.1](../plugin-protocol.md#a1-主仓库-readme)；风险证据的链接放哪还没定（[open-decisions O2](../BUILD.md#7-只有用户能答的和能验的)）。
+- 声明（用途是个人备份、离线阅读、注意力整理；平台账号和法律上的后果由用户自己承担；链到 [调研 06 §16](06-platform-access-and-account-risk.md#16-账号风险的证据)）在 README 里另起一节，放在开头之后，草稿见 [插件协议 附录 A.1](../protocol/distribution.md#a1-主仓库-readme)；风险证据的链接放哪还没定（[open-decisions O2](../BUILD.md#7-只有用户能答的和能验的)）。
 - 状态行一直留到第一个能用的版本发布。
 
 <a id="1025-三段叙事"></a>

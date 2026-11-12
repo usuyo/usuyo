@@ -15,7 +15,7 @@
   2. 一条帖子**后面**的串（作者自己接着回的几条）；
   3. X 的长文章（Articles）正文，不登录拿不拿得到没核实。
 
-  这三种的内容在你浏览器里页面自己拿回的回答里有（书签、喜欢的时间线带着帖子本身；打开帖子页时的 `TweetDetail` 带着整串）。要收它们，靠的是内核的通用投递口：`extension` 令牌经 `POST /v1/deliver` 交已经取到的内容，[协议 §5.1](../plugin-protocol.md#51-本机-http-接口) 设计了、还没做。它是给所有平台的扩展和脚本用的，不是 X 专用的路。在它做好以前，这三种条目停在「只有链接」。
+  这三种的内容在你浏览器里页面自己拿回的回答里有（书签、喜欢的时间线带着帖子本身；打开帖子页时的 `TweetDetail` 带着整串）。要收它们，靠的是内核的通用投递口：`extension` 令牌经 `POST /v1/deliver` 交已经取到的内容，[协议 §5.1](../protocol/delivery.md#51-本机-http-接口) 设计了、还没做。它是给所有平台的扩展和脚本用的，不是 X 专用的路。在它做好以前，这三种条目停在「只有链接」。
 
   这个分叉靠一个前提：你那个出口上访客令牌或 syndication 至少有一个肯回答。两个都被拒时，单条也只能从登录着的页面拿，全部落到 (b)。所以[第 12 节](#12-测试)里你先测的就是这一条。
 - **usuyo 里不登录 X。** 不做登录窗口、不做带 cookie 的 `list`，理由见[第 2 节](#2-列出你存过的)。代价：书签和喜欢没有 `list` 能力，就进不了跟着收，每次都是你自己翻一遍、脚本交一批；新存的不会自己进来。
@@ -39,10 +39,10 @@
 
   usuyo 的脚本放在 X 插件仓库的 `userscript/` 下，照小红书插件的脚本写（握手、令牌只存脚本管理器、只连 `127.0.0.1`，见 `usuyo-fetch/xiaohongshu/README.md`；小红书那边记下的条目 12 小时作废是因为 `xsec_token` 会过期，X 的链接不过期，不照搬）。它只记：帖子 id、作者的 `screen_name`、正文第一行当标题；书签记 `action: favorite`，喜欢记 `action: like`；交的链接是 `https://x.com/<screen_name>/status/<id>`。喜欢只记你自己的：请求里的 `userId` 要等于登录着的那个人（怎么在页面里拿到自己的 id 要实现时核，推断可以读 `twid` cookie 或页面状态；X 2024 年起不给别人看喜欢列表，推断页面上本来就只有你自己的）。
 
-  回答里没有「什么时候存的」：两种时间线只给 `sortIndex`。fieldtheory-cli 也拿不到书签时间，把 `bookmarkedAt` 记成空（`src/graphql-bookmarks.ts`）。所以 `actedAt` 留空，不用抓取时间冒充（[协议 §3.8](../plugin-protocol.md#38-list-与跟着收)）。
+  回答里没有「什么时候存的」：两种时间线只给 `sortIndex`。fieldtheory-cli 也拿不到书签时间，把 `bookmarkedAt` 记成空（`src/graphql-bookmarks.ts`）。所以 `actedAt` 留空，不用抓取时间冒充（[协议 §3.8](../protocol/fetch.md#38-list-与跟着收)）。
 - **官方归档**（`official-export`，不碰账号）：在 X 的设置里申请下载自己的数据，拿到一个 zip。[steipete/birdclaw](https://github.com/steipete/birdclaw)（MIT）读里面的 `data/like.js`、`data/like-partN.js`，也接受 `data/bookmark(s).js`（`src/lib/archive/slices.ts`）。它的代码接受书签文件，不等于今天的归档里一定有书签；调研笔记记过 timelinize 的 Twitter 源不导入喜欢和书签（[官方导出笔记](../research/notes/official-export-findings.md)）。归档里有没有书签、`like.js` 每条有哪些字段，要你申请一份来看。插件的 `list` 读这个 zip，只交链接，内容照样由 `fetch` 不带账号去取。
 - **带 cookie 调书签接口**（`session-api`，不做）：[afar1/fieldtheory-cli](https://github.com/afar1/fieldtheory-cli)（MIT，2026-09-05）的 `src/graphql-bookmarks.ts` 带网页的公开 bearer、`ct0` 和 `auth_token` cookie 调 `Bookmarks`，不生成 `x-client-transaction-id`，默认每页隔 600 毫秒；它的 issue 里没搜到锁号或 403 的报告。不做的原因：要你在 usuyo 里登录 X，cookie 出了浏览器、由程序按程序的节奏翻页；而 gallery-dl 带登录时每次都生成 `x-client-transaction-id`（`gallery_dl/extractor/twitter.py` 的 `_call`，第 1893 行起），说明登录着的接口可能在查这个头（推断）。浏览器脚本那条路已经够用，这条只多一样：能做跟着收，新存的书签自己进来。为这一样把账号交给程序，不值（[第 0 节](#0-结论)写了代价）；你要是更看重跟着收，这是要你答的一问。
-- **付费的官方接口**（`official-export`，要开发者账号）：[xdevplatform/xurl](https://github.com/xdevplatform/xurl)（MIT，2026-11-07 仍在推送）调 `GET /2/users/:id/bookmarks` 和 `GET /2/users/:id/liked_tweets`，每次最多 100 条（`api/shortcuts.go`）；要 OAuth 2.0 用户授权，应用要放进按量付费的套餐（README）。价格和条数上限写在 X 自己的文档站上，没核。可以作为你自己装 xurl、usuyo 包装它的插件（[协议 §9.1](../plugin-protocol.md#91-包装命令行)），不是首选。
+- **付费的官方接口**（`official-export`，要开发者账号）：[xdevplatform/xurl](https://github.com/xdevplatform/xurl)（MIT，2026-11-07 仍在推送）调 `GET /2/users/:id/bookmarks` 和 `GET /2/users/:id/liked_tweets`，每次最多 100 条（`api/shortcuts.go`）；要 OAuth 2.0 用户授权，应用要放进按量付费的套餐（README）。价格和条数上限写在 X 自己的文档站上，没核。可以作为你自己装 xurl、usuyo 包装它的插件（[协议 §9.1](../protocol/wrapping.md#91-包装命令行)），不是首选。
 
 <a id="3-取单条"></a>
 ## 3. 取单条
@@ -56,13 +56,13 @@
 
 `queryId` 写死在代码里，三家各用一个（yt-dlp `2ICDjqPd81tulZcYrtpTuQ`，gallery-dl `qxWQxcMLiTPcavz9Qy5hwQ`，fieldtheory `fHLDP3qFEjnTqhWBVvsREg`），推断 X 还收旧的。fieldtheory 的注释说过期了就去网页的 `main.<hash>.js` 里找 `operationName:"TweetResultByRestId"`。插件把 `queryId` 和 `features` 放在一个文件里，回答说参数不对时报 `upstream-changed`。
 
-访客令牌不是访客身份：它不是页面生成的 cookie，是插件自己一次 POST 换来的，所以清单不写 `visitors`（[协议 §2.5.1](../plugin-protocol.md#251-访客身份-visitors) 管的是宿主开窗口取 cookie）。gallery-dl 把它缓存一小时（`_authenticate_guest`）；插件照做，放在 `${CACHE}`，不算账号凭据（推断）。换令牌会被拒：[gallery-dl #9505](https://github.com/mikf/gallery-dl/issues/9505)（2026-05）用户那边 `guest/activate.json` 回 403，维护者那边同一条能取，看出口。
+访客令牌不是访客身份：它不是页面生成的 cookie，是插件自己一次 POST 换来的，所以清单不写 `visitors`（[协议 §2.5.1](../protocol/manifest.md#251-访客身份-visitors) 管的是宿主开窗口取 cookie）。gallery-dl 把它缓存一小时（`_authenticate_guest`）；插件照做，放在 `${CACHE}`，不算账号凭据（推断）。换令牌会被拒：[gallery-dl #9505](https://github.com/mikf/gallery-dl/issues/9505)（2026-05）用户那边 `guest/activate.json` 回 403，维护者那边同一条能取，看出口。
 
 **被限流或令牌被拒，退到 syndication。** `GET https://cdn.syndication.twimg.com/tweet-result?id=<id>&token=<t>`，`token` 由 id 算出：`((id / 1e15) * π).toString(36)` 去掉 `0` 和 `.`。这是 X 给嵌入帖子用的接口；照 [vercel/react-tweet](https://github.com/vercel/react-tweet)（MIT）的 `packages/react-tweet/src/api/fetch-tweet.ts` 写，用普通 UA，回空对象当不存在，`TweetTombstone` 当已删。yt-dlp 在帖子接口回 429 时也退到它（第 1197–1201 行），不过它用 `Googlebot` 当 UA，我们不照这个。
 
 **拿到什么：**
 
-- **正文。** 帖子接口的 `legacy.full_text`；长帖（超过普通长度）的全文在 `note_tweet.note_tweet_results.result.text`，请求的 `features` 里要开 `longform_notetweets_consumption_enabled`（yt-dlp 的写法），twitter-web-exporter 也是先读它再退到 `full_text`（`src/utils/api.ts` 的 `extractTweetFullText`）。访客令牌下长帖全文给不给，没核。syndication 只给截断的 `text`，长帖只有 `note_tweet.id`（react-tweet `src/api/types/tweet.ts`）；走 syndication 时在 `missingReason` 写「长帖只拿到前一段」（一类输出只拿到一部分，协议还说不出，[协议 §13](../plugin-protocol.md#13-待定) 第 35 项）。正文里的 `t.co` 短链按 `entities.urls[].expanded_url` 展开，不去请求 `t.co`。
+- **正文。** 帖子接口的 `legacy.full_text`；长帖（超过普通长度）的全文在 `note_tweet.note_tweet_results.result.text`，请求的 `features` 里要开 `longform_notetweets_consumption_enabled`（yt-dlp 的写法），twitter-web-exporter 也是先读它再退到 `full_text`（`src/utils/api.ts` 的 `extractTweetFullText`）。访客令牌下长帖全文给不给，没核。syndication 只给截断的 `text`，长帖只有 `note_tweet.id`（react-tweet `src/api/types/tweet.ts`）；走 syndication 时在 `missingReason` 写「长帖只拿到前一段」（一类输出只拿到一部分，协议还说不出，[协议 §13](../protocol/open.md#13-待定) 第 35 项）。正文里的 `t.co` 短链按 `entities.urls[].expanded_url` 展开，不去请求 `t.co`。
 - **图片。** `extended_entities.media[]` 里 `type: photo` 的 `media_url_https`，按 gallery-dl 的写法加 `name=orig` 取原图（第 79 行、第 1298 行的例子）。syndication 在 `mediaDetails[]` 里，字段同名。
 - **视频和动图。** `type: video`、`animated_gif` 的 `video_info.variants[]`，取 `content_type: video/mp4` 里 `bitrate` 最高的一个（gallery-dl 第 236–238 行）；`m3u8` 不取。不带 cookie 下载，地址在 `video.twimg.com`（推断，要你核）。
 - **引用的帖子。** 帖子接口的 `quoted_status_result.result`（yt-dlp 第 1102 行），syndication 的 `quoted_tweet`，带它自己的 `mediaDetails`。只取一层，写进同一个快照。
@@ -78,12 +78,12 @@
 <a id="4-按创作者或关键词列"></a>
 ## 4. 按创作者或关键词列
 
-不登录看不到主页时间线和搜索：gallery-dl 不登录时时间线回 403、404 就报「要登录的 cookie」（`_call` 里的 `AuthRequired("authenticated cookies", "timeline")`）。所以这两样只能在你登录着的浏览器里由脚本记你自己翻到的；twitter-web-exporter 也截搜索结果页和列表时间线（`src/modules/search-timeline/`、`src/modules/list-timeline/`）。协议还没有这类能力（[协议 §13](../plugin-protocol.md#13-待定) 第 26 项），等它定了，脚本交来的同样只是链接。
+不登录看不到主页时间线和搜索：gallery-dl 不登录时时间线回 403、404 就报「要登录的 cookie」（`_call` 里的 `AuthRequired("authenticated cookies", "timeline")`）。所以这两样只能在你登录着的浏览器里由脚本记你自己翻到的；twitter-web-exporter 也截搜索结果页和列表时间线（`src/modules/search-timeline/`、`src/modules/list-timeline/`）。协议还没有这类能力（[协议 §13](../protocol/open.md#13-待定) 第 26 项），等它定了，脚本交来的同样只是链接。
 
 <a id="5-身份和链接"></a>
 ## 5. 身份和链接
 
-- **平台 id** `x`，写在[协议 §2.3](../plugin-protocol.md#23-获取插件的字段) 的平台 id 例子里；plugin-kit 的平台列表本身还没做（[协议 §3.1](../plugin-protocol.md#31-运行器与节奏)），宿主现在只查 `contentId` 非空、不超长。`contentId` 是帖子的十进制 id，`^[0-9]{1,20}$`。
+- **平台 id** `x`，写在[协议 §2.3](../protocol/manifest.md#23-获取插件的字段) 的平台 id 例子里；plugin-kit 的平台列表本身还没做（[协议 §3.1](../protocol/fetch.md#31-运行器与节奏)），宿主现在只查 `contentId` 非空、不超长。`contentId` 是帖子的十进制 id，`^[0-9]{1,20}$`。
 - **认得的链接**（照 yt-dlp 的 `_BASE_REGEX` 和 `TwitterIE._VALID_URL`）：主机 `x.com`、`twitter.com`，可带 `www.`、`mobile.`、`m.`；路径 `<screen_name>/status/<id>`、`i/web/status/<id>`、`statuses/<id>`，后面可以跟 `/photo/<n>`、`/video/<n>`（不进身份）。手机「分享」复制出的链接带 `?s=…&t=…`：插件的请求只用 id 拼，这些参数从不发出去，usuyo 记下的原链接不变。
 - **`t.co` 短链**：`canonicalize` 只请求 `t.co`、只看它跳去哪里，不带 cookie，一看到帖子链接就停（yt-dlp 有 `TwitterShortenerIE`）。`t.co` 回的是重定向还是带跳转的页面，没核。
 - **第三方转发域名**（`fxtwitter.com`、`fixupx.com` 上同样路径的链接，FxEmbed 的 README 里写的两种）：离线认出 id，不请求这些主机。别的转发域名没核，不认。
@@ -106,7 +106,7 @@
 <a id="7-错误码"></a>
 ## 7. 错误码
 
-对到[协议 §3.3](../plugin-protocol.md#33-信封与错误码) 的码：
+对到[协议 §3.3](../protocol/fetch.md#33-信封与错误码) 的码：
 
 | 看到什么 | 回什么 |
 |---|---|
@@ -129,7 +129,7 @@
 <a id="9-清单"></a>
 ## 9. 清单
 
-照现行协议的词（[协议 §2.3](../plugin-protocol.md#23-获取插件的字段)）：
+照现行协议的词（[协议 §2.3](../protocol/manifest.md#23-获取插件的字段)）：
 
 ```yaml
 protocol: 1
@@ -186,9 +186,9 @@ run:
 ```
 
 - 没有 `sites`：usuyo 里不登录 X。没有 `visitors`：访客令牌是插件自己换的，不是宿主开窗口取的 cookie（[第 3 节](#3-取单条)）。
-- `match` 写宽，粗筛交给 `canonicalize`（[协议 §3.5](../plugin-protocol.md#35-canonicalize-与身份)）；`*.` 前缀不含裸域，所以两种都写。
-- `list` 只读归档，交的条目只带 `url`，内容照样由 `fetch` 去取（[协议 §3.9](../plugin-protocol.md#39-从文件导入)）。归档的文件名照协议的例子写成 `twitter-*.zip`，X 现在给的文件名要你核。这个插件有网络权限，所以读归档的 `list` 也照节奏排，不能像 `network.mode: none` 的导入插件那样并行；归档一次几千条，可以接受。
-- 浏览器脚本不在清单里：它不是宿主启动的进程，走[协议 §9.4](../plugin-protocol.md#94-浏览器扩展与油猴脚本)，交来的链接按 `fetch` 取。
+- `match` 写宽，粗筛交给 `canonicalize`（[协议 §3.5](../protocol/fetch.md#35-canonicalize-与身份)）；`*.` 前缀不含裸域，所以两种都写。
+- `list` 只读归档，交的条目只带 `url`，内容照样由 `fetch` 去取（[协议 §3.9](../protocol/fetch.md#39-从文件导入)）。归档的文件名照协议的例子写成 `twitter-*.zip`，X 现在给的文件名要你核。这个插件有网络权限，所以读归档的 `list` 也照节奏排，不能像 `network.mode: none` 的导入插件那样并行；归档一次几千条，可以接受。
+- 浏览器脚本不在清单里：它不是宿主启动的进程，走[协议 §9.4](../protocol/wrapping.md#94-浏览器扩展与油猴脚本)，交来的链接按 `fetch` 取。
 
 <a id="10-风险和证据"></a>
 ## 10. 风险和证据

@@ -1,14 +1,14 @@
 <a id="小红书获取设计"></a>
 # 小红书：获取设计
 
-文中「协议」指[插件协议](../plugin-protocol.md)，「06」指[调研 06](../research/06-platform-access-and-account-risk.md)。各平台的总表、要不要账号的几个说法、怎么相对安全地试，在 [platforms/README](README.md)；这里不重复。
+文中「协议」指[插件协议](../protocol/README.md)，「06」指[调研 06](../research/06-platform-access-and-account-risk.md)。各平台的总表、要不要账号的几个说法、怎么相对安全地试，在 [platforms/README](README.md)；这里不重复。
 
 <a id="0-结论"></a>
 ## 0. 结论
 
 | 平台 | 首个实现 | 兜底 | 做不到的 |
 |---|---|---|---|
-| 小红书 | `fetch` 走公开笔记页（带 `xsec_token` 的长链，解析 `__INITIAL_STATE__`），不签名、不登录，被送回首页时带一份访客身份再试一次；清单由你在日常浏览器里用油猴脚本交给 [`/v1/batches`](../plugin-protocol.md#51-本机-http-接口)，插件没有 `list` | 你自装的 XHS-Downloader，按 [协议 §9.2](../plugin-protocol.md#92-包装本机-http-服务) 包装 | 不带任何 cookie 取单条不稳定：2026-10 有报告空 cookie 的长链被重定向到首页，带一份未登录的访客 cookie 才成功（[§2.2](#22-取单条)）；访客身份由清单的 `visitors` 声明，usuyo 开一个不登录的窗口取（[协议 §2.5.1](../plugin-protocol.md#251-访客身份-visitors)） |
+| 小红书 | `fetch` 走公开笔记页（带 `xsec_token` 的长链，解析 `__INITIAL_STATE__`），不签名、不登录，被送回首页时带一份访客身份再试一次；清单由你在日常浏览器里用油猴脚本交给 [`/v1/batches`](../protocol/delivery.md#51-本机-http-接口)，插件没有 `list` | 你自装的 XHS-Downloader，按 [协议 §9.2](../protocol/wrapping.md#92-包装本机-http-服务) 包装 | 不带任何 cookie 取单条不稳定：2026-10 有报告空 cookie 的长链被重定向到首页，带一份未登录的访客 cookie 才成功（[§2.2](#22-取单条)）；访客身份由清单的 `visitors` 声明，usuyo 开一个不登录的窗口取（[协议 §2.5.1](../protocol/manifest.md#251-访客身份-visitors)） |
 
 最大的风险在小红书：2026 年只读也有警告、封号的报告（[06 §16.2](../research/06-platform-access-and-account-risk.md#162-issue-里的账号问题)），匿名批量取还牵连过复制链接的账号（[XHS-Downloader #305](https://github.com/JoeanAmier/XHS-Downloader/issues/305)）。
 
@@ -42,7 +42,7 @@
 | [z-mio/ParseHub](https://github.com/z-mio/ParseHub) `provider_api/xhs.py` | MIT / Python | 2026-11-09 | 读它的 `new Set` 处理、CDN 地址换算、移动端回退；不用签名部分 |
 | [JoeanAmier/XHS-Downloader](https://github.com/JoeanAmier/XHS-Downloader) | GPL-3.0 / Python | 2026-11-07 | 兜底：你自装，插件经 HTTP 调；[#502](https://github.com/JoeanAmier/XHS-Downloader/pull/502) 正在加扫码登录和「风控暂停」 |
 
-清单：`platforms: [xiaohongshu]`，`match` 是上面四种长链和两种短链，`access: public-web`、`login: none`，顶层 `visitors` 声明 `www.xiaohongshu.com` 的访客身份（窗口打开 `https://www.xiaohongshu.com/`），`fetch` 列 `visitors: [www.xiaohongshu.com]`，`outputs: [text, images, media:video, meta]`。`canonicalize` 取 24 位十六进制 note id 作 `contentId`，`identity.url` 写 `https://www.xiaohongshu.com/explore/<id>`，`resolvedUrl` 保留 `xsec_token`（[协议 §3.5](../plugin-protocol.md#35-canonicalize-与身份)）。节奏 `batch: true`、`interval: 15s`、`daily: 100`。
+清单：`platforms: [xiaohongshu]`，`match` 是上面四种长链和两种短链，`access: public-web`、`login: none`，顶层 `visitors` 声明 `www.xiaohongshu.com` 的访客身份（窗口打开 `https://www.xiaohongshu.com/`），`fetch` 列 `visitors: [www.xiaohongshu.com]`，`outputs: [text, images, media:video, meta]`。`canonicalize` 取 24 位十六进制 note id 作 `contentId`，`identity.url` 写 `https://www.xiaohongshu.com/explore/<id>`，`resolvedUrl` 保留 `xsec_token`（[协议 §3.5](../protocol/fetch.md#35-canonicalize-与身份)）。节奏 `batch: true`、`interval: 15s`、`daily: 100`。
 
 <a id="24-插件做成的样子"></a>
 ### 2.4 插件做成的样子

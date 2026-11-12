@@ -32,7 +32,7 @@
 - **凭据。** cookie、令牌的值只在钥匙串和单次调用的 0600 临时文件里，不进日志、报错、前端、资料库；宿主自己造的报错只写字段名。不读 `~/.ssh`、`~/.aws`、`~/.npmrc` 这类目录和文件。
 - **删东西用 `trash`**，不用 `rm`。
 - **提交和推送。** 开发期直接在 `main` 上写，一个提交一件事，信息写 `<scope>: <summary>` 加 `-` 开头的几行；不加任何 AI 署名。推送攒成批，推之前确认 `gh api user --jq .login` 是仓库的主人。
-- **文档。** 改了行为就把 [SPEC](SPEC.md)、[插件协议](plugin-protocol.md) 写到和代码一样。文档里的交叉引用都要能点，标题前放显式的 `<a id>`；改完跑 `just docs <改过的文件>`（`tools/check_md.py` 查这几份的锚点和引用，`tools/resolve_links.py` 查全仓库的相对链接）。文档和代码对不上时，以 SPEC 为准；SPEC 有缺口就照[回答表](answers.md)里用户说过的方向补，并把补的地方写回 SPEC。
+- **文档。** 改了行为就把 [SPEC](SPEC.md)、[插件协议](protocol/README.md) 写到和代码一样。文档里的交叉引用都要能点，标题前放显式的 `<a id>`；改完跑 `just docs <改过的文件>`（`tools/check_md.py` 查这几份的锚点和引用，`tools/resolve_links.py` 查全仓库的相对链接）。文档和代码对不上时，以 SPEC 为准；SPEC 有缺口就照[回答表](answers.md)里用户说过的方向补，并把补的地方写回 SPEC。
 - **界面。** 照画布（仓库旁边的 `usuyo-canvas/`，README 里有页面清单和设计值）搬，但布局要能伸缩：画布是 1440 宽的定宽稿，窗口默认 1280×800、最小 720×480，定宽会叠在一起。图标用 lucide-react，不用表情符号。
 - **平台名不进应用。** `apps/` 和 `crates/` 里，测试和样例库以外不出现任何平台的名字、网址、cookie 名；要用到就让插件清单声明。
 
@@ -43,7 +43,7 @@
 |---|---|---|
 | 资料库（文件是真相） | 条目文件夹、快照、回收站、主题文件；按文件重建索引 | `crates/usuyo-library`、`crates/usuyo-contract`、[SPEC 第 1 层](SPEC.md) |
 | 搜索 | 标题、正文、记一句；中文、拼音、首字母 | `crates/usuyo-index` |
-| 插件宿主和 plugin-kit | 获取插件一次一进程；公网地址检查、逐跳核对跳转、大小上限；凭据经钥匙串交给单次调用；访客身份 | `crates/usuyo-plugin`、`crates/usuyo-plugin-kit`、[插件协议](plugin-protocol.md) |
+| 插件宿主和 plugin-kit | 获取插件一次一进程；公网地址检查、逐跳核对跳转、大小上限；凭据经钥匙串交给单次调用；访客身份 | `crates/usuyo-plugin`、`crates/usuyo-plugin-kit`、[插件协议](protocol/README.md) |
 | 内核 | 收下、取内容的任务和退避、按平台的节奏和暂停、导入（列出、预览、挑、收）、交进来的清单、收件夹、回收站到期 | `crates/usuyo-core` |
 | 本机接口 | 一个口 127.0.0.1:47615；令牌、握手、只能交的令牌；事件流；列出回收站 | `crates/usuyo-api`、契约在 `apps/desktop/web/src/api/endpoints.ts` |
 | 桌面壳 | 起内核、登录窗口、访客身份窗口 | `apps/desktop/src-tauri` |
@@ -82,7 +82,7 @@ flowchart LR
 
 | 接口 | 状态 | 缺什么 |
 |---|---|---|
-| [插件协议](plugin-protocol.md#01-读者与状态) | v1 草案；宿主和 plugin-kit 有了第一版（[§3.13](plugin-protocol.md#313-宿主和-plugin-kit-现在做到的11-11)、[§10.1](plugin-protocol.md#101-plugin-kit-的-http-客户端11-11)） | [待定](plugin-protocol.md#13-待定)里还有没答的；沙箱、本机代理、`serve`、schema 文件 |
+| [插件协议](protocol/README.md#01-读者与状态) | v1 草案；宿主和 plugin-kit 有了第一版（[§3.13](protocol/fetch.md#313-宿主和-plugin-kit-现在做到的11-11)、[§10.1](protocol/plugin-kit.md#101-plugin-kit-的-http-客户端11-11)） | [待定](protocol/open.md#13-待定)里还有没答的；沙箱、本机代理、`serve`、schema 文件 |
 | 资料库格式（[SPEC §1](SPEC.md#1-资料库-v1第-1-层)） | v1 草案，`crates/usuyo-contract`、`crates/usuyo-library` 照它实现 | 联网后并身份；同步（[008](#008-文字同步)） |
 | 改动提议、改动记录（[SPEC §1.5](SPEC.md#15-改动提议)、[§1.6](SPEC.md#16-改动记录)） | v1 草案，资料库层能写能撤 | 接受提议的流程、界面（[006](#006-agent)） |
 | 宿主 ↔ 界面（[SPEC 本机接口](SPEC.md#本机接口第-2-层11-11-照代码)） | 照代码写了；契约文件是 `apps/desktop/web/src/api/endpoints.ts` | 窗口用的路径还不带 `/v1/`、分页、OpenAPI 描述 |
@@ -90,12 +90,12 @@ flowchart LR
 | [MCP 工具](SPEC.md#10-mcp-工具m0) | v0 草案，没实现 | 全部 |
 | [命令行](SPEC.md#9-clim0) | `init`、`add`、`get`、`search`、`reindex`、`daemon` | 不再加命令 |
 | [搜索语法](SPEC.md#11-索引) | tantivy 索引能搜；语法没写 | 查询串、筛选、分页 |
-| [投递接口](plugin-protocol.md#5-投递接口) | `/v1/ping`、`/v1/deliver`（只收链接）、`/v1/batches` 和按投递端发的令牌做了，和窗口用的路由同一个监听口 | 已取到的内容（multipart）、批次查询 |
-| [导出与读回](plugin-protocol.md#44-导出的-run-与-readback) | 草案 | 笔记库里的文件形状（[007](#007-导出读回和别的工具的导出)） |
+| [投递接口](protocol/delivery.md#5-投递接口) | `/v1/ping`、`/v1/deliver`（只收链接）、`/v1/batches` 和按投递端发的令牌做了，和窗口用的路由同一个监听口 | 已取到的内容（multipart）、批次查询 |
+| [导出与读回](protocol/transform-export.md#44-导出的-run-与-readback) | 草案 | 笔记库里的文件形状（[007](#007-导出读回和别的工具的导出)） |
 | 配置、版本策略（[SPEC §0.2](SPEC.md#02-版本与兼容)、[§1.1](SPEC.md#11-目录树)） | v1 草案 | 设置的完整清单（[010](#010-设置第一次打开收下浮层)） |
 | 订阅源 | 没有 | 你填的地址、订阅对象（[009](#009-跟着收)） |
 
-已经做完的两条线：001 收下一条（收下、存好、搜到、在窗口里看到），002 平台（登录、列出、导入、交进来的清单）；它们的做法已经写进 [SPEC](SPEC.md)、[插件协议](plugin-protocol.md) 和 [apps/desktop/README.md](../apps/desktop/README.md)。它们剩下的、不归哪条线的：
+已经做完的两条线：001 收下一条（收下、存好、搜到、在窗口里看到），002 平台（登录、列出、导入、交进来的清单）；它们的做法已经写进 [SPEC](SPEC.md)、[插件协议](protocol/README.md) 和 [apps/desktop/README.md](../apps/desktop/README.md)。它们剩下的、不归哪条线的：
 
 - 壳起的内核，在壳没了（被信号杀掉、崩溃）以后该自己退出；现在留着接着跑，下次启动的壳找到它接着用（[apps/desktop/README.md](../apps/desktop/README.md#打开以后)）。
 - Safari 的 Userscripts 没有网站访问权限时先发 CORS 预检，投递接口（`/v1/…`）现在不答，请求就失败；这几条路径要答预检，只放扩展的来源。
@@ -255,7 +255,7 @@ ACP 会话在窗口里只显示它交来的改动提议和权限请求，不显�
 
 清单和协议还缺的：
 
-- 按关键词和创作者主页列、可选的评论、扫码登录（[插件协议待定](plugin-protocol.md#13-待定)第 26–28 项）。
+- 按关键词和创作者主页列、可选的评论、扫码登录（[插件协议待定](protocol/open.md#13-待定)第 26–28 项）。
 - 导入取什么：现在导入时取内容不带 `want`，每条按默认全取；节奏里加一个字段说导入取什么，才能导入先只取文字。
 - 交来的链接多久失效（小红书的 `xsec_token` 只有几个小时），导入页才好写「今天收下这些」。
 
@@ -264,16 +264,16 @@ ACP 会话在窗口里只显示它交来的改动提议和权限请求，不显�
 <a id="012-插件的安装和分发"></a>
 ### 012 插件的安装和分发
 
-已经定的（[ADR-003](decisions/ADR-003-plugins.md)、[插件协议](plugin-protocol.md)）：官方组织只放通用的东西；平台获取插件放用户自己的获取插件组织，client-hook 类单独一个组织；档位和登录要求只是给用户挑的标签，不拦。
+已经定的（[ADR-003](decisions/ADR-003-plugins.md)、[插件协议](protocol/README.md)）：官方组织只放通用的东西；平台获取插件放用户自己的获取插件组织，client-hook 类单独一个组织；档位和登录要求只是给用户挑的标签，不拦。
 
 要做成的样子：从网上装和更新插件（来源、校验、签名）；插件的沙箱（文件、网络出口经宿主的本机代理）；插件开发指引；官方插件仓库和契约测试。组织和账号由用户注册。
 
 还没做的：
 
-- 校验用 GitHub App：无服务器中转接 webhook，官方组织的 Actions 拉插件、跑契约测试、写回 check run（[回答表](answers.md)）；[ADR-003 §6](decisions/ADR-003-plugins.md#6-分发与校验) 写了，[插件协议 §8.3](plugin-protocol.md#83-校验与来源证明)还没写。`usuyo-fetch` 把发版用的可复用工作流复制一份放进自己的 `.github`，来源证明的签发者是它自己，不出现官方组织；plugin-kit 改工作流时同步一次。
-- 插件的 schema 文件和 plugin-kit SDK 的形状；运行器和 `crates/usuyo-plugin-kit` 已经有了（[插件协议 §3.13](plugin-protocol.md#313-宿主和-plugin-kit-现在做到的11-11)）。
-- client-hook 插件放 `usuyo-fetch-hook`，添加来源时能一次加两个（[插件协议 §8.4](plugin-protocol.md#84-三种来源)、[§8.8](plugin-protocol.md#88-获取方式组织的仓库结构)）。
-- 预装的通用网页获取：`builtin/` 的身份和发版对上[插件协议 §8.4](plugin-protocol.md#84-三种来源)；`web` 不用 `match`，按主机分节奏。
+- 校验用 GitHub App：无服务器中转接 webhook，官方组织的 Actions 拉插件、跑契约测试、写回 check run（[回答表](answers.md)）；[ADR-003 §6](decisions/ADR-003-plugins.md#6-分发与校验) 写了，[插件协议 §8.3](protocol/distribution.md#83-校验与来源证明)还没写。`usuyo-fetch` 把发版用的可复用工作流复制一份放进自己的 `.github`，来源证明的签发者是它自己，不出现官方组织；plugin-kit 改工作流时同步一次。
+- 插件的 schema 文件和 plugin-kit SDK 的形状；运行器和 `crates/usuyo-plugin-kit` 已经有了（[插件协议 §3.13](protocol/fetch.md#313-宿主和-plugin-kit-现在做到的11-11)）。
+- client-hook 插件放 `usuyo-fetch-hook`，添加来源时能一次加两个（[插件协议 §8.4](protocol/distribution.md#84-三种来源)、[§8.8](protocol/distribution.md#88-获取方式组织的仓库结构)）。
+- 预装的通用网页获取：`builtin/` 的身份和发版对上[插件协议 §8.4](protocol/distribution.md#84-三种来源)；`web` 不用 `match`，按主机分节奏。
 - 权限里加连本机 Unix socket，只在第三方包装现成工具时要。
 
 <a id="013-打包和更新"></a>

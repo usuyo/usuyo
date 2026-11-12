@@ -3,7 +3,7 @@
 
 状态：草案 · 2026-11-03
 
-目的：回答用户 2026-11-03 的两句话：「电脑端看一下npm i -g agent-desktop」「然后安卓看一下https://github.com/wangzan101/Mika」。两个都是 `vision-ui` 层的工具（[06 §1.1](06-platform-access-and-account-risk.md#11-七个层级)）：agent-desktop 在电脑上经系统的无障碍树读界面、点元素；Mika 在安卓手机上读屏、替人操作 App。读它们是为了接下来的获取插件和风险设计：电脑端和安卓端的视觉层插件靠什么跑、要用户授予什么、平台能看到什么、[插件协议](../plugin-protocol.md#思鹭插件协议-v1草案)要改哪些地方。结论和要你定的问题在 [§0](#0-结论)，待核实的汇总在 [§6](#6-待核实清单)。
+目的：回答用户 2026-11-03 的两句话：「电脑端看一下npm i -g agent-desktop」「然后安卓看一下https://github.com/wangzan101/Mika」。两个都是 `vision-ui` 层的工具（[06 §1.1](06-platform-access-and-account-risk.md#11-七个层级)）：agent-desktop 在电脑上经系统的无障碍树读界面、点元素；Mika 在安卓手机上读屏、替人操作 App。读它们是为了接下来的获取插件和风险设计：电脑端和安卓端的视觉层插件靠什么跑、要用户授予什么、平台能看到什么、[插件协议](../protocol/README.md#思鹭插件协议-v1草案)要改哪些地方。结论和要你定的问题在 [§0](#0-结论)，待核实的汇总在 [§6](#6-待核实清单)。
 
 <a id="约定"></a>
 ## 约定
@@ -37,7 +37,7 @@
 
 - 两个都落在 `vision-ui`：读屏幕上渲染出来的内容（无障碍树、截图、OCR），用系统级的接口发输入。agent-desktop 的 `launch --cdp` 会带远程调试端口重启 Chromium 系的客户端，用了就算 `client-hook`，我们不用（[§3.1](#31-电脑端)）。
 - agent-desktop 能当电脑端视觉层获取插件的**运行时**：读树、按 ref 点元素、截窗口、读剪贴板，错误里写明「这次动作有没有送达、能不能安全重试」。它不认识任何具体 App，每个平台的流程还要自己写。
-- Mika 对我们主要是**做法的参考**：虚拟屏的建法和降级、逐屏合并去重、操作节奏的具体数字、路线回放的落盘格式。它本身不能当确定性的获取插件调：没有不经模型的外部接口，模型配置在手机上，不经宿主代发（[插件协议 §4.3](../plugin-protocol.md#43-模型与密钥由宿主代发)）。
+- Mika 对我们主要是**做法的参考**：虚拟屏的建法和降级、逐屏合并去重、操作节奏的具体数字、路线回放的落盘格式。它本身不能当确定性的获取插件调：没有不经模型的外部接口，模型配置在手机上，不经宿主代发（[插件协议 §4.3](../protocol/transform-export.md#43-模型与密钥由宿主代发)）。
 
 **建议怎么用。**
 
@@ -116,7 +116,7 @@
 | Windows | 不用授权，同完整性级别的 App 可读可写；以管理员运行的 App 能读不能写，先比较两个进程令牌的完整性级别 | `AD:skills/agent-desktop-windows/references/permissions-and-elevation.md` |
 | Linux | 在用户自己的图形会话里运行，装了 `at-spi2-core`；在总线启动之前就开着的 App 要重启；X11 按键要 XTest，Wayland 要 Mutter RemoteDesktop 和 `wl-clipboard` | `AD:docs/install.md`「Permissions」 |
 
-对我们的意思：获取插件是宿主拉起的子进程，按上面的旁证，辅助功能和屏幕录制会记在宿主上，没声明的插件也用得上；这和 [插件协议 §7](../plugin-protocol.md#7-权限与隔离) 现在的推断一致，只是多了第三方旁证。
+对我们的意思：获取插件是宿主拉起的子进程，按上面的旁证，辅助功能和屏幕录制会记在宿主上，没声明的插件也用得上；这和 [插件协议 §7](../protocol/isolation.md#7-权限与隔离) 现在的推断一致，只是多了第三方旁证。
 
 <a id="14-确定性"></a>
 ### 1.4 确定性
@@ -277,7 +277,7 @@
 - Mika 本体 Apache-2.0，NOTICE 只有「Mika / Copyright 2026 wangzan101」（`M:LICENSE`、`M:NOTICE`）。借代码要附许可证、保留 NOTICE 和源文件里的出处（包括 scrcpy 那段的头部）、标明改动。
 - 随 APK 带的 PRoot 是 GPL-2.0-or-later，talloc 是 LGPL-3.0-or-later，都以独立程序运行（`M:licenses/THIRD_PARTY_NOTICES.md:146-170`）。项目自己的规矩要求每次发布附 `mika-<版本>-gpl-sources.tar.gz`（`M:tools/sandbox/README.md:60-67`），但 38 个附件全是 APK。和自己定的规矩不符是事实；算不算违反 GPL-2.0 第 3 条要看源码的提供方式（仓库里有来源锁文件、补丁和构建脚本），这是法律判断，标推断。
 - ML Kit 是 Google 的闭源 SDK，没有列进第三方声明，也没列进 App 的「开源许可」页（`MA:ui/LicensesScreen.kt:52-71`）。
-- 对我们：Apache 部分可以借；PRoot 照 [插件协议 §9.6](../plugin-protocol.md#96-许可证) 不打进插件资产；ML Kit 不打包。
+- 对我们：Apache 部分可以借；PRoot 照 [插件协议 §9.6](../protocol/wrapping.md#96-许可证) 不打进插件资产；ML Kit 不打包。
 - 能借的块：
 
 | 块 | 位置 | 用处 |
@@ -294,7 +294,7 @@
 <a id="3-怎么接进获取插件"></a>
 ## 3. 怎么接进获取插件
 
-两端的插件都照 [06 §1.3](06-platform-access-and-account-risk.md#13-混合路径视觉层拿链接公开页面取内容) 的混合路径：视觉层的 `list` 一页只返回 `url`（加上界面上看得到的标题、作者），内容由别的插件按链接去取（[插件协议 §3.8](../plugin-protocol.md#38-list-与跟着收)）。
+两端的插件都照 [06 §1.3](06-platform-access-and-account-risk.md#13-混合路径视觉层拿链接公开页面取内容) 的混合路径：视觉层的 `list` 一页只返回 `url`（加上界面上看得到的标题、作者），内容由别的插件按链接去取（[插件协议 §3.8](../protocol/fetch.md#38-list-与跟着收)）。
 
 <a id="31-电脑端"></a>
 ### 3.1 电脑端
@@ -325,7 +325,7 @@
 
 | 做法 | 怎么做 | 手机上要开的 | 模型 | 拿得到什么 | access / login | 建议 |
 |---|---|---|---|---|---|---|
-| 安卓-A 手机上跑 Mika，导出再导入 | 让 Mika 把收藏列表写成文件（沙箱的 `write_file`、`share_file`），传到电脑由通用导入插件读 | 开发者选项、USB 调试常开、无线调试；无障碍由 Mika 打开 | 每次，用 Mika 自己的配置 | 屏上的整行文字；多半没有链接（推断），没有链接就是无平台 ID 的条目，去重和取内容都接不上 | 导入插件照 [插件协议 §9.4](../plugin-protocol.md#94-浏览器扩展与油猴脚本) 记 `official-export` / `none`，`description` 写明清单来历 | 不做专门支持 |
+| 安卓-A 手机上跑 Mika，导出再导入 | 让 Mika 把收藏列表写成文件（沙箱的 `write_file`、`share_file`），传到电脑由通用导入插件读 | 开发者选项、USB 调试常开、无线调试；无障碍由 Mika 打开 | 每次，用 Mika 自己的配置 | 屏上的整行文字；多半没有链接（推断），没有链接就是无平台 ID 的条目，去重和取内容都接不上 | 导入插件照 [插件协议 §9.4](../protocol/wrapping.md#94-浏览器扩展与油猴脚本) 记 `official-export` / `none`，`description` 写明清单来历 | 不做专门支持 |
 | 安卓-B 电脑经 ADB 驱动手机 | 获取插件在电脑上，经宿主管的 adb 服务按固定流程：打开收藏页 → `uiautomator dump` 读树 → 逐条点开 → 分享 →「复制链接」→ 经 adb shell 读手机剪贴板 → 返回 → 滚动；读不到树时截图走本机 OCR | 开发者选项、USB 调试或无线调试；第一次连电脑点「允许 USB 调试」；不装 App、不开无障碍服务 | 默认不要 | 卡片上的标题、作者，分享链接；没有收藏时间 | `vision-ui` / `required`，`credential: app`，`devices: [adb]` | 按需做，放 `{fetch-org}` |
 | 安卓-C 自己做安卓 App | C1 无障碍服务 App（AutoJs6、gkd 一类）；C2 照 Mika 自带 ADB 客户端、起 shell 助手、开虚拟屏 | 装不在应用商店的 APK；C1 开无障碍、先「允许受限制的设置」；C2 同 A | 可以不要 | 同 B | `vision-ui` / `required` | 不做：成本按月计，检测面更大，平台流程在手机上跑还要另起一套运行时 |
 | 包装 Mika 的 MCP | 插件调 `mika_run_task` 交一句目标 | 同 A | 每次，在手机上发生，宿主代发不了、标不了「离开本机」 | 由模型决定 | `vision-ui` / `required` | `{fetch-org}` 不收；用户自己装的第三方插件照常能用（D-b 没有闸门） |
@@ -352,35 +352,35 @@
 <a id="4-对插件协议的影响"></a>
 ## 4. 对插件协议的影响
 
-这一节只是建议，[插件协议](../plugin-protocol.md#思鹭插件协议-v1草案)本身由别的写入者改。「谁定」一列：**我们定**是技术做法，照 [插件协议 §11](../plugin-protocol.md#11-设计取舍) 的口径写进设计取舍；**问你**的对应 [§0](#0-结论) 的问题。
+这一节只是建议，[插件协议](../protocol/README.md#思鹭插件协议-v1草案)本身由别的写入者改。「谁定」一列：**我们定**是技术做法，照 [插件协议 §11](../protocol/tradeoffs.md#11-设计取舍) 的口径写进设计取舍；**问你**的对应 [§0](#0-结论) 的问题。
 
 | 协议小节 | 现在 | 建议 | 谁定 |
 |---|---|---|---|
-| [§2.3](../plugin-protocol.md#23-获取插件的字段) 能力声明 | 没有说明这次调用会不会干扰用户 | 加 `interaction`：`background`（默认，只读，不弹菜单、不改剪贴板、不抢焦点、不动指针）或 `foreground`（上面任何一样会发生）。宿主只拿它排程和加锁，不拦截、不弹确认。`devices` 说的是要什么权限，说不出这次调用会不会干扰你 | 我们定 |
-| [§2.3](../plugin-protocol.md#23-获取插件的字段) 能力声明 | 获取插件没有模型字段 | 加 `provider`：`none`（默认）、`optional`、`required`，含义同 [§2.9](../plugin-protocol.md#29-转换插件的字段)；视觉层插件流程对不上时可以让看图模型找一个控件，找到后回树里核对 | 我们定 |
-| [§2.3](../plugin-protocol.md#23-获取插件的字段) `pacing` | 只有 `batch`、`interval`、`daily` | 说明里加视觉层的参考值，出处是 Mika（[§2.3](#23-读屏与输入)）：换一屏停 2.5–5 秒、按字数每字加 15 ms、一次至多换 24 屏；这些是一次调用内部的节奏，`interval`、`daily` 另按平台给 | 我们定 |
-| [§2.4](../plugin-protocol.md#24-access-与-login) access 与 login | 没说浏览器、Electron 目标和安卓的几种做法算哪层 | 规则里加两条。一，目标是浏览器或 Electron 客户端时：只读无障碍树或截图、动作走无障碍接口或系统输入，记 `vision-ui`，读日常浏览器的网页也算；经 CDP、远程调试、扩展或页面脚本读 DOM 或请求，记 `browser-session`；带调试端口重启官方客户端、或在它的渲染进程里执行脚本，记 `client-hook`。二，经 ADB 或手机上的程序读控件树、截图、OCR 再发输入，记 `vision-ui`；开后台虚拟屏、以 shell 身份起助手不改变层级；只有注入或 Hook 目标 App 的进程、读它的私有数据才是 `client-hook` | 我们定 |
-| [§2.5](../plugin-protocol.md#25-登录站点-sites) 登录站点 | `credential: app` 表示驱动已登录的客户端或手机 | 写明 `site` 填这个平台账号的站点（`weixin.qq.com`、`www.douyin.com`），和浏览器插件写同一个 `site` 没关系，`credential` 不同；登录状态由插件在 `health` 的 `login[]` 里报。可选加 `apps`（例如 `[{os: android, id: com.xingin.xhs}]`），宿主连上设备后先用 `pm path` 查装没装，没装就给 `needs: ["app:com.xingin.xhs"]`；加不加在实现时定 | 我们定 |
-| [§2.7](../plugin-protocol.md#27-权限-permissions) `devices` | `adb`：「经 ADB 驱动 Android 手机」 | 不加新值，会不会动指针由 `interaction` 说清。`adb` 的说明改成「经宿主管的 adb 服务操作你选定的一台 Android 设备；adb shell 能做的都能做：读屏幕和控件树、截图、模拟点按、读剪贴板、开虚拟屏、推送并运行程序、装卸 App」，权限页照这句写。安卓上的读屏、截图、剪贴板都经 `adb`，不另声明 `accessibility`、`screen-capture`、`clipboard`（这三项指电脑本机）；插件推到手机上的文件、装的东西、改的设置，要在 README 列出并在退出前还原 | 我们定 |
-| [§2.7](../plugin-protocol.md#27-权限-permissions) `exec` | 缺省等于 `requires.runtime` 里的名字 | 加一句：`${PLUGIN_DIR}` 里的可执行文件（插件自带的工具和它们再拉起的 helper）总是可以执行，不用写进 `exec`；`exec` 只管安装目录以外的程序。原因：agent-desktop 会自己起剪贴板 helper，请求权限时还会重启自己 | 我们定 |
-| [§2.8](../plugin-protocol.md#28-安装与启动) 安装与启动 | 资产是插件自己的可执行文件 | 视觉层插件自带固定版本的 agent-desktop 发布包，只打包对应平台的那一份（v1.1.0 每个平台 1.65–3.43 MB，npm 包是 15 MB），不用 `requires.runtime`、不让用户 `npm i -g`。插件仓库的 CI 先核 `checksums.txt`，再跑 `gh attestation verify <archive> --repo vercel-labs/agent-desktop`，通过才打进资产；`upstream` 写版本和 Apache-2.0，资产里带上从仓库取的 LICENSE。升级 agent-desktop 就发一个新的插件版本。推到手机上的文件（scrcpy-server、自己的助手）放在电脑端资产里一起校验，不在运行时另下载；GPL 的手机端组件只让用户自装。运行时表加 `adb`、`scrcpy`。三个以上插件都带 agent-desktop 时，再考虑做成宿主管的共用运行时 | 我们定 |
-| [§3.1](../plugin-protocol.md#31-运行器与节奏) 运行器与节奏 | 每个平台一把单调用锁 | 加三把锁：`interaction: foreground` 的调用全机同一时间只跑一个；声明了 `clipboard` 的调用全机同一时间只跑一个；同一台安卓设备同一时间只跑一个调用，不论哪个插件。设备没连、没解锁、没授权时插件回 `dependency-missing`，跟着收跳过这一轮、不算失败。宿主不存手机的解锁密码，不替你解锁。占屏幕的调用什么时候能自己跑见问题 2 | 锁我们定；自动跑问你 |
-| [§3.2](../plugin-protocol.md#32-调用约定) 调用约定 | `waiting` 的原因有 `user-action`、`device-locked`、`device-disconnected` | `waiting` 加 `user-active`（插件在 `foreground` 的步骤之间发现你在用键鼠，停下等你停手，等不到回 `blocked`）和 `device-unauthorized`（手机上还没点「允许 USB 调试」）。环境变量加 `SEELU_PROVIDER`（`provider` 不是 `none` 时）、`ADB_SERVER_SOCKET`、`ANDROID_SERIAL`（声明了 `adb` 时）。包 agent-desktop 的插件自己给子进程设 `AGENT_DESKTOP_HOME`：一次一进程设 `${TMP}/agent-desktop`，常驻设 `${HOME}/agent-desktop`，不用 `${CACHE}`，因为 ref 映射里有界面上的文字 | 我们定 |
-| [§3.3](../plugin-protocol.md#33-信封与错误码) 信封与错误码 | 没有「已投递 / 没投递」这一维 | v1 不加：`list`、`fetch` 不改平台状态，`unfavorite` 幂等；以后加了不幂等的写操作再加。插件内部只在 agent-desktop 报 `not_delivered` 时自己重试。agent-desktop 的错误码怎么翻成我们的码写进 plugin-kit 的视觉层 SDK：`PERM_DENIED` → `dependency-missing`（`permission:accessibility` 或 `permission:screen-capture`）；找不到客户端窗口 → `dependency-missing`（`app:wechat`）；窗口是登录或扫码页 → `login-required`；树空或很浅 → `upstream-changed`（有 OCR 退路的先自己退）；界面出现验证、风控、下线提示 → `blocked`；`STALE_REF` 先自己重新快照再试；`POLICY_DENIED` → `internal`（插件的 bug）；快照 `complete: false` 不算错。`needs` 的 `state:` 加 `debugging`（开发者选项或 USB 调试没开）和 `authorized`（这台电脑没被手机授权） | 我们定 |
-| [§3.4](../plugin-protocol.md#34-超时与取消) 超时 | `list` 每页默认 60 秒 | 视觉层插件在能力里写 `timeout: 10m`，每处理一条发一次 `progress`，靠 120 秒「无进度」发现卡死；先发 `progress` 再取快照，一次快照可能要几十秒 | 我们定 |
-| [§3.8](../plugin-protocol.md#38-list-与跟着收) list | 条目要有 `url` 或 `ref` | 视觉层的条目带 `url`（从「复制链接」来），不用屏上位置当 `ref`，新收藏会把位置往后挤；翻屏去重按 `canonicalize` 后的身份比，不按整行文字比；游标记最后一条的链接和已读条数，下一页先在可见的几行里找它，找不到就回顶部重新滚；`actedAt` 留空；一页宜少（推断：一页 5–10 条）。可选加条目字段 `fetchSoon: true`，小红书这类会话内有效的链接让宿主尽快取 | 我们定 |
-| [§4.3](../plugin-protocol.md#43-模型与密钥由宿主代发) 模型代发 | 只写转换、导出插件 `run` 参数里的 `provider` | 改成获取插件也适用：一次一进程时经 `SEELU_PROVIDER` 拿到 `{baseUrl, token, model}`，常驻时在 `context.provider`；token 规则不变。[§9.5](../plugin-protocol.md#95-视觉层流程) 里「用户选云端视觉模型时走代发」那句这样才有落点。另写一句：包装自带模型的第三方 Agent（Mika 的 MCP 一类）不在这一条之内，它的模型调用在手机上发生，宿主标不了「离开本机」 | 前半我们定；这类插件收不收见问题 3 |
-| [§7](../plugin-protocol.md#7-权限与隔离) 权限与隔离 | 「推断子进程会按负责进程继承这些权限」 | 改成：有第三方旁证（agent-desktop 的代码注释和故障文档说授权记在启动它的 App 上），没有 Apple 文档；系统设置有时也会单独列出子程序。不做按插件分开的 macOS 授权：要让插件进程自己当负责进程得用私有接口，插件二进制多是 ad-hoc 签名，每次升级可能都要重新授权（推断）。实现时先在 Seatbelt profile 里跑一次 `agent-desktop snapshot`，跑不通就照现在的写法，声明了 `accessibility` 的插件在 macOS 上不进 Seatbelt。剪贴板：Apple 给剪贴板加了「程序读之前先问」（[NSPasteboard.AccessBehavior](https://developer.apple.com/documentation/appkit/nspasteboard/accessbehavior-swift.enum)，macOS 26 上还是开发者预览），开了以后弹窗大概率记在宿主上（推断），宿主第一次用到 `clipboard` 时先跟你说清楚 | 我们定 |
-| [§7](../plugin-protocol.md#7-权限与隔离) `adb` 一行 | 「部分：经 `exec` 放行 adb，经网络许可放行本机 adb 服务端口」 | 宿主自己起一个 adb 服务：私有端口，这个服务进程的 `HOME` 指向本机配置目录下的子目录，让 `adbkey` 固定（adb 的密钥在 `$HOME/.android/adbkey`，adb 源码 `client/auth.cpp`）。不这样的话，插件的私有 `${HOME}` 每次调用都会生成新密钥，手机每次都要重新点授权（推断）。插件只拿到 `ADB_SERVER_SOCKET=tcp:127.0.0.1:<端口>` 和 `ANDROID_SERIAL=<你选的设备>`，沙箱只放行这个端口；无线调试的配对和连接在宿主界面里做。连着几台设备时插件经同一个服务仍能点名别的设备，所以 macOS、Linux 仍是「部分」。adb 密钥算凭据，0600，不放 `${CACHE}` | 我们定 |
-| [§8.3](../plugin-protocol.md#83-校验与来源证明)、[§8.6](../plugin-protocol.md#86-屏蔽清单与下架) | — | 拿 Mika 的恶意 fork（[M#250](https://github.com/wangzan101/Mika/issues/250)）当例子：从山寨仓库装了就中招，说明「只认来源证明」有实际意义 | 我们定 |
-| [§9.1](../plugin-protocol.md#91-包装命令行) 包装命令行 | — | 视觉层 SDK 包 agent-desktop 时守这几条：只调 `${PLUGIN_DIR}` 里那份固定版本；检查信封 `version`，主版本不是 2 就回 `internal`；只有能力声明了 `interaction: foreground` 才允许 `--headed`；不用 `launch --cdp`、`session start`、`trace`、`--screenshots`、`skills`，不用 JEV；每条命令都带 `--app`，最好也带 `--window-id` | 我们定 |
-| [§9.4](../plugin-protocol.md#94-浏览器扩展与油猴脚本) 扩展与油猴脚本 | 导入插件按自己做的事填 `official-export`，文件来历写进 `description` | 例子里加一句：手机上的 Agent（Mika 一类）导出的清单同样处理，`description` 写「清单由你手机上的某某导出，导出时用的是它自己的模型」 | 我们定 |
-| [§9.5](../plugin-protocol.md#95-视觉层流程) 视觉层流程 | 以 Mac 微信收藏为例，`exec: [osascript]` | 例子改成自带 agent-desktop（见下），去掉 `osascript`，加 `interaction: foreground`、`timeout: 10m`，`daily` 改成按每页 10 条算的 30（推断，没有微信那边的阈值）；写明受微信和 macOS 版本限制。再加一个安卓例子（经 ADB 读小红书收藏）：默认主屏，虚拟屏是插件设置，微信和视频号不用虚拟屏；手机剪贴板经 adb shell 读。运行时默认不用模型兜底，设置里可以打开（本机或云端，云端经 [§4.3](../plugin-protocol.md#43-模型与密钥由宿主代发) 代发并标「离开本机」）。P10 的建议要按 [§0](#0-结论) 第 1 条重写 | 例子我们定；P10 问你（问题 1） |
-| [§9.6](../plugin-protocol.md#96-许可证) 许可证 | MIT、Apache、BSD 可以打进资产 | 加一句：上游的发布包里没有 LICENSE 文件时（agent-desktop 就是），从上游仓库取一份放进资产 | 我们定 |
-| [§11](../plugin-protocol.md#11-设计取舍) 设计取舍 | — | 加这几行：视觉层插件自带固定版本的 agent-desktop；能力加 `interaction`，加全机的屏幕锁、剪贴板锁和设备锁；不做按插件分开的 macOS 授权；信封不加「投递」字段；安卓走电脑经 ADB、不做手机配套 App；宿主自己管 adb 服务和密钥；安卓视觉层默认主屏；获取插件也能经宿主代发用模型。理由和放弃了什么照上表 | 我们定 |
-| [§13](../plugin-protocol.md#13-待定) 待定 | 16 项 | 加四项，分别链到 open-decisions 里对应问题 1–3 的条目（P10 改写，P19、P18 新开），和问题 3 末句「包装 Mika 这类插件收不收」新开的 R11 | 问你 |
+| [§2.3](../protocol/manifest.md#23-获取插件的字段) 能力声明 | 没有说明这次调用会不会干扰用户 | 加 `interaction`：`background`（默认，只读，不弹菜单、不改剪贴板、不抢焦点、不动指针）或 `foreground`（上面任何一样会发生）。宿主只拿它排程和加锁，不拦截、不弹确认。`devices` 说的是要什么权限，说不出这次调用会不会干扰你 | 我们定 |
+| [§2.3](../protocol/manifest.md#23-获取插件的字段) 能力声明 | 获取插件没有模型字段 | 加 `provider`：`none`（默认）、`optional`、`required`，含义同 [§2.9](../protocol/manifest.md#29-转换插件的字段)；视觉层插件流程对不上时可以让看图模型找一个控件，找到后回树里核对 | 我们定 |
+| [§2.3](../protocol/manifest.md#23-获取插件的字段) `pacing` | 只有 `batch`、`interval`、`daily` | 说明里加视觉层的参考值，出处是 Mika（[§2.3](#23-读屏与输入)）：换一屏停 2.5–5 秒、按字数每字加 15 ms、一次至多换 24 屏；这些是一次调用内部的节奏，`interval`、`daily` 另按平台给 | 我们定 |
+| [§2.4](../protocol/manifest.md#24-access-与-login) access 与 login | 没说浏览器、Electron 目标和安卓的几种做法算哪层 | 规则里加两条。一，目标是浏览器或 Electron 客户端时：只读无障碍树或截图、动作走无障碍接口或系统输入，记 `vision-ui`，读日常浏览器的网页也算；经 CDP、远程调试、扩展或页面脚本读 DOM 或请求，记 `browser-session`；带调试端口重启官方客户端、或在它的渲染进程里执行脚本，记 `client-hook`。二，经 ADB 或手机上的程序读控件树、截图、OCR 再发输入，记 `vision-ui`；开后台虚拟屏、以 shell 身份起助手不改变层级；只有注入或 Hook 目标 App 的进程、读它的私有数据才是 `client-hook` | 我们定 |
+| [§2.5](../protocol/manifest.md#25-登录站点-sites) 登录站点 | `credential: app` 表示驱动已登录的客户端或手机 | 写明 `site` 填这个平台账号的站点（`weixin.qq.com`、`www.douyin.com`），和浏览器插件写同一个 `site` 没关系，`credential` 不同；登录状态由插件在 `health` 的 `login[]` 里报。可选加 `apps`（例如 `[{os: android, id: com.xingin.xhs}]`），宿主连上设备后先用 `pm path` 查装没装，没装就给 `needs: ["app:com.xingin.xhs"]`；加不加在实现时定 | 我们定 |
+| [§2.7](../protocol/manifest.md#27-权限-permissions) `devices` | `adb`：「经 ADB 驱动 Android 手机」 | 不加新值，会不会动指针由 `interaction` 说清。`adb` 的说明改成「经宿主管的 adb 服务操作你选定的一台 Android 设备；adb shell 能做的都能做：读屏幕和控件树、截图、模拟点按、读剪贴板、开虚拟屏、推送并运行程序、装卸 App」，权限页照这句写。安卓上的读屏、截图、剪贴板都经 `adb`，不另声明 `accessibility`、`screen-capture`、`clipboard`（这三项指电脑本机）；插件推到手机上的文件、装的东西、改的设置，要在 README 列出并在退出前还原 | 我们定 |
+| [§2.7](../protocol/manifest.md#27-权限-permissions) `exec` | 缺省等于 `requires.runtime` 里的名字 | 加一句：`${PLUGIN_DIR}` 里的可执行文件（插件自带的工具和它们再拉起的 helper）总是可以执行，不用写进 `exec`；`exec` 只管安装目录以外的程序。原因：agent-desktop 会自己起剪贴板 helper，请求权限时还会重启自己 | 我们定 |
+| [§2.8](../protocol/manifest.md#28-安装与启动) 安装与启动 | 资产是插件自己的可执行文件 | 视觉层插件自带固定版本的 agent-desktop 发布包，只打包对应平台的那一份（v1.1.0 每个平台 1.65–3.43 MB，npm 包是 15 MB），不用 `requires.runtime`、不让用户 `npm i -g`。插件仓库的 CI 先核 `checksums.txt`，再跑 `gh attestation verify <archive> --repo vercel-labs/agent-desktop`，通过才打进资产；`upstream` 写版本和 Apache-2.0，资产里带上从仓库取的 LICENSE。升级 agent-desktop 就发一个新的插件版本。推到手机上的文件（scrcpy-server、自己的助手）放在电脑端资产里一起校验，不在运行时另下载；GPL 的手机端组件只让用户自装。运行时表加 `adb`、`scrcpy`。三个以上插件都带 agent-desktop 时，再考虑做成宿主管的共用运行时 | 我们定 |
+| [§3.1](../protocol/fetch.md#31-运行器与节奏) 运行器与节奏 | 每个平台一把单调用锁 | 加三把锁：`interaction: foreground` 的调用全机同一时间只跑一个；声明了 `clipboard` 的调用全机同一时间只跑一个；同一台安卓设备同一时间只跑一个调用，不论哪个插件。设备没连、没解锁、没授权时插件回 `dependency-missing`，跟着收跳过这一轮、不算失败。宿主不存手机的解锁密码，不替你解锁。占屏幕的调用什么时候能自己跑见问题 2 | 锁我们定；自动跑问你 |
+| [§3.2](../protocol/fetch.md#32-调用约定) 调用约定 | `waiting` 的原因有 `user-action`、`device-locked`、`device-disconnected` | `waiting` 加 `user-active`（插件在 `foreground` 的步骤之间发现你在用键鼠，停下等你停手，等不到回 `blocked`）和 `device-unauthorized`（手机上还没点「允许 USB 调试」）。环境变量加 `SEELU_PROVIDER`（`provider` 不是 `none` 时）、`ADB_SERVER_SOCKET`、`ANDROID_SERIAL`（声明了 `adb` 时）。包 agent-desktop 的插件自己给子进程设 `AGENT_DESKTOP_HOME`：一次一进程设 `${TMP}/agent-desktop`，常驻设 `${HOME}/agent-desktop`，不用 `${CACHE}`，因为 ref 映射里有界面上的文字 | 我们定 |
+| [§3.3](../protocol/fetch.md#33-信封与错误码) 信封与错误码 | 没有「已投递 / 没投递」这一维 | v1 不加：`list`、`fetch` 不改平台状态，`unfavorite` 幂等；以后加了不幂等的写操作再加。插件内部只在 agent-desktop 报 `not_delivered` 时自己重试。agent-desktop 的错误码怎么翻成我们的码写进 plugin-kit 的视觉层 SDK：`PERM_DENIED` → `dependency-missing`（`permission:accessibility` 或 `permission:screen-capture`）；找不到客户端窗口 → `dependency-missing`（`app:wechat`）；窗口是登录或扫码页 → `login-required`；树空或很浅 → `upstream-changed`（有 OCR 退路的先自己退）；界面出现验证、风控、下线提示 → `blocked`；`STALE_REF` 先自己重新快照再试；`POLICY_DENIED` → `internal`（插件的 bug）；快照 `complete: false` 不算错。`needs` 的 `state:` 加 `debugging`（开发者选项或 USB 调试没开）和 `authorized`（这台电脑没被手机授权） | 我们定 |
+| [§3.4](../protocol/fetch.md#34-超时与取消) 超时 | `list` 每页默认 60 秒 | 视觉层插件在能力里写 `timeout: 10m`，每处理一条发一次 `progress`，靠 120 秒「无进度」发现卡死；先发 `progress` 再取快照，一次快照可能要几十秒 | 我们定 |
+| [§3.8](../protocol/fetch.md#38-list-与跟着收) list | 条目要有 `url` 或 `ref` | 视觉层的条目带 `url`（从「复制链接」来），不用屏上位置当 `ref`，新收藏会把位置往后挤；翻屏去重按 `canonicalize` 后的身份比，不按整行文字比；游标记最后一条的链接和已读条数，下一页先在可见的几行里找它，找不到就回顶部重新滚；`actedAt` 留空；一页宜少（推断：一页 5–10 条）。可选加条目字段 `fetchSoon: true`，小红书这类会话内有效的链接让宿主尽快取 | 我们定 |
+| [§4.3](../protocol/transform-export.md#43-模型与密钥由宿主代发) 模型代发 | 只写转换、导出插件 `run` 参数里的 `provider` | 改成获取插件也适用：一次一进程时经 `SEELU_PROVIDER` 拿到 `{baseUrl, token, model}`，常驻时在 `context.provider`；token 规则不变。[§9.5](../protocol/wrapping.md#95-视觉层流程) 里「用户选云端视觉模型时走代发」那句这样才有落点。另写一句：包装自带模型的第三方 Agent（Mika 的 MCP 一类）不在这一条之内，它的模型调用在手机上发生，宿主标不了「离开本机」 | 前半我们定；这类插件收不收见问题 3 |
+| [§7](../protocol/isolation.md#7-权限与隔离) 权限与隔离 | 「推断子进程会按负责进程继承这些权限」 | 改成：有第三方旁证（agent-desktop 的代码注释和故障文档说授权记在启动它的 App 上），没有 Apple 文档；系统设置有时也会单独列出子程序。不做按插件分开的 macOS 授权：要让插件进程自己当负责进程得用私有接口，插件二进制多是 ad-hoc 签名，每次升级可能都要重新授权（推断）。实现时先在 Seatbelt profile 里跑一次 `agent-desktop snapshot`，跑不通就照现在的写法，声明了 `accessibility` 的插件在 macOS 上不进 Seatbelt。剪贴板：Apple 给剪贴板加了「程序读之前先问」（[NSPasteboard.AccessBehavior](https://developer.apple.com/documentation/appkit/nspasteboard/accessbehavior-swift.enum)，macOS 26 上还是开发者预览），开了以后弹窗大概率记在宿主上（推断），宿主第一次用到 `clipboard` 时先跟你说清楚 | 我们定 |
+| [§7](../protocol/isolation.md#7-权限与隔离) `adb` 一行 | 「部分：经 `exec` 放行 adb，经网络许可放行本机 adb 服务端口」 | 宿主自己起一个 adb 服务：私有端口，这个服务进程的 `HOME` 指向本机配置目录下的子目录，让 `adbkey` 固定（adb 的密钥在 `$HOME/.android/adbkey`，adb 源码 `client/auth.cpp`）。不这样的话，插件的私有 `${HOME}` 每次调用都会生成新密钥，手机每次都要重新点授权（推断）。插件只拿到 `ADB_SERVER_SOCKET=tcp:127.0.0.1:<端口>` 和 `ANDROID_SERIAL=<你选的设备>`，沙箱只放行这个端口；无线调试的配对和连接在宿主界面里做。连着几台设备时插件经同一个服务仍能点名别的设备，所以 macOS、Linux 仍是「部分」。adb 密钥算凭据，0600，不放 `${CACHE}` | 我们定 |
+| [§8.3](../protocol/distribution.md#83-校验与来源证明)、[§8.6](../protocol/distribution.md#86-屏蔽清单与下架) | — | 拿 Mika 的恶意 fork（[M#250](https://github.com/wangzan101/Mika/issues/250)）当例子：从山寨仓库装了就中招，说明「只认来源证明」有实际意义 | 我们定 |
+| [§9.1](../protocol/wrapping.md#91-包装命令行) 包装命令行 | — | 视觉层 SDK 包 agent-desktop 时守这几条：只调 `${PLUGIN_DIR}` 里那份固定版本；检查信封 `version`，主版本不是 2 就回 `internal`；只有能力声明了 `interaction: foreground` 才允许 `--headed`；不用 `launch --cdp`、`session start`、`trace`、`--screenshots`、`skills`，不用 JEV；每条命令都带 `--app`，最好也带 `--window-id` | 我们定 |
+| [§9.4](../protocol/wrapping.md#94-浏览器扩展与油猴脚本) 扩展与油猴脚本 | 导入插件按自己做的事填 `official-export`，文件来历写进 `description` | 例子里加一句：手机上的 Agent（Mika 一类）导出的清单同样处理，`description` 写「清单由你手机上的某某导出，导出时用的是它自己的模型」 | 我们定 |
+| [§9.5](../protocol/wrapping.md#95-视觉层流程) 视觉层流程 | 以 Mac 微信收藏为例，`exec: [osascript]` | 例子改成自带 agent-desktop（见下），去掉 `osascript`，加 `interaction: foreground`、`timeout: 10m`，`daily` 改成按每页 10 条算的 30（推断，没有微信那边的阈值）；写明受微信和 macOS 版本限制。再加一个安卓例子（经 ADB 读小红书收藏）：默认主屏，虚拟屏是插件设置，微信和视频号不用虚拟屏；手机剪贴板经 adb shell 读。运行时默认不用模型兜底，设置里可以打开（本机或云端，云端经 [§4.3](../protocol/transform-export.md#43-模型与密钥由宿主代发) 代发并标「离开本机」）。P10 的建议要按 [§0](#0-结论) 第 1 条重写 | 例子我们定；P10 问你（问题 1） |
+| [§9.6](../protocol/wrapping.md#96-许可证) 许可证 | MIT、Apache、BSD 可以打进资产 | 加一句：上游的发布包里没有 LICENSE 文件时（agent-desktop 就是），从上游仓库取一份放进资产 | 我们定 |
+| [§11](../protocol/tradeoffs.md#11-设计取舍) 设计取舍 | — | 加这几行：视觉层插件自带固定版本的 agent-desktop；能力加 `interaction`，加全机的屏幕锁、剪贴板锁和设备锁；不做按插件分开的 macOS 授权；信封不加「投递」字段；安卓走电脑经 ADB、不做手机配套 App；宿主自己管 adb 服务和密钥；安卓视觉层默认主屏；获取插件也能经宿主代发用模型。理由和放弃了什么照上表 | 我们定 |
+| [§13](../protocol/open.md#13-待定) 待定 | 16 项 | 加四项，分别链到 open-decisions 里对应问题 1–3 的条目（P10 改写，P19、P18 新开），和问题 3 末句「包装 Mika 这类插件收不收」新开的 R11 | 问你 |
 
-[插件协议 §9.5](../plugin-protocol.md#95-视觉层流程) 的两个例子可以写成这样（`interval`、`daily`、`adb>=35` 都是示意值）。第一个是 Mac 微信收藏里的公众号文章，`screen-capture` 只给 OCR 退路用：
+[插件协议 §9.5](../protocol/wrapping.md#95-视觉层流程) 的两个例子可以写成这样（`interval`、`daily`、`adb>=35` 都是示意值）。第一个是 Mac 微信收藏里的公众号文章，`screen-capture` 只给 OCR 退路用：
 
 ```yaml
 platforms: [wechat-mp]

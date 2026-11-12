@@ -3,7 +3,7 @@
 
 日期：2026-10-28 · 状态：accepted
 
-本条定插件的种类、进程与协议、清单、权限与隔离、仓库拆分、分发与校验、导出与读回。字段和调用细节在[插件协议](../plugin-protocol.md)。依据是调研 [05 §6](../research/05-note-apps-and-plugins.md#6-对歇存插件化架构的启示)；分发方式按用户的决定用 GitHub 组织加 GitHub App，不做索引仓库。
+本条定插件的种类、进程与协议、清单、权限与隔离、仓库拆分、分发与校验、导出与读回。字段和调用细节在[插件协议](../protocol/README.md)。依据是调研 [05 §6](../research/05-note-apps-and-plugins.md#6-对歇存插件化架构的启示)；分发方式按用户的决定用 GitHub 组织加 GitHub App，不做索引仓库。
 
 <a id="背景"></a>
 ## 背景
@@ -43,7 +43,7 @@ usuyo 要接三种外部能力：从平台取回内容，把音视频和图片�
 
 | 类 | 控制协议 | 数据 |
 |---|---|---|
-| 获取 | 子命令 `canonicalize`、`fetch`、`list`、`health`，stdout 输出 JSON 信封（[插件协议 §3](../plugin-protocol.md#3-获取插件协议)） | `--out` 指向宿主分配的临时目录 |
+| 获取 | 子命令 `canonicalize`、`fetch`、`list`、`health`，stdout 输出 JSON 信封（[插件协议 §3](../protocol/fetch.md#3-获取插件协议)） | `--out` 指向宿主分配的临时目录 |
 | 转换 | stdio 上换行分隔的 JSON-RPC 2.0，分帧和 MCP stdio 相同。方法 `describe`、`health`、`run`；`progress` 通知；支持取消；stdin 关闭后退出。可以常驻，模型加载一次处理多条 | 只传文件路径，大块数据不走管道 |
 | 导出 | 同转换；另有 `readback`：插件只读目标文件夹，把目标文件转回用户层的值交给宿主；底本留在宿主，不交给插件 | 同转换 |
 
@@ -61,7 +61,7 @@ usuyo 要接三种外部能力：从平台取回内容，把音视频和图片�
   - 获取另有 `access`（七层之一，含义照[调研 06 §1.1](../research/06-platform-access-and-account-risk.md#11-七个层级)）、`login`（`none`、`optional`、`required`）和 `sites`（会用到哪个站点的账号）。能力之间不同时按能力分别声明，顶层取最高一档。这些是给用户挑选用的标签，不是闸门；
   - 转换另有 `consumes`、`produces`、`provider`；
   - 导出另有 `target`、`writes`、`readback`。
-- 完整的字段表在[插件协议 §2](../plugin-protocol.md#2-清单)。
+- 完整的字段表在[插件协议 §2](../protocol/manifest.md#2-清单)。
 
 <a id="4-权限与隔离"></a>
 ### 4. 权限与隔离
@@ -80,14 +80,14 @@ usuyo 要接三种外部能力：从平台取回内容，把音视频和图片�
 用户同意：
 
 - 安装时展示权限，用户按资料库同意。
-- 新版本扩大权限时，这个版本先停用，等用户重新同意；不静默更新扩大了权限的版本。登录站点的 (`site`, `credential`, `domains`) 出现新值、新增密钥设置或改了密钥的注入目标，也算扩大权限（[插件协议 §8.5](../plugin-protocol.md#85-添加来源更新与权限扩大)）。做法照 GitHub App 改权限需安装方批准，防的是经自动更新下发恶意代码。
+- 新版本扩大权限时，这个版本先停用，等用户重新同意；不静默更新扩大了权限的版本。登录站点的 (`site`, `credential`, `domains`) 出现新值、新增密钥设置或改了密钥的注入目标，也算扩大权限（[插件协议 §8.5](../protocol/distribution.md#85-添加来源更新与权限扩大)）。做法照 GitHub App 改权限需安装方批准，防的是经自动更新下发恶意代码。
 - 新版本调高 `access` 或 `login` 只在更新说明里标出，不停用。
 - 插件的启用状态、配置与密钥放本机配置目录，不放进会同步的资料库，避免同步过来的插件配置直接执行（[05 §4.1](../research/05-note-apps-and-plugins.md#41-宿主插件的安全模型)）。
 
 <a id="5-仓库拆分"></a>
 ### 5. 仓库拆分
 
-照 Tachiyomi 拆成 Mihon（应用）与 Keiyoushi（扩展）的分法，应用和获取插件分属不同的组织；和 Keiyoushi 的单一大仓库不同，获取插件一个插件一个仓库（取舍见[插件协议 §8.8](../plugin-protocol.md#88-获取方式组织的仓库结构)）。
+照 Tachiyomi 拆成 Mihon（应用）与 Keiyoushi（扩展）的分法，应用和获取插件分属不同的组织；和 Keiyoushi 的单一大仓库不同，获取插件一个插件一个仓库（取舍见[插件协议 §8.8](../protocol/distribution.md#88-获取方式组织的仓库结构)）。
 
 | 仓库 | 内容 | 许可证 |
 |---|---|---|
@@ -108,9 +108,9 @@ usuyo 要接三种外部能力：从平台取回内容，把音视频和图片�
 
 - **官方插件列表就是组织本身。** 客户端列出 `usuyo` 组织里带 topic `usuyo-plugin` 的仓库，版本和资产取各自的 GitHub Release。不另做索引文件，不走 PR 收录。仓库进组织就是上架，由组织成员审核。
 - **来源分三种显示**：官方、第三方来源 · 组织名、第三方 · 未经 usuyo 审核。第三方插件不经过 usuyo，作者在自己的仓库发布，用户输入 `owner/repo` 直接安装，浏览靠搜索 topic `usuyo-plugin`。
-- **责任**：用户添加第三方插件来源时确认一次声明：用途是个人备份、离线阅读、注意力整理，平台账号和法律上的后果由用户自己承担，链到[调研 06 §16](../research/06-platform-access-and-account-risk.md#16-账号风险的证据) 的证据。主仓库 README、获取插件组织的主页、插件 README 模板里也写，模板见[插件协议附录 A](../plugin-protocol.md#附录-a-声明模板)。不做逐个插件的弹窗。
+- **责任**：用户添加第三方插件来源时确认一次声明：用途是个人备份、离线阅读、注意力整理，平台账号和法律上的后果由用户自己承担，链到[调研 06 §16](../research/06-platform-access-and-account-risk.md#16-账号风险的证据) 的证据。主仓库 README、获取插件组织的主页、插件 README 模板里也写，模板见[插件协议附录 A](../protocol/distribution.md#附录-a-声明模板)。不做逐个插件的弹窗。
 - **GitHub App 从一开始就做**，归 `usuyo` 组织所有，装在组织上；webhook 由无服务器中转接收、验签、排队，再触发官方组织的 GitHub Actions 拉插件、校验清单 schema 和各平台资产的 sha256、跑契约测试，结果写回 check run。没有自己的服务器，App 私钥放在中转平台上。第三方作者也可以把它装到自己的仓库，拿到同样的校验；客户端显示每个版本的校验结果：通过、失败、没有校验。
-- **身份与拦截。** 插件 `id` 等于 `owner/repo`，客户端另按 GitHub 的数字仓库 id 认仓库，改名、转移或旧名被重新注册时停止更新。官方组织的插件缺来源证明、或校验没通过就拒装；用户添加的来源（包括 `usuyo-fetch`）在添加时固定签发者，以后签发者变了就停止更新；第三方插件校验没通过时只标出，安装前多一步确认（[插件协议 §8.3](../plugin-protocol.md#83-校验与来源证明)）。
+- **身份与拦截。** 插件 `id` 等于 `owner/repo`，客户端另按 GitHub 的数字仓库 id 认仓库，改名、转移或旧名被重新注册时停止更新。官方组织的插件缺来源证明、或校验没通过就拒装；用户添加的来源（包括 `usuyo-fetch`）在添加时固定签发者，以后签发者变了就停止更新；第三方插件校验没通过时只标出，安装前多一步确认（[插件协议 §8.3](../protocol/distribution.md#83-校验与来源证明)）。
 - **安装与更新以 release 资产的 sha256 为准。** 客户端下载后核对清单里列出的 sha256，不一致就拒装。
 - **屏蔽清单。** 不做下架用的索引，只在主仓库放一份 `security/plugin-blocklist.json`，列出恶意仓库和恶意版本（仓库、版本范围、原因、日期）。客户端在启动、安装和更新前读取它，命中的拒装，已装的停用。
 
@@ -122,9 +122,9 @@ usuyo 要接三种外部能力：从平台取回内容，把音视频和图片�
 - **用户区是一条分隔线。** 条目笔记里只有一行分隔线，上面是你的笔记，下面每次导出重写；主题、卡片、成稿不加标记，属性之后的整篇是正文。通用 Markdown 用同一条线，写成 HTML 注释。
 - **身份写在文件里**：每个导出文件带 `usuyo_id`（Obsidian frontmatter、Logseq `usuyo-id::`、思源 `custom-usuyo-id`、Notion 属性）；插件按它认挪过、改过名的文件。
 - **底本加三方合并。** 导出记录放按机器目录的 `libraries/<libraryId>/exports/<target>.json`（[SPEC §1.1](../SPEC.md#11-目录树)），每个对象是 `{path, hash, base}`，`base` 是上次交给 `run` 的那份用户层。每次导出先读回，宿主拿它和底本、库里现在的那份照 [SPEC §1.8](../SPEC.md#18-同步) 三方合并，经 [SPEC §1.4](../SPEC.md#14-你写的那一层)「读进来」写进库，记 `actor: external`、`via: readback:<插件 id>`。一次导出算一批，能整批撤销，不走改动提议。合不上的，库里那份留下，目标那份进回收站（`reason: conflict`），出「两边都改过的」卡片。路径丢了能按 `usuyo_id` 扫描重建，底本丢了照 [SPEC §1.8](../SPEC.md#18-同步)「云盘的冲突副本」那条没底本的做法。
-- **导出插件不直接写目标目录**，结果交给宿主写，写之前再比一次哈希。读回时沙箱放行目标文件夹，只读，协议规定只有 `readback` 读它（[插件协议 §7.1](../plugin-protocol.md#71-常驻进程的路径)）。
+- **导出插件不直接写目标目录**，结果交给宿主写，写之前再比一次哈希。读回时沙箱放行目标文件夹，只读，协议规定只有 `readback` 读它（[插件协议 §7.1](../protocol/isolation.md#71-常驻进程的路径)）。
 - **删掉以后**：usuyo 里删掉一条，已经导出去的副本不管；在 Obsidian 里删掉的笔记，下次导出重新生成。
-- **frontmatter**：导出文件沿用 Web Clipper 默认键 `title`、`source`、`author`、`published`、`created`、`description`、`tags`，再加 `usuyo_id`、`platform`、`kind`；资料库里的 front matter 用 camelCase、不加前缀（[SPEC §0.1](../SPEC.md#01-命名)），Obsidian 要的样子由导出插件转换（[插件协议 §4.4](../plugin-protocol.md#44-导出的-run-与-readback)）。
+- **frontmatter**：导出文件沿用 Web Clipper 默认键 `title`、`source`、`author`、`published`、`created`、`description`、`tags`，再加 `usuyo_id`、`platform`、`kind`；资料库里的 front matter 用 camelCase、不加前缀（[SPEC §0.1](../SPEC.md#01-命名)），Obsidian 要的样子由导出插件转换（[插件协议 §4.4](../protocol/transform-export.md#44-导出的-run-与-readback)）。
 - **目标顺序**：Obsidian（同时产出通用 Markdown 文件夹）、思源、Notion、Logseq OG、飞书、语雀。云端目标的读回只做轮询；飞书、语雀只做单向导出。
 
 <a id="8-gpl-工具"></a>

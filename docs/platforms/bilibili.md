@@ -1,7 +1,7 @@
 <a id="b站获取设计"></a>
 # B站：获取设计
 
-文中「协议」指[插件协议](../plugin-protocol.md)，「06」指[调研 06](../research/06-platform-access-and-account-risk.md)。各平台的总表、要不要账号的几个说法、怎么相对安全地试，在 [platforms/README](README.md)；这里不重复。
+文中「协议」指[插件协议](../protocol/README.md)，「06」指[调研 06](../research/06-platform-access-and-account-risk.md)。各平台的总表、要不要账号的几个说法、怎么相对安全地试，在 [platforms/README](README.md)；这里不重复。
 
 <a id="0-结论"></a>
 ## 0. 结论
@@ -40,7 +40,7 @@
 | [amtoaer/bili-sync](https://github.com/amtoaer/bili-sync) | MIT / Rust | 2026-09-10 | 可借收藏夹请求代码（`fav_time` 的处理在 `crates/bili_sync/src/utils/convert.rs`，`DedeUserID` 在 `bilibili/credential.rs`）；它会签名、按网页流程刷新 cookie，这两部分不要 |
 | [ayasa520/bilibili-favorites-exporter](https://github.com/ayasa520/bilibili-favorites-exporter) | MIT / JS | 2025-09-09 | 兜底：扩展导出 JSON，写导入插件读 |
 
-清单：`platforms: [bilibili]`，`match: ["www.bilibili.com/video/*", "m.bilibili.com/video/*", "b23.tv/*"]`；`fetch` 记 `public-web`、`login: none`，`timeout: 30m`，`outputs: [text, images, media:video, media:audio, meta]`；`list` 记 `session-api`、`login: required`、`order: newest-first`，清单里写死「稍后再看」这一个来源（`bilibili:toview`），收藏夹由 `sources` 现列；`sites` 写 `www.bilibili.com`、`credential: cookies`、`domains: [".bilibili.com"]`，登录判定 cookie `SESSDATA`。插件不调 cookie 刷新接口（[协议 §6](../plugin-protocol.md#6-凭据)）。`contentId` 用 BV 号，分 P 写 `BV…:p2`。节奏 `batch: true`、`interval: 5s`、`daily: 500`。
+清单：`platforms: [bilibili]`，`match: ["www.bilibili.com/video/*", "m.bilibili.com/video/*", "b23.tv/*"]`；`fetch` 记 `public-web`、`login: none`，`timeout: 30m`，`outputs: [text, images, media:video, media:audio, meta]`；`list` 记 `session-api`、`login: required`、`order: newest-first`，清单里写死「稍后再看」这一个来源（`bilibili:toview`），收藏夹由 `sources` 现列；`sites` 写 `www.bilibili.com`、`credential: cookies`、`domains: [".bilibili.com"]`，登录判定 cookie `SESSDATA`。插件不调 cookie 刷新接口（[协议 §6](../protocol/credentials.md#6-凭据)）。`contentId` 用 BV 号，分 P 写 `BV…:p2`。节奏 `batch: true`、`interval: 5s`、`daily: 500`。
 
 <a id="44-插件做成的样子"></a>
 ### 4.4 插件做成的样子

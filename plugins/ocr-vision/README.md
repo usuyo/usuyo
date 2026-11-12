@@ -20,12 +20,12 @@
 <a id="跑起来是什么样"></a>
 ## 跑起来是什么样
 
-插件是常驻进程，照[协议 §4.2](../../docs/plugin-protocol.md#42-转换的-run) 在 stdio 上说 JSON-RPC。
+插件是常驻进程，照[协议 §4.2](../../docs/protocol/transform-export.md#42-转换的-run) 在 stdio 上说 JSON-RPC。
 
 - **循环**：一行一条消息，最长 1 MiB，更长的回 `-32600` 并丢掉这一行；不是 JSON、不是对象、`jsonrpc` 不对、没有 `method` 的各回对应的标准码，不退出。读 stdin 在一个专门的线程上，一帧处理完才读下一帧。同一时间只跑一个 `run`，跑着的时候 `describe`、`health`、`cancel` 照样收，第二个 `run` 回 `invalid-args`。收到 `cancel` 以后，`run` 怎么结束都回 `cancelled`。stdin 关了：取消跑着的，最多等 4 秒它回完，再退出；等不到就以失败退出。stdout 只放协议消息。
 - **`describe`**：`models` 是 accurate 一档 Vision 认得的语言。`health` 查这台系统有没有 revision 3。
 - **一次 `run`**：`want` 只能是 `[ocr]`。每个输入要么是 `image` 带 `imageKey`（16 位小写十六进制），要么是 `derived:keyframes` 带 `frameSec`，不然回 `invalid-args`。然后一张一张读图、认字；每张之前查取消，每张之后发一次 `progress`（`unit: image`）。读不了的图回 `unsupported-input`，消息只写下标（「input 1 is not a readable image」），不写路径。图按 EXIF 方向摆正再认，`width`、`height` 是摆正以后的。
-- **路径**：只认[协议 §7.1](../../docs/plugin-protocol.md#71-常驻进程的路径) 的布局：`out` 是 `<暂存>/out/<callId>/`，输入都要在同一个暂存目录的 `in/<callId>/` 里。路径要是绝对路径、不带 `.` `..`，输入要是普通文件（不是符号链接），解开上级的符号链接以后还在 `in/<callId>/` 里；不合的回 `invalid-args`，只写下标。`ocr.json` 写进 `out`，已经有同名的（含符号链接）就不写。
+- **路径**：只认[协议 §7.1](../../docs/protocol/isolation.md#71-常驻进程的路径) 的布局：`out` 是 `<暂存>/out/<callId>/`，输入都要在同一个暂存目录的 `in/<callId>/` 里。路径要是绝对路径、不带 `.` `..`，输入要是普通文件（不是符号链接），解开上级的符号链接以后还在 `in/<callId>/` 里；不合的回 `invalid-args`，只写下标。`ocr.json` 写进 `out`，已经有同名的（含符号链接）就不写。
 - **结果**：所有输入都认完、没被取消才写 `ocr.json`，一份盖住这次所有的图，格式见 [§5.3](../../docs/features/003-transforms.md#53-各样东西的格式)：`input` 是输入的下标，带 `imageKey` 或 `frameSec`，`lines` 从上到下。Vision 的框是 0–1、原点在左下角，换成原点在左上角的 `[x, y, w, h]`，夹到 0–1，留 4 位小数；分数留 3 位。分数低的行照样写进去。所有图都没有一行分数到 0.3 时不写文件，回 `empty: true`、`reason: no-text`，`marks` 带 `no-text`（[§6](../../docs/features/003-transforms.md#6-很明显的标记)）。`tool` 是 `Vision`，版本写系统版本、build 和请求的 revision，例如 `macOS 15.6.1 (24G90), VNRecognizeTextRequest revision 3`。
 
 参数（`run` 的 `options`），回显的那份原样交回来照样认；不认识的键回 `invalid-args`：

@@ -233,7 +233,7 @@ Hatoba 把后端抽象成 `SyncBackend` trait，Worker 和 D1 直连各实现一
 
 - **依据**：S3 的 `If-None-Match` 防覆盖，回 412（[AWS 条件写](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes.html)）；`If-None-Match: *` 防止 PUT 覆盖已有资源（[RFC 9110 §13.1.2](https://www.rfc-editor.org/rfc/rfc9110#section-13.1.2)）；WebDAV 靠 ETag 防丢更新（[RFC 4918 §8.6](https://www.rfc-editor.org/rfc/rfc4918#section-8.6)）。坚果云、Nextcloud 认不认没查，设置时先探：同一路径带这个头写两次，第二次应回 412。
 - **备份**：PRD 7.10 的「备份到 WebDAV、S3 或另一个文件夹」用同一套格式，里面只有密文。
-- **不做成插件**：导出插件拿明文只读视图（[插件协议 §4.4](../plugin-protocol.md#44-导出的-run-与-readback)），同步要双向搬全部文件、比较并交换。做成插件就得把钥匙交给插件（违背[插件协议 §4.3](../plugin-protocol.md#43-模型与密钥由宿主代发)），插件还成了资料库的写方（违背 [ADR-003 §2](../decisions/ADR-003-plugins.md#2-进程与协议)）。这几种是通用协议，没有平台知识，[原则 1](../PRD.md#4-原则) 不挡。以后接专有网盘再开第四类「远端」插件，方法就是 `Remote` 那些。
+- **不做成插件**：导出插件拿明文只读视图（[插件协议 §4.4](../protocol/transform-export.md#44-导出的-run-与-readback)），同步要双向搬全部文件、比较并交换。做成插件就得把钥匙交给插件（违背[插件协议 §4.3](../protocol/transform-export.md#43-模型与密钥由宿主代发)），插件还成了资料库的写方（违背 [ADR-003 §2](../decisions/ADR-003-plugins.md#2-进程与协议)）。这几种是通用协议，没有平台知识，[原则 1](../PRD.md#4-原则) 不挡。以后接专有网盘再开第四类「远端」插件，方法就是 `Remote` 那些。
 - **Go 的库**（`gh api` 查，都在维护）：`minio/minio-go`、`emersion/go-webdav`、`zalando/go-keyring`、`klauspost/compress`。
 
 <a id="8-能直接用-hatoba-的什么"></a>

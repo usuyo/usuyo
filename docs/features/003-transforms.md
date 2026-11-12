@@ -2,7 +2,7 @@
 # 003 — 变成文字：口播、图里的字、画面
 
 状态：in-progress（2026-11-11。这份写给实现的模型和以后查，不等用户批，见 [CLAUDE.md](../../CLAUDE.md) 开发流程）
-关联：[PRD 原则](../PRD.md#4-原则) · [SPEC §1.2.2](../SPEC.md#122-raw-和-derived)、[§1.2.3](../SPEC.md#123-contentmd-和各栏) · [插件协议 §2.9](../plugin-protocol.md#29-转换插件的字段)、[§4](../plugin-protocol.md#4-转换与导出插件协议) · [调研 04](../research/04-tech-options.md) · [调研 16](../research/16-piecing-engine.md) · [feature 001](../BUILD.md#3-现在做到哪) · [feature 002](../BUILD.md#3-现在做到哪)
+关联：[PRD 原则](../PRD.md#4-原则) · [SPEC §1.2.2](../SPEC.md#122-raw-和-derived)、[§1.2.3](../SPEC.md#123-contentmd-和各栏) · [插件协议 §2.9](../protocol/manifest.md#29-转换插件的字段)、[§4](../protocol/transform-export.md#4-转换与导出插件协议) · [调研 04](../research/04-tech-options.md) · [调研 16](../research/16-piecing-engine.md) · [feature 001](../BUILD.md#3-现在做到哪) · [feature 002](../BUILD.md#3-现在做到哪)
 
 <a id="目标"></a>
 ## 目标
@@ -63,7 +63,7 @@
 - 硬字幕的专门提取（逐帧找字幕带再认）：先靠关键帧上的字；不够再加插件。
 - 说话人分开、逐词时间点：以后换模型时加，格式留了位置。
 - Windows、Linux 上的图里认字默认插件（PP-OCRv6）：列在工作包里，排在 macOS 之后（[§3.2](#32-图里的字)）。
-- 插件沙箱（[协议 §7](../plugin-protocol.md#7-权限与隔离)）：照旧还没有。
+- 插件沙箱（[协议 §7](../protocol/isolation.md#7-权限与隔离)）：照旧还没有。
 - 视频号「录下播放的声音再转」那条路：要 `audio-capture`，归获取插件；录下来的音频进 `raw/` 以后，这里照常转。
 
 <a id="3-用哪些工具"></a>
@@ -121,7 +121,7 @@ ffmpeg 自带的 `scdet` 按镜头变化打分（调研 04 [§4.3](../research/0
 <a id="41-四个转换插件"></a>
 ### 4.1 四个转换插件
 
-都是转换插件，独立进程，照[协议 §4](../plugin-protocol.md#4-转换与导出插件协议) 在 stdio 上说 JSON-RPC。不带平台知识，所以放主仓库 `plugins/`，用 `builtin/` 前缀，像 `plugins/web` 一样随安装包带（[协议 §8.4](../plugin-protocol.md#84-三种来源)）。许可同 `plugins/web`（MIT）。
+都是转换插件，独立进程，照[协议 §4](../protocol/transform-export.md#4-转换与导出插件协议) 在 stdio 上说 JSON-RPC。不带平台知识，所以放主仓库 `plugins/`，用 `builtin/` 前缀，像 `plugins/web` 一样随安装包带（[协议 §8.4](../protocol/distribution.md#84-三种来源)）。许可同 `plugins/web`（MIT）。
 
 | 插件 | 目录 | 语言 | 产出 | 吃 | 模型 |
 |---|---|---|---|---|---|
@@ -142,18 +142,18 @@ raw 里的图、封面 ──ocr──▶ 图里的字
 平台给的字幕 ──（不转）──▶ 直接摆出来、进索引
 ```
 
-**哪两个文件是一段**：宿主按内容配，不按平台。同一个快照的 `media[]` 里恰好一个 `video`、一个 `audio`，`ffprobe` 看画面文件没有音轨、音频文件没有画面，两者时长差不超过 1 秒或 2%（取大的），就配成一对，交给 `play`。配不上的不合，各自照常转。fetch 输出的 `media[]` 带 `group` 时先按它（[协议 §3.7](../plugin-protocol.md#37-fetch-输出)）。画面文件本来就带音轨的（小红书、视频号）不需要 `play`。
+**哪两个文件是一段**：宿主按内容配，不按平台。同一个快照的 `media[]` 里恰好一个 `video`、一个 `audio`，`ffprobe` 看画面文件没有音轨、音频文件没有画面，两者时长差不超过 1 秒或 2%（取大的），就配成一对，交给 `play`。配不上的不合，各自照常转。fetch 输出的 `media[]` 带 `group` 时先按它（[协议 §3.7](../protocol/fetch.md#37-fetch-输出)）。画面文件本来就带音轨的（小红书、视频号）不需要 `play`。
 
 <a id="42-宿主要加的"></a>
 ### 4.2 宿主要加的
 
 **现在有的**（照代码）：
 
-- `crates/usuyo-plugin` 能解析转换插件的清单（`consumes`、`produces`、`provider`、`models`，[§3.13](../plugin-protocol.md#313-宿主和-plugin-kit-现在做到的11-11)），`discover` 把它们放进 `Discovery.other`，没人调。
+- `crates/usuyo-plugin` 能解析转换插件的清单（`consumes`、`produces`、`provider`、`models`，[§3.13](../protocol/fetch.md#313-宿主和-plugin-kit-现在做到的11-11)），`discover` 把它们放进 `Discovery.other`，没人调。
 - 一次一进程的调用器（`host/process.rs`）：自己的进程组、三种计时、先 SIGTERM 再 SIGKILL；输出目录检查（`host/outdir.rs`）；运行时只按 `PATH` 加几个 Homebrew 目录找（`find_runtime`）。
 - `jobs.db` 只有取内容的任务，按 `item_id` 一条，一次跑一个（`crates/usuyo-core/src/jobs.rs`）。
 - 转录的写入、列出、按层找（`crates/usuyo-library/src/runs.rs`）：`asr`、`ocr`、`frames` 各层和 `frame/<runId>/<毫秒>` 只从 `derived/runs/` 读，`video` 先给最新一次 `play` 的产物（[SPEC §1.2.2](../SPEC.md#122-raw-和-derived)）；只留文字也移走转录里的 `play` 产物和 `keyframes/`。
-- 常驻的转换进程（`crates/usuyo-plugin/src/host/transform.rs`，[协议 §4.1](../plugin-protocol.md#41-分帧与生命周期)）。
+- 常驻的转换进程（`crates/usuyo-plugin/src/host/transform.rs`，[协议 §4.1](../protocol/transform-export.md#41-分帧与生命周期)）。
 - 索引只建了 `text`、`comments`、`takeaway`、`notes` 四层（`crates/usuyo-core/src/index_doc.rs`）；搜索把认不出的层都当 `text`。
 - 前端的 `Facet` 已有 `asr`（带 `by: machine | platform`）、`ocr`、`video.frames`、`remark`，但按 `layer` 当 key，同一层出两份会撞（`FacetColumn.tsx`）。
 
@@ -162,8 +162,8 @@ raw 里的图、封面 ──ocr──▶ 图里的字
 | 加在哪 | 什么 |
 |---|---|
 | `crates/usuyo-plugin`（协议类型） | `protocol/transform.rs`：`describe`、`health`、`run`、`cancel`、`progress` 的消息类型；清单词表改成 [§8.2](#82-要写回-spec--协议的) 的样子；`models[]` 加 `format`、`mirrors`、`license` |
-| `crates/usuyo-plugin`（宿主） | `host/transform.rs`：常驻进程。启动、`describe` 核对、`health`；同一进程一次只发一个 `run`；`cancel`；关 stdin 等 5 秒，再 SIGTERM、SIGKILL 进程组；闲 120 秒自己关掉，放掉模型占的内存。暂存目录照[协议 §7.1](../plugin-protocol.md#71-常驻进程的路径)：输入先硬链接进 `in/<callId>/`，跨文件系统再复制；`out/<callId>/` 照输出目录规则查。`progress` 只用来判断卡住（120 秒没有新的算卡住），不往外报 |
-| `crates/usuyo-plugin-kit` | `transform` 模块：Rust 插件用的 JSON-RPC 循环，作者只写 `run` 处理函数（[协议 §10](../plugin-protocol.md#10-契约测试与-plugin-kit) 说 SDK 管这个） |
+| `crates/usuyo-plugin`（宿主） | `host/transform.rs`：常驻进程。启动、`describe` 核对、`health`；同一进程一次只发一个 `run`；`cancel`；关 stdin 等 5 秒，再 SIGTERM、SIGKILL 进程组；闲 120 秒自己关掉，放掉模型占的内存。暂存目录照[协议 §7.1](../protocol/isolation.md#71-常驻进程的路径)：输入先硬链接进 `in/<callId>/`，跨文件系统再复制；`out/<callId>/` 照输出目录规则查。`progress` 只用来判断卡住（120 秒没有新的算卡住），不往外报 |
+| `crates/usuyo-plugin-kit` | `transform` 模块：Rust 插件用的 JSON-RPC 循环，作者只写 `run` 处理函数（[协议 §10](../protocol/plugin-kit.md#10-契约测试与-plugin-kit) 说 SDK 管这个） |
 | `crates/usuyo-core` | `models.rs`：模型下载和校验（[§4.3](#43-ffmpeg-和模型怎么到这台电脑上)）。`transform.rs`：排任务、配对、编排一条链、写转录、事件。`jobs.rs` 加 `transform_jobs` 表（[§4.4](#44-什么时候转)） |
 | `crates/usuyo-library` | 转录的写入、列出、按层找（[§5](#5-存在哪怎么重做)）；「只留文字」也移走转录里的二进制产物 |
 | `crates/usuyo-contract` | 转录记录 `run.json` 的类型、schema `urn:usuyo:schema:run:1`、`testdata/` 样例 |
@@ -175,7 +175,7 @@ raw 里的图、封面 ──ocr──▶ 图里的字
 <a id="43-ffmpeg-和模型怎么到这台电脑上"></a>
 ### 4.3 ffmpeg 和模型怎么到这台电脑上
 
-**ffmpeg** 随 `builtin/media` 的资产走，不另下载、不从 `PATH` 找（[协议 §2.8](../plugin-protocol.md#28-安装与启动) 说插件自带的第三方程序放进自己的资产、锁版本）。
+**ffmpeg** 随 `builtin/media` 的资产走，不另下载、不从 `PATH` 找（[协议 §2.8](../protocol/manifest.md#28-安装与启动) 说插件自带的第三方程序放进自己的资产、锁版本）。
 
 - 插件仓库 CI 从 ffmpeg.org 的 9.0.2 源码包编（锁源码包的 sha256），`--disable-gpl --disable-nonfree --disable-everything`，只打开要的：mov/mp4/matroska/webm/flv/mpegts/aac/mp3/wav 的拆封装；mp4、wav、image2、`null` 封装；h264、hevc、vp9、av1（libdav1d，BSD）、aac、mp3、opus、flac 的解码器和对应的 parser；`aac_adtstoasc`、`extract_extradata` 这类拷流要的 bsf；mjpeg、pcm_s16le 编码；`scdet`、`freezedetect`、`scale`、`aresample`、`fps`、`format`、`trim`、`null`、`anull` 滤镜（`trim` 是输入前的 `-ss` 让 ffmpeg 自己加的，`aresample` 是转音频时自己加的）；`file`、`pipe` 协议；静态链接，每个平台一份。编译脚本和 LGPL 声明放 `plugins/media/ffmpeg/`，和资产一起发。体积未实测。
 - ADR-003 [§8](../decisions/ADR-003-plugins.md#8-gpl-工具) 写的是「第三方二进制只从上游官方 release 下载」。ffmpeg 官方不发二进制，所以从官方源码编是最接近的做法，要你确认（[§13](#13-风险和待定)）。现成的备选：martin-riedl.de 有签名的 macOS arm64 9.0.2 构建，带 sha256，但许可没写（多半带 x264，是 GPL）。
@@ -465,7 +465,7 @@ export interface Pending {
 <a id="82-要写回-spec--协议的"></a>
 ### 8.2 要写回 SPEC / 协议的
 
-这份不改那两个文件；实现时一起改，改完在这里打勾。13 条都在 11-11 随 WP1、WP2 写回了。顺手多写的几处：协议 [§3.3](../plugin-protocol.md#33-信封与错误码) 的 `needs` 加前缀 `model:`（[§4.4](#44-什么时候转) 要它）；[§4.2](../plugin-protocol.md#42-转换的-run) 的结果加 `probe[]`（`want: [probe]` 回的流信息放这里，原来没有字段）；SPEC [§1.8](../SPEC.md#18-同步) 的同步表、[§1.4.2](../SPEC.md#142-卡片成稿记一句和划线) 里指向旧 meta 的一句跟着改；`keyframes.json`、`ocr.json` 也各有 schema（`urn:usuyo:schema:keyframes:1`、`…:ocr:1`）。
+这份不改那两个文件；实现时一起改，改完在这里打勾。13 条都在 11-11 随 WP1、WP2 写回了。顺手多写的几处：协议 [§3.3](../protocol/fetch.md#33-信封与错误码) 的 `needs` 加前缀 `model:`（[§4.4](#44-什么时候转) 要它）；[§4.2](../protocol/transform-export.md#42-转换的-run) 的结果加 `probe[]`（`want: [probe]` 回的流信息放这里，原来没有字段）；SPEC [§1.8](../SPEC.md#18-同步) 的同步表、[§1.4.2](../SPEC.md#142-卡片成稿记一句和划线) 里指向旧 meta 的一句跟着改；`keyframes.json`、`ocr.json` 也各有 schema（`urn:usuyo:schema:keyframes:1`、`…:ocr:1`）。
 
 **SPEC**
 
@@ -479,12 +479,12 @@ export interface Pending {
 
 **插件协议**
 
-1. [x] [§2.9](../plugin-protocol.md#29-转换插件的字段) `produces` 不再写路径，写产物种类：`play`、`audio:pcm16k`（中间产物）、`probe`（只回信息、不出文件）、`asr`、`keyframes`、`ocr`，以后 `readable`、`vision`、`summary`、`embeddings`；路径由宿主定在 `derived/runs/<runId>/` 下。`consumes` 加 `audio:pcm16k`。
-2. [x] [§2.9](../plugin-protocol.md#29-转换插件的字段) `models[]` 加 `format`（`file`、`tar.bz2`、`tar.gz`、`zip`，压缩包由宿主解到 `${MODELS}/<名字>/`）、`mirrors`（同一个 sha256 的别的地址）、`license`（下载前给你看）；`size` 改必填。
-3. [x] [§4.2](../plugin-protocol.md#42-转换的-run) `run` 的参数加 `want`（这次要哪几种产出，一个插件能做几种时用）；`inputs[]` 加 `snapshot`、`imageKey`、`frameSec`、`role`（`video`、`audio`）；结果加 `tool {name, version}`、`options`（实际用的参数，含默认值）、`marks[]`、每个输出的 `kind`；宿主照它写 `run.json`，不再写 `<文件>.meta.json`。`empty` 的 `reason` 词表：`no-speech`、`no-audio-track`、`no-text`。
-4. [x] [§4.1](../plugin-protocol.md#41-分帧与生命周期)：转换进程闲了可以关掉；`progress` 只用来判断卡住，不往界面报。
-5. [x] [§3.7](../plugin-protocol.md#37-fetch-输出)：fetch 输出的 `media[]` 加可选 `group`，同一个字符串表示同一段时间线拆开的几个文件；没有 `group` 时宿主照 [§4.1](#41-四个转换插件) 的内容规则配。B 站插件交 `video.m4s`、`audio.m4s` 时写同一个 `group`。
-6. [x] [§7.1](../plugin-protocol.md#71-常驻进程的路径)：没有沙箱时硬链接进 `in/` 挡不住插件改原文件，原样靠 `usuyo.fetch.json` 的哈希查出来（同步前和「检查与修复」时）；有沙箱以后照原文。
+1. [x] [§2.9](../protocol/manifest.md#29-转换插件的字段) `produces` 不再写路径，写产物种类：`play`、`audio:pcm16k`（中间产物）、`probe`（只回信息、不出文件）、`asr`、`keyframes`、`ocr`，以后 `readable`、`vision`、`summary`、`embeddings`；路径由宿主定在 `derived/runs/<runId>/` 下。`consumes` 加 `audio:pcm16k`。
+2. [x] [§2.9](../protocol/manifest.md#29-转换插件的字段) `models[]` 加 `format`（`file`、`tar.bz2`、`tar.gz`、`zip`，压缩包由宿主解到 `${MODELS}/<名字>/`）、`mirrors`（同一个 sha256 的别的地址）、`license`（下载前给你看）；`size` 改必填。
+3. [x] [§4.2](../protocol/transform-export.md#42-转换的-run) `run` 的参数加 `want`（这次要哪几种产出，一个插件能做几种时用）；`inputs[]` 加 `snapshot`、`imageKey`、`frameSec`、`role`（`video`、`audio`）；结果加 `tool {name, version}`、`options`（实际用的参数，含默认值）、`marks[]`、每个输出的 `kind`；宿主照它写 `run.json`，不再写 `<文件>.meta.json`。`empty` 的 `reason` 词表：`no-speech`、`no-audio-track`、`no-text`。
+4. [x] [§4.1](../protocol/transform-export.md#41-分帧与生命周期)：转换进程闲了可以关掉；`progress` 只用来判断卡住，不往界面报。
+5. [x] [§3.7](../protocol/fetch.md#37-fetch-输出)：fetch 输出的 `media[]` 加可选 `group`，同一个字符串表示同一段时间线拆开的几个文件；没有 `group` 时宿主照 [§4.1](#41-四个转换插件) 的内容规则配。B 站插件交 `video.m4s`、`audio.m4s` 时写同一个 `group`。
+6. [x] [§7.1](../protocol/isolation.md#71-常驻进程的路径)：没有沙箱时硬链接进 `in/` 挡不住插件改原文件，原样靠 `usuyo.fetch.json` 的哈希查出来（同步前和「检查与修复」时）；有沙箱以后照原文。
 
 <a id="9-给-004-的"></a>
 ## 9. 给 004 的
@@ -495,7 +495,7 @@ export interface Pending {
 - **来源都在 `run.json`**：004 的向量 meta 里的 `inputs` 指向这些文件和哈希，换了一次转录就是换了输入，照它的规则重算。
 - **标题面、内容层、画面层分得开**：标题、简介、封面上的字是标题面；口播、字幕、正文、图文的图里的字是内容层；关键帧和关键帧上的字是画面层。跟着收的命中默认看标题层加内容层、画面层不算（[SPEC §1.10 第 7 条](../SPEC.md#110-要你看一眼)），004 照这个分。
 - **标记只给信号，不给结论**：`no-speech` 的条目，004 只靠标题面挂在线头边上（调研 16 已经这样说视频号）；`static-picture` 不让 004 少看画面。
-- **空也是结果**：`empty: true` 告诉 004 这一面确实没东西，免得对着空文稿编（[协议 §4.2](../plugin-protocol.md#42-转换的-run)）。
+- **空也是结果**：`empty: true` 告诉 004 这一面确实没东西，免得对着空文稿编（[协议 §4.2](../protocol/transform-export.md#42-转换的-run)）。
 - 003 不做平台腔停用表、不起名、不写任何总结。
 
 <a id="10-工作包"></a>
