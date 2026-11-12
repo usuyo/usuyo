@@ -632,6 +632,12 @@ impl Engine {
             if r.held || r.listed || (r.stop_code.is_some() && r.wait_until.is_none()) {
                 continue;
             }
+            // 来源型导入每走一步之前都再看一次它的方法：关了、登录没了、自检没过，就停在这里；
+            // 在等的也一样，不等到点再去调插件
+            if r.kind == "source" && self.stop_if_unlistable(&r)? {
+                self.emit(Event::ImportUpdated { id: r.id.clone() });
+                continue;
+            }
             let now = now_ms();
             if let Some(at) = r.wait_until.filter(|t| *t > now) {
                 note(at);
@@ -660,6 +666,29 @@ impl Engine {
             }
         }
         Ok((steps, wake))
+    }
+
+    /// 这个导入的方法现在列不了（关了、登录没了、自检没过）就把导入停下，原因记在导入上，回 `true`。
+    /// 「接着导入」会再看一次。插件不在了由 [`Self::list_page`] 报。
+    fn stop_if_unlistable(&self, r: &ImportRow) -> Result<bool> {
+        let Some(plugin) = r
+            .plugin
+            .as_deref()
+            .and_then(|p| self.inner.host.plugin(p))
+            .cloned()
+        else {
+            return Ok(false);
+        };
+        let method = r.method.as_deref().unwrap_or_default();
+        let Err(e) = self.list_method(&plugin, method) else {
+            return Ok(false);
+        };
+        let hint = match &e {
+            Error::UnsupportedInput(why) => why.clone(),
+            other => other.to_string(),
+        };
+        self.inner.jobs.import_stop(&r.id, e.code(), Some(&hint))?;
+        Ok(true)
     }
 
     /// 列一页。回下一步最早什么时候能做（还有页要列时）。

@@ -26,6 +26,10 @@ case "$1" in
     echo "sources $3 $5" >> "$c/calls"
     printf '{"ok": true, "sources": [{"source": "example:fav:7", "title": "从 %s", "action": "favorite"}]}' "$5"
     ;;
+  list)
+    echo "list $4" >> "$c/calls"
+    echo '{"ok": true, "items": [{"url": "https://example.test/9", "identity": {"platform": "example", "contentId": "9"}, "title": "t"}], "nextCursor": "2", "evidence": {"fetchedAt": "2026-11-01T03:00:01Z", "access": "public-web"}}'
+    ;;
   fetch)
     out="$4"
     echo "$6 ${8:-all} ${USUYO_CREDENTIALS:+cred} ${USUYO_VISITOR:+visitor}" >> "$c/calls"
@@ -464,4 +468,38 @@ async fn a_list_can_start_from_a_link() {
             .start_import("fake/multi", "guest", "example:fav:7", "")
             .is_err()
     );
+}
+
+#[tokio::test]
+async fn switching_a_method_off_stops_its_import_before_the_next_page() {
+    let f = Fixture::new();
+    let engine = f.engine();
+    let imp = engine
+        .start_import("fake/multi", "saved", "example:fav:7", "")
+        .unwrap();
+    let id = serde_json::to_value(&imp).unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    // 第一页列了，还有下一页在等
+    engine.advance_imports().await.unwrap();
+    assert_eq!(f.calls(), ["list saved"]);
+    let view = serde_json::to_value(engine.import(&id).unwrap()).unwrap();
+    assert_eq!(view["pages"], 1, "{view}");
+
+    engine.set_method("fake/multi", "saved", false).unwrap();
+    engine.advance_imports().await.unwrap();
+    engine.advance_imports().await.unwrap();
+    // 关了以后不再调插件，导入停下并写明原因（没有「到几点再试」）
+    assert_eq!(f.calls(), ["list saved"]);
+    let view = serde_json::to_value(engine.import(&id).unwrap()).unwrap();
+    assert_eq!(view["waiting"]["code"], "unsupported-input", "{view}");
+    assert!(view["waiting"]["until"].is_null(), "{view}");
+    assert!(view["waiting"]["hint"].is_string(), "{view}");
+
+    // 开回来、点「接着导入」，从停的地方继续
+    engine.set_method("fake/multi", "saved", true).unwrap();
+    engine.resume_import(&id).unwrap();
+    engine.advance_imports().await.unwrap();
+    assert_eq!(f.calls().len(), 2);
 }
