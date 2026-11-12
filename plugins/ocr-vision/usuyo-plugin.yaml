@@ -1,0 +1,22 @@
+# 预装的图里认字插件（协议 §2.9、feature 003 §4.1）：图文的图、封面、关键帧进，一份 ocr.json 出。
+# 只在 macOS 上有：用系统的 Vision（VNRecognizeTextRequest revision 3），不下载模型，不联网。
+# level、languages、languageCorrection 不是设置（设置没有列表类型，键也不能有大写），
+# 只经 run 的 options 交进来，例如「再转一次」时；默认 accurate、zh-Hans en-US zh-Hant yue-Hans yue-Hant、true。
+protocol: 1
+id: builtin/ocr-vision
+kind: transform
+name: 图里的字
+description: 系统 Vision 认出图里和画面上的每一行字，记下在哪一块
+version: 0.1.0
+license: MIT
+maintainers: [usuyo]
+consumes: [image, derived:keyframes]
+produces: [ocr]
+provider: none
+permissions:
+  fs:
+    read: ["${INPUT}"]
+    write: ["${OUT}"]
+  limits: {memory: 1GiB, timeout: 600s}
+run:
+  command: ["${PLUGIN_DIR}/usuyo-plugin-ocr-vision"]
