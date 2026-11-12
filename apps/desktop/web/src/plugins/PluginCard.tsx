@@ -5,7 +5,7 @@ import { usePluginChange, useSwitchMethod } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
 import { openExternal } from "../shell";
 import { Button } from "../ui/Button";
-import { accountText, ACCESS_TEXT, getsText, lastCallText, methodStatus, pauseText } from "./words";
+import { accountText, ACCESS_TEXT, getsText, lastCallText, methodStatus, pausedAsBlocker, pauseText, perPlatformText } from "./words";
 
 /** 看哪些取法：全部、现在用得上的、还用不上的。 */
 export type MethodFilter = "all" | "usable" | "blocked";
@@ -77,9 +77,10 @@ function MethodRow({ plugin, method, onSwitch, busy }: { plugin: FetchPlugin; me
   const status = methodStatus(method);
   const last = method.lastCall;
   const gets = getsText(method.gets);
+  const tiers = perPlatformText(method, plugin.platforms);
   const lines = [
     ...(status ? [{ key: "status", text: status, tone: method.usable ? "text-label" : "text-sub" }] : []),
-    ...method.pauses.filter((p) => !p.byYou && method.built).map((p) => ({ key: `${p.method}-${p.scope}-${p.byYou ? "you" : "platform"}`, text: pauseText(p, plugin.platforms), tone: p.byYou ? "text-sub" : "text-warn" })),
+    ...method.pauses.filter((p) => !p.byYou && method.built && !pausedAsBlocker(method)).map((p) => ({ key: `${p.method}-${p.scope}-${p.byYou ? "you" : "platform"}`, text: pauseText(p, plugin.platforms), tone: p.byYou ? "text-sub" : "text-warn" })),
     ...(last ? [{ key: "last", text: lastCallText(last), tone: last.ok ? "text-sub" : "text-warn" }] : []),
   ];
   return (
@@ -123,8 +124,25 @@ function MethodRow({ plugin, method, onSwitch, busy }: { plugin: FetchPlugin; me
             那一页。
           </p>
         ) : null}
+        {tiers.length > 0 ? (
+          <div className="mt-1 text-small">
+            {tiers.map((t) => (
+              <p key={t} className="m-0 text-label">
+                {t}
+              </p>
+            ))}
+            {method.built ? <p className="m-0 text-sub">开关只有一个：拨过以后，这几个平台也照它开或关。</p> : null}
+            {/* 开关开着、那几个平台还照默认关着时，再拨一次「开」就都开了；给个直接的口子，不用先关再开。 */}
+            {onSwitch && method.enabled && method.perPlatform?.some((t) => !t.enabled) ? (
+              <Button variant="quiet" size="none" className="mt-0.5 text-small text-label underline decoration-border2 underline-offset-4" isDisabled={busy} onPress={() => onSwitch(true)}>
+                这几个平台也开
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
         {gets.length > 0 ? (
           <div className="mt-1 flex flex-wrap gap-x-3 text-small text-sub">
+            {method.built ? null : <span>做好以后能：</span>}
             {gets.map((g) => (
               <span key={g}>{g}</span>
             ))}

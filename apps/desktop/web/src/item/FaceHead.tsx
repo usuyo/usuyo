@@ -49,7 +49,7 @@ export function FaceHead({
         <h3 className="m-0 text-note font-semibold text-text">{FACE_NAME[layer]}</h3>
         {shown ? <MonoLabel>{shown.segments.length} 段</MonoLabel> : null}
         <span className="flex-1" />
-        <RedoMenu jobs={[layer]} itemId={itemId} busy={busy} label={FACE_NAME[layer]} />
+        <RedoMenu jobs={[layer]} itemId={itemId} busy={busy} label={FACE_NAME[layer]} {...(shown?.source.plugin ? { current: shown.source.plugin } : {})} />
       </div>
       {copies.length > 1 ? (
         <div className="flex flex-wrap items-center gap-1">
@@ -96,16 +96,19 @@ function ableFor(job: TransformJob, transforms: TransformsView | undefined): Tra
 const usable = (p: TransformPlugin) => p.health === "ok" || p.models.some((m) => m.state !== "present");
 
 /**
- * 「再转」：再做一次（不点名插件，内核用它默认的那个），有别的插件能做时「换一个转」。
+ * 「再转」：再做一次，有别的插件能做时「换一个转」。`current` 是摆着的那一份是哪个插件做的（`FacetSource.plugin`）：
+ * 有它时「再转一次」点名用它；没有时（平台给的、还没有机器的）不点名，内核用它默认的那个，也就是能做它的第一个。
  * 转出文字的三层做好了多一份、原来的留着；画面的两样换成新做的那份。没装能做它的插件时不出现。
  */
-export function RedoMenu({ jobs, itemId, busy, label }: { jobs: TransformJob[]; itemId: string; busy: boolean; label: string }) {
+export function RedoMenu({ jobs, itemId, busy, label, current }: { jobs: TransformJob[]; itemId: string; busy: boolean; label: string; current?: string }) {
   const transforms = useTransforms();
   const redo = useTransform(itemId);
   const flash = useFlash(2400);
-  const choices = jobs.flatMap((job) =>
-    ableFor(job, transforms.data).map((p, i) => ({ id: `${job} ${p.id}`, job, plugin: p, again: i === 0 })),
-  );
+  const choices = jobs.flatMap((job) => {
+    const able = ableFor(job, transforms.data);
+    const again = able.find((p) => p.id === current) ?? able[0];
+    return able.map((p) => ({ id: `${job} ${p.id}`, job, plugin: p, again: p === again, named: p.id === current }));
+  });
   if (choices.length === 0) return null;
   const text = (c: (typeof choices)[number]) => {
     const name = `「${c.plugin.name}」`;
@@ -133,7 +136,7 @@ export function RedoMenu({ jobs, itemId, busy, label }: { jobs: TransformJob[]; 
               const c = choices.find((x) => x.id === key);
               if (!c) return;
               const kept = c.job === "play" || c.job === "keyframes" ? "排上了；做好了换成新的" : "排上了；转好了多一份，原来的留着";
-              redo.mutate(c.again ? { job: c.job } : { job: c.job, plugin: c.plugin.id }, { onSuccess: () => flash.show(kept) });
+              redo.mutate(c.again && !c.named ? { job: c.job } : { job: c.job, plugin: c.plugin.id }, { onSuccess: () => flash.show(kept) });
             }}
           >
             {choices.map((c) => (

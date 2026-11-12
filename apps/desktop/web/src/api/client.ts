@@ -15,16 +15,21 @@ export class DaemonUnreachableError extends Error {
   }
 }
 
-/** 内核回了非 2xx。`code` 是 problem+json 里的 `code`（SPEC §0.3），回的不是 problem 时没有。 */
+/**
+ * 内核回了非 2xx。`code` 是 problem+json 里的 `code`（SPEC §0.3），回的不是 problem 时没有；
+ * `hint` 是给人看的一句中文，界面照它显示；`message` 是 `detail`，给日志。
+ */
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string | undefined;
+  readonly hint: string | undefined;
 
-  constructor(status: number, message: string, code?: string) {
+  constructor(status: number, message: string, code?: string, hint?: string) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
+    this.hint = hint;
   }
 }
 
@@ -36,18 +41,24 @@ export function isNotServed(error: unknown): boolean {
   return error instanceof ApiError && (error.status === 405 || (error.status === 404 && error.message === NO_SUCH_ROUTE));
 }
 
-function problemOf(text: string): { detail?: string; code?: string } {
+function problemOf(text: string): { detail?: string; code?: string; hint?: string } {
   try {
     const body: unknown = JSON.parse(text);
     if (typeof body !== "object" || body === null) return {};
     return {
       ...("detail" in body && typeof body.detail === "string" ? { detail: body.detail } : {}),
       ...("code" in body && typeof body.code === "string" ? { code: body.code } : {}),
+      ...("hint" in body && typeof body.hint === "string" ? { hint: body.hint } : {}),
     };
   } catch {
     // 不是 JSON（例如代理回的纯文字），整段当原因。
     return {};
   }
+}
+
+function apiError(status: number, statusText: string, text: string): ApiError {
+  const problem = problemOf(text);
+  return new ApiError(status, problem.detail ?? (text || statusText), problem.code, problem.hint);
 }
 
 /** 内核在哪、带什么令牌。开发服务器的代理在服务端带令牌，这里是 null。 */
@@ -102,8 +113,6 @@ export async function request<T>(
   init: {
     method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
     body?: unknown;
-    /** 原样交一个文件（别的工具导出的文件）；和 `body` 只给一个。 */
-    file?: Blob;
     query?: Record<string, string>;
     /** 调插件的慢请求（列来源）要等得久一些。 */
     timeoutMs?: number;
@@ -121,9 +130,9 @@ export async function request<T>(
       method: init.method ?? "GET",
       headers: {
         ...authHeaders(c),
-        ...(init.file ? { "Content-Type": "application/octet-stream" } : init.body === undefined ? {} : { "Content-Type": "application/json" }),
+        ...(init.body === undefined ? {} : { "Content-Type": "application/json" }),
       },
-      body: init.file ?? (init.body === undefined ? undefined : JSON.stringify(init.body)),
+      body: init.body === undefined ? undefined : JSON.stringify(init.body),
       signal: AbortSignal.timeout(init.timeoutMs ?? REQUEST_TIMEOUT_MS),
     });
   } catch (error) {
@@ -134,13 +143,72 @@ export async function request<T>(
   if (unreachable(response)) throw new DaemonUnreachableError(new Error("proxy could not reach the daemon"));
   if (response.status === 401) forgetConnection();
   if (!response.ok) {
-    const text = await response.text();
-    const problem = problemOf(text);
-    throw new ApiError(response.status, problem.detail ?? (text || response.statusText), problem.code);
+    throw apiError(response.status, response.statusText, await response.text());
   }
   // 204（退出登录、撤销令牌、不要这次导入）没有内容；调用处的类型写 `void`。
   if (response.status === 204) return undefined as T;
   // 响应形状由 endpoints.ts 的类型声明负责，这里不再校验。
   const body: unknown = await response.json();
   return body as T;
+}
+
+/** 交文件的时限：内核那边 30 分钟，这边多等一分钟，让内核的那句先到。 */
+const UPLOAD_TIMEOUT_MS = 31 * 60_000;
+
+/**
+ * 原样交一个文件，边交边报交了多少字节。fetch 报不了上传了多少，这里用 XMLHttpRequest。
+ * `signal` 停下时回 `AbortError`；别的失败和 `request` 一样：连不上是 `DaemonUnreachableError`，非 2xx 是 `ApiError`。
+ */
+export async function upload<T>(
+  path: string,
+  file: Blob,
+  query: Record<string, string>,
+  onSent: (bytes: number) => void,
+  signal: AbortSignal,
+): Promise<T> {
+  const c = await connection();
+  const url = urlOf(c, path);
+  for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
+  signal.throwIfAborted();
+  return new Promise<T>((done, fail) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url);
+    for (const [key, value] of Object.entries(authHeaders(c))) xhr.setRequestHeader(key, value);
+    xhr.setRequestHeader("Content-Type", "application/octet-stream");
+    xhr.timeout = UPLOAD_TIMEOUT_MS;
+    xhr.upload.onprogress = (e) => onSent(e.loaded);
+    const stop = () => xhr.abort();
+    signal.addEventListener("abort", stop, { once: true });
+    const settle = () => signal.removeEventListener("abort", stop);
+    xhr.onabort = () => {
+      settle();
+      fail(signal.reason instanceof Error ? signal.reason : new DOMException("stopped", "AbortError"));
+    };
+    const lost = () => {
+      settle();
+      forgetConnection();
+      fail(new DaemonUnreachableError(new Error("upload did not reach the daemon")));
+    };
+    xhr.onerror = lost;
+    xhr.ontimeout = lost;
+    xhr.onload = () => {
+      settle();
+      if (xhr.status === 502 && xhr.getResponseHeader(PROXY_UNREACHABLE_HEADER) !== null) {
+        fail(new DaemonUnreachableError(new Error("proxy could not reach the daemon")));
+        return;
+      }
+      if (xhr.status === 401) forgetConnection();
+      if (xhr.status < 200 || xhr.status >= 300) {
+        fail(apiError(xhr.status, xhr.statusText, xhr.responseText));
+        return;
+      }
+      try {
+        // 响应形状由 endpoints.ts 的类型声明负责，这里不再校验。
+        done(JSON.parse(xhr.responseText) as T);
+      } catch (error) {
+        fail(error);
+      }
+    };
+    xhr.send(file);
+  });
 }

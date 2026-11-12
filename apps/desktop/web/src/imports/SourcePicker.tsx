@@ -3,36 +3,32 @@ import { useState, type FormEvent } from "react";
 import { Button as AriaButton, Form, Input, Label, TextField } from "react-aria-components";
 import { ApiError } from "../api/client";
 import type { FetchMethod, FetchPlugin } from "../api/endpoints";
-import { usePlugins, useSources, useStartImport, useVisitors } from "../api/hooks";
+import { useFileReaders, usePlugins, useSources, useStartImport, useVisitors } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
-import { accountText, canList, methodStatus, pauseText, visitorText } from "../plugins/words";
+import { accountText, canList, methodStatus, pausedAsBlocker, pauseText, visitorText } from "../plugins/words";
 import { Button } from "../ui/Button";
 
-/** 内核回的错误里只按 `code` 分。 */
-function problemCode(error: Error): string | null {
-  return error instanceof ApiError ? (error.code ?? null) : null;
-}
-
-function SourcesError({ error, plugin, fromLink }: { error: Error; plugin: FetchPlugin; fromLink: boolean }) {
-  const code = problemCode(error);
+/**
+ * 列不出来：照内核给的 `hint` 说；插件报的错没带 `hint` 时，才按 `code` 说一句。
+ * 要你去「获取插件」动手的几种，后面带个链接。
+ */
+function SourcesError({ error, plugin }: { error: Error; plugin: FetchPlugin }) {
   const visitors = useVisitors();
-  if (code === null) return <ErrorLine error={error} className="mt-2" />;
+  if (!(error instanceof ApiError) || error.code === undefined) return <ErrorLine error={error} className="mt-2" />;
+  const code = error.code;
   const text =
-    code === "invalid-args" && fromLink
-      ? "这条链接用不了：要一条 http 或 https 开头的完整链接。"
-      : code === "unsupported-input"
-        ? `${plugin.name}的这种取法现在列不了：可能在按节奏等，或者这台电脑上缺了什么，「获取插件」里写着。`
-        : code === "login-required"
+    error.hint ??
+    (code === "login-required"
       ? `要先登录：在「获取插件」的${plugin.name}里登录好了，再回来列。`
       : code === "visitor-required"
         ? `${visitorText(visitors.data?.find((x) => plugin.visitors.includes(x.site))?.state)}；好了再回来列。`
-        : code === "rate-limited" || code === "blocked" || code === "paused"
+        : code === "rate-limited" || code === "blocked"
           ? `${plugin.name}的插件停着，原因写在「获取插件」里。`
-          : `没能列出来（${code}）。`;
+          : `没能列出来（${code}）。`);
   return (
     <p role="status" className="m-0 mt-2 text-small text-sub">
       {text}
-      {code === "login-required" || code === "visitor-required" || code === "paused" || code === "unsupported-input" ? (
+      {code === "login-required" || code === "visitor-required" || code === "rate-limited" || code === "blocked" || code === "unsupported-input" ? (
         <Link to="/plugins" className="ml-1 text-label underline-offset-2 hover:underline">
           去看看
         </Link>
@@ -68,8 +64,7 @@ function Sources({ plugin, method, onStarted }: { plugin: FetchPlugin; method: F
           <TextField value={draft} onChange={setDraft} className="flex min-w-0 flex-1 flex-col gap-1">
             <Label className="text-small text-label">{method.gets.link}</Label>
             <Input
-              type="url"
-              placeholder="https://"
+              placeholder="一条链接，或带链接的分享文字"
               className="h-ctl-sm w-full rounded-input border border-border2 bg-transparent px-3 font-sans text-note text-text outline-none focus:border-label"
             />
           </TextField>
@@ -79,7 +74,7 @@ function Sources({ plugin, method, onStarted }: { plugin: FetchPlugin; method: F
         </Form>
       ) : null}
       {sources.isFetching ? <p className="m-0 text-small text-sub">在问{plugin.name}有哪些可以列的……按平台的节奏，可能要等一会儿。</p> : null}
-      {sources.error ? <SourcesError error={sources.error} plugin={plugin} fromLink={fromLink} /> : null}
+      {sources.error ? <SourcesError error={sources.error} plugin={plugin} /> : null}
       {fromLink && sources.data && sources.data.length === 0 ? <p className="m-0 mt-1 text-small text-sub">这条链接里没有能列的。</p> : null}
       <ul className="m-0 mt-1 flex list-none flex-col p-0">
         {list.map((s) => (
@@ -115,10 +110,13 @@ function listsText(plugin: FetchPlugin, m: FetchMethod): string {
  */
 export function SourcePicker({ onStarted }: { onStarted: (id: string) => void }) {
   const plugins = usePlugins();
+  const readers = new Set((useFileReaders().data ?? []).map((r) => r.id));
   const [openKey, setOpenKey] = useState<string | null>(null);
   const all = plugins.data?.plugins ?? [];
-  const cards = all.flatMap((p) => p.methods.filter((m) => m.built && canList(m)).map((m) => ({ plugin: p, method: m, key: `${p.id}#${m.id}` })));
-  const linkOnly = all.filter((p) => !p.methods.some((m) => m.built && canList(m)));
+  // 读文件的方法在「别的工具导出的文件」那一半，这里不列。
+  const lists = (p: FetchPlugin, m: FetchMethod) => m.built && canList(m) && !readers.has(`${p.id}#${m.id}`);
+  const cards = all.flatMap((p) => p.methods.filter((m) => lists(p, m)).map((m) => ({ plugin: p, method: m, key: `${p.id}#${m.id}` })));
+  const linkOnly = all.filter((p) => !p.methods.some((m) => lists(p, m)));
 
   return (
     <section aria-label="从哪里导入">
@@ -137,7 +135,8 @@ export function SourcePicker({ onStarted }: { onStarted: (id: string) => void })
         {cards.map(({ plugin: p, method: m, key }) => {
           const expanded = openKey === key && m.usable;
           const status = methodStatus(m);
-          const pause = m.pauses[0];
+          // 停着已经是用不上的一条原因时，不再另写一行。
+          const pause = pausedAsBlocker(m) ? undefined : m.pauses[0];
           return (
             <div key={key} className={`rounded-card border bg-card p-4 ${expanded ? "col-span-full border-border2" : "border-border"}`}>
               <AriaButton

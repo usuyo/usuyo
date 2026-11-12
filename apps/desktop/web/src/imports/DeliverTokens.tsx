@@ -15,7 +15,7 @@ const KIND_TEXT: Record<DeliverClientKind, string> = {
 };
 const KINDS: DeliverClientKind[] = ["extension", "mobile", "api"];
 
-/** 发给脚本、扩展、手机的投递令牌：只能往 usuyo 交链接，读不了资料库。新的只显示一次。 */
+/** 发给脚本、扩展、手机的投递令牌：只能往 usuyo 交，读不了资料库；交已取到内容的文件只认扩展和脚本的。新的只显示一次。 */
 export function DeliverTokens() {
   const tokens = useDeliverTokens();
   const inbox = useInbox();
@@ -47,7 +47,7 @@ export function DeliverTokens() {
     <section aria-label="交进来的清单" className="mt-10">
       <h2 className="m-0 text-section font-semibold text-text">交进来的清单</h2>
       <p className="m-0 mt-1 text-small text-sub">
-        浏览器里的脚本或扩展、手机，可以把一批链接交给 usuyo：每一批在右边单独一条，一样先给你看再收。每个用自己的令牌，只能交，读不了你的资料库；撤销马上生效。
+        浏览器里的脚本或扩展、手机，可以把一批链接交给 usuyo；扩展和脚本还能交一个装着已经读到的内容的文件。每一批在右边单独一条，一样先给你看再收。每个用自己的令牌，只能交，读不了你的资料库；撤销马上生效。
       </p>
 
       <div className="mt-3.5 flex flex-wrap items-end gap-2">

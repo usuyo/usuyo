@@ -85,6 +85,20 @@ it("asks once on open for what is still to come, and offers redo with the defaul
   expect(posted.filter((p) => JSON.stringify(p.body) === '{"jobs":"pending"}')).toHaveLength(1);
 });
 
+it("redoes the copy on show with the plugin that made it, not the first plugin with that job", async () => {
+  const base = await createMockLibrary(false).item("c1");
+  // 摆着的那份画面上的字是 PP-OCR 做的：「再转一次」点名用它，排在前面的 Vision 是「换成」。
+  const item: Item = {
+    ...base,
+    facets: base.facets.map((f) => (f.layer === "frames" ? { ...f, source: { ...f.source, plugin: "lin/ocr-ppocr", tool: "PP-OCR" } } : f)),
+  };
+  const posted = serve(item, { trashDays: 30, entries: [] });
+  fireEvent.click(await screen.findByRole("button", { name: "再转一次画面上的字，或换一个转" }));
+  expect(await screen.findByRole("menuitem", { name: /^换成「图里的字」转一份/ })).toBeTruthy();
+  fireEvent.click(screen.getByRole("menuitem", { name: /^再转一次/ }));
+  await waitFor(() => expect(posted).toContainEqual({ path: `/api/items/${item.id}/transform`, body: { job: "frames", plugin: "lin/ocr-ppocr" } }));
+});
+
 it("says a face needs a model with its name, size and licence, and tries again by asking for everything still to come", async () => {
   const base = await createMockLibrary(false).item("c1");
   const model = { plugin: "builtin/asr-sherpa", name: "sense-voice-int8-2024-07-17", size: 163_002_883, license: "FunASR Model Open Source License" };

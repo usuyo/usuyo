@@ -35,8 +35,10 @@ const xhs: FetchPlugin = {
   pauses: [],
   methods: [
     method({ id: "note-page", name: "笔记页", access: "public-web", account: { kind: "none" } }),
-    method({ id: "iphone", name: "iPhone", riskNote: { text: "镜像没有公开的识别接口。", source: { label: "某个 issue", url: "https://example.com/1" } } }),
-    method({ id: "android", name: "安卓", built: false }),
+    // 是哪种手机看 `drives`，不看 id。
+    method({ id: "mirror", name: "iPhone", drives: "iphone", riskNote: { text: "镜像没有公开的识别接口。", source: { label: "某个 issue", url: "https://example.com/1" } } }),
+    method({ id: "usb", name: "安卓", drives: "android", built: false }),
+    method({ id: "pc", name: "电脑客户端", access: "client-hook", account: { kind: "own-app", where: "小红书" }, drives: "desktop-app" }),
   ],
 };
 
@@ -193,6 +195,8 @@ it("lists the methods that use a phone, what each still needs, and links to its 
   expect(within(list).getByText("插件写了，还没做好")).toBeTruthy();
   expect(within(list).getByText("记下的：镜像没有公开的识别接口。")).toBeTruthy();
   expect(within(list).queryByText("笔记页 · iPhone 镜像")).toBeNull();
+  // 驱动电脑上客户端的留在「获取插件」页。
+  expect(within(list).queryByText(/电脑客户端/)).toBeNull();
 });
 
 it("has no sample phone without a phone ?mock= variant", async () => {

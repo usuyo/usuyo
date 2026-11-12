@@ -1,9 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { X } from "lucide-react";
 import { useEffect, useRef, type ReactNode } from "react";
-import { isNotServed } from "../api/client";
 import { useFileReaders, usePlugins, useSites, useVisitors } from "../api/hooks";
-import { ErrorLine, NotServedLine } from "../components/ErrorLine";
+import { ErrorLine } from "../components/ErrorLine";
 import { Button } from "../ui/Button";
 import { waysOf, type Way } from "./words";
 
@@ -83,11 +82,8 @@ export function Ways({ onClose }: { onClose: () => void }) {
           <h3 id="ways-files-h" className="m-0 text-note font-semibold text-text">
             别的工具导出的文件
           </h3>
-          {isNotServed(readers.error) ? (
-            <NotServedLine className="mt-1">这台电脑上的 usuyo 内核还读不了别的工具导出的文件。</NotServedLine>
-          ) : readers.error ? (
-            <ErrorLine error={readers.error} className="mt-1" />
-          ) : null}
+          {readers.error ? <ErrorLine error={readers.error} className="mt-1" /> : null}
+          {readers.data && readers.data.length === 0 ? <p className="m-0 mt-1 text-small text-sub">装着的插件里还没有能读文件的。</p> : null}
           <ul className="m-0 mt-0.5 flex list-none flex-col p-0">
             {(readers.data ?? []).map((r) => (
               <li key={r.id}>

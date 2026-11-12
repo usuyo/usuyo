@@ -8,7 +8,7 @@ afterEach(() => {
 describe("mock platforms", () => {
   it("lists one plugin per platform with every method, and a spread of states the daemon gives", async () => {
     const { plugins } = await createMockPlatforms().plugins();
-    expect(plugins.map((p) => p.name)).toEqual(["X", "小红书", "微信视频号", "B站"]);
+    expect(plugins.map((p) => p.name)).toEqual(["X", "小红书", "微信视频号", "B站", "yt-dlp"]);
     const x = plugins.find((p) => p.id === "usuyo-fetch/x");
     expect(x?.methods).toHaveLength(9);
     expect(x?.methods.filter((m) => m.built).map((m) => m.name)).toEqual(["访客接口", "嵌入接口", "浏览器脚本", "官方归档"]);
@@ -16,12 +16,24 @@ describe("mock platforms", () => {
     // 用得上的就是没有原因的。
     expect(all.every((m) => m.usable === (m.blockers.length === 0))).toBe(true);
     const codes = new Set(all.flatMap((m) => m.blockers.map((b) => b.code)));
-    for (const code of ["off", "not-built", "login-missing", "visitor-missing", "check-failed"]) expect(codes.has(code)).toBe(true);
+    for (const code of ["off", "not-built", "login-missing", "visitor-missing", "check-failed", "paused"]) expect(codes.has(code)).toBe(true);
+    expect(all.filter((m) => m.drives !== undefined).map((m) => m.drives)).toEqual(["iphone", "iphone", "desktop-app", "iphone"]);
+    // 没做好的也说做好以后取得到什么。
+    expect(all.filter((m) => !m.built).every((m) => Object.keys(m.gets).length > 0)).toBe(true);
     expect(all.some((m) => m.lastCall?.ok === false)).toBe(true);
     expect(all.some((m) => m.account.kind === "own-app")).toBe(true);
     const bili = plugins.find((p) => p.id === "usuyo-fetch/bilibili");
     expect(bili?.methods.find((m) => m.id === "favorites")?.pauses[0]).toMatchObject({ method: "favorites", code: "rate-limited", byYou: false });
     expect(bili?.pauses.map((p) => p.method)).toEqual(["favorites"]);
+    expect(bili?.methods.find((m) => m.id === "favorites")).toMatchObject({ usable: false, blockers: [{ code: "paused" }] });
+  });
+
+  it("keeps one switch for a method with per-platform tiers: once switched, every platform follows", async () => {
+    const m = createMockPlatforms();
+    const before = (await m.plugins()).plugins.find((p) => p.id === "usuyo-fetch/ytdlp")?.methods[0];
+    expect(before).toMatchObject({ enabled: true, perPlatform: [{ platform: "youtube", enabled: false }, { platform: "weibo", enabled: false }] });
+    const after = (await m.switchMethod("usuyo-fetch/ytdlp", "ytdlp", true)).methods[0];
+    expect(after?.perPlatform?.every((t) => t.enabled)).toBe(true);
   });
 
   it("switches a built method and its reasons follow, and refuses one that is not built", async () => {
@@ -47,6 +59,7 @@ describe("mock platforms", () => {
     const held = await m.hold("usuyo-fetch/bilibili");
     expect(held.pauses).toContainEqual({ method: "*", scope: "*", byYou: true });
     expect(held.methods.every((x) => x.pauses.some((p) => p.byYou))).toBe(true);
+    expect(held.methods.filter((x) => x.built).every((x) => x.blockers.some((b) => b.code === "paused"))).toBe(true);
     expect((await m.tryNow("usuyo-fetch/bilibili")).pauses).toEqual([]);
   });
 

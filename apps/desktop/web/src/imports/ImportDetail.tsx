@@ -109,7 +109,9 @@ function Ready({ v, platform }: { v: ImportView; platform: string | undefined })
             {v.preview.stored > 0 ? `已经存着的 ${v.preview.stored} 条不动。` : ""}
           </p>
           <p className="m-0 mt-1 text-small text-sub">
-            收的时候照{platform ? `${platform}的` : "平台的"}节奏一条条来，不用守着；随时能停。
+            {v.kind === "file"
+              ? "收的时候一条条来：文件里有的从副本里取，只有链接的照平台的节奏去取；不用守着，随时能停。"
+              : `收的时候照${platform ? `${platform}的` : "平台的"}节奏一条条来，不用守着；随时能停。`}
           </p>
         </div>
         <Button variant="soft" size="md" isDisabled={change.isPending || total === 0} onPress={confirm}>
@@ -185,29 +187,30 @@ function Taken({ v }: { v: ImportView }) {
 }
 
 function EntryRow({ e, tick }: { e: ImportEntry; tick?: { on: boolean; set: (on: boolean) => void } }) {
-  const host = URL.canParse(e.url) ? new URL(e.url).host : e.url;
+  // 从文件导入时，只在文件里的那几条没有链接：只写标题，不写主机。
+  const host = e.url === undefined ? "" : URL.canParse(e.url) ? new URL(e.url).host : e.url;
+  const name = e.title || e.url || "没有标题的一条";
   if (tick) {
     return (
       <li className="border-b border-border">
         <Checkbox
           isSelected={tick.on}
           onChange={tick.set}
-          aria-label={`收下 ${e.title || e.url}`}
+          aria-label={`收下 ${name}`}
           className="group press -mx-2 flex cursor-pointer items-center gap-3 rounded-btn px-2 py-2 outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent data-[hovered]:bg-chip/60"
         >
           <Tick />
-          <span className={`min-w-0 flex-1 truncate text-body ${tick.on ? "text-text" : "text-faint"}`}>{e.title || e.url}</span>
-          <span className="mono shrink-0 text-tag text-faint">{host}</span>
+          <span className={`min-w-0 flex-1 truncate text-body ${tick.on ? "text-text" : "text-faint"}`}>{name}</span>
+          {host ? <span className="mono shrink-0 text-tag text-faint">{host}</span> : null}
         </Checkbox>
       </li>
     );
   }
   const body = (
     <>
-      <span className="min-w-0 flex-1 truncate text-body text-text">{e.title || e.url}</span>
+      <span className="min-w-0 flex-1 truncate text-body text-text">{name}</span>
       <span className="mono shrink-0 text-tag text-faint">
-        {e.actedAt ? `${dayText(e.actedAt)} · ` : ""}
-        {host}
+        {[e.actedAt ? dayText(e.actedAt) : "", host].filter(Boolean).join(" · ")}
       </span>
     </>
   );

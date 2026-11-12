@@ -176,20 +176,21 @@ export const paths = {
   /** GET `{path}`：收件文件夹在哪。手机经云盘往里放 `.txt`（一行一个链接或整段分享文字），收完移到 `.usuyo-done/`。 */
   inbox: "/inbox",
 
-  // —— 别的工具导出的文件（「导入」页的另一半，BUILD 007）。内核今天（11-12）还没有这两条。——
-  /** GET `FileReader[]`：装着的、能读别的工具导出的文件的导入插件。 */
+  // —— 别的工具导出的文件（「导入」页的另一半，协议 §3.9）——
+  /** GET `FileReader[]`：能读文件的方法（做了的、`list` 写了 `files` 的），照插件和清单的顺序。 */
   fileReaders: "/file-readers",
   /**
-   * POST 文件本身（`application/octet-stream`），`?reader=<插件 id>&name=<文件名>`：内核存一份副本，原文件不动，
-   * 由那个导入插件读出清单，回 `ImportView`（`kind: "file"`，`state: "listing"` 或 `ready`）；之后和别的导入一样看预览、确认。
-   * 插件读不了这个文件回 `invalid-args`，带一句原因。
+   * POST 文件本身，`?reader=<FileReader.id>&name=<文件名>`（`#` 写成 `%23`），最多 16 GiB，超了 413 带 `hint`：
+   * 内核存一份副本，原文件不动，马上列第一页，回 `ImportView`（`kind: "file"`，`state: "listing"` 或 `ready`）；
+   * 之后和别的导入一样看预览、确认。插件读不了这个文件回 400 `invalid-args`，`hint` 是插件的那句话，什么都不留；
+   * 那种方法关着或用不上回 422 `unsupported-input`。
    */
   fileImports: "/file-imports",
 } as const;
 
 /**
  * 投递接口（协议 §5.1）：浏览器扩展、油猴脚本、手机用自己的投递令牌调，壳和页面不用。
- * 投递令牌只能进这三条，读不了资料库；带 `Origin` 的只认 `chrome-extension://` 一类。
+ * 投递令牌只能进这几条，读不了资料库；带 `Origin` 的只认 `chrome-extension://` 一类。
  * 发令牌以前先握手：`POST /handshake {nonce, client: <令牌 . 前面的 id>}`，证明用整个令牌算。
  */
 export const deliverPaths = {
@@ -198,6 +199,8 @@ export const deliverPaths = {
   deliver: "/v1/deliver",
   /** POST `BatchRequest` → 202 `{id}`：进导入的预览。 */
   batches: "/v1/batches",
+  /** POST 一个装着已取到内容的文件，`?reader=&name=`，最多 256 MiB → 202 `{id}`；只认 `extension` 类令牌。 */
+  fileImports: "/v1/file-imports",
 } as const;
 
 /** 插件 id 是 `owner/repo`：两段分别编码，中间的 `/` 留着。 */
@@ -260,6 +263,8 @@ export interface FacetSource {
   by: "platform" | "machine";
   /** 机器的：工具和模型的显示名，例如「SenseVoice」「Vision」。 */
   tool?: string;
+  /** 机器的：做这一份的转换插件 id（`owner/repo`）；宿主自己判的没有。 */
+  plugin?: string;
   runId?: string;
   /** RFC 3339。 */
   at?: string;
@@ -844,7 +849,8 @@ export interface FetchPlugin {
  * 账号用在哪：`none` 不用；`visitor` 用访客身份（不是账号，`sites` 是 `paths.visitors` 的站点）；
  * `own-browser` 账号留在你自己的浏览器里，由脚本把链接交进来；`own-phone` 账号留在手机的 App 里；
  * `own-app` 账号留在这台电脑上的客户端里；`in-usuyo` 你在 usuyo 的窗口里登录（`sites` 是 `paths.sites` 的站点）；
- * `developer` 用你自己申请的开发者凭据（平台的官方 API）。`where` 是这些站点给人看的名字，取自清单。
+ * `developer` 用你自己申请的开发者凭据（平台的官方 API）。`where` 是账号所在的地方给人看的名字：`visitor` 是访客身份的名字，
+ * `in-usuyo`、`own-browser`、`own-phone`、`own-app` 是方法列的站点的名字，没列站点时是插件的名字；`none`、`developer` 没有。
  */
 export interface MethodAccount {
   kind: "none" | "visitor" | "own-browser" | "own-phone" | "own-app" | "in-usuyo" | "developer";
@@ -857,7 +863,8 @@ export type OutputKind = "text" | "html" | "images" | "media:video" | "media:aud
 
 /**
  * 这种取法这台机器上为什么用不上，一项一句：`not-built`、`off`、`login-missing`、`login-expired`、`visitor-missing`、
- * `visitor-expired`、`check-failed`（插件的本机检查没过）、`health-failed`（插件没能自查）。`hint` 是内核写好的中文。
+ * `visitor-expired`、`check-failed`（插件的本机检查没过）、`health-failed`（插件没能自查）、`paused`（停着：被限流、被拦，
+ * `hint` 写到几点；或你点的「先别试」，写到你点「现在再试」为止）。`hint` 是内核写好的中文。
  */
 export interface MethodBlocker {
   code: string;
@@ -872,6 +879,17 @@ export interface MethodCall {
   hint?: string;
 }
 
+/**
+ * 一种取法在某个平台上的层级和方法本身不同（清单的 `perPlatform`）。`platform` 是 `FetchPlugin.platforms` 里的 id；
+ * `enabled`：没拨过开关时照那一层的默认（`private-api`、`client-hook` 关着），拨过就和方法的 `enabled` 一样。
+ */
+export interface PlatformTier {
+  platform: string;
+  access: Access;
+  login: LoginNeed;
+  enabled: boolean;
+}
+
 /** 一种取法。`built: false` 是插件声明了、还没做好的：照样列出来，标明，开不了。 */
 export interface FetchMethod {
   id: string;
@@ -882,14 +900,19 @@ export interface FetchMethod {
   account: MethodAccount;
   /** `foreground`：调用时你看得见（弹菜单、动剪贴板、占手机屏幕这一类）；只用来排程，不拦。 */
   interaction: "background" | "foreground";
+  /** 驱动哪一样：`iphone`（经 iPhone 镜像）、`android`（经 adb），`desktop-app`（这台电脑上一个客户端的窗口）。 */
+  drives?: "iphone" | "android" | "desktop-app";
+  /** 层级和方法本身不同的平台；没有这样的平台时不给。开关只有一个，拨过以后各平台都照它。 */
+  perPlatform?: PlatformTier[];
   /**
-   * 取得到什么：`fetch` 是取一条时拿得到的几样，`list` 是清单里写死的来源名（能列、没有写死的是空的），
+   * 取得到什么（没做好的也给，说的是做好以后）：`fetch` 是取一条时拿得到的几样，`list` 是清单里写死的来源名（能列、没有写死的是空的），
    * `link` 是来源从一条链接开始时链接框上的那句，`delivers: "links"` 是由别处把链接交进来。
    */
   gets: { fetch?: OutputKind[]; list?: string[]; link?: string; delivers?: "links" };
   built: boolean;
+  /** 开关：你拨过的照你拨的，没拨过照方法本身的那一层。 */
   enabled: boolean;
-  /** 这台机器上现在用得上：做好了、开着、要的登录和访客身份都在、本机检查没挡它。不看暂停。 */
+  /** 这台机器上现在用得上：做好了、开着、要的登录和访客身份都在、本机检查没挡它、没停着。 */
   usable: boolean;
   blockers: MethodBlocker[];
   lastCall?: MethodCall;
@@ -992,7 +1015,7 @@ export interface ImportView {
   /** `source`：插件列出来的；`delivered`：交进来的一批链接；`file`：别的工具导出的文件读出来的。 */
   kind: "source" | "delivered" | "file";
   title: string;
-  /** `file` 的：交进来的文件名和读它的插件名。 */
+  /** `file` 的：交来的文件名（洗过的，只当显示的字）和读它的插件的名字。 */
   file?: { name: string; reader: string };
   pluginId?: string;
   /** 来源属于插件的哪种取法；交进来的没有。 */
@@ -1018,7 +1041,8 @@ export interface ImportView {
 
 export interface ImportEntry {
   seq: number;
-  url: string;
+  /** 从文件导入时只有插件的 `ref`、没有链接的那几条没有。 */
+  url?: string;
   title?: string;
   action?: string;
   actedAt?: string;
@@ -1050,23 +1074,23 @@ export interface ConfirmImportRequest {
 }
 
 /**
- * 一个能读别的工具导出的文件的导入插件（第三类插件之外预装的那一样，和平台无关的「链接清单」也是一个）。
- * 名字、读什么、文件长什么样都由插件清单给，应用里不写死任何平台。
+ * 一种能读别的工具导出的文件的方法（`GET /file-readers`）：做了的、`list` 写了 `files` 的。
+ * 名字、读什么、文件长什么样都取自插件清单，应用里不写死任何平台。
  */
 export interface FileReader {
-  /** `<插件 id>#<取法 id>`，交文件时原样给回；同一种取法也在插件的 `methods` 里时，第一次打开那一页靠它不重复列。 */
+  /** `<插件 id>#<方法 id>`，交文件时原样给回；同一种方法也在插件的 `methods` 里，别处靠它不重复列。 */
   id: string;
-  /** 例如「官方归档」。 */
+  /** 方法的名字，例如「官方归档」。 */
   name: string;
   /** 插件的名字。 */
   plugin: string;
-  /** 给人看的一句：读哪个工具的哪种导出，例如「某平台设置里『下载你的数据』给的 zip」。 */
+  /** 清单的 `list.reads`：读哪个工具的哪种导出。 */
   reads: string;
-  /** 文件名的样子，例如 `*.zip`；只用来提示和挑文件时过滤。 */
+  /** 清单的 `list.files`，例如 `twitter-*.zip`；只拿来提示和挑文件，内核不按它拒。 */
   patterns: string[];
-  /** 读得出的清单，例如「喜欢」「书签」。 */
+  /** 清单 `list.sources` 的名字；没写死来源时是空的。 */
   lists: string[];
-  /** 记下来的一句没核过的事，例如「归档里有没有书签没核」。只是信息。 */
+  /** 方法的 `risk.text`。只是信息。 */
   note?: string;
 }
 

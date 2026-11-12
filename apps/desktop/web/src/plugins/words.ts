@@ -113,15 +113,38 @@ export function canList(m: FetchMethod): boolean {
 }
 
 /**
- * 这种取法现在怎样，一句话：用不上的照内核的原因一句句说；用得上又没停着的说用得上。
- * 停着的另由 `pauseText` 说（内核的 `usable` 不看暂停），这里回 null。没做好的行上有标，也回 null。
+ * 这种取法现在怎样，一句话：用不上的照内核的原因一句句说（停着的也是一条原因，写到什么时候）；用得上的说用得上。
+ * 用得上又有暂停的（通用网页按网站停的）另由 `pauseText` 说，这里回 null。没做好的行上有标，也回 null。
  */
 export function methodStatus(m: FetchMethod): string | null {
   if (!m.built) return null;
   if (!m.usable) return m.blockers.map((b) => b.hint).join("；");
-  // 「先别试」整个插件的那句写在插件上，这里只短短说一句。
-  if (m.pauses.some((p) => p.byYou)) return "你让它先别试";
   return m.pauses.length > 0 ? null : "现在能用";
+}
+
+/** 停着已经写成一条原因（`paused`）的，暂停不再另写一行。 */
+export function pausedAsBlocker(m: FetchMethod): boolean {
+  return m.blockers.some((b) => b.code === "paused");
+}
+
+const ACCESS_ORDER = Object.keys(ACCESS_TEXT);
+
+/**
+ * 按平台层级不同的那几行：「在YouTube、微博上层级更高：调平台没公开的接口 · 那里现在关着」，同一层、同一个开关状态的平台写在一起。
+ * `platforms` 把平台 id 换成名字。开关只有一个，另由调用处说它也管这几个平台。
+ */
+export function perPlatformText(m: FetchMethod, platforms: { id: string; name: string }[]): string[] {
+  const groups = new Map<string, { names: string[]; access: Access; enabled: boolean }>();
+  for (const t of m.perPlatform ?? []) {
+    const key = `${t.access} ${t.enabled}`;
+    const g = groups.get(key) ?? { names: [], access: t.access, enabled: t.enabled };
+    g.names.push(platforms.find((x) => x.id === t.platform)?.name ?? t.platform);
+    groups.set(key, g);
+  }
+  return [...groups.values()].map((g) => {
+    const higher = ACCESS_ORDER.indexOf(g.access) > ACCESS_ORDER.indexOf(m.access);
+    return `在${g.names.join("、")}上层级更${higher ? "高" : "低"}：${ACCESS_TEXT[g.access]} · 那里现在${g.enabled ? "开着" : "关着"}`;
+  });
 }
 
 /** 上一次调用：什么时候，没出错，或那一句错。 */

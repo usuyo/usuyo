@@ -18,12 +18,22 @@ const inMinutes = (m: number) => new Date(Date.now() + m * 60_000).toISOString()
 
 type MethodSpec = Pick<FetchMethod, "id" | "name" | "access" | "account" | "gets"> & Partial<FetchMethod>;
 
-/** `off`、`not-built` 由开关和做没做好算出来；别的原因（登录、访客身份、本机检查）照样例写的留着。 */
+/** 停着的写成一条原因，同内核：限流、被拦写到几点，「先别试」写到你点「现在再试」为止。 */
+function pausedHint(p: FetchMethod["pauses"][number]): string {
+  if (p.byYou) return "你让它先别试，到你点「现在再试」为止";
+  const d = p.until ? new Date(p.until) : null;
+  const at = d ? `${d.getMonth() + 1} 月 ${d.getDate()} 日 ${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}` : null;
+  const why = p.code === "rate-limited" ? "平台限流了" : p.code === "blocked" ? "平台拦住了" : "停着";
+  return at ? `${why}，${at}以前不用它` : `${why}，等你点「现在再试」`;
+}
+
+/** `off`、`not-built`、`paused` 由开关、做没做好、暂停算出来；别的原因（登录、访客身份、本机检查）照样例写的留着。 */
 function settle(m: FetchMethod): FetchMethod {
-  const kept = m.blockers.filter((b) => b.code !== "off" && b.code !== "not-built");
+  const kept = m.blockers.filter((b) => b.code !== "off" && b.code !== "not-built" && b.code !== "paused");
+  const paused = m.pauses[0];
   const blockers = !m.built
     ? [{ code: "not-built", hint: "这种方法还没做" }]
-    : [...(m.enabled ? [] : [{ code: "off", hint: "你关掉了这种方法" }]), ...kept];
+    : [...(m.enabled ? [] : [{ code: "off", hint: "你关掉了这种方法" }]), ...kept, ...(paused ? [{ code: "paused", hint: pausedHint(paused) }] : [])];
   return { ...m, blockers, usable: blockers.length === 0 };
 }
 
@@ -32,8 +42,8 @@ export function method(m: MethodSpec): FetchMethod {
   return settle({ login: "none", interaction: "background", built: true, enabled: true, usable: true, blockers: [], pauses: [], ...m });
 }
 
-// 内核给没做好的取法的 `gets` 是空的（清单里没写能力）。
-const notBuilt = (m: MethodSpec) => method({ ...m, gets: {}, built: false, enabled: false });
+// 没做好的取法，清单里写了能力的，内核照样给 `gets`：做好以后会取得什么。
+const notBuilt = (m: MethodSpec) => method({ ...m, built: false, enabled: false });
 
 const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
 
@@ -95,7 +105,7 @@ function basePlugins(): FetchPlugin[] {
           riskNote: { text: "注册三年的账号一次取 800 个关注后被封。", source: { label: "twikit #338", url: "https://github.com/d60/twikit/issues/338" } },
         }),
         notBuilt({ id: "api", name: "官方 API", access: "official-export", login: "required", account: { kind: "developer", where: "X" }, gets: { list: ["书签", "喜欢"] } }),
-        notBuilt({ id: "mirror", name: "手机镜像", access: "vision-ui", login: "required", account: { kind: "own-phone" }, interaction: "foreground", gets: { list: ["书签", "喜欢"], delivers: "links" } }),
+        notBuilt({ id: "mirror", name: "手机镜像", access: "vision-ui", login: "required", account: { kind: "own-phone", where: "X" }, drives: "iphone", interaction: "foreground", gets: { list: ["书签", "喜欢"], delivers: "links" } }),
       ],
     },
     {
@@ -134,7 +144,8 @@ function basePlugins(): FetchPlugin[] {
           name: "iPhone",
           access: "vision-ui",
           login: "required",
-          account: { kind: "own-phone" },
+          account: { kind: "own-phone", where: "小红书" },
+          drives: "iphone",
           interaction: "foreground",
           gets: { list: ["收藏", "赞过"], delivers: "links" },
         }),
@@ -172,13 +183,14 @@ function basePlugins(): FetchPlugin[] {
           blockers: [{ code: "login-missing", hint: "要先在 usuyo 里登录腾讯元宝" }],
           riskNote: { text: "公开部署的解析服务被大量调用后，元宝账号被封。", source: { label: "wx_channels_download #495", url: "https://github.com/ltaoo/wx_channels_download/issues/495" } },
         }),
-        notBuilt({ id: "pc-client", name: "电脑微信", access: "client-hook", login: "required", account: { kind: "own-app" }, gets: { fetch: ["media:video"] } }),
+        notBuilt({ id: "pc-client", name: "电脑微信", access: "client-hook", login: "required", account: { kind: "own-app", where: "微信视频号" }, drives: "desktop-app", gets: { fetch: ["media:video"] } }),
         notBuilt({
           id: "iphone",
           name: "iPhone",
           access: "vision-ui",
           login: "required",
-          account: { kind: "own-phone" },
+          account: { kind: "own-phone", where: "微信视频号" },
+          drives: "iphone",
           interaction: "foreground",
           gets: { list: ["赞和收藏"], delivers: "links" },
         }),
@@ -227,6 +239,35 @@ function basePlugins(): FetchPlugin[] {
           riskNote: { text: "一例大会员被冻结，因果不明。", source: { label: "yutto #452", url: "https://github.com/yutto-dev/yutto/issues/452" } },
         }),
         notBuilt({ id: "yutto", name: "yutto（高清音视频、字幕）", access: "session-api", login: "required", account: { kind: "in-usuyo", sites: ["www.bilibili.com"], where: "B站" }, gets: { fetch: ["media:video", "subtitle"] } }),
+      ],
+    },
+    // 一个插件管几个平台、在其中几个上层级更高的一种（照 usuyo-fetch/ytdlp）：开关只有一个，那几个平台没拨过时关着。
+    {
+      ...base,
+      id: "usuyo-fetch/ytdlp",
+      name: "yt-dlp",
+      description: "用 yt-dlp 按链接取一条视频：标题、作者、封面、字幕和视频文件",
+      platforms: [
+        { id: "bilibili", name: "B站" },
+        { id: "youtube", name: "YouTube" },
+        { id: "weibo", name: "微博" },
+      ],
+      access: "private-api",
+      login: "none",
+      canList: false,
+      pacing: [{ platform: "youtube", batch: true, intervalSec: 10, daily: 200 }],
+      methods: [
+        method({
+          id: "ytdlp",
+          name: "yt-dlp",
+          access: "public-web",
+          account: { kind: "none" },
+          gets: { fetch: ["meta", "images", "subtitle", "media:video"] },
+          perPlatform: [
+            { platform: "youtube", access: "private-api", login: "none", enabled: false },
+            { platform: "weibo", access: "private-api", login: "none", enabled: false },
+          ],
+        }),
       ],
     },
   ];
@@ -298,14 +339,14 @@ function globMatch(pattern: string, name: string): boolean {
 
 const POSTS = ["关于慢慢写东西的一条长帖", "胶片扫描的一个小技巧", "一张东京的夜景", "读书笔记的模板", "做饭时的一个顺序", "前端动效的几条规矩"];
 
-/** 归档里读出来的喜欢和书签：前两条库里已经存着，第三条在回收站里。 */
+/** 归档里读出来的喜欢和书签：前两条库里已经存着，第三条在回收站里；每十条有一条只在文件里，没有链接。 */
 function archiveEntries(n: number): ImportEntry[] {
   return Array.from({ length: n }, (_, i): ImportEntry => {
     const standing = i < 2 ? "stored" : i === 2 ? "trashed" : "new";
     return {
       seq: i + 1,
-      url: `https://x.com/i/status/18${(5_300_000_000_000_000 + i * 7_919).toString()}`,
-      title: POSTS[i % POSTS.length] ?? "",
+      ...(i % 10 === 9 ? {} : { url: `https://x.com/i/status/18${(5_300_000_000_000_000 + i * 7_919).toString()}` }),
+      title: i % 10 === 9 ? "私信里转来的一张图" : (POSTS[i % POSTS.length] ?? ""),
       action: i % 4 === 0 ? "favorite" : "like",
       actedAt: new Date(Date.UTC(2026, 9, 28 - i, 9)).toISOString(),
       ...(standing === "new" ? {} : { itemId: `x-mock${i}` }),
@@ -389,6 +430,9 @@ function advance(i: MockImport, now: number): void {
 export function createMockPlatforms(empty = false): Platforms {
   // 插件上的 `pauses` 是各取法的合起来，同内核。
   const plugins = empty ? [] : basePlugins().map((p) => ({ ...p, pauses: p.methods.flatMap((m) => m.pauses) }));
+  // 拨过开关以后，各平台都照它。
+  const switched = (m: FetchMethod, enabled: boolean): FetchMethod =>
+    m.perPlatform ? { ...m, enabled, perPlatform: m.perPlatform.map((t) => ({ ...t, enabled })) } : { ...m, enabled };
   const sites = empty ? [] : baseSites();
   const visitors = empty ? [] : baseVisitors();
   const imports = new Map<string, MockImport>();
@@ -425,7 +469,7 @@ export function createMockPlatforms(empty = false): Platforms {
     const linked = ["c2", "c7", "f2", "j5", "f7", "w1", "w4", "k3", "e4", "r4", "r5", "c1"];
     const taking = entriesFor(40, 3, 0).map((e, i) => ({
       ...e,
-      url: e.url.replace("bilibili.com/video", "xiaohongshu.com/explore"),
+      url: e.url?.replace("bilibili.com/video", "xiaohongshu.com/explore"),
       taken: i >= 3 && i < 15,
       ...(i >= 3 && i < 15 ? { itemId: linked[i - 3] ?? `xhs-mock${i}` } : {}),
     }));
@@ -495,7 +539,7 @@ export function createMockPlatforms(empty = false): Platforms {
       const m = p.methods[at];
       if (!m) throw new ApiError(404, `样例里 ${pluginId} 没有取法 ${methodId}`, "not-found");
       if (!m.built) throw new ApiError(422, "这种取法还没做好", "unsupported-input");
-      p.methods[at] = settle({ ...m, enabled });
+      p.methods[at] = settle(switched(m, enabled));
       return { ...p, methods: p.methods.map((x) => ({ ...x })) };
     },
     async tryNow(pluginId) {
@@ -503,7 +547,7 @@ export function createMockPlatforms(empty = false): Platforms {
       const p = plugin(pluginId);
       p.pauses = [];
       // 每次换新的对象，同内核每次回新的一份。
-      p.methods = p.methods.map((m) => ({ ...m, pauses: [] }));
+      p.methods = p.methods.map((m) => settle({ ...m, pauses: [] }));
       return { ...p };
     },
     async hold(pluginId) {
@@ -511,7 +555,7 @@ export function createMockPlatforms(empty = false): Platforms {
       const p = plugin(pluginId);
       const hold = { method: "*", scope: "*", byYou: true };
       p.pauses = [...p.pauses.filter((x) => !x.byYou), hold];
-      p.methods = p.methods.map((m) => ({ ...m, pauses: [...m.pauses.filter((x) => !x.byYou), hold] }));
+      p.methods = p.methods.map((m) => settle({ ...m, pauses: [...m.pauses.filter((x) => !x.byYou), hold] }));
       return { ...p };
     },
     async sites() {
@@ -642,12 +686,20 @@ export function createMockPlatforms(empty = false): Platforms {
       await wait(40);
       return empty ? [LINK_LIST] : [...FILE_READERS];
     },
-    async importFile(readerId, file) {
-      await wait(400);
+    async importFile(readerId, file, onSent, signal) {
       const reader = [...FILE_READERS].find((r) => r.id === readerId);
-      if (!reader) throw new ApiError(400, "没有这个导入插件", "invalid-args");
+      if (!reader) throw new ApiError(404, "no such file reader", "not-found", "没有这种读文件的方法");
+      // 照约 200 MB/s 交，一步 120 毫秒，能停下。
+      for (let sent = 0; sent < file.size; ) {
+        await wait(120);
+        signal.throwIfAborted();
+        sent = Math.min(file.size, sent + 24_000_000);
+        onSent(sent);
+      }
+      await wait(300);
+      // 样例里，名字对不上的当作插件认不出的文件；内核自己不按名字拒。
       if (!reader.patterns.some((pattern) => globMatch(pattern, file.name))) {
-        throw new ApiError(400, `${reader.plugin}的${reader.name}读不了「${file.name}」：文件名不像${reader.patterns.join("、")}`, "invalid-args");
+        throw new ApiError(400, "the plugin could not read the file", "invalid-args", `这不像${reader.plugin}的${reader.name}：里面没有它认得的文件`);
       }
       const id = `0193f2b0-${(imports.size + 1).toString().padStart(4, "0")}-7f3a-8b4c-5d6e7f8a9b0c`;
       const all = archiveEntries(reader.id === LINK_LIST.id ? 9 : 31);
@@ -660,8 +712,8 @@ export function createMockPlatforms(empty = false): Platforms {
         view: {
           id,
           kind: "file",
-          title: reader.lists.join("和"),
-          file: { name: file.name, reader: `${reader.plugin} · ${reader.name}` },
+          title: file.name,
+          file: { name: file.name, reader: reader.plugin },
           createdAt: new Date().toISOString(),
           state: "listing",
           pages: 0,

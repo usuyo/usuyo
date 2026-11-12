@@ -73,6 +73,7 @@ function serve(sources: Response[] = []) {
       if (path.endsWith(`/imports/${VIEW.id}`)) return Promise.resolve(Response.json(VIEW));
       if (path.endsWith("/imports")) return Promise.resolve(Response.json(init?.method === "POST" ? VIEW : []));
       if (path.endsWith("/plugins")) return Promise.resolve(Response.json({ plugins: [BILI], notLoaded: [] }));
+      if (path.endsWith("/file-readers")) return Promise.resolve(Response.json([]));
       if (path.endsWith("/events")) return new Promise(() => {});
       if (path.endsWith("/entries")) return Promise.resolve(Response.json([]));
       return Promise.resolve(Response.json({ code: "not-found", detail: "no such route" }, { status: 404 }));
@@ -107,19 +108,32 @@ it("gives a list method that starts from a link a link field, asks for its sourc
   expect(await screen.findByText(/B站 · 公开收藏夹 · 从插件列出来的/)).toBeTruthy();
 });
 
-const problem = (status: number, code: string) => Response.json({ code, detail: "link: not a link", status }, { status, headers: { "content-type": "application/problem+json" } });
+const problem = (status: number, code: string, hint?: string) =>
+  Response.json({ code, detail: "link: not a link", status, ...(hint ? { hint } : {}) }, { status, headers: { "content-type": "application/problem+json" } });
 
-it("says a link it cannot use in plain words, and asks again when the same link is handed in again", async () => {
-  const seen = serve([problem(400, "invalid-args"), problem(422, "unsupported-input"), Response.json([SOURCE])]);
+it("says the daemon's sentence for a link it cannot use, hands share text over as pasted, and asks again for the same link", async () => {
+  const seen = serve([problem(400, "invalid-args", "这段文字里没有链接"), problem(422, "unsupported-input", "公开收藏夹现在用不上：在按节奏等"), Response.json([SOURCE])]);
   fireEvent.click(await screen.findByText("公开收藏夹"));
   const field = await screen.findByLabelText("收藏夹或个人空间的链接");
   fireEvent.change(field, { target: { value: "ftp://space.bilibili.com/1" } });
   fireEvent.click(screen.getByRole("button", { name: "看看有什么" }));
-  expect(await screen.findByText(/这条链接用不了/)).toBeTruthy();
-  fireEvent.change(field, { target: { value: "https://space.bilibili.com/1/favlist?fid=2" } });
+  expect(await screen.findByText("这段文字里没有链接")).toBeTruthy();
+  // 带链接的分享文字照原样交过去，链接由内核取出来。
+  const shared = "【胶片】的收藏夹 https://space.bilibili.com/1/favlist?fid=2 快来看看";
+  fireEvent.change(field, { target: { value: shared } });
   fireEvent.click(screen.getByRole("button", { name: "看看有什么" }));
-  expect(await screen.findByText(/这种取法现在列不了/)).toBeTruthy();
+  expect(await screen.findByText("公开收藏夹现在用不上：在按节奏等")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "看看有什么" }));
   expect(await screen.findByRole("button", { name: "列出来" })).toBeTruthy();
-  expect(seen.filter((x) => x.url.pathname.endsWith("/sources"))).toHaveLength(3);
+  const asked = seen.filter((x) => x.url.pathname.endsWith("/sources"));
+  expect(asked).toHaveLength(3);
+  expect(asked[1]?.url.searchParams.get("link")).toBe(shared);
+});
+
+it("says its own sentence for a plugin's error that came without a hint", async () => {
+  serve([problem(502, "login-required")]);
+  fireEvent.click(await screen.findByText("公开收藏夹"));
+  fireEvent.change(await screen.findByLabelText("收藏夹或个人空间的链接"), { target: { value: "https://space.bilibili.com/1" } });
+  fireEvent.click(screen.getByRole("button", { name: "看看有什么" }));
+  expect(await screen.findByText(/要先登录：在「获取插件」的B站里登录好了/)).toBeTruthy();
 });

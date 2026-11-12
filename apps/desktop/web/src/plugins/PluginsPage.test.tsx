@@ -78,14 +78,15 @@ it("says how plugins get installed today when none are", async () => {
   expect(screen.queryByText("这一页还没做。")).toBeNull();
 });
 
-it("shows a method's labels, the daemon's sentence for what it is missing, its pause, and the login row", async () => {
+it("shows a method's labels, the daemon's sentences for what it is missing (its pause among them), and the login row", async () => {
   serve({ plugins: [bili], notLoaded: [] }, [
     { site: "www.bilibili.com", name: "B站", loginUrl: "https://passport.bilibili.com/login", cookies: ["SESSDATA"], domains: [], login: "missing", plugins: [bili.id] },
   ]);
   expect(await screen.findByText("要在 usuyo 里登录你的B站账号")).toBeTruthy();
-  expect(screen.getByText("要先在 usuyo 里登录B站")).toBeTruthy();
+  // 停着是用不上的一条原因，写到几点；暂停不再另写一行。
+  expect(screen.getByText(/^要先在 usuyo 里登录B站；平台拦住了，.*以前不用它$/)).toBeTruthy();
   expect(screen.getByText("用你的登录调平台的接口")).toBeTruthy();
-  expect(screen.getByText(/B站挡住了这次请求 · .* 自己再试/)).toBeTruthy();
+  expect(screen.queryByText(/B站挡住了这次请求/)).toBeNull();
   expect(screen.getByRole("button", { name: "现在再试" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "先别试" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "登录" })).toBeTruthy();
@@ -193,4 +194,42 @@ it("opens the platform named in the address, and a method on a phone points to t
   serve({ plugins: [phone("bilibili", "B站"), phone("xiaohongshu", "小红书")], notLoaded: [] }, [], [], "/plugins?platform=xiaohongshu");
   const section = await screen.findByRole("region", { name: "小红书" });
   expect(within(section).getByRole("link", { name: "手机" }).getAttribute("href")).toBe("/phone");
+});
+
+it("says which platforms carry a higher tier and that the one switch covers them, and what an unbuilt method would get", async () => {
+  const ytdlp: FetchPlugin = {
+    ...bili,
+    id: "usuyo-fetch/ytdlp",
+    name: "yt-dlp",
+    platforms: [
+      { id: "bilibili", name: "B站" },
+      { id: "youtube", name: "YouTube" },
+      { id: "instagram", name: "Instagram" },
+    ],
+    access: "private-api",
+    login: "none",
+    sites: [],
+    pauses: [],
+    methods: [
+      method({
+        id: "ytdlp",
+        name: "yt-dlp",
+        access: "public-web",
+        account: { kind: "none" },
+        gets: { fetch: ["meta", "media:video"] },
+        perPlatform: [
+          { platform: "youtube", access: "private-api", login: "none", enabled: false },
+          { platform: "instagram", access: "private-api", login: "none", enabled: false },
+        ],
+      }),
+      method({ id: "later", name: "以后的一种", access: "session-api", account: { kind: "none" }, gets: { list: ["收藏夹"] }, built: false, enabled: false }),
+    ],
+  };
+  const switched = serve({ plugins: [ytdlp], notLoaded: [] }, [], [], "/plugins?platform=youtube");
+  expect(await screen.findByText("在YouTube、Instagram上层级更高：调平台没公开的接口 · 那里现在关着")).toBeTruthy();
+  expect(screen.getByText("开关只有一个：拨过以后，这几个平台也照它开或关。")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "这几个平台也开" }));
+  await waitFor(() => expect(switched).toEqual([{ path: "/api/plugins/usuyo-fetch/ytdlp/methods/ytdlp", body: { enabled: true } }]));
+  expect(screen.getByText("做好以后能：")).toBeTruthy();
+  expect(screen.getByText("列出：收藏夹")).toBeTruthy();
 });

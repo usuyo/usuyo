@@ -80,6 +80,8 @@ function run(raw: RawItem, layer: string): { runId: string; at: string } {
 
 /** 机器转的口播、图里的字、画面上的字，各用哪个工具（和样例的转换插件对上）。 */
 export const MOCK_TOOLS = { asr: "SenseVoice", ocr: "Vision", frames: "Vision" } as const;
+/** 做这几份的转换插件（`FacetSource.plugin`），和 mock/transforms.ts 的插件 id 一致。 */
+const MOCK_BY = { asr: "builtin/asr-sherpa", ocr: "builtin/ocr-vision", frames: "builtin/ocr-vision" } as const;
 
 function buildFacets(raw: RawItem): Facet[] {
   if (raw.link) return [];
@@ -132,7 +134,7 @@ function buildFacets(raw: RawItem): Facet[] {
     facets.push({
       layer: "asr",
       key: `asr:${r.runId}`,
-      source: { by: "machine", tool: MOCK_TOOLS.asr, ...r, lang: "zh" },
+      source: { by: "machine", tool: MOCK_TOOLS.asr, plugin: MOCK_BY.asr, ...r, lang: "zh" },
       segments: timed(raw.asr ?? []),
       ...(raw.silent ? { remark: "没听到人说话" } : {}),
     });
@@ -145,7 +147,7 @@ function buildFacets(raw: RawItem): Facet[] {
     facets.push({
       layer: "ocr",
       key: `ocr:${r.runId}`,
-      source: { by: "machine", tool: MOCK_TOOLS.ocr, ...r },
+      source: { by: "machine", tool: MOCK_TOOLS.ocr, plugin: MOCK_BY.ocr, ...r },
       segments: onImages.map(([imageKey, text]) => {
         const row = rowOf.get(imageKey) ?? 0;
         rowOf.set(imageKey, row + 1);
@@ -159,7 +161,7 @@ function buildFacets(raw: RawItem): Facet[] {
     facets.push({
       layer: "frames",
       key: `frames:${r.runId}`,
-      source: { by: "machine", tool: MOCK_TOOLS.frames, ...r },
+      source: { by: "machine", tool: MOCK_TOOLS.frames, plugin: MOCK_BY.frames, ...r },
       segments: onScreen.map(([sec, text], i) => {
         const end = Math.min(dur, sec + 4 + Math.round(r01(`${raw.id}${i}e`) * 8));
         const frameUrl = pic(frameAt(sec));

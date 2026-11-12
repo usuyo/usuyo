@@ -122,7 +122,7 @@ export function createMockTransforms(items: MockItems, empty: boolean): Transfor
       const base = item.facets.find((f) => f.layer === layer);
       if (base && "source" in base) {
         const runId = `0193f2b2-0000-7000-8000-${String(++seq).padStart(12, "0")}`;
-        const copy = { ...base, key: `${layer}:${runId}`, source: { by: "machine" as const, tool: TOOL[plugin.id] ?? plugin.name, runId, at: new Date().toISOString(), ...(layer === "asr" ? { lang: "zh" } : {}) } };
+        const copy = { ...base, key: `${layer}:${runId}`, source: { by: "machine" as const, tool: TOOL[plugin.id] ?? plugin.name, plugin: plugin.id, runId, at: new Date().toISOString(), ...(layer === "asr" ? { lang: "zh" } : {}) } };
         added = [{ ...copy, segments: layer === "asr" ? reheard(base.segments) : base.segments }];
       }
     }

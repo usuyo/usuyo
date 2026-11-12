@@ -467,16 +467,17 @@ export function useNotStored(id: string, taken: number, limit: number) {
 
 type ImportChange = { kind: "confirm"; body: ConfirmImportRequest } | { kind: "hold" } | { kind: "resume" } | { kind: "delete" };
 
-/** 能读别的工具导出的文件的导入插件。 */
+/** 能读别的工具导出的文件的方法。 */
 export function useFileReaders() {
   return useQuery({ queryKey: queryKeys.fileReaders, queryFn: () => call((s) => s.fileReaders()), retry: retryUnlessMissing });
 }
 
-/** 交一个文件给导入插件读：回来的导入和别的导入一样，看预览、确认。 */
+/** 交一个文件给一种读文件的方法读：回来的导入和别的导入一样，看预览、确认。`onSent` 报交了多少字节，`signal` 停下。 */
 export function useImportFile() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ reader, file }: { reader: string; file: File }) => call((s) => s.importFile(reader, file)),
+    mutationFn: ({ reader, file, onSent, signal }: { reader: string; file: File; onSent: (bytes: number) => void; signal: AbortSignal }) =>
+      call((s) => s.importFile(reader, file, onSent, signal)),
     onSuccess: (view) => {
       queryClient.setQueryData(queryKeys.import(view.id), view);
       void queryClient.invalidateQueries({ queryKey: queryKeys.imports });

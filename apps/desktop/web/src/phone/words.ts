@@ -1,5 +1,5 @@
 // 「手机」页上的话，和从插件里挑出用到手机的取法。
-import type { Access, AndroidDevice, FetchPlugin, GrantState, MethodBlocker, PhoneClipboardTest, PhoneView, PluginPause } from "../api/endpoints";
+import type { Access, AndroidDevice, FetchPlugin, GrantState, MethodBlocker, PhoneClipboardTest, PhoneView } from "../api/endpoints";
 import { timeText } from "../plugins/words";
 
 export const GRANT_TEXT: Record<GrantState, string> = {
@@ -52,43 +52,44 @@ export interface PhoneMethod {
   methodId: string;
   name: string;
   access: Access;
-  /** 契约里没写是哪种手机：照取法的 id 猜（phone.md §4 叫它们 `iphone`、`android`），不是 `android` 的都算 iPhone 镜像。 */
+  /** 要哪种手机：清单的 `drives`。 */
   phone: "iphone" | "android";
   built: boolean;
   /** 内核说的：插件这边用得上（做好了、开着、插件自查没挡它）。手机连没连上不在里面，看 `PhoneView`。 */
   usable: boolean;
+  /** 用不上的原因；停着（`paused`）也在里面，写到什么时候。 */
   blockers: MethodBlocker[];
-  /** 这种取法的暂停，含「先别试」。 */
-  pauses: PluginPause[];
   risk?: string;
 }
 
-/** 从插件里挑出账号在手机上的取法。插件和取法的形状可能会变，用到它们的只有这一个函数。 */
+/** 从插件里挑出驱动手机的取法（`drives` 是 `iphone` 或 `android`）；驱动电脑上客户端的留在「获取插件」页。 */
 export function phoneMethods(plugins: FetchPlugin[]): PhoneMethod[] {
   return plugins.flatMap((p) =>
-    p.methods
-      .filter((m) => m.account.kind === "own-phone")
-      .map((m) => ({
-        pluginId: p.id,
-        platformId: p.platforms[0]?.id ?? p.id,
-        platform: p.platforms[0]?.name ?? p.name,
-        methodId: m.id,
-        name: m.name,
-        access: m.access,
-        phone: m.id === "android" ? ("android" as const) : ("iphone" as const),
-        built: m.built,
-        usable: m.usable,
-        blockers: m.blockers,
-        pauses: m.pauses,
-        ...(m.riskNote ? { risk: m.riskNote.text } : {}),
-      })),
+    p.methods.flatMap((m) =>
+      m.drives === "iphone" || m.drives === "android"
+        ? [
+            {
+              pluginId: p.id,
+              platformId: p.platforms[0]?.id ?? p.id,
+              platform: p.platforms[0]?.name ?? p.name,
+              methodId: m.id,
+              name: m.name,
+              access: m.access,
+              phone: m.drives,
+              built: m.built,
+              usable: m.usable,
+              blockers: m.blockers,
+              ...(m.riskNote ? { risk: m.riskNote.text } : {}),
+            },
+          ]
+        : [],
+    ),
   );
 }
 
 /** 这一种现在能不能用，不能的话差什么。`phone` 是 null 时内核还不给手机那一页。 */
 export function methodState(m: PhoneMethod, phone: PhoneView | null): string {
   if (!m.built) return "插件写了，还没做好";
-  if (m.pauses.length > 0) return "停着，见插件卡片";
   if (!m.usable) return m.blockers.map((b) => b.hint).join("；");
   if (phone === null) return "插件这边用得上";
   if (m.phone === "android") {

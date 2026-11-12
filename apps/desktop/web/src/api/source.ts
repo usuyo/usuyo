@@ -1,4 +1,4 @@
-import { DaemonUnreachableError, request } from "./client";
+import { DaemonUnreachableError, request, upload } from "./client";
 import {
   paths,
   type ConfirmImportRequest,
@@ -101,10 +101,10 @@ export interface Platforms {
   createDeliverToken(body: CreateDeliverTokenRequest): Promise<NewDeliverToken>;
   revokeDeliverToken(id: string): Promise<void>;
   inbox(): Promise<{ path: string }>;
-  /** 能读别的工具导出的文件的导入插件。 */
+  /** 能读别的工具导出的文件的方法。 */
   fileReaders(): Promise<FileReader[]>;
-  /** 交一个文件给某个导入插件读，回这一次导入。 */
-  importFile(readerId: string, file: File): Promise<ImportView>;
+  /** 交一个文件给一种读文件的方法读，边交边报交了多少字节；回这一次导入。 */
+  importFile(readerId: string, file: File, onSent: (bytes: number) => void, signal: AbortSignal): Promise<ImportView>;
 }
 
 /** 转换插件和模型（feature 003 §8.1）。 */
@@ -239,8 +239,7 @@ const daemon: Source = {
   revokeDeliverToken: (id) => request<void>(paths.deliverToken(id), { method: "DELETE" }),
   inbox: () => request<{ path: string }>(paths.inbox),
   fileReaders: () => request<FileReader[]>(paths.fileReaders),
-  importFile: (reader, file) =>
-    request<ImportView>(paths.fileImports, { method: "POST", file, query: { reader, name: file.name }, timeoutMs: FILE_TIMEOUT_MS }),
+  importFile: (reader, file, onSent, signal) => upload<ImportView>(paths.fileImports, file, { reader, name: file.name }, onSent, signal),
 
   settings: () => request<SettingsView>(paths.settings),
   changeSettings: (patch) => request<SettingsView>(paths.settings, { method: "PATCH", body: patch }),
