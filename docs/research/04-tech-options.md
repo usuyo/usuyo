@@ -5,7 +5,7 @@
 
 > 里程碑口径已废弃：项目改为按完整功能一次性开发。文中的 M0–M3 只指写作时 SPEC 的分段，请按功能面阅读。
 
-关联：[PRD](../PRD.md) · [SPEC §7 去重](../SPEC.md#04-id) · [SPEC §11 索引](../BUILD.md#3-现在做到哪) · [ADR-001](../decisions/ADR-004-rust-tauri.md) · [feature 001](../BUILD.md#3-现在做到哪)
+关联：[PRD](../PRD.md) · [SPEC §7 去重](../spec/conventions.md#04-id) · [SPEC §11 索引](../BUILD.md#3-现在做到哪) · [ADR-001](../decisions/ADR-004-rust-tauri.md) · [feature 001](../BUILD.md#3-现在做到哪)
 
 <a id="约定"></a>
 ## 约定
@@ -114,7 +114,7 @@
 
 推荐：
 
-1. 契约先定、引擎可换：OCR sidecar 协议为 `<bin> ocr <image> --json`，stdout 输出 [SPEC §5](../SPEC.md#5-derived-文件约定) 的 `[{text, bbox, confidence}]` 加 `{by, version}`；内核只认协议。
+1. 契约先定、引擎可换：OCR sidecar 协议为 `<bin> ocr <image> --json`，stdout 输出 [SPEC §5](../spec/library.md#5-derived-文件约定) 的 `[{text, bbox, confidence}]` 加 `{by, version}`；内核只认协议。
 2. 默认跨平台引擎：PP-OCRv6 small 或 medium 的 ONNX 模型 + ONNX Runtime。实现形式二选一，M1 定：(a) 把 RapidOCR 的 C++ 实现编成单一可执行文件（Windows / macOS / Linux 各一份）；(b) 用 Go 或 Rust 写一个 onnxruntime 薄壳。两者都不带 Python。ONNX Runtime 动态库 + 模型的体积（估 50–100MB）待实测。
 3. 系统快路径：macOS 用自写 Swift CLI 调 Vision（约 100 行），Windows 用 `OcrEngine`；零体积、速度快，但坐标粒度为行，内核把它们标为 `by: "vision"` / `by: "winocr"`，并允许用户在设置里切到 PP-OCR 重算（SPEC 的 derived 可重算正好覆盖）。
 4. 不选 Tesseract；VLM 只做人工触发的兜底。
@@ -129,7 +129,7 @@
 <a id="3-asr-sidecar"></a>
 ## 3. ASR sidecar
 
-需求回顾：中文口播（抖音、B站、视频号）为主；输出 WebVTT 分段带时间戳（[SPEC §5](../SPEC.md#5-derived-文件约定) `asr.vtt`）；独立进程；体积与许可证可接受；只在空闲且接电时跑。
+需求回顾：中文口播（抖音、B站、视频号）为主；输出 WebVTT 分段带时间戳（[SPEC §5](../spec/library.md#5-derived-文件约定) `asr.vtt`）；独立进程；体积与许可证可接受；只在空闲且接电时跑。
 
 <a id="31-候选对比asr"></a>
 ### 3.1 候选对比（ASR）
@@ -225,7 +225,7 @@ sidecar 接口：
 <a id="5-去重"></a>
 ## 5. 去重
 
-需求回顾（[SPEC §7](../SPEC.md#04-id)）：内容层指纹 = 文本 SimHash（海明距离 ≤ 3）、图片 pHash、视频「时长 + 关键帧 pHash」；命中写 `sameAs`，不自动合并。
+需求回顾（[SPEC §7](../spec/conventions.md#04-id)）：内容层指纹 = 文本 SimHash（海明距离 ≤ 3）、图片 pHash、视频「时长 + 关键帧 pHash」；命中写 `sameAs`，不自动合并。
 
 <a id="51-候选对比去重"></a>
 ### 5.1 候选对比（去重）
@@ -245,7 +245,7 @@ sidecar 接口：
 
 阈值经验值：
 
-- SimHash 64 位：Manku、Jain、Sarma（WWW 2007）在 80 亿网页上验证 k = 3 合理，[SPEC §7](../SPEC.md#04-id) 的 ≤ 3 与之一致。来源：[论文 PDF](https://www.www2007.cpsc.ucalgary.ca/papers/paper215.pdf)。
+- SimHash 64 位：Manku、Jain、Sarma（WWW 2007）在 80 亿网页上验证 k = 3 合理，[SPEC §7](../spec/conventions.md#04-id) 的 ≤ 3 与之一致。来源：[论文 PDF](https://www.www2007.cpsc.ucalgary.ca/papers/paper215.pdf)。
 - pHash 64 位：教程类来源给 ≤ 10「通常同图」、≤ 5「保守」、无关图约 32；没有找到严格的公开基准，必须用自己的样本调。来源：[pHash in Python 指南](https://mojoauth.com/security-guides/phash-in-python)（查阅 2026-10-21）。
 - vPDQ 256 位用 D = 31（约 12%）作为帧匹配阈，换算到 64 位约为 ≤ 8，与上面的 5–10 区间吻合。
 
@@ -257,7 +257,7 @@ sidecar 接口：
 1. 文本 SimHash 自写，特征用 `cjk` bigram（与索引同一分析器，保证同一文本在索引与指纹两侧切法一致），k = 3；库规模万级以内直接线性比较，超过再加 4 表分段索引（Manku 方案）或 semblance。
 2. 图片 pHash 用 `corona10/goimagehash` 的 `PerceptionHash`（64 位）；阈值初始 ≤ 8，候选命中进入 `sameAs` 由用户裁决；对 `ExtPerceptionHash`（256 位）在小红书多图帖上做一次对比实验再决定是否升级。
 3. 视频：时长差 ≤ 2s 为预筛，再对关键帧集合做 vPDQ 式比例匹配（≥ 80% 的帧有距离 ≤ 8 的对应帧）；不引外部实现。
-4. 指纹写入 `manifest.fingerprints`，格式 `simhash:<hex16>`、`phash:<hex16>`、`dur:<s>|phash:<hex16>,...`，与 [SPEC §3](../SPEC.md#3-manifestjson) 已有字段兼容。
+4. 指纹写入 `manifest.fingerprints`，格式 `simhash:<hex16>`、`phash:<hex16>`、`dur:<s>|phash:<hex16>,...`，与 [SPEC §3](../spec/library.md#3-manifestjson) 已有字段兼容。
 
 风险：
 
@@ -268,7 +268,7 @@ sidecar 接口：
 <a id="6-画布与桌面壳"></a>
 ## 6. 画布与桌面壳
 
-需求回顾（[PRD §5](../PRD.md#5-功能范围)、[SPEC §2](../SPEC.md#2-资料库目录真相源)）：节点（素材 / 线索 / 念头）、连线、可重叠分组（一条素材可属于多个分组，没有唯一中心）、语义缩放、位置稳定；`canvas.json` 只存位置与视图状态；MyGo 壳、系统 webview、TS + Vite；产品默认 i18n。
+需求回顾（[PRD §5](../PRD.md#5-功能范围)、[SPEC §2](../spec/library.md#2-资料库目录真相源)）：节点（素材 / 线索 / 念头）、连线、可重叠分组（一条素材可属于多个分组，没有唯一中心）、语义缩放、位置稳定；`canvas.json` 只存位置与视图状态；MyGo 壳、系统 webview、TS + Vite；产品默认 i18n。
 
 <a id="61-画布库对比"></a>
 ### 6.1 画布库对比
@@ -364,13 +364,13 @@ MyGo 的事实核对（ADR 写「仍在 0.5.x」）：
 <a id="7-对歇存技术决策的启示"></a>
 ## 7. 对歇存技术决策的启示
 
-与 [ADR-001](../decisions/ADR-004-rust-tauri.md)、[SPEC §11](../BUILD.md#3-现在做到哪)、[SPEC §7](../SPEC.md#04-id) 的逐条对照。
+与 [ADR-001](../decisions/ADR-004-rust-tauri.md)、[SPEC §11](../BUILD.md#3-现在做到哪)、[SPEC §7](../spec/conventions.md#04-id) 的逐条对照。
 
 一致之处：
 
 - 「重计算作为独立 sidecar、不 import 进内核」被所有候选验证为必要：sherpa-onnx Go 绑定、tantivy-go、bleve vector、usearch 全部依赖 cgo 或原生共享库，只有以进程为边界才能守住「纯 Go、无 cgo」。
 - bleve 作为 M0 全文索引仍成立；`cjk` 分析器的 bigram 行为与 [SPEC §11](../BUILD.md#3-现在做到哪)「CJK 双字分析器」吻合，拼音字段另建的做法与 feature 001 一致。
-- [SPEC §7](../SPEC.md#04-id) 的 SimHash 海明距离 ≤ 3 有 Manku 2007 的实证支撑；pHash 阈值 SPEC 未写数字，建议初值 ≤ 8 并校准。
+- [SPEC §7](../spec/conventions.md#04-id) 的 SimHash 海明距离 ≤ 3 有 Manku 2007 的实证支撑；pHash 阈值 SPEC 未写数字，建议初值 ≤ 8 并校准。
 - 「本地还是云端由用户选、标明数据是否离开本机」在 ASR / VLM 两处都对应到「OpenAI 兼容端点 + 模型名」这一种配置形态，内核不需要为每个引擎写适配。
 
 冲突或需修订之处：
@@ -380,7 +380,7 @@ MyGo 的事实核对（ADR 写「仍在 0.5.x」）：
 3. [SPEC §11](../BUILD.md#3-现在做到哪) 的 bleve `cjk` 分析器要显式 `output_unigram: true`，否则单字查询与奇数长度词末字不可搜；这不改变决策，但要写进 feature 001 的实现要点与 `internal/index` 测试用例。feature 001 的「不理想则换 gse」回退要注意 `gse-bleve` 已归档，需自写 Tokenizer 包装。
 4. 一个未在 SPEC 中出现的分叉：modernc SQLite 同时具备 FTS5（内建）、`unicode_bigram` tokenizer（第三方 pre-v1）与 sqlite-vec（内建），全文 + 向量可以落在 `.xiecun/` 下一个 SQLite 文件里，比 bleve 目录 + SQLite 两套存储简单。不建议改 M0，但建议在 M1 向量落地时对两套方案做一次体积与查询延迟实测后再定，并记一条 ADR。
 5. PRD「可重叠分组」排除了最常见的三个画布库（tldraw、Excalidraw、React Flow）的内建分组模型，M3 的工作量应按「自建画布模型 + Konva 渲染」估算，而不是「接一个画布库」；同时 tldraw 的专有许可与遥测使它对 AGPL 项目不可用。CLAUDE.md「画布库待定」可以在此基础上收敛。
-6. OCR 与 ASR 的「留接口」应按 2026 年的现状设计：OCR 目标模型已从 PP-OCRv5 变为 PP-OCRv6（三档 1.5M / 7.7M / 34.5M 参数，RapidOCR 已有 ONNX）；ASR 中文默认应为 SenseVoice / Paraformer 经 sherpa-onnx 或 FunASR llama.cpp runtime，而不是 whisper.cpp；两者的输出契约（bbox 行级 vs 词级、时间戳段级 vs 词级）要在 [SPEC §5](../SPEC.md#5-derived-文件约定) 注明可选粒度。
+6. OCR 与 ASR 的「留接口」应按 2026 年的现状设计：OCR 目标模型已从 PP-OCRv5 变为 PP-OCRv6（三档 1.5M / 7.7M / 34.5M 参数，RapidOCR 已有 ONNX）；ASR 中文默认应为 SenseVoice / Paraformer 经 sherpa-onnx 或 FunASR llama.cpp runtime，而不是 whisper.cpp；两者的输出契约（bbox 行级 vs 词级、时间戳段级 vs 词级）要在 [SPEC §5](../spec/library.md#5-derived-文件约定) 注明可选粒度。
 7. 许可证清单需要进入文档：权重层面 FunASR 模型许可（非 MIT）、MiniCPM-V 单独模型许可待核实、chromem-go 为 MPL-2.0；内核 AGPL-3.0 下引入 MPL 文件级 copyleft 库通常可行但要确认。
 
 待核实清单（落地前必须验证）：

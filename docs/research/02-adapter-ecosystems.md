@@ -16,7 +16,7 @@
 
 | 编号 | 缺口 | 现状 |
 |---|---|---|
-| G1 | `adapter.yaml` 没有 `version`，但 [SPEC §3](../SPEC.md#3-manifestjson) 的 `snapshots[].adapterVersion` 要填一个值 | 未定义 |
+| G1 | `adapter.yaml` 没有 `version`，但 [SPEC §3](../spec/library.md#3-manifestjson) 的 `snapshots[].adapterVersion` 要填一个值 | 未定义 |
 | G2 | 没有 `name` / `description` / `maintainers` / `homepage` / 语言 / 内容分级 / 优先级 | 未定义 |
 | G3 | `match` 的语义：是否含 scheme、host 与 path 怎么比、多个适配器同时命中的次序、与 `builtin/web-generic` 的 `*` 如何共存 | 只说"URL glob patterns" |
 | G4 | `method: cli` 时 `<bin>` 怎么找到；`local-service` / `mcp` / `http-api` / `browser` 四种 method 没有调用约定 | 未定义 |

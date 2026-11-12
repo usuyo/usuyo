@@ -14,13 +14,13 @@
 
 - **读者**：插件作者（包装现成工具或自己写）、实现插件运行器的人、在 [§13](open.md#13-待定) 拍板产品问题的人。
 - **状态**：草案。视觉层的两种做法（电脑端读无障碍树、安卓经 ADB，[§9.5](wrapping.md#95-视觉层流程)）和获取插件经宿主代发用模型（[§4.3](transform-export.md#43-模型与密钥由宿主代发)）照[调研 10](../research/10-desktop-and-android-agents.md)。字段名、子命令、方法名、错误码按这里写；实现插件运行器时如有改动，在本文修订并同步 plugin-kit 的 schema（[§10](plugin-kit.md#10-契约测试与-plugin-kit)）。
-- **版本**：清单里的 `protocol` 是整数，本文是 `1`。宿主只加载 `protocol` 在支持集合里的插件，拒载原因显示在插件列表里（做法同 Mihon 的 `extensionLib`，见 [02 §15.1](../research/02-adapter-ecosystems.md#151-声明与匹配)）。同一个 `protocol` 内只加可选字段；插件不得输出它声明的版本里没有的字段，宿主遇到未知字段时忽略并记日志，`usuyo plugin check` 把未知字段当失败。主版本怎么升、旧主版本再加载多久，照 [SPEC §0.2](../SPEC.md#02-版本与兼容)。
+- **版本**：清单里的 `protocol` 是整数，本文是 `1`。宿主只加载 `protocol` 在支持集合里的插件，拒载原因显示在插件列表里（做法同 Mihon 的 `extensionLib`，见 [02 §15.1](../research/02-adapter-ecosystems.md#151-声明与匹配)）。同一个 `protocol` 内只加可选字段；插件不得输出它声明的版本里没有的字段，宿主遇到未知字段时忽略并记日志，`usuyo plugin check` 把未知字段当失败。主版本怎么升、旧主版本再加载多久，照 [SPEC §0.2](../spec/conventions.md#02-版本与兼容)。
 
 <a id="02-和其他文档的关系"></a>
 ### 0.2 和其他文档的关系
 
 - [ADR-003](../decisions/ADR-003-plugins.md) 定了插件的种类、进程模型、权限与隔离、仓库拆分、分发与校验、导出与读回；本文是它的展开。
-- 资料库目录、`manifest.json`、`derived/` 文件以 [SPEC 第 1 层](../SPEC.md#1-资料库-v1第-1-层)为准（[§1.1](../SPEC.md#11-目录树)、[§1.2.1](../SPEC.md#121-manifestjson-v1)、[§1.2.2](../SPEC.md#122-raw-和-derived)），身份和 id 以 [SPEC §0.4](../SPEC.md#04-id) 为准。
+- 资料库目录、`manifest.json`、`derived/` 文件以 [SPEC 第 1 层](../spec/library.md#1-资料库-v1第-1-层)为准（[§1.1](../spec/library.md#11-目录树)、[§1.2.1](../spec/library.md#121-manifestjson-v1)、[§1.2.2](../spec/library.md#122-raw-和-derived)），身份和 id 以 [SPEC §0.4](../spec/conventions.md#04-id) 为准。
 - 内核是 Rust（[ADR-004](../decisions/ADR-004-rust-tauri.md)）。本文的类型在 `crates/usuyo-plugin`（清单、信封、宿主），JSON Schema 在 `crates/usuyo-plugin/schema/`；插件作者用 MIT 的 `crates/usuyo-plugin-kit`，它转出这些类型，另带 HTTP 客户端（[§10.1](plugin-kit.md#101-plugin-kit-的-http-客户端11-11)）；资料库的类型在 `crates/usuyo-contract`。
 - 依据：适配器生态 [调研 02](../research/02-adapter-ecosystems.md)、Agent 协议 [调研 03](../research/03-agent-protocols.md)、笔记软件与插件 [调研 05](../research/05-note-apps-and-plugins.md)、平台获取与账号 [调研 06](../research/06-platform-access-and-account-risk.md)。
 - 需要用户拍板的产品问题汇总在 [回答表](../answers.md)，本文相关的见 [§13](open.md#13-待定)。
@@ -30,7 +30,7 @@
 
 产品名 usuyo，命令 `usuyo`（[回答表](../answers.md)）。本文的标识符：清单 `usuyo-plugin.yaml`、环境变量前缀 `USUYO_`、资料库隐藏目录 `.usuyo/`、GitHub topic `usuyo-plugin`、导出文件里的 `usuyo_id`、URL scheme `usuyo://`。调研和回答表里的 `seelu`（思鹭）、`xiecun`（歇存）是旧暂名，作为记录不改。
 
-本文说的「本机配置目录」「按机器目录」都是 [SPEC §0.1](../SPEC.md#01-命名) 的按机器的目录。
+本文说的「本机配置目录」「按机器目录」都是 [SPEC §0.1](../spec/conventions.md#01-命名) 的按机器的目录。
 
 GitHub 组织（用户自己注册）：官方组织 `usuyo`，获取方式组织 `usuyo-fetch`，client-hook 插件放 `usuyo-fetch-hook`。权利人联系地址写 `{contact}`，两个组织用不用同一个地址见 [§13](open.md#13-待定) 第 1 项。
 

@@ -4,7 +4,7 @@
 
 - 总纲（做到哪、要做的事）：[docs/BUILD.md](docs/BUILD.md)
 - 产品定义：[docs/PRD.md](docs/PRD.md)
-- 技术规格：[docs/SPEC.md](docs/SPEC.md)
+- 技术规格：[docs/SPEC.md](docs/spec/README.md)
 - 插件协议：[docs/plugin-protocol.md](docs/protocol/README.md)
 - 各平台的获取方案：[docs/platforms/](docs/platforms/)
 - 用户逐条的回答：[docs/answers.md](docs/answers.md)

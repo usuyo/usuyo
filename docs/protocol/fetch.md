@@ -6,7 +6,7 @@
 
 宿主怎么用获取插件，插件作者要知道的部分：
 
-- **身份**：收下一个链接时，宿主在 `match` 命中的插件上按用户排的顺序调 `canonicalize`，取第一个 `match: true` 的结果作为身份（[SPEC §0.4](../SPEC.md#04-id)）。`identity.contentId` 要符合平台列表里的格式（[§2.3](manifest.md#23-获取插件的字段)），不符合的按 `invalid-output` 处理（平台列表还没有，宿主现在只查非空、不超过 256 字节、没有控制字符）。
+- **身份**：收下一个链接时，宿主在 `match` 命中的插件上按用户排的顺序调 `canonicalize`，取第一个 `match: true` 的结果作为身份（[SPEC §0.4](../spec/conventions.md#04-id)）。`identity.contentId` 要符合平台列表里的格式（[§2.3](manifest.md#23-获取插件的字段)），不符合的按 `invalid-output` 处理（平台列表还没有，宿主现在只查非空、不超过 256 字节、没有控制字符）。
 - **顺序**：每个平台按用户排的顺序依次调 `fetch`，失败换下一个，全部失败停在 `link` 并记下各自的原因。默认顺序见本节末尾。不论 `access` 高低都照这个顺序换。平台插件和 `platforms` 含 `web` 的插件都命中时，先把平台插件全部试完，再轮到 `web` 插件。
 - **暂停单个插件**：插件返回 `rate-limited` 时，宿主在 `retryAfter` 之内（没给就 15 分钟）不再在这个平台上调它；返回 `blocked` 时，暂停一小时，用户在插件那一行点「现在再试」可以更早去掉，这一条不因这次暂停重试。`retryAfter` 最多算一小时（更长的按一小时）；`platforms` 含 `web` 的插件按链接的主机暂停，别的按平台；`jobs.db` 打开时丢掉比现在晚一小时以上的旧暂停。别的插件照常按顺序试，包括用同一个账号的插件：平台的限流常按接口分开计，换一个插件、换一个接口可能还取得到（推断）。
 - **完整度只升不降**：宿主给每个快照记下实际拿到的输出集合（`outputs` 词表里的值）。新快照算不算升级、用户改了「只留文字」之类的设置后要不要再取，比的是这个集合，不比 `full`、`partial` 这两个字样。失败不降级。
@@ -30,8 +30,8 @@
 | 插件回 `ok: true`、`completeness: link` | 按 `unsupported-input` 处理，换下一个 |
 | 插件自报的 `completeness` 和实际输出对不上 | 宿主按 `text`、`html`、`images`、`media[].kind` 实际出现了哪些，对照 `--want` 重算，以宿主算的为准，并记日志 |
 | 退出码 `2` 且没有信封 | 记 `invalid-args`，当 bug 记下，换下一个 |
-| 没有插件的 `match` 命中，或 `canonicalize` 全部回 `match: false` | 交给 `platforms` 含 `web` 的插件（如果装了）；没装就由宿主照 [SPEC §0.4](../SPEC.md#04-id) 自己算出 `web:` 身份建条目，停在 `link` |
-| `match` 命中的插件都没回 `match: true`，且有一个 `canonicalize` 因 `network` 或 `timeout` 失败（例如离线时收下的短链） | 不交给 `web` 插件。宿主拿这条链接本身算 `web:` 身份，马上建只有链接的条目（`completeness: link`，还没有快照；之后的快照照记 `inputUrl`），重试记进本机 `jobs.db`（[SPEC §1.1](../SPEC.md#11-目录树)）；之后再调 `canonicalize`，拿到平台身份就照 [SPEC §0.4](../SPEC.md#04-id) 并过去，`web-` id 留作别名；跟着收的不建，这一次不算跑完，联网后整次重跑 |
+| 没有插件的 `match` 命中，或 `canonicalize` 全部回 `match: false` | 交给 `platforms` 含 `web` 的插件（如果装了）；没装就由宿主照 [SPEC §0.4](../spec/conventions.md#04-id) 自己算出 `web:` 身份建条目，停在 `link` |
+| `match` 命中的插件都没回 `match: true`，且有一个 `canonicalize` 因 `network` 或 `timeout` 失败（例如离线时收下的短链） | 不交给 `web` 插件。宿主拿这条链接本身算 `web:` 身份，马上建只有链接的条目（`completeness: link`，还没有快照；之后的快照照记 `inputUrl`），重试记进本机 `jobs.db`（[SPEC §1.1](../spec/library.md#11-目录树)）；之后再调 `canonicalize`，拿到平台身份就照 [SPEC §0.4](../spec/conventions.md#04-id) 并过去，`web-` id 留作别名；跟着收的不建，这一次不算跑完，联网后整次重跑 |
 | 常驻进程崩溃 | 记 `crashed`，下一次调用时重启；连续崩溃 3 次就停用这个插件，直到用户在插件那一行点「继续」 |
 
 默认顺序：先试不用账号的，再试用账号的；同一类里按 `access` 从低到高，相同的按安装顺序；用户拖动排过的平台照用户排的。拿到一部分时默认接着试：顺序里后面能补上 `missing` 的插件，宿主带 `--want=<missing>` 接着调，直到拿全或试完，每个成功的快照都留。
@@ -150,7 +150,7 @@
 | `file:` | 导入文件的副本已经不在 | `file:twitter-2026-10-30.zip` |
 | `model:` | 转换插件要的模型（清单 `models[].name`）不在 `${MODELS}` 里 | `model:sense-voice-int8-2024-07-17` |
 
-还有前缀 `version:`，值是宿主要满足的版本，例 `version:usuyo>=1.3`（[SPEC §0.3](../SPEC.md#03-错误模型)）。
+还有前缀 `version:`，值是宿主要满足的版本，例 `version:usuyo>=1.3`（[SPEC §0.3](../spec/conventions.md#03-错误模型)）。
 
 插件返回的错误码：
 
@@ -208,10 +208,10 @@
 {"ok": true, "match": false}
 ```
 
-- 展开短链、去掉跟踪参数、取出平台内容 ID（[SPEC §0.4](../SPEC.md#04-id)）。不是自己的链接回 `match: false`，退出码 0，这不是错误。
+- 展开短链、去掉跟踪参数、取出平台内容 ID（[SPEC §0.4](../spec/conventions.md#04-id)）。不是自己的链接回 `match: false`，退出码 0，这不是错误。
 - 只为展开短链才发请求，只跟随重定向，不带凭据；这个请求不计入平台节奏，另受每平台每分钟的上限（[§3.1](#31-运行器与节奏)）。
-- `identity` 的形状和 `fetch` 输出里的一样。`identity.contentId` 照 plugin-kit 平台列表里的格式写（[§2.3](manifest.md#23-获取插件的字段)）。`identity.url` 写规范化后的链接，去掉跟踪参数和会话 token 一类参数，只用于去重和显示。`platform: web` 的身份不带 `contentId`，必带 `url`，宿主再照 [SPEC §0.4](../SPEC.md#04-id) 规范化一遍。
-- `resolvedUrl` 可选：展开短链后的完整链接，保留全部参数。宿主把用户给的原链接另存（快照里记 `inputUrl`，[SPEC §1.2.1](../SPEC.md#121-manifestjson-v1)），有 `resolvedUrl` 时一并记下，交给 `fetch` 的是这两者之一，不是 `identity.url`（[§3.6](#36-fetch-与输出目录)）。小红书的链接要带 `xsec_token` 才取得到（[06 §1.3](../research/06-platform-access-and-account-risk.md#13-混合路径视觉层拿链接公开页面取内容)），去掉参数就取不到了。
+- `identity` 的形状和 `fetch` 输出里的一样。`identity.contentId` 照 plugin-kit 平台列表里的格式写（[§2.3](manifest.md#23-获取插件的字段)）。`identity.url` 写规范化后的链接，去掉跟踪参数和会话 token 一类参数，只用于去重和显示。`platform: web` 的身份不带 `contentId`，必带 `url`，宿主再照 [SPEC §0.4](../spec/conventions.md#04-id) 规范化一遍。
+- `resolvedUrl` 可选：展开短链后的完整链接，保留全部参数。宿主把用户给的原链接另存（快照里记 `inputUrl`，[SPEC §1.2.1](../spec/library.md#121-manifestjson-v1)），有 `resolvedUrl` 时一并记下，交给 `fetch` 的是这两者之一，不是 `identity.url`（[§3.6](#36-fetch-与输出目录)）。小红书的链接要带 `xsec_token` 才取得到（[06 §1.3](../research/06-platform-access-and-account-risk.md#13-混合路径视觉层拿链接公开页面取内容)），去掉参数就取不到了。
 
 <a id="36-fetch-与输出目录"></a>
 ### 3.6 fetch 与输出目录
@@ -224,7 +224,7 @@
 - `--want` 是宿主想要的东西，取 `outputs` 的子集；不给时按 `outputs` 全取。例如用户开了「收下后直接只留文字」，宿主就不要 `media:video`，插件不必下载视频。
 - `--out` 是宿主新建的空目录，绝对路径。插件只在里面写文件，不依赖当前目录；输出 JSON 里的路径都相对它。
 - 成功后宿主把整个目录移成 `raw/<snapshotId>/`，没被 JSON 引用的文件（例如平台原始返回）也原样留下；失败就整个丢掉。
-- **输出目录的规则**（[§4.2](transform-export.md#42-转换的-run)、[§4.4](transform-export.md#44-导出的-run-与-readback)、[§5.1](delivery.md#51-本机-http-接口)、[§5.2](delivery.md#52-监听文件夹) 都照这条）：宿主在移动前遍历整个目录，不只看 JSON 引用的条目。只接受普通文件和目录；遇到符号链接、`nlink > 1` 的硬链接、FIFO、套接字、设备文件，或名字含 `..`、以 `/` 开头、含控制字符的条目，整次判 `invalid-output` 并丢弃。名字另照 [SPEC §0.6](../SPEC.md#06-文本和文件) 查：不能以 `usuyo.` 开头（不分大小写），不能有 `< > : " / \ | ? *`，不以 `.` 开头、不以空格或 `.` 结尾，要是 NFC，不能是 Windows 保留名（带扩展名也算），大小写折叠后不重名，每段不超过 200 字节，相对路径不超过 99 个 UTF-16 单位（条目文件夹以内的 140 减去 `raw/<snapshotId>/`）。整个目录最多 10,000 项（文件加目录）。JSON 里同一个文件只能引用一次，引用的文件要在。JSON 里的路径同样不能有 `..` 或绝对路径。整个目录有大小上限，`fetch` 默认 8 GiB，转换、导出和投递默认 1 GiB，用户可以在设置里改，超了也判 `invalid-output`。原因：插件在沙箱里读不了 `~/.ssh`，但能在 `out` 里建一个指向它的符号链接；目录移进资料库后，索引、导出和 MCP 会以宿主的身份读到目标内容。
+- **输出目录的规则**（[§4.2](transform-export.md#42-转换的-run)、[§4.4](transform-export.md#44-导出的-run-与-readback)、[§5.1](delivery.md#51-本机-http-接口)、[§5.2](delivery.md#52-监听文件夹) 都照这条）：宿主在移动前遍历整个目录，不只看 JSON 引用的条目。只接受普通文件和目录；遇到符号链接、`nlink > 1` 的硬链接、FIFO、套接字、设备文件，或名字含 `..`、以 `/` 开头、含控制字符的条目，整次判 `invalid-output` 并丢弃。名字另照 [SPEC §0.6](../spec/conventions.md#06-文本和文件) 查：不能以 `usuyo.` 开头（不分大小写），不能有 `< > : " / \ | ? *`，不以 `.` 开头、不以空格或 `.` 结尾，要是 NFC，不能是 Windows 保留名（带扩展名也算），大小写折叠后不重名，每段不超过 200 字节，相对路径不超过 99 个 UTF-16 单位（条目文件夹以内的 140 减去 `raw/<snapshotId>/`）。整个目录最多 10,000 项（文件加目录）。JSON 里同一个文件只能引用一次，引用的文件要在。JSON 里的路径同样不能有 `..` 或绝对路径。整个目录有大小上限，`fetch` 默认 8 GiB，转换、导出和投递默认 1 GiB，用户可以在设置里改，超了也判 `invalid-output`。原因：插件在沙箱里读不了 `~/.ssh`，但能在 `out` 里建一个指向它的符号链接；目录移进资料库后，索引、导出和 MCP 会以宿主的身份读到目标内容。
 - 建议的目录布局：
 
 ```
@@ -267,7 +267,7 @@
 | 字段 | 含义 |
 |---|---|
 | `ok` | 必填，成功为 `true` |
-| `identity` | 没有平台内容 ID 的条目（聊天记录、转发的图片一类）可以省略，或写 `{"platform": "file"}` 不带 `contentId`，省略等于 `{"platform": "file"}`；这样的条目不参与身份层，去重只走内容层（[SPEC §0.4](../SPEC.md#04-id)） |
+| `identity` | 没有平台内容 ID 的条目（聊天记录、转发的图片一类）可以省略，或写 `{"platform": "file"}` 不带 `contentId`，省略等于 `{"platform": "file"}`；这样的条目不参与身份层，去重只走内容层（[SPEC §0.4](../spec/conventions.md#04-id)） |
 | `textFormat` | 可选，`plain`（默认）或 `markdown` |
 | `media` | 对象数组：`path`、`kind`（`video`、`audio`、`subtitle`、`other`）必填，`mime`、`lang`、`durationSec`、`group` 可选。转换插件按 `kind` 编排，靠扩展名猜不可靠。`group`：同一个字符串表示同一段时间线拆开的几个文件（例如分开存的画面和音轨），1–64 个字母、数字或 `. _ : -`，不合的整次 `invalid-output`；没有 `group` 时宿主照 feature 003 [§4.1](../features/003-transforms.md#41-四个转换插件) 按内容配 |
 | `missing` 的取值 | 用 `outputs` 的词表，例如 `media:video` |
@@ -280,7 +280,7 @@
 | 其余字段 | `kind`、`title`、`author`、`publishedAt`、`text`、`html`、`images`、`platformTags`、`completeness`、`missing`、`evidence.fetchedAt`；时间一律 RFC 3339 带偏移，宿主把 `publishedAt` 换成 UTC 存，偏移不是 `Z` 的另存 `publishedAtOriginal` |
 
 - `completeness`：`full` 是 `--want` 里的都拿到了；`partial` 是缺了一部分，缺什么写进 `missing`；`link` 是只认出了身份。宿主会按实际输出重算，比较完整度时比的是实际拿到的输出集合（[§3.1](#31-运行器与节奏)）。
-- `text` 是平台原文的文字，宿主据此生成 `content.md`：只读副本，总照主快照重写；原样在 `raw/`（[SPEC §1.2.3](../SPEC.md#123-contentmd-和各栏)）。
+- `text` 是平台原文的文字，宿主据此生成 `content.md`：只读副本，总照主快照重写；原样在 `raw/`（[SPEC §1.2.3](../spec/library.md#123-contentmd-和各栏)）。
 - 数组字段总是出现，可以为空。
 
 <a id="38-list-与跟着收"></a>
@@ -316,10 +316,10 @@
 - 每页由宿主单独调用，页与页之间按节奏等待；不传 `--cursor` 是第一页，`nextCursor: null` 是最后一页。游标是插件私有的不透明字符串。
 - 条目字段：`url` 或 `ref` 至少一个；`identity`、`title`、`author`、`publishedAt`、`action`（`favorite`、`like`、`share`、`view`、`unknown`）、`actedAt` 能给就给，时间 RFC 3339 带偏移。拿不到加入时间时 `actedAt` 留空，不用抓取时间冒充（[02 §15.5](../research/02-adapter-ecosystems.md#155-批量导入与同步)）。
 - 只有 `url` 的条目，宿主按 [§3.1](#31-运行器与节奏) 的顺序去取内容；带 `ref` 的条目，宿主回到这个插件调 `fetch <ref>`。`ref` 由插件自己定，对宿主不透明；宿主为每个 `ref` 记下它来自哪个插件、哪个 `source`，调 `fetch <ref>` 时按这个 `source` 设好 `${INPUT}` 一类的上下文。
-- **跟着收（增量）**：每个订阅记下自己列过的身份，只存身份的哈希、不存标题，按机器记在 `jobs.db`，和翻页游标放在一起（推断，[SPEC §1.1](../SPEC.md#11-目录树)）。宿主只收这个订阅没列过的身份：回收站里的跳过，资料库里已有的不新建、只多一项 `origins`（[SPEC §1.7](../SPEC.md#17-删掉)）。所以它列过、你删掉的不会被它带回来，回收站到期移除以后也一样；它没列过的（比如你自己粘贴过、删掉、已经到期移除的），以后它第一次列出来就照新的收（这是代价）。`order: newest-first` 的来源，宿主从第一页往后翻，遇到一整页都是这个订阅列过的就停；`--since` 是这个来源上次跟着收成功跑完的时间，插件拿得到 `actedAt` 时可以据此提前结束、返回 `nextCursor: null`。`unordered` 的来源每次全量翻，频率由用户的订阅设置定。
+- **跟着收（增量）**：每个订阅记下自己列过的身份，只存身份的哈希、不存标题，按机器记在 `jobs.db`，和翻页游标放在一起（推断，[SPEC §1.1](../spec/library.md#11-目录树)）。宿主只收这个订阅没列过的身份：回收站里的跳过，资料库里已有的不新建、只多一项 `origins`（[SPEC §1.7](../spec/library.md#17-删掉)）。所以它列过、你删掉的不会被它带回来，回收站到期移除以后也一样；它没列过的（比如你自己粘贴过、删掉、已经到期移除的），以后它第一次列出来就照新的收（这是代价）。`order: newest-first` 的来源，宿主从第一页往后翻，遇到一整页都是这个订阅列过的就停；`--since` 是这个来源上次跟着收成功跑完的时间，插件拿得到 `actedAt` 时可以据此提前结束、返回 `nextCursor: null`。`unordered` 的来源每次全量翻，频率由用户的订阅设置定。
 - 一台机器第一次跑一个订阅，只记下列出来的身份，不收（[PRD 7.3](../PRD.md#73-导入和跟着收) 对个人来源这样建议，这里所有订阅都照它，推断）。这一次跑完才把列出来的记成列过；还没跑完过一次的，下一次仍照第一次跑（推断）。换了 `fetchDevice`，新的那台也是第一次：上一台最后一次跑完到新的那台第一次跑之间新出现的，会漏掉（推断）。
 - 批量导入的结果先进预览（新增、已有、可以升级完整度；回收站里的算已有，确认后拿回来，推断），用户确认后才按节奏去取内容（[PRD](../PRD.md) 的批量导入）；跟着收是用户订阅过的来源，新条目直接收下，不再逐次预览。
-- 跟着收收下的条目，`origins[]` 里那一项记 `entry: subscription`，另记 `subscription`（订阅 id）；批量导入（`/v1/batches` 和对列表来源的一次性导入）记 `import`，同一批共用一个 `importBatch`（[SPEC §1.2.1](../SPEC.md#121-manifestjson-v1)）。
+- 跟着收收下的条目，`origins[]` 里那一项记 `entry: subscription`，另记 `subscription`（订阅 id）；批量导入（`/v1/batches` 和对列表来源的一次性导入）记 `import`，同一批共用一个 `importBatch`（[SPEC §1.2.1](../spec/library.md#121-manifestjson-v1)）。
 
 `sources` 里的 `count` 是平台页面上显示的数字，拿不到就不填；导入结果里写一次「平台显示多少条，取到多少条」，并说明差额可能是已删除或看不到的，不变成常驻的差额。
 
@@ -358,7 +358,7 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip"
 ```
 
 - 用户拖进一个文件或点「导入」时，宿主按 `files` 找能读它的插件；都对不上时让用户手选，插件不认识就回 `unsupported-input`。
-- 调 `list` 之前，宿主把导入文件复制到按机器目录（[SPEC §1.1](../SPEC.md#11-目录树)）下的 `libraries/<libraryId>/imports/<importBatch>/`（能用 clonefile、reflink 或硬链接就不真的复制），`${INPUT}` 和 `USUYO_INPUT` 指向这份副本；来源写 `file:<原文件名>`。导入要先进预览，用户可能几天后才确认，原文件这期间被移走也不影响；副本在这批导入结束或取消后清掉。用户下载目录的绝对路径不进 `ref`，也不随快照写进资料库。
+- 调 `list` 之前，宿主把导入文件复制到按机器目录（[SPEC §1.1](../spec/library.md#11-目录树)）下的 `libraries/<libraryId>/imports/<importBatch>/`（能用 clonefile、reflink 或硬链接就不真的复制），`${INPUT}` 和 `USUYO_INPUT` 指向这份副本；来源写 `file:<原文件名>`。导入要先进预览，用户可能几天后才确认，原文件这期间被移走也不影响；副本在这批导入结束或取消后清掉。用户下载目录的绝对路径不进 `ref`，也不随快照写进资料库。
 - `ref` 由插件自己定，对宿主不透明，不含绝对路径。宿主记住每个 `ref` 来自哪个来源，`fetch <ref>` 时放行同一个 `${INPUT}`。副本已经不在时，宿主不调用插件，条目记 `dependency-missing`，`needs` 写 `file:<原文件名>`。
 - 导出包里有内容的（X 归档、flomo、BiliNote 的 `note_results`），条目带 `ref`，宿主再调 `fetch <ref>` 取出内容和文件；只有链接的（Takeout 的稍后观看、书签），条目只带 `url`，内容交给平台插件去取，取不到就停在 `link`。
 - 大文件可以在 `${CACHE}` 里留解压结果，或用常驻模式只打开一次。

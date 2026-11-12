@@ -32,7 +32,7 @@
 - **凭据。** cookie、令牌的值只在钥匙串和单次调用的 0600 临时文件里，不进日志、报错、前端、资料库；宿主自己造的报错只写字段名。不读 `~/.ssh`、`~/.aws`、`~/.npmrc` 这类目录和文件。
 - **删东西用 `trash`**，不用 `rm`。
 - **提交和推送。** 开发期直接在 `main` 上写，一个提交一件事，信息写 `<scope>: <summary>` 加 `-` 开头的几行；不加任何 AI 署名。推送攒成批，推之前确认 `gh api user --jq .login` 是仓库的主人。
-- **文档。** 改了行为就把 [SPEC](SPEC.md)、[插件协议](protocol/README.md) 写到和代码一样。文档里的交叉引用都要能点，标题前放显式的 `<a id>`；改完跑 `just docs <改过的文件>`（`tools/check_md.py` 查这几份的锚点和引用，`tools/resolve_links.py` 查全仓库的相对链接）。文档和代码对不上时，以 SPEC 为准；SPEC 有缺口就照[回答表](answers.md)里用户说过的方向补，并把补的地方写回 SPEC。
+- **文档。** 改了行为就把 [SPEC](spec/README.md)、[插件协议](protocol/README.md) 写到和代码一样。文档里的交叉引用都要能点，标题前放显式的 `<a id>`；改完跑 `just docs <改过的文件>`（`tools/check_md.py` 查这几份的锚点和引用，`tools/resolve_links.py` 查全仓库的相对链接）。文档和代码对不上时，以 SPEC 为准；SPEC 有缺口就照[回答表](answers.md)里用户说过的方向补，并把补的地方写回 SPEC。
 - **界面。** 照画布（仓库旁边的 `usuyo-canvas/`，README 里有页面清单和设计值）搬，但布局要能伸缩：画布是 1440 宽的定宽稿，窗口默认 1280×800、最小 720×480，定宽会叠在一起。图标用 lucide-react，不用表情符号。
 - **平台名不进应用。** `apps/` 和 `crates/` 里，测试和样例库以外不出现任何平台的名字、网址、cookie 名；要用到就让插件清单声明。
 
@@ -41,7 +41,7 @@
 
 | 哪一块 | 做到哪 | 在哪 |
 |---|---|---|
-| 资料库（文件是真相） | 条目文件夹、快照、回收站、主题文件；按文件重建索引 | `crates/usuyo-library`、`crates/usuyo-contract`、[SPEC 第 1 层](SPEC.md) |
+| 资料库（文件是真相） | 条目文件夹、快照、回收站、主题文件；按文件重建索引 | `crates/usuyo-library`、`crates/usuyo-contract`、[SPEC 第 1 层](spec/README.md) |
 | 搜索 | 标题、正文、记一句；中文、拼音、首字母 | `crates/usuyo-index` |
 | 插件宿主和 plugin-kit | 获取插件一次一进程；公网地址检查、逐跳核对跳转、大小上限；凭据经钥匙串交给单次调用；访客身份 | `crates/usuyo-plugin`、`crates/usuyo-plugin-kit`、[插件协议](protocol/README.md) |
 | 内核 | 收下、取内容的任务和退避、按平台的节奏和暂停、导入（列出、预览、挑、收）、交进来的清单、收件夹、回收站到期 | `crates/usuyo-core` |
@@ -83,19 +83,19 @@ flowchart LR
 | 接口 | 状态 | 缺什么 |
 |---|---|---|
 | [插件协议](protocol/README.md#01-读者与状态) | v1 草案；宿主和 plugin-kit 有了第一版（[§3.13](protocol/fetch.md#313-宿主和-plugin-kit-现在做到的11-11)、[§10.1](protocol/plugin-kit.md#101-plugin-kit-的-http-客户端11-11)） | [待定](protocol/open.md#13-待定)里还有没答的；沙箱、本机代理、`serve`、schema 文件 |
-| 资料库格式（[SPEC §1](SPEC.md#1-资料库-v1第-1-层)） | v1 草案，`crates/usuyo-contract`、`crates/usuyo-library` 照它实现 | 联网后并身份；同步（[008](#008-文字同步)） |
-| 改动提议、改动记录（[SPEC §1.5](SPEC.md#15-改动提议)、[§1.6](SPEC.md#16-改动记录)） | v1 草案，资料库层能写能撤 | 接受提议的流程、界面（[006](#006-agent)） |
-| 宿主 ↔ 界面（[SPEC 本机接口](SPEC.md#本机接口第-2-层11-11-照代码)） | 照代码写了；契约文件是 `apps/desktop/web/src/api/endpoints.ts` | 窗口用的路径还不带 `/v1/`、分页、OpenAPI 描述 |
+| 资料库格式（[SPEC §1](spec/library.md#1-资料库-v1第-1-层)） | v1 草案，`crates/usuyo-contract`、`crates/usuyo-library` 照它实现 | 联网后并身份；同步（[008](#008-文字同步)） |
+| 改动提议、改动记录（[SPEC §1.5](spec/library.md#15-改动提议)、[§1.6](spec/library.md#16-改动记录)） | v1 草案，资料库层能写能撤 | 接受提议的流程、界面（[006](#006-agent)） |
+| 宿主 ↔ 界面（[SPEC 本机接口](spec/local-api.md#本机接口第-2-层11-11-照代码)） | 照代码写了；契约文件是 `apps/desktop/web/src/api/endpoints.ts` | 窗口用的路径还不带 `/v1/`、分页、OpenAPI 描述 |
 | 内核推的事件 | server-sent events，八种事件（同上） | 补发、信封 |
 | [MCP 工具](BUILD.md#006-agent) | v0 草案，没实现 | 全部 |
 | [命令行](BUILD.md#1-用户定下的做法) | `init`、`add`、`get`、`search`、`reindex`、`daemon` | 不再加命令 |
 | [搜索语法](BUILD.md#3-现在做到哪) | tantivy 索引能搜；语法没写 | 查询串、筛选、分页 |
 | [投递接口](protocol/delivery.md#5-投递接口) | `/v1/ping`、`/v1/deliver`（只收链接）、`/v1/batches` 和按投递端发的令牌做了，和窗口用的路由同一个监听口 | 已取到的内容（multipart）、批次查询 |
 | [导出与读回](protocol/transform-export.md#44-导出的-run-与-readback) | 草案 | 笔记库里的文件形状（[007](#007-导出读回和别的工具的导出)） |
-| 配置、版本策略（[SPEC §0.2](SPEC.md#02-版本与兼容)、[§1.1](SPEC.md#11-目录树)） | v1 草案 | 设置的完整清单（[010](#010-设置第一次打开收下浮层)） |
+| 配置、版本策略（[SPEC §0.2](spec/conventions.md#02-版本与兼容)、[§1.1](spec/library.md#11-目录树)） | v1 草案 | 设置的完整清单（[010](#010-设置第一次打开收下浮层)） |
 | 订阅源 | 没有 | 你填的地址、订阅对象（[009](#009-跟着收)） |
 
-已经做完的两条线：001 收下一条（收下、存好、搜到、在窗口里看到），002 平台（登录、列出、导入、交进来的清单）；它们的做法已经写进 [SPEC](SPEC.md)、[插件协议](protocol/README.md) 和 [apps/desktop/README.md](../apps/desktop/README.md)。它们剩下的、不归哪条线的：
+已经做完的两条线：001 收下一条（收下、存好、搜到、在窗口里看到），002 平台（登录、列出、导入、交进来的清单）；它们的做法已经写进 [SPEC](spec/README.md)、[插件协议](protocol/README.md) 和 [apps/desktop/README.md](../apps/desktop/README.md)。它们剩下的、不归哪条线的：
 
 - 壳起的内核，在壳没了（被信号杀掉、崩溃）以后该自己退出；现在留着接着跑，下次启动的壳找到它接着用（[apps/desktop/README.md](../apps/desktop/README.md#打开以后)）。
 - Safari 的 Userscripts 没有网站访问权限时先发 CORS 预检，投递接口（`/v1/…`）现在不答，请求就失败；这几条路径要答预检，只放扩展的来源。
@@ -150,7 +150,7 @@ flowchart LR
 - 找相近的：全文加本机向量两路检索再合并；向量模型在本机跑，挂在转换接口后面，能换。图和关键帧也算向量，拼出素材那一类的线头。
 - **多个角度和支线**：一个角度是一份配方（让模型按某个问题去读一组段），每次跑留一份记录，引用由机器另行核对到原话；同一组段可以分出不同的支线并排放。模型由用户选，调用由宿主代发。
 - 机器产出的都能重算，放 `derived/` 和资料库的 `.usuyo/` 下，照 003 的「一次一个文件夹、写了不改」。
-- 跟着收的命中默认看标题层加内容层，画面层不算（[SPEC 要你看一眼的第 7 条](SPEC.md#110-要你看一眼)）。
+- 跟着收的命中默认看标题层加内容层，画面层不算（[SPEC 要你看一眼的第 7 条](spec/library.md#110-要你看一眼)）。
 
 要做成的样子：主页地图上主题和线头的摆法、主题页（成员、命中方式、关键词）、读一条时旁边列相近的段、搜索用两路检索、角度和支线在主题页上并排。
 
@@ -159,7 +159,7 @@ flowchart LR
 <a id="005-你写的那一层"></a>
 ### 005 你写的那一层
 
-文件的样子已经在 [SPEC 第 1 层](SPEC.md) 定了：记一句在条目的 `notes.md` 头部，划线在 `highlights.md`，主题页、卡片、成稿是按标题起名的 Markdown，只有 usuyo 写的一小套 YAML 头；在 usuyo 外面改过的文件照同步那套三方合并读进来；在访达里改名就是改标题。
+文件的样子已经在 [SPEC 第 1 层](spec/README.md) 定了：记一句在条目的 `notes.md` 头部，划线在 `highlights.md`，主题页、卡片、成稿是按标题起名的 Markdown，只有 usuyo 写的一小套 YAML 头；在 usuyo 外面改过的文件照同步那套三方合并读进来；在访达里改名就是改标题。
 
 已经定的：
 
@@ -187,8 +187,8 @@ flowchart LR
 
 还没做的：
 
-- 私密条目回 `skipped`：本机接口的 `POST /items` 现在一律记成窗口里收的（`via: app`），私密的照收；命令行也从不跳过。投递接口里扩展、手机、`api` 令牌的已经会跳过（[SPEC 本机接口](SPEC.md#本机接口第-2-层11-11-照代码)）。
-- 写 MCP 之前先写内核服务契约：一份描述（[OpenAPI 3.2](https://github.com/OAI/OpenAPI-Specification/releases)）派生本机 HTTP 和 MCP，生成客户端和文档；含搜索语法（自己的小语法：`字段:值`、引号、`-`、`after:`，不把索引实现绑进接口）、事件、端口。界面用的那一半已经照代码写进 [SPEC 本机接口](SPEC.md#本机接口第-2-层11-11-照代码)，契约文件是 `apps/desktop/web/src/api/endpoints.ts`。一起定：Agent 连接名从哪来、MCP 收下工具的 `pickedBy`、撤销工具（能撤哪些已定，[SPEC §1.10 第 18 条](SPEC.md#110-要你看一眼)）、错误和输出 schema 怎么配、游标有效期、各处的间隔、上限和文案。原先留在 SPEC 里的 v0 草案（仓库布局、标签、去重、命令行、MCP 工具、索引）在 `e654e08` 删掉了，`git show e654e08^:docs/SPEC.md` 里还看得到「留着的 v0」那一节，写契约时拿来对照。
+- 私密条目回 `skipped`：本机接口的 `POST /items` 现在一律记成窗口里收的（`via: app`），私密的照收；命令行也从不跳过。投递接口里扩展、手机、`api` 令牌的已经会跳过（[SPEC 本机接口](spec/local-api.md#本机接口第-2-层11-11-照代码)）。
+- 写 MCP 之前先写内核服务契约：一份描述（[OpenAPI 3.2](https://github.com/OAI/OpenAPI-Specification/releases)）派生本机 HTTP 和 MCP，生成客户端和文档；含搜索语法（自己的小语法：`字段:值`、引号、`-`、`after:`，不把索引实现绑进接口）、事件、端口。界面用的那一半已经照代码写进 [SPEC 本机接口](spec/local-api.md#本机接口第-2-层11-11-照代码)，契约文件是 `apps/desktop/web/src/api/endpoints.ts`。一起定：Agent 连接名从哪来、MCP 收下工具的 `pickedBy`、撤销工具（能撤哪些已定，[SPEC §1.10 第 18 条](spec/library.md#110-要你看一眼)）、错误和输出 schema 怎么配、游标有效期、各处的间隔、上限和文案。原先留在 SPEC 里的 v0 草案（仓库布局、标签、去重、命令行、MCP 工具、索引）在 `e654e08` 删掉了，`git show e654e08^:docs/SPEC.md` 里还看得到「留着的 v0」那一节，写契约时拿来对照。
 
 ACP 会话在窗口里只显示它交来的改动提议和权限请求，不显示对话本身。
 
@@ -239,7 +239,7 @@ ACP 会话在窗口里只显示它交来的改动提议和权限请求，不显�
 
 靠：各条线各自的那一栏跟着那条线做，这里做壳和「存储、诊断、外观」。
 
-还没做的：回收站的「照时间移除」（时钟守卫拦下以后用户点了才放行，[SPEC §1.7](SPEC.md#17-删掉)）内核里有这条路，还没有接口和界面；设置要先列全 `settings.json` 的清单。
+还没做的：回收站的「照时间移除」（时钟守卫拦下以后用户点了才放行，[SPEC §1.7](spec/library.md#17-删掉)）内核里有这条路，还没有接口和界面；设置要先列全 `settings.json` 的清单。
 
 关掉主窗口后 usuyo 留在菜单栏（Windows 是托盘），快捷键、扩展、跟着收、MCP 照常；菜单栏图标不显示任何数字。开机启动默认关，第一次打开跟着收或全局快捷键时问一句要不要开机启动。还没有获取插件能取的链接，条目上写「只有链接：还没有能取它的获取插件」，旁边一个「添加来源」，打开来源设置，不点名任何来源。
 
@@ -309,7 +309,7 @@ bundle id、MCP `_meta` 自定义键的前缀、schema 的 `$id` 都从用户给
 - 收藏里观点和审美素材各占多少？（两类线头都做）
 - 个人 Agent 主要替你做什么？（先给它搜索、收下、提议这几样）
 - 回收站的「时钟跳了就先不清」留不留？拦下以后要不要在某种情况下自己放行（时钟回到合理范围，或拦了几天以后提醒）？（先留着，只在用户点了以后放行）
-- 成稿引用了私密条目，导出到 Obsidian 和给 Agent 时各怎么办？用户说等有界面和具体例子再定（照 [SPEC 要你看一眼第 13 条](SPEC.md#110-要你看一眼)现在的写法）。
+- 成稿引用了私密条目，导出到 Obsidian 和给 Agent 时各怎么办？用户说等有界面和具体例子再定（照 [SPEC 要你看一眼第 13 条](spec/library.md#110-要你看一眼)现在的写法）。
 - 手机上视频号的分享菜单里有没有「复制链接」？
 - 订阅来的默认只收挑的，还是也收命中关注的？平时用哪个阅读器（决定先接 Google Reader API，还是 Readwise、Folo）？（默认只收挑的；阅读器先不接哪一家）
 

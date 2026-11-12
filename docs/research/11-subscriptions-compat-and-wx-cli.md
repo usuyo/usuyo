@@ -534,7 +534,7 @@ Mastodon、Bluesky 的路径出处：
 
 | 输出 | 在设计里吗 | 走哪 | 工作量 |
 |---|---|---|---|
-| 资料库本身就是 Markdown 文件夹 | 在 | [SPEC §2](../SPEC.md#2-资料库目录真相源) | 已有 |
+| 资料库本身就是 Markdown 文件夹 | 在 | [SPEC §2](../spec/library.md#2-资料库目录真相源) | 已有 |
 | 导出到笔记软件并读回 | 在 | 导出插件 | 已有设计 |
 | MCP 读取 | 在 | [SPEC §10](../BUILD.md#006-agent) | 已有设计 |
 | 迁出包：Netscape HTML、CSV | 在（[E1](../PRD.md#79-导出与互通) 建议 B） | 命令行 | 小 |

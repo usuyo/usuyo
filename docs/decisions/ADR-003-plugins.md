@@ -117,14 +117,14 @@ usuyo 要接三种外部能力：从平台取回内容，把音视频和图片�
 <a id="7-导出与读回"></a>
 ### 7. 导出与读回
 
-- **资料库不当 vault 用。** 资料库的形状按 usuyo 自己的需要定（[SPEC 第 1 层](../SPEC.md#1-资料库-v1第-1-层)）；在 Obsidian 里改的是导出的那份，再读回 usuyo。导出只在用户点「现在导出」时跑，先读回再重写。
+- **资料库不当 vault 用。** 资料库的形状按 usuyo 自己的需要定（[SPEC 第 1 层](../spec/library.md#1-资料库-v1第-1-层)）；在 Obsidian 里改的是导出的那份，再读回 usuyo。导出只在用户点「现在导出」时跑，先读回再重写。
 - **读回的是用户层**：笔记、记一句、标签、主题，以及主题页、卡片、成稿的正文。划线、标题、日期和分隔线以下的各层只出不进，每次导出重写，界面上写明。主题成员走条目和卡片的 `usuyo_topics`。
 - **用户区是一条分隔线。** 条目笔记里只有一行分隔线，上面是你的笔记，下面每次导出重写；主题、卡片、成稿不加标记，属性之后的整篇是正文。通用 Markdown 用同一条线，写成 HTML 注释。
 - **身份写在文件里**：每个导出文件带 `usuyo_id`（Obsidian frontmatter、Logseq `usuyo-id::`、思源 `custom-usuyo-id`、Notion 属性）；插件按它认挪过、改过名的文件。
-- **底本加三方合并。** 导出记录放按机器目录的 `libraries/<libraryId>/exports/<target>.json`（[SPEC §1.1](../SPEC.md#11-目录树)），每个对象是 `{path, hash, base}`，`base` 是上次交给 `run` 的那份用户层。每次导出先读回，宿主拿它和底本、库里现在的那份照 [SPEC §1.8](../SPEC.md#18-同步) 三方合并，经 [SPEC §1.4](../SPEC.md#14-你写的那一层)「读进来」写进库，记 `actor: external`、`via: readback:<插件 id>`。一次导出算一批，能整批撤销，不走改动提议。合不上的，库里那份留下，目标那份进回收站（`reason: conflict`），出「两边都改过的」卡片。路径丢了能按 `usuyo_id` 扫描重建，底本丢了照 [SPEC §1.8](../SPEC.md#18-同步)「云盘的冲突副本」那条没底本的做法。
+- **底本加三方合并。** 导出记录放按机器目录的 `libraries/<libraryId>/exports/<target>.json`（[SPEC §1.1](../spec/library.md#11-目录树)），每个对象是 `{path, hash, base}`，`base` 是上次交给 `run` 的那份用户层。每次导出先读回，宿主拿它和底本、库里现在的那份照 [SPEC §1.8](../spec/library.md#18-同步) 三方合并，经 [SPEC §1.4](../spec/library.md#14-你写的那一层)「读进来」写进库，记 `actor: external`、`via: readback:<插件 id>`。一次导出算一批，能整批撤销，不走改动提议。合不上的，库里那份留下，目标那份进回收站（`reason: conflict`），出「两边都改过的」卡片。路径丢了能按 `usuyo_id` 扫描重建，底本丢了照 [SPEC §1.8](../spec/library.md#18-同步)「云盘的冲突副本」那条没底本的做法。
 - **导出插件不直接写目标目录**，结果交给宿主写，写之前再比一次哈希。读回时沙箱放行目标文件夹，只读，协议规定只有 `readback` 读它（[插件协议 §7.1](../protocol/isolation.md#71-常驻进程的路径)）。
 - **删掉以后**：usuyo 里删掉一条，已经导出去的副本不管；在 Obsidian 里删掉的笔记，下次导出重新生成。
-- **frontmatter**：导出文件沿用 Web Clipper 默认键 `title`、`source`、`author`、`published`、`created`、`description`、`tags`，再加 `usuyo_id`、`platform`、`kind`；资料库里的 front matter 用 camelCase、不加前缀（[SPEC §0.1](../SPEC.md#01-命名)），Obsidian 要的样子由导出插件转换（[插件协议 §4.4](../protocol/transform-export.md#44-导出的-run-与-readback)）。
+- **frontmatter**：导出文件沿用 Web Clipper 默认键 `title`、`source`、`author`、`published`、`created`、`description`、`tags`，再加 `usuyo_id`、`platform`、`kind`；资料库里的 front matter 用 camelCase、不加前缀（[SPEC §0.1](../spec/conventions.md#01-命名)），Obsidian 要的样子由导出插件转换（[插件协议 §4.4](../protocol/transform-export.md#44-导出的-run-与-readback)）。
 - **目标顺序**：Obsidian（同时产出通用 Markdown 文件夹）、思源、Notion、Logseq OG、飞书、语雀。云端目标的读回只做轮询；飞书、语雀只做单向导出。
 
 <a id="8-gpl-工具"></a>

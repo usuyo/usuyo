@@ -2,7 +2,7 @@
 # 003 — 变成文字：口播、图里的字、画面
 
 状态：in-progress（2026-11-11。这份写给实现的模型和以后查，不等用户批，见 [CLAUDE.md](../../CLAUDE.md) 开发流程）
-关联：[PRD 原则](../PRD.md#4-原则) · [SPEC §1.2.2](../SPEC.md#122-raw-和-derived)、[§1.2.3](../SPEC.md#123-contentmd-和各栏) · [插件协议 §2.9](../protocol/manifest.md#29-转换插件的字段)、[§4](../protocol/transform-export.md#4-转换与导出插件协议) · [调研 04](../research/04-tech-options.md) · [调研 16](../research/16-piecing-engine.md) · [feature 001](../BUILD.md#3-现在做到哪) · [feature 002](../BUILD.md#3-现在做到哪)
+关联：[PRD 原则](../PRD.md#4-原则) · [SPEC §1.2.2](../spec/library.md#122-raw-和-derived)、[§1.2.3](../spec/library.md#123-contentmd-和各栏) · [插件协议 §2.9](../protocol/manifest.md#29-转换插件的字段)、[§4](../protocol/transform-export.md#4-转换与导出插件协议) · [调研 04](../research/04-tech-options.md) · [调研 16](../research/16-piecing-engine.md) · [feature 001](../BUILD.md#3-现在做到哪) · [feature 002](../BUILD.md#3-现在做到哪)
 
 <a id="目标"></a>
 ## 目标
@@ -152,7 +152,7 @@ raw 里的图、封面 ──ocr──▶ 图里的字
 - `crates/usuyo-plugin` 能解析转换插件的清单（`consumes`、`produces`、`provider`、`models`，[§3.13](../protocol/fetch.md#313-宿主和-plugin-kit-现在做到的11-11)），`discover` 把它们放进 `Discovery.other`，没人调。
 - 一次一进程的调用器（`host/process.rs`）：自己的进程组、三种计时、先 SIGTERM 再 SIGKILL；输出目录检查（`host/outdir.rs`）；运行时只按 `PATH` 加几个 Homebrew 目录找（`find_runtime`）。
 - `jobs.db` 只有取内容的任务，按 `item_id` 一条，一次跑一个（`crates/usuyo-core/src/jobs.rs`）。
-- 转录的写入、列出、按层找（`crates/usuyo-library/src/runs.rs`）：`asr`、`ocr`、`frames` 各层和 `frame/<runId>/<毫秒>` 只从 `derived/runs/` 读，`video` 先给最新一次 `play` 的产物（[SPEC §1.2.2](../SPEC.md#122-raw-和-derived)）；只留文字也移走转录里的 `play` 产物和 `keyframes/`。
+- 转录的写入、列出、按层找（`crates/usuyo-library/src/runs.rs`）：`asr`、`ocr`、`frames` 各层和 `frame/<runId>/<毫秒>` 只从 `derived/runs/` 读，`video` 先给最新一次 `play` 的产物（[SPEC §1.2.2](../spec/library.md#122-raw-和-derived)）；只留文字也移走转录里的 `play` 产物和 `keyframes/`。
 - 常驻的转换进程（`crates/usuyo-plugin/src/host/transform.rs`，[协议 §4.1](../protocol/transform-export.md#41-分帧与生命周期)）。
 - 索引只建了 `text`、`comments`、`takeaway`、`notes` 四层（`crates/usuyo-core/src/index_doc.rs`）；搜索把认不出的层都当 `text`。
 - 前端的 `Facet` 已有 `asr`（带 `by: machine | platform`）、`ocr`、`video.frames`、`remark`，但按 `layer` 当 key，同一层出两份会撞（`FacetColumn.tsx`）。
@@ -186,7 +186,7 @@ raw 里的图、封面 ──ocr──▶ 图里的字
 
 - 不在安装时下，不自己悄悄下。第一条要转口播的条目在那一面写：「转口播要先下载 SenseVoice 模型，约 163 MB，只下一次。」旁边一个「下载」；转换插件页也有同一个按钮，写模型名、大小、许可。下好以后，等着的条目照常转。没点就一直等着，不提醒第二次。
 - 大于 1 GiB 的（以后的 FireRedASR2 不到，Qwen3-ASR 不到，都写大小）同样只点了才下。换模型（插件设置里选另一个）也是先问。
-- 放按机器目录的 `models/<owner>/<repo>/<模型名>/`（[SPEC §1.1](../SPEC.md#11-目录树) 的 `models/`）。宿主下，插件不联网。
+- 放按机器目录的 `models/<owner>/<repo>/<模型名>/`（[SPEC §1.1](../spec/library.md#11-目录树) 的 `models/`）。宿主下，插件不联网。
 - 下载：先试 `url`，不行按顺序试 `mirrors`（同一个 sha256）；支持 Range 续传；连接 15 秒，60 秒没收到字节算断；下完按整个文件的 sha256 校验，对不上整个丢掉、报原因。压缩包（sherpa 的模型是 `.tar.bz2`）解到同目录下的临时文件夹，再改名进去，同时写 `model.json`：`{name, sha256, size, license, files: [{path, size, sha256}]}`。插件 `describe` 时宿主核对 `files`。
 - SenseVoice 的条目，写进插件清单：
 
@@ -211,7 +211,7 @@ sha256 是下载以后算出来的。
 
 - **自动**：一个快照落进资料库（收下、再取一次、导入、交进来的）以后，宿主看它有什么，排上要做的：有视频就排 `play`（配得上时）、`asr`、`keyframes`，关键帧那次落地以后排 `frames`（认关键帧上的字）；有图（含封面）就排 `ocr`。平台给了字幕也照样排 `asr`，两份并排（为什么，见 [§13](#13-风险和待定)「平台给了字幕也照样转」）。设置里 `transforms.auto: false` 时不自动排，只在点名时转。
 - **点名**：打开一条、还有面没转出来，它的任务挪到最前，在电池上也跑；点「再转一次」「换一个转」同样。
-- **在哪台转**：照 [SPEC §1.2.1](../SPEC.md#121-manifestjson-v1)，`origins` 里最早那一项的那台。别的设备不自动转，等同步来的文字。
+- **在哪台转**：照 [SPEC §1.2.1](../spec/library.md#121-manifestjson-v1)，`origins` 里最早那一项的那台。别的设备不自动转，等同步来的文字。
 
 **限着，免得一次导入 500 条把电脑烤热**：
 
@@ -277,14 +277,14 @@ items/bilibili/bilibili-…/
     thumb.jpg  fingerprints.json                               ← 宿主产出，照旧
 ```
 
-- `runId` 是 UUIDv7，按字符串排就是按时间排（[SPEC §0.4](../SPEC.md#04-id)）。
+- `runId` 是 UUIDv7，按字符串排就是按时间排（[SPEC §0.4](../spec/conventions.md#04-id)）。
 - 宿主先在 `.usuyo/tmp/` 拼好整个文件夹（插件的产出、宿主算的哈希、`run.json`），再改名进 `derived/runs/`。写进去以后不改；要改就是再转一次。
 - **一层现在给谁看**：同一层（同一个 `job`、同样的输入）有几次，最新的一次排第一，别的照样摆着、能切换（[§7.1](#71-条目页的数据形状)）。引用链接按秒、按 `imageKey` 找回，不认 `runId`，所以换了一次转录，你写过的引用不断。
 - **做好没有**：一个任务算做好，要有一次这个 `job` 的转录，它的 `inputs` 的 sha256 盖住了现在要的那些输入。哪个插件、哪个版本做的都算。插件升级不自动重转（不让你的电脑莫名其妙地忙），想要就点「再转一次」。`empty: true` 的转录也算做好（没有人声就是结果）。
 - **中间产物不进资料库**：给转写用的 16 kHz WAV 放按机器缓存 `cache/transform/<itemId>/<runId>/`，这条链跑完就删。它的来历记在用它的那次转录的 `inputs[].via` 里，链照样清楚。
 - **同步**：`run.json` 和文字产物（`asr.vtt`、`ocr.json`、`keyframes.json`）跟着文字同步；二进制产物（`play.mp4`、`keyframes/*.jpg`）和媒体一样，以后媒体同步时再说，现在不同步。另一台看得到关键帧上的字和秒数，看不到那张帧。
 - **只留文字**：除了现有的 `raw/` 里的媒体，再把各次转录里的 `play.mp4`、`keyframes/` 移进回收站，`run.json` 和文字产物留着；「把移走的图和视频拿回来」照样拿回。
-- **删掉一次转录**：第一版不做。转录很小，多了也不碍事；真要做，进回收站，照 [SPEC §1.7](../SPEC.md#17-删掉)。
+- **删掉一次转录**：第一版不做。转录很小，多了也不碍事；真要做，进回收站，照 [SPEC §1.7](../spec/library.md#17-删掉)。
 
 <a id="52-转录记录-runjson"></a>
 ### 5.2 转录记录 run.json
@@ -342,7 +342,7 @@ items/bilibili/bilibili-…/
 <a id="53-各样东西的格式"></a>
 ### 5.3 各样东西的格式
 
-坐标统一：**时间**是秒，最多 3 位小数（[SPEC §0.5](../SPEC.md#05-时间)）；**图上的框**是 `[x, y, w, h]`，0–1，按图的宽高算，原点在左上角。引用链接里换成百分数（`#xywh=percent:…`，[SPEC §0.4](../SPEC.md#04-id)）。
+坐标统一：**时间**是秒，最多 3 位小数（[SPEC §0.5](../spec/conventions.md#05-时间)）；**图上的框**是 `[x, y, w, h]`，0–1，按图的宽高算，原点在左上角。引用链接里换成百分数（`#xywh=percent:…`，[SPEC §0.4](../spec/conventions.md#04-id)）。
 
 - **`asr.vtt`**：WebVTT，UTF-8。一条 cue 一个 VAD 段，长于 `maxCueSec`（15 秒）的按 token 时间点在标点处切开。cue 的字是纯文字，去掉 SenseVoice 的 `<|zh|><|NEUTRAL|><|Speech|><|withitn|>` 这类标签；开头一行 `NOTE` 写语言。一个人声段都没有时不写文件，`empty: true`。
 - **平台字幕**：`raw/<snapshotId>/` 里 `media[]` 的 `kind: subtitle` 那些 `.vtt`，原样读，不转。语言取那一项的 `lang`，没有就从文件名 `subtitle.<lang>.vtt` 取。
@@ -360,7 +360,7 @@ items/bilibili/bilibili-…/
 {"images": [{"input": 0, "imageKey": "3f2a9c0d1e4b5a67", "width": 1080, "height": 1440, "lines": [{"text": "水温 92°C，粉水比1:15", "bbox": [0.0736, 0.2542, 0.5504, 0.0542], "confidence": 0.5}]}, {"input": 1, "frameSec": 12.04, "width": 960, "height": 540, "lines": []}]}
 ```
 
-  `input` 是 `run.json` 里 `inputs` 的下标。图文和封面的图带 `imageKey`（[SPEC §1.2.2](../SPEC.md#122-raw-和-derived)），关键帧带 `frameSec`。`confidence` 是引擎自己的分，不跨引擎比。一次 `ocr` 转录可以盖几张图；快照新来了图，只为没盖到的那些再排一次。
+  `input` 是 `run.json` 里 `inputs` 的下标。图文和封面的图带 `imageKey`（[SPEC §1.2.2](../spec/library.md#122-raw-和-derived)），关键帧带 `frameSec`。`confidence` 是引擎自己的分，不跨引擎比。一次 `ocr` 转录可以盖几张图；快照新来了图，只为没盖到的那些再排一次。
 
 <a id="6-很明显的标记"></a>
 ## 6. 很明显的标记
@@ -449,7 +449,7 @@ export interface Pending {
 <a id="81-接口"></a>
 ### 8.1 接口
 
-先改 `apps/desktop/web/src/api/endpoints.ts`（[SPEC 本机接口](../SPEC.md#本机接口第-2-层11-11-照代码) 说它是唯一的契约文件），Rust 照它做，样例库跟着补。
+先改 `apps/desktop/web/src/api/endpoints.ts`（[SPEC 本机接口](../spec/local-api.md#本机接口第-2-层11-11-照代码) 说它是唯一的契约文件），Rust 照它做，样例库跟着补。
 
 | 方法与路径 | 做什么 |
 |---|---|
@@ -465,17 +465,17 @@ export interface Pending {
 <a id="82-要写回-spec--协议的"></a>
 ### 8.2 要写回 SPEC / 协议的
 
-这份不改那两个文件；实现时一起改，改完在这里打勾。13 条都在 11-11 随 WP1、WP2 写回了。顺手多写的几处：协议 [§3.3](../protocol/fetch.md#33-信封与错误码) 的 `needs` 加前缀 `model:`（[§4.4](#44-什么时候转) 要它）；[§4.2](../protocol/transform-export.md#42-转换的-run) 的结果加 `probe[]`（`want: [probe]` 回的流信息放这里，原来没有字段）；SPEC [§1.8](../SPEC.md#18-同步) 的同步表、[§1.4.2](../SPEC.md#142-卡片成稿记一句和划线) 里指向旧 meta 的一句跟着改；`keyframes.json`、`ocr.json` 也各有 schema（`urn:usuyo:schema:keyframes:1`、`…:ocr:1`）。
+这份不改那两个文件；实现时一起改，改完在这里打勾。13 条都在 11-11 随 WP1、WP2 写回了。顺手多写的几处：协议 [§3.3](../protocol/fetch.md#33-信封与错误码) 的 `needs` 加前缀 `model:`（[§4.4](#44-什么时候转) 要它）；[§4.2](../protocol/transform-export.md#42-转换的-run) 的结果加 `probe[]`（`want: [probe]` 回的流信息放这里，原来没有字段）；SPEC [§1.8](../spec/library.md#18-同步) 的同步表、[§1.4.2](../spec/library.md#142-卡片成稿记一句和划线) 里指向旧 meta 的一句跟着改；`keyframes.json`、`ocr.json` 也各有 schema（`urn:usuyo:schema:keyframes:1`、`…:ocr:1`）。
 
 **SPEC**
 
-1. [x] [§1.2](../SPEC.md#12-条目文件夹) 的目录例子：`derived/` 下换成 `runs/<runId>/…`，`asr.vtt`、`ocr/`、`keyframes/`、`audio/`、`<文件>.meta.json` 从 `derived/` 根下去掉；`thumb.jpg`、`fingerprints.json` 不变。
-2. [x] [§1.2.2](../SPEC.md#122-raw-和-derived)：写进 [§5](#5-存在哪怎么重做) 的规矩（一次一个文件夹、写了不改、谁在前按时间、做好没有怎么判、中间产物在按机器缓存、哪些同步）和 `run.json`（[§5.2](#52-转录记录-runjson)）；`ocr.json`、`keyframes.json`、`asr.vtt` 的格式（`frames` 也写 `ocr.json`）（[§5.3](#53-各样东西的格式)）；框是 0–1、原点左上。
-3. [x] [§1.2.3](../SPEC.md#123-contentmd-和各栏) 的表：口播 = 平台字幕 + `asr` 转录；图里的字 = `ocr` 转录；加一行「画面里的字」（`frames`，链接里的层是 `video`，带 `#t=` 和 `xywh`）；画面 = `play` 或原样画面，加关键帧。
-4. [x] [§0.4](../SPEC.md#04-id) 的引用：关键帧上的字写 `usuyo://item/<id>/video@<s>#t=12.04&xywh=percent:7.4,25.4,55,5.4`（Media Fragments 的时间和空间合用 `&`）。
-5. [x] [§1.1](../SPEC.md#11-目录树)：按机器目录的 `models/<owner>/<repo>/<名字>/`（含 `model.json`）、缓存的 `cache/transform/`；`jobs.db` 多 `transform_jobs`；按机器的 `settings.json` 多 `transforms.auto`（默认 `true`）。
-6. [x] [§1.7](../SPEC.md#17-删掉) 和只留文字：转录里的 `play.mp4`、`keyframes/` 跟着媒体走。
-7. [x] [§1.9](../SPEC.md#19-schema-和-usuyo-contract)：加 schema `urn:usuyo:schema:run:1`。
+1. [x] [§1.2](../spec/library.md#12-条目文件夹) 的目录例子：`derived/` 下换成 `runs/<runId>/…`，`asr.vtt`、`ocr/`、`keyframes/`、`audio/`、`<文件>.meta.json` 从 `derived/` 根下去掉；`thumb.jpg`、`fingerprints.json` 不变。
+2. [x] [§1.2.2](../spec/library.md#122-raw-和-derived)：写进 [§5](#5-存在哪怎么重做) 的规矩（一次一个文件夹、写了不改、谁在前按时间、做好没有怎么判、中间产物在按机器缓存、哪些同步）和 `run.json`（[§5.2](#52-转录记录-runjson)）；`ocr.json`、`keyframes.json`、`asr.vtt` 的格式（`frames` 也写 `ocr.json`）（[§5.3](#53-各样东西的格式)）；框是 0–1、原点左上。
+3. [x] [§1.2.3](../spec/library.md#123-contentmd-和各栏) 的表：口播 = 平台字幕 + `asr` 转录；图里的字 = `ocr` 转录；加一行「画面里的字」（`frames`，链接里的层是 `video`，带 `#t=` 和 `xywh`）；画面 = `play` 或原样画面，加关键帧。
+4. [x] [§0.4](../spec/conventions.md#04-id) 的引用：关键帧上的字写 `usuyo://item/<id>/video@<s>#t=12.04&xywh=percent:7.4,25.4,55,5.4`（Media Fragments 的时间和空间合用 `&`）。
+5. [x] [§1.1](../spec/library.md#11-目录树)：按机器目录的 `models/<owner>/<repo>/<名字>/`（含 `model.json`）、缓存的 `cache/transform/`；`jobs.db` 多 `transform_jobs`；按机器的 `settings.json` 多 `transforms.auto`（默认 `true`）。
+6. [x] [§1.7](../spec/library.md#17-删掉) 和只留文字：转录里的 `play.mp4`、`keyframes/` 跟着媒体走。
+7. [x] [§1.9](../spec/library.md#19-schema-和-usuyo-contract)：加 schema `urn:usuyo:schema:run:1`。
 
 **插件协议**
 
@@ -493,7 +493,7 @@ export interface Pending {
 
 - **每一面都是带原样坐标的段**：层（`asr`、`ocr`、`frames`，加已有的 `text`、`comments`）、快照、坐标（时间区间；`imageKey` 加框；帧的秒数加框）、字、来源（`runId` 或平台字幕）。004 切段直接用 cue 和 OCR 行，不用自己再找时间。
 - **来源都在 `run.json`**：004 的向量 meta 里的 `inputs` 指向这些文件和哈希，换了一次转录就是换了输入，照它的规则重算。
-- **标题面、内容层、画面层分得开**：标题、简介、封面上的字是标题面；口播、字幕、正文、图文的图里的字是内容层；关键帧和关键帧上的字是画面层。跟着收的命中默认看标题层加内容层、画面层不算（[SPEC §1.10 第 7 条](../SPEC.md#110-要你看一眼)），004 照这个分。
+- **标题面、内容层、画面层分得开**：标题、简介、封面上的字是标题面；口播、字幕、正文、图文的图里的字是内容层；关键帧和关键帧上的字是画面层。跟着收的命中默认看标题层加内容层、画面层不算（[SPEC §1.10 第 7 条](../spec/library.md#110-要你看一眼)），004 照这个分。
 - **标记只给信号，不给结论**：`no-speech` 的条目，004 只靠标题面挂在线头边上（调研 16 已经这样说视频号）；`static-picture` 不让 004 少看画面。
 - **空也是结果**：`empty: true` 告诉 004 这一面确实没东西，免得对着空文稿编（[协议 §4.2](../protocol/transform-export.md#42-转换的-run)）。
 - 003 不做平台腔停用表、不起名、不写任何总结。

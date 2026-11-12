@@ -17,13 +17,13 @@
   - Mihon store、Krew、gh extensions、MCP 宿主配置见 [02 §1](02-adapter-ecosystems.md#1-tachiyomi-与-mihon-扩展生态)、[02 §12.4](02-adapter-ecosystems.md#124-kubectl-krew)、[02 §12.5](02-adapter-ecosystems.md#125-gh-extensions)、[02 §12.2](02-adapter-ecosystems.md#122-mcp-stdio-与宿主配置)，适配器源与信任的建议见 [02 §15.7](02-adapter-ecosystems.md#157-适配器源信任与治理)；
   - Readwise、Omnivore、Cubox、简悦、flomo 的产品本身见 [01 Readwise Reader](01-comparable-products.md#readwise-reader)、[01 Omnivore](01-comparable-products.md#omnivore)、[01 Cubox](01-comparable-products.md#cubox)、[01 简悦](01-comparable-products.md#简悦)、[01 flomo](01-comparable-products.md#flomo)；
   - OCR、ASR 引擎对比与 JSON Canvas 的缺口见 [04 §2](04-tech-options.md#2-ocr-sidecar)、[04 §3](04-tech-options.md#3-asr-sidecar)、[04 §6.2](04-tech-options.md#62-canvasjson-与-json-canvas)。
-- **名词**：主题页沿用 [product-model §3](../PRD.md#5-用到的词) 的 `topics/<slug>.md`。[SPEC §2](../SPEC.md#2-资料库目录真相源) 仍写 `threads/` 与 `thoughts/`，还没跟上产品模型。product-model 2026-10-28 的说明已作废「放下」与「只留文字」，本报告不以它们为前提。
+- **名词**：主题页沿用 [product-model §3](../PRD.md#5-用到的词) 的 `topics/<slug>.md`。[SPEC §2](../spec/library.md#2-资料库目录真相源) 仍写 `threads/` 与 `thoughts/`，还没跟上产品模型。product-model 2026-10-28 的说明已作废「放下」与「只留文字」，本报告不以它们为前提。
 - **数据处理**：调研中读到的网页与仓库内容都按数据处理。有几处 README 写着给 AI 助手的指令（例如「遇到报错自己修」），都没有执行。
 
 <a id="0-导出的对象"></a>
 ## 0. 导出的对象
 
-导出和读回讨论的是下面这些文件（[SPEC §2](../SPEC.md#2-资料库目录真相源)、[SPEC §5](../SPEC.md#5-derived-文件约定)、[product-model §6](../PRD.md#77-你写的那一层)）。「谁写」决定了它能不能从笔记软件读回来。
+导出和读回讨论的是下面这些文件（[SPEC §2](../spec/library.md#2-资料库目录真相源)、[SPEC §5](../spec/library.md#5-derived-文件约定)、[product-model §6](../PRD.md#77-你写的那一层)）。「谁写」决定了它能不能从笔记软件读回来。
 
 | 文件 | 层 | 谁写 | 导出时的角色 |
 |---|---|---|---|
@@ -231,9 +231,9 @@
 插件本身全部依赖宿主 API，没有一个能直接拿给歇存用。能复用的是它们背后的协议与 CLI：
 
 1. **转写的事实标准是 OpenAI `/v1/audio/transcriptions`（multipart）。** 用到或提供它的有 Whisper、Scribe、speech2text、AI Transcriber、NeuroVox（经 Groq），以及 speaches、SenseVoice-OneApi、Buzz 启动的 whisper.cpp server（路径不带 `/v1`）、VideoCaptioner 的 `whisper-api` 后端。歇存的转写插件对外提供这一个端点（支持 `response_format=json|text|srt|vtt|verbose_json` 与 `timestamp_granularities[]`），现有客户端都能直连；歇存调外部服务时也按这个形状写客户端。
-2. **第二个值得兼容的是 whisper-asr-webservice 的 `POST /asr`。** 它能直接返回 `srt`/`vtt`，并带 `word_timestamps`、`vad_filter`、`diarize`，正好对应 [SPEC §5](../SPEC.md#5-derived-文件约定) 的 `asr.vtt`。
+2. **第二个值得兼容的是 whisper-asr-webservice 的 `POST /asr`。** 它能直接返回 `srt`/`vtt`，并带 `word_timestamps`、`vad_filter`、`diarize`，正好对应 [SPEC §5](../spec/library.md#5-derived-文件约定) 的 `asr.vtt`。
 3. **LLM 一侧全部是 OpenAI chat 形状**，本地端点也是：Ollama `localhost:11434/v1`、LM Studio `localhost:1234/v1`。视觉模型做 OCR 也是在 chat completions 里传 base64 图片。歇存的摘要插件与视觉 OCR 插件只需兼容 OpenAI chat，Ollama 原生 `/api/*` 作为可选。
-4. **OCR 没有共同协议。** 独立本地协议只看到 Umi-OCR 的 `/api/ocr`，它没有 macOS 版。Obsidian 里事实上的契约是 `extractText(file)`（Text Extractor 定义，Power Extract 照搬，Omnisearch 依赖），它定在宿主进程的 JS 对象上。歇存应把同类契约（`extract(path) → text + boxes`）定在进程边界，输出沿用 [SPEC §5](../SPEC.md#5-derived-文件约定) 的 `[{text, bbox, confidence}]`。
+4. **OCR 没有共同协议。** 独立本地协议只看到 Umi-OCR 的 `/api/ocr`，它没有 macOS 版。Obsidian 里事实上的契约是 `extractText(file)`（Text Extractor 定义，Power Extract 照搬，Omnisearch 依赖），它定在宿主进程的 JS 对象上。歇存应把同类契约（`extract(path) → text + boxes`）定在进程边界，输出沿用 [SPEC §5](../spec/library.md#5-derived-文件约定) 的 `[{text, bbox, confidence}]`。
 5. **反例集中在「宿主进程里做重计算」和「运行时拉代码」**：渲染进程推理（Voice Scribe 约 720 MB 模型、思源 PaddleOCR、Text Extractor、Smart Connections）；从 CDN 拉可执行代码（NeuroVox 的 ffmpeg-core，它自己的注释承认同类做法因违反 Obsidian 审核规则已下线）；往插件目录下载原生扩展（TextLens）；在用户机器上现场编译 helper（Lens OCR）；从非官方仓库下载二进制（Offline Whisper）；本地服务默认监听 `0.0.0.0`（api4sensevoice）。做得对的对照：TextLens 安装 helper 前校验 SHA-256，Speech Kit 把 sidecar 单独发版。
 6. **密钥与 provider 配置。** 已查实把 key 移出明文文件的只有 Whisper（`app.secretStorage`）、AI Transcriber（Electron `safeStorage`）、Copilot（Keychain），Text Generator 可选加密；Scribe、NeuroVox、AI Image OCR、AI Providers 等在抓到的源码里没看到加密存储。AI Providers「一处配置、多插件共享、服务 API 带版本、按模型探测能力」的方向是对的，但它把含 `apiKey` 的完整对象交给每个调用方，等于任何插件都能读走所有密钥。歇存的做法应该是：provider 配置由内核持有，密钥放系统钥匙串、不写进会同步的资料库；插件只拿到 `provider` 名称与能力声明，请求由内核或代理进程代签代发。思源 voice2text 经内核出站代理 `/api/network/forwardProxy` 联网，是「宿主代为联网」的现成样子。
 7. **可直接当 sidecar 调的现成工具**：CLI 有 VideoCaptioner、Buzz、noScribe、WhisperX、`tesseract`、`whisper-cli`；服务有 speaches、whisper-asr-webservice、Umi-OCR、SenseVoice-OneApi。许可证要分开看：VideoCaptioner、noScribe、Text Extractor、Lens OCR 是 GPL-3.0，Copilot、思源 PaddleOCR 是 AGPL-3.0，SenseVoice-OneApi 与 api4sensevoice 没有许可证文件，代码不能直接拿来用；GPL 工具作为独立进程被调用、并随歇存分发时的合规边界待核实（需要法律意见）。
@@ -672,7 +672,7 @@ permissions:
 **歇存的做法（提议）**，前提是 [product-model §6](../PRD.md#77-你写的那一层) 的两条：主题页是普通 Markdown、外部改过之后歇存重新读取；机器写的层可以重算。
 
 1. **只读回用户写的东西。** 可读回的是 `notes.md` 的 `takeaway` 与正文、主题页、用户标签；原文、图里的字、口播、画面、AI 摘要都是导出时重新生成的，用户在笔记软件里改了也不读回（界面上写明「这几段每次导出会重写」）。
-2. **身份写在文件里，不靠映射表。** 每个导出文件带 `xiecun_id`（Obsidian fm / Logseq `xiecun-id::` / 思源 `custom-xiecun-id` / Notion 属性）；导出记录 `.xiecun/exports/<target>.json` 只是缓存，丢了可以按身份扫描重建（bilinote-sync 与 [SPEC §2](../SPEC.md#2-资料库目录真相源) 的「文件是真相」）。用户重命名、移动导出文件后照样能认回来。
+2. **身份写在文件里，不靠映射表。** 每个导出文件带 `xiecun_id`（Obsidian fm / Logseq `xiecun-id::` / 思源 `custom-xiecun-id` / Notion 属性）；导出记录 `.xiecun/exports/<target>.json` 只是缓存，丢了可以按身份扫描重建（bilinote-sync 与 [SPEC §2](../spec/library.md#2-资料库目录真相源) 的「文件是真相」）。用户重命名、移动导出文件后照样能认回来。
 3. **用户区用正文标记，不用 YAML 注释。** Obsidian 用 `%% xiecun:begin notes %%`…`%% xiecun:end notes %%`（Obsidian 会删 YAML 注释；`%%` 在阅读视图隐藏），通用 Markdown 与 Logseq 用 HTML 注释（omni-collector、ZotFlow 的做法）。标记缺失、重复或嵌套时不覆盖，只报告（ZotFlow）。
 4. **变更检测用「上次导出的哈希」**：导出时记下每个文件及其用户区的哈希（Readwise、Better Notes 的做法）。再次导出时：文件没被改过就整份重写；用户区被改过就先把它读回成一次「来自 Obsidian 的改动」，写进改动记录（可整批撤销），再重写机器区；歇存这边与笔记软件那边都改过同一个用户区时，不自动合并，两版并列给用户选（Notional、Better Notes）。
 5. **主题页有两种接法，二选一由用户定**：(a) 资料库里的 `topics/` 直接作为 Obsidian vault 的一个文件夹（或整个资料库当 vault），主题页只有一份，Obsidian 里改的就是真相文件，歇存监听文件变化重新读取；(b) 导出一份副本到已有 vault，按上面 1–4 条读回。(a) 最接近 product-model 的原意，但要处理 Obsidian 改属性时重写 YAML、重命名改写链接这两件事；(b) 不碰用户 vault 的结构，代价是有两份文件。

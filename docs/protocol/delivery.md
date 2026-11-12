@@ -6,19 +6,19 @@
 <a id="51-本机-http-接口"></a>
 ### 5.1 本机 HTTP 接口
 
-对应 PRD 的浏览器扩展、本地 HTTP API，约定照 [03 §6.3](../research/03-agent-protocols.md#63-对歇存的意义)。做了的：`/v1/ping`、`/v1/deliver`（只收链接）、`/v1/batches` 和按投递端发的令牌，和窗口用的路由在同一个监听口上，规则见 [SPEC 本机接口](../SPEC.md#本机接口第-2-层11-11-照代码)；下面没做的部分标了「还没做」。
+对应 PRD 的浏览器扩展、本地 HTTP API，约定照 [03 §6.3](../research/03-agent-protocols.md#63-对歇存的意义)。做了的：`/v1/ping`、`/v1/deliver`（只收链接）、`/v1/batches` 和按投递端发的令牌，和窗口用的路由在同一个监听口上，规则见 [SPEC 本机接口](../spec/local-api.md#本机接口第-2-层11-11-照代码)；下面没做的部分标了「还没做」。
 
 - 只绑 `127.0.0.1`，端口 `47615`，和给窗口用的路由是同一个监听口，不另开端口。
 - 每个请求带 `Authorization: Bearer <令牌>`。令牌按投递端分别生成：名字（例如「xhs-vault 脚本」）、入口类型（`extension`、`mobile`、`api`），可单独撤销。在应用的导入页里发（`POST /deliver-tokens`，主令牌调），格式 `<id>.<秘密>`，整个令牌只在发的那一次回给调用方；存在按机器目录的 `deliver-tokens.json`，不放进资料库。投递令牌只能进 `/v1/ping`、`/v1/deliver`、`/v1/batches`。
-- 除 `chrome-extension://`、`moz-extension://`、`safari-web-extension://` 以外，带任何 `Origin` 头的请求都拒绝，包括 `Origin: null`（沙箱 iframe、`file://` 页面会带它），也不回 CORS 头：普通网页发不进来，也读不到响应。没有 `Origin` 的请求放行。宿主另外核对 `Host` 头是 `127.0.0.1:<端口>`、`localhost:<端口>` 或 `[::1]:<端口>`。各油猴脚本管理器的 `GM_xmlhttpRequest` 实际带什么 `Origin` 待核实。投递令牌发出去以前先握手：`POST /handshake`，请求 `{nonce, client}`，`client` 是令牌 `.` 前面的 id，内核用整个令牌当密钥回 HMAC 证明，令牌本身不上线路（[SPEC 本机接口](../SPEC.md#本机接口第-2-层11-11-照代码)）。`/v1/…` 不回 CORS 头，也不答 CORS 预检（Safari 的 Userscripts 没有网站访问权限时会先发预检，还没做，[总纲](../BUILD.md#5-功能线)）。
+- 除 `chrome-extension://`、`moz-extension://`、`safari-web-extension://` 以外，带任何 `Origin` 头的请求都拒绝，包括 `Origin: null`（沙箱 iframe、`file://` 页面会带它），也不回 CORS 头：普通网页发不进来，也读不到响应。没有 `Origin` 的请求放行。宿主另外核对 `Host` 头是 `127.0.0.1:<端口>`、`localhost:<端口>` 或 `[::1]:<端口>`。各油猴脚本管理器的 `GM_xmlhttpRequest` 实际带什么 `Origin` 待核实。投递令牌发出去以前先握手：`POST /handshake`，请求 `{nonce, client}`，`client` 是令牌 `.` 前面的 id，内核用整个令牌当密钥回 HMAC 证明，令牌本身不上线路（[SPEC 本机接口](../spec/local-api.md#本机接口第-2-层11-11-照代码)）。`/v1/…` 不回 CORS 头，也不答 CORS 预检（Safari 的 Userscripts 没有网站访问权限时会先发预检，还没做，[总纲](../BUILD.md#5-功能线)）。
 - 条目在 `origins[]` 里那一项的 `entry` 取令牌的入口类型。`extension` 令牌交来已取到的内容时，快照的 `plugin` 记 `deliver:<令牌名>`；只交链接的，快照记去取它的那个插件。投递来的内容同样按不可信输入处理。
 - **令牌能交什么。** `api` 和 `mobile` 类令牌只接受链接（`url`、`text` 和 `/v1/batches`），不接受已取到的内容；已取到的内容只接受 `extension` 类令牌和收件文件夹（[§5.2](#52-监听文件夹)）（还没做：`/v1/deliver` 现在只收链接，没有 multipart，任何令牌都不能交已取到的内容）。Agent 用 `api` 令牌交已取好的内容，等于没经过改动提议就改了已有条目，和「Agent 写入先提议后生效」的原则冲突。
-- **身份由宿主重新算。** 宿主不采用投递方给的 `identity`，而是用 `identity.url`（没有就用 `url`）重新调 `canonicalize` 得出身份；拿不到身份的（没有网址的；http(s) 链接马上就有身份，最差是这条链接的 `web:` 身份，离线时的短链也一样，之后可能并进平台 id，见 [§3.1](fetch.md#31-运行器与节奏)），按无平台 ID 的条目处理（[SPEC §0.4](../SPEC.md#04-id)）。不然一个持有令牌的脚本报出某个已有条目的身份、再带上 `completeness: full`，就能覆盖那个条目。
+- **身份由宿主重新算。** 宿主不采用投递方给的 `identity`，而是用 `identity.url`（没有就用 `url`）重新调 `canonicalize` 得出身份；拿不到身份的（没有网址的；http(s) 链接马上就有身份，最差是这条链接的 `web:` 身份，离线时的短链也一样，之后可能并进平台 id，见 [§3.1](fetch.md#31-运行器与节奏)），按无平台 ID 的条目处理（[SPEC §0.4](../spec/conventions.md#04-id)）。不然一个持有令牌的脚本报出某个已有条目的身份、再带上 `completeness: full`，就能覆盖那个条目。
 
 | 方法与路径 | 用途 | 返回 |
 |---|---|---|
 | `GET /v1/ping` | 检查令牌和连通 | `{"name":"usuyo","version":"…","protocol":1,"client":"xhs-vault 脚本"}` |
-| `POST /v1/deliver` | 收下一条：只有链接或分享文字，或已取到的内容（已取到的内容还没做；请求体只认 `url`、`text`，别的字段包括 `action` 都被忽略） | `202`，身份一算出就回条目 id（一般 3 秒内）；`canonicalize` 因网络失败或超时（例如离线时的短链）时，回这条链接的 `web-` id，联网后可能并进平台 id，旧 id 留作别名（[SPEC §0.4](../SPEC.md#04-id)） |
+| `POST /v1/deliver` | 收下一条：只有链接或分享文字，或已取到的内容（已取到的内容还没做；请求体只认 `url`、`text`，别的字段包括 `action` 都被忽略） | `202`，身份一算出就回条目 id（一般 3 秒内）；`canonicalize` 因网络失败或超时（例如离线时的短链）时，回这条链接的 `web-` id，联网后可能并进平台 id，旧 id 留作别名（[SPEC §0.4](../spec/conventions.md#04-id)） |
 | `POST /v1/batches` | 交一批链接，进导入预览 | `202`，批次 id；新增、已有的数目在导入预览里随身份算出逐步出现 |
 
 只有链接时，宿主照 [§3.1](fetch.md#31-运行器与节奏) 去取内容；`text` 是手机分享出来的整段文字，宿主从里面找出第一个链接：

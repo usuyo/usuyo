@@ -38,7 +38,7 @@
 1. 前端只通过本地 HTTP 接口和事件流与内核通信。应用代码里不调用壳生成的绑定。事件流是 server-sent events（`GET /events`）：要带 `Authorization` 头，`EventSource` 带不了，所以用 `fetch` 读流，断了按 1 秒到 30 秒退后重连，重连上时把数据全部重拉一次（11-11，原写 WebSocket）。
 2. 窗口、菜单、托盘、全局快捷键、文件对话框这些壳能力，集中在一个薄的 `shell/` 模块后面。换壳只改这一处。
 3. 媒体由 daemon 通过 localhost 提供，支持 HTTP Range 请求，不用 `file://`。原因：WKWebView 在 http 源下读本地文件受限，视频拖动进度也需要 Range。这是交给内核接口的要求。
-4. 本地接口与 MCP 工具共用一份契约定义，见调研 [01 启示 8](../research/01-comparable-products.md#4-对歇存的启示)。11-11 这份是 `apps/desktop/web/src/api/endpoints.ts`：路径和类型只写在这一个文件里，改接口先改它，Rust 那边照它做（[SPEC 本机接口](../SPEC.md#本机接口第-2-层11-11-照代码)）；MCP 还没做。
+4. 本地接口与 MCP 工具共用一份契约定义，见调研 [01 启示 8](../research/01-comparable-products.md#4-对歇存的启示)。11-11 这份是 `apps/desktop/web/src/api/endpoints.ts`：路径和类型只写在这一个文件里，改接口先改它，Rust 那边照它做（[SPEC 本机接口](../spec/local-api.md#本机接口第-2-层11-11-照代码)）；MCP 还没做。
 
 <a id="待验证"></a>
 ## 待验证
