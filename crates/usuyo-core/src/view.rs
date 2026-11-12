@@ -9,10 +9,63 @@ pub struct Platform {
     pub name: String,
 }
 
+/// 一层文字里的一段，带它在原样里的位置（转出来的文字有，原文的段没有）。
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Segment {
     pub text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub position: Option<Position>,
+}
+
+/// 媒体里的一处（feature 003 §5.3、§7.1）：一个时间点（秒，可带结束），或一张图。
+/// `xywh` 是图上（或那一帧上）的框，0–1，原点在左上角。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "lowercase",
+    rename_all_fields = "camelCase"
+)]
+pub enum Position {
+    Time {
+        sec: f64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        end_sec: Option<f64>,
+        snapshot_id: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        xywh: Option<[f64; 4]>,
+        /// 画面上的字：认出这一行的那一帧。
+        #[serde(skip_serializing_if = "Option::is_none")]
+        frame_url: Option<String>,
+    },
+    Image {
+        image_key: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        xywh: Option<[f64; 4]>,
+    },
+}
+
+/// 一份是从哪来的。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FacetSource {
+    pub by: SourceBy,
+    /// 机器的：工具或模型的名字。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lang: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SourceBy {
+    Platform,
+    Machine,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -38,7 +91,10 @@ pub struct Comment {
     pub likes: Option<u64>,
 }
 
-/// 一条有几个侧面就给几个。口播（asr）和图里的字（ocr）等转换插件接上再有。
+/// 一条有几个侧面就给几个，同一层有几份就给几份（feature 003 §7.1）。`key` 在一条里唯一：
+/// `asr:platform:<snapshotId>:<lang>`、`asr:<runId>`、`ocr:<runId>`、`frames:<runId>`、`video:<snapshotId>`，
+/// 原文、图、评论是 `text:<snapshotId>`、`image:<snapshotId>`、`comments:<snapshotId>`。
+/// `remark` 只写量得出来的明显的事（003 §6）。
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(
     tag = "layer",
@@ -46,24 +102,91 @@ pub struct Comment {
     rename_all_fields = "camelCase"
 )]
 pub enum Facet {
+    Asr {
+        key: String,
+        source: FacetSource,
+        segments: Vec<Segment>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        remark: Option<String>,
+    },
+    Ocr {
+        key: String,
+        source: FacetSource,
+        segments: Vec<Segment>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        remark: Option<String>,
+    },
+    /// 关键帧上的字：连着几帧一样的一行合成一段，`endSec` 写到最后出现的那一帧。
+    Frames {
+        key: String,
+        source: FacetSource,
+        segments: Vec<Segment>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        remark: Option<String>,
+    },
     Text {
+        key: String,
         segments: Vec<Segment>,
     },
     Image {
+        key: String,
         images: Vec<ImageRef>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        remark: Option<String>,
     },
     Video {
+        key: String,
         snapshot_id: String,
         /// 插件没给时长时是 0。
         duration_sec: f64,
+        /// 有合起来的 `play.mp4` 时是它，不然是原样的画面。
         #[serde(skip_serializing_if = "Option::is_none")]
         url: Option<String>,
-        /// 关键帧要等转换插件，现在总是空的。
+        /// 最新一次 `keyframes` 的帧。
         frames: Vec<Frame>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        remark: Option<String>,
     },
     Comments {
+        key: String,
         comments: Vec<Comment>,
     },
+}
+
+/// 还没转出来的一面，只在条目页那一面写一句（feature 003 §4.4）。没有计数、没有百分比。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Pending {
+    /// `asr` `ocr` `frames` `video`（`play`、`keyframes` 都算画面那一面）。
+    pub layer: &'static str,
+    pub state: PendingState,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<PendingModel>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hint: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PendingState {
+    /// 在转。
+    Now,
+    /// 等你下载模型。
+    NeedsModel,
+    /// 没转出来，原因在 `hint`。
+    Failed,
+    /// 排着，在电池上：接上电源时转。
+    OnPower,
+    /// 排着，会慢慢转。
+    Later,
+}
+
+/// 要先下载的模型；`plugin` 是转换插件的 id，`size` 是字节。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PendingModel {
+    pub plugin: String,
+    pub name: String,
+    pub size: u64,
+    pub license: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -100,6 +223,8 @@ pub struct ItemView {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
     pub facets: Vec<Facet>,
+    /// 还没转出来的面。
+    pub pending: Vec<Pending>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub trashed_at: Option<String>,
 }
@@ -203,6 +328,9 @@ pub struct TrashView {
 #[serde(rename_all = "lowercase")]
 pub enum HitLayer {
     Text,
+    Asr,
+    Ocr,
+    Frames,
     Comments,
     Title,
     Author,
@@ -216,6 +344,9 @@ pub struct SearchHit {
     pub title: String,
     pub platform: Platform,
     pub layer: HitLayer,
+    /// 转出来的文字命中时：那一秒、那一张、那一块。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub position: Option<Position>,
     pub snippet: String,
     /// 命中词在 `snippet` 里的 [起, 止)，按 UTF-16 单位（JS 字符串下标）。
     #[serde(rename = "match")]
@@ -447,7 +578,14 @@ pub struct VisitorView {
     pub plugins: Vec<String>,
 }
 
-/// 一个装着的转换插件（`GET /transforms`，形状由 WP8 照 `endpoints.ts` 定）。
+/// `GET /transforms`：装着的转换插件，和 `transforms.auto`。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct TransformsView {
+    pub plugins: Vec<TransformPluginView>,
+    pub auto: bool,
+}
+
+/// 一个装着的转换插件。
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TransformPluginView {
@@ -456,10 +594,30 @@ pub struct TransformPluginView {
     pub version: String,
     /// 它能做的 `job`：`play` `asr` `keyframes` `ocr` `frames`。
     pub jobs: Vec<String>,
+    /// 清单的 `upstream`：自带或包着的第三方程序和它的许可。
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub bundled: Vec<Bundled>,
     pub models: Vec<ModelView>,
+    /// 插件自己报的：`ok`，或 `unavailable`（`hint` 是没过的那几项检查）。
+    pub health: Health,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hint: Option<String>,
 }
 
-/// 一个模型：名字、下载大小、许可、现在怎样。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Bundled {
+    pub name: String,
+    pub license: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Health {
+    Ok,
+    Unavailable,
+}
+
+/// 一个模型：名字、下载大小、许可、现在怎样；`failed` 带一句给人看的原因。
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelView {
@@ -468,9 +626,11 @@ pub struct ModelView {
     pub license: String,
     #[serde(serialize_with = "model_state")]
     pub state: crate::ModelState,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hint: Option<String>,
 }
 
-/// `absent` `downloading` `present` `failed`；没成的原因只进日志。
+/// `absent` `downloading` `present` `failed`；没成的英文原因只进日志。
 fn model_state<S: serde::Serializer>(s: &crate::ModelState, ser: S) -> Result<S::Ok, S::Error> {
     ser.serialize_str(match s {
         crate::ModelState::Absent => "absent",
@@ -478,6 +638,45 @@ fn model_state<S: serde::Serializer>(s: &crate::ModelState, ser: S) -> Result<S:
         crate::ModelState::Present => "present",
         crate::ModelState::Failed(_) => "failed",
     })
+}
+
+/// 设置页要的内核那边的设置（`GET /settings`）。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsView {
+    pub library: String,
+    /// 回收站放几天；`null` 是一直。
+    pub trash_days: Option<u32>,
+    /// 时钟守卫拦下了到期的项；没有拦下时省略。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trash_held: Option<TrashHeld>,
+    pub network: NetworkView,
+    pub transforms: TransformsSetting,
+    /// 内核的日志在哪。
+    pub logs: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct TrashHeld {
+    pub count: usize,
+    /// 记下的最晚时间，RFC 3339。
+    pub since: String,
+}
+
+/// `mode` 是 `system`、`direct`、`custom`；`custom` 的 `proxy` 不带密码。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NetworkView {
+    pub mode: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proxy: Option<String>,
+    /// 这台电脑开着假 IP 模式的代理，宿主已经照它调好了。
+    pub fake_ip: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct TransformsSetting {
+    pub auto: bool,
 }
 
 /// 推给前端的事件；SSE 的事件名就是 `type`。
@@ -533,14 +732,54 @@ mod tests {
     #[test]
     fn shapes_match_the_frontend_contract() {
         let f = Facet::Video {
+            key: "video:s".into(),
             snapshot_id: "s".into(),
             duration_sec: 3.0,
             url: None,
             frames: vec![],
+            remark: None,
         };
         assert_eq!(
             serde_json::to_value(&f).unwrap(),
-            json!({"layer": "video", "snapshotId": "s", "durationSec": 3.0, "frames": []})
+            json!({"layer": "video", "key": "video:s", "snapshotId": "s", "durationSec": 3.0, "frames": []})
+        );
+        let a = Facet::Frames {
+            key: "frames:r".into(),
+            source: FacetSource {
+                by: SourceBy::Machine,
+                tool: Some("Vision".into()),
+                run_id: Some("r".into()),
+                at: None,
+                lang: None,
+            },
+            segments: vec![Segment {
+                text: "x".into(),
+                position: Some(Position::Time {
+                    sec: 1.5,
+                    end_sec: Some(4.0),
+                    snapshot_id: "s".into(),
+                    xywh: Some([0.1, 0.2, 0.3, 0.4]),
+                    frame_url: None,
+                }),
+            }],
+            remark: None,
+        };
+        assert_eq!(
+            serde_json::to_value(&a).unwrap(),
+            json!({"layer": "frames", "key": "frames:r",
+                   "source": {"by": "machine", "tool": "Vision", "runId": "r"},
+                   "segments": [{"text": "x", "position": {"kind": "time", "sec": 1.5, "endSec": 4.0,
+                                 "snapshotId": "s", "xywh": [0.1, 0.2, 0.3, 0.4]}}]})
+        );
+        let p = Pending {
+            layer: "asr",
+            state: PendingState::NeedsModel,
+            model: None,
+            hint: None,
+        };
+        assert_eq!(
+            serde_json::to_value(&p).unwrap(),
+            json!({"layer": "asr", "state": "needs-model"})
         );
         assert_eq!(
             serde_json::to_value(Stored::TextOnly).unwrap(),

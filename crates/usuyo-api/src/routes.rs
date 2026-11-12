@@ -22,10 +22,10 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::services::ServeFile;
 use tower_http::set_header::SetResponseHeaderLayer;
 use usuyo_core::view::{
-    ImportEntryView, ImportView, ItemView, MapView, PluginView, PluginsView, SearchHit, SiteView,
-    TakeResponse, Topic, TrashView, VisitorView,
+    ImportEntryView, ImportView, ItemView, MapView, PluginView, PluginsView, SearchHit,
+    SettingsView, SiteView, TakeResponse, Topic, TransformsView, TrashView, VisitorView,
 };
-use usuyo_core::{DeliveredLink, Engine, ImportChoice, Links, Via};
+use usuyo_core::{DeliveredLink, Engine, ImportChoice, Links, SettingsPatch, Via};
 use usuyo_plugin::protocol::{SourceInfo, StorageState};
 
 use crate::clients::{Client, ClientKind};
@@ -93,6 +93,18 @@ pub(crate) fn build(engine: Engine, gate: Arc<Gate>, origins: &[String]) -> Rout
         .route("/trash/{id}/purge", post(purge_now))
         .route("/items/{id}/text-only", post(text_only))
         .route("/items/{id}/refetch", post(refetch))
+        .route("/items/{id}/transform", post(item_transform))
+        .route("/transforms", get(transforms))
+        .route(
+            "/transforms/{owner}/{repo}/models/{name}/download",
+            post(model_download),
+        )
+        .route(
+            "/transforms/{owner}/{repo}/models/{name}/remove",
+            post(model_remove),
+        )
+        .route("/settings", get(settings).patch(patch_settings))
+        .route("/trash/release-held", post(release_held))
         .route("/search", get(search))
         .route("/reindex", post(reindex))
         .route("/media/{id}/{*layer}", get(media))
@@ -137,7 +149,13 @@ pub(crate) fn build(engine: Engine, gate: Arc<Gate>, origins: &[String]) -> Rout
         .collect();
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::list(origins))
-        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::PATCH,
+            Method::DELETE,
+        ])
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION, header::RANGE])
         .expose_headers([
             header::CONTENT_RANGE,
@@ -380,6 +398,98 @@ async fn text_only(State(s): State<AppState>, Path(id): Path<String>) -> ApiResu
 async fn refetch(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<ItemView> {
     let links = s.links(&id);
     Ok(Json(blocking(move || s.engine.refetch(&id, &links)).await?))
+}
+
+/// `{jobs: "pending"}`，或 `{job, plugin?, options?}`。
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TransformRequest {
+    jobs: Option<String>,
+    job: Option<String>,
+    plugin: Option<String>,
+    options: Option<serde_json::Map<String, serde_json::Value>>,
+}
+
+/// 打开条目页时把还没转的挪到最前；或者再转一次、换一个插件转。回 202，转换在后台跑。
+async fn item_transform(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+    req: Result<Json<TransformRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<serde_json::Value>), Problem> {
+    let req = body(req)?;
+    match req {
+        TransformRequest {
+            jobs: Some(jobs),
+            job: None,
+            plugin: None,
+            options: None,
+        } if jobs == "pending" => {
+            blocking(move || s.engine.transform_now(&id)).await?;
+        }
+        TransformRequest {
+            jobs: None,
+            job: Some(job),
+            plugin,
+            options,
+        } => {
+            blocking(move || {
+                s.engine
+                    .redo_transform(&id, &job, plugin.as_deref(), options.unwrap_or_default())
+            })
+            .await?;
+        }
+        _ => {
+            return Err(Problem::new(
+                "invalid-args",
+                "give {\"jobs\": \"pending\"} or {job, plugin?, options?}",
+            ));
+        }
+    }
+    Ok((StatusCode::ACCEPTED, Json(json!({"queued": true}))))
+}
+
+async fn transforms(State(s): State<AppState>) -> Json<TransformsView> {
+    Json(s.engine.transforms_view().await)
+}
+
+/// 下一个模型：已经在了回 200，开始下（或已经在下）回 202，下完发 `transforms-updated`。
+async fn model_download(
+    State(s): State<AppState>,
+    Path((owner, repo, name)): Path<(String, String, String)>,
+) -> Result<(StatusCode, Json<serde_json::Value>), Problem> {
+    if s.engine.download_model(&plugin_id(&owner, &repo), &name)? {
+        Ok((StatusCode::OK, Json(json!({"state": "present"}))))
+    } else {
+        Ok((StatusCode::ACCEPTED, Json(json!({"state": "downloading"}))))
+    }
+}
+
+async fn model_remove(
+    State(s): State<AppState>,
+    Path((owner, repo, name)): Path<(String, String, String)>,
+) -> Result<StatusCode, Problem> {
+    blocking(move || s.engine.remove_model(&plugin_id(&owner, &repo), &name)).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn settings(State(s): State<AppState>) -> ApiResult<SettingsView> {
+    Ok(Json(blocking(move || s.engine.settings()).await?))
+}
+
+async fn patch_settings(
+    State(s): State<AppState>,
+    req: Result<Json<SettingsPatch>, JsonRejection>,
+) -> ApiResult<SettingsView> {
+    let patch = body(req)?;
+    Ok(Json(
+        blocking(move || s.engine.patch_settings(patch, Via::App)).await?,
+    ))
+}
+
+/// 「照时间移除」：时钟守卫拦下的回收站项照时间移除。
+async fn release_held(State(s): State<AppState>) -> ApiResult<serde_json::Value> {
+    let removed = blocking(move || s.engine.release_held_trash()).await?;
+    Ok(Json(json!({ "removed": removed })))
 }
 
 #[derive(Deserialize)]

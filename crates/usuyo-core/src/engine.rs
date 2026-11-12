@@ -25,8 +25,8 @@ use crate::models::{Models, Net};
 use crate::pace::{Pacing, PlatformLocks};
 use crate::transform::{PowerSource, SystemPower, TransformSetup, Transforms};
 use crate::view::{
-    Comment, Event, Facet, HitLayer, ImageRef, ItemSummary, ItemView, MapPoint, MapView, Platform,
-    Reindexed, SearchHit, Segment, Stored, Topic, Unreadable,
+    Event, HitLayer, ItemSummary, ItemView, MapPoint, MapView, Platform, Reindexed, SearchHit,
+    Stored, Topic, Unreadable,
 };
 use crate::{Error, Result};
 
@@ -197,6 +197,10 @@ pub(crate) struct Inner {
     pub inbox: PathBuf,
     pub inbox_settle: Duration,
     pub transforms: Transforms,
+    /// 按机器的根目录：设置页读写那里的 `settings.json`。
+    pub machine_root: PathBuf,
+    /// 改 `settings.json` 时一次一个。
+    pub settings_lock: Mutex<()>,
 }
 
 #[derive(Clone)]
@@ -310,6 +314,8 @@ impl Engine {
                 inbox: config.inbox,
                 inbox_settle: config.inbox_settle,
                 transforms,
+                machine_root: config.machine_root,
+                settings_lock: Mutex::new(()),
             }),
         };
         if engine.inner.index.needs_rebuild() {
@@ -430,50 +436,7 @@ impl Engine {
 
     fn view_of(&self, m: &Manifest, c: &Content, links: &Links) -> Result<ItemView> {
         let id = m.id.as_str();
-        let mut facets = Vec::new();
-        if let Some(v) = &c.video {
-            facets.push(Facet::Video {
-                snapshot_id: v.snapshot.clone(),
-                duration_sec: v.duration_sec.unwrap_or(0.0),
-                url: Some(links.url(id, "video")),
-                frames: Vec::new(),
-            });
-        }
-        if !c.images.is_empty() {
-            let images = c
-                .images
-                .iter()
-                .map(|im| {
-                    let (width, height) = imagesize::size(&im.path)
-                        .map(|s| (s.width as u32, s.height as u32))
-                        .unwrap_or((0, 0));
-                    ImageRef {
-                        key: im.key.clone(),
-                        url: links.url(id, &format!("image/{}", im.key)),
-                        width,
-                        height,
-                    }
-                })
-                .collect();
-            facets.push(Facet::Image { images });
-        }
-        if let Some((_, paras)) = &c.text {
-            facets.push(Facet::Text {
-                segments: paras.iter().map(|t| Segment { text: t.clone() }).collect(),
-            });
-        }
-        if let Some((_, comments)) = &c.comments {
-            facets.push(Facet::Comments {
-                comments: comments
-                    .iter()
-                    .map(|x| Comment {
-                        author: x.author.clone(),
-                        text: x.text.clone(),
-                        likes: x.likes,
-                    })
-                    .collect(),
-            });
-        }
+        let facets = crate::facets::facets(id, c, links);
         let failed = self
             .inner
             .jobs
@@ -499,6 +462,7 @@ impl Engine {
             missing,
             note: c.takeaway.clone(),
             facets,
+            pending: self.pending(id)?,
             trashed_at: None,
         })
     }
@@ -522,6 +486,9 @@ impl Engine {
                 let seg = hit.segments.into_iter().next()?;
                 let first = seg.snippet.highlights.first().cloned().unwrap_or(0..0);
                 let layer = match seg.layer.as_str() {
+                    "asr" => HitLayer::Asr,
+                    "ocr" => HitLayer::Ocr,
+                    "frames" => HitLayer::Frames,
                     "comments" => HitLayer::Comments,
                     "takeaway" | "notes" => HitLayer::Note,
                     "meta" => meta_layer(&seg.snippet, &hit.author),
@@ -533,12 +500,19 @@ impl Engine {
                         .get(..byte)
                         .map_or(0, |s| s.encode_utf16().count())
                 };
+                let position = match layer {
+                    HitLayer::Asr | HitLayer::Ocr | HitLayer::Frames => {
+                        crate::facets::position_of(&seg.locator, seg.snapshot_id.as_deref())
+                    }
+                    _ => None,
+                };
                 Some(SearchHit {
                     matched: [utf16(first.start), utf16(first.end)],
                     platform: self.platform(&hit.platform),
                     item_id: hit.item_id,
                     title: hit.title,
                     layer,
+                    position,
                     snippet: seg.snippet.text,
                 })
             })
@@ -622,9 +596,13 @@ impl Engine {
         })
     }
 
-    /// 媒体文件在哪：只认 `image/<key>`、`video`、`audio`，经资料库解析，出不了条目文件夹。
+    /// 媒体文件在哪：只认 `image/<key>`、`video`（有合起来的 `play.mp4` 时是它）、`audio`、
+    /// `frame/<runId>/<毫秒>`，经资料库解析，出不了条目文件夹。
     pub fn media(&self, id: &str, layer: &str) -> Result<PathBuf> {
-        let ok = layer == "video" || layer == "audio" || layer.starts_with("image/");
+        let ok = layer == "video"
+            || layer == "audio"
+            || layer.starts_with("image/")
+            || layer.starts_with("frame/");
         if !ok {
             return Err(Error::InvalidArgs(format!("no media layer `{layer}`")));
         }
@@ -830,13 +808,12 @@ fn meta_layer(snippet: &usuyo_index::Snippet, author: &str) -> HitLayer {
 }
 
 /// `partial`：主快照的插件说了有些没存下来，哪怕每一类都拿到了一些。
-/// 只有 `missing` 没有原因的不算：宿主照「想要的 − 拿到的」算，页面本来就没图也会记一笔 `images`。
 fn stored(m: &Manifest, partial: bool) -> Stored {
     if m.state == ItemState::TextOnly {
         Stored::TextOnly
     } else if m.snapshots.is_empty() {
         Stored::Link
-    } else if partial || (!m.missing.is_empty() && m.missing_reason.is_some()) {
+    } else if partial || !m.missing.is_empty() {
         Stored::Partial
     } else {
         Stored::Complete

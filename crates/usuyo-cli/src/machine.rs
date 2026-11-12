@@ -40,18 +40,11 @@ fn read_settings(root: &Path) -> Result<Map<String, Value>> {
     }
 }
 
-/// 记下当前资料库；别的键原样留着。
+/// 记下当前资料库；别的键原样留着（写法在 `usuyo-core` 的设置那里，只有自己能读）。
 pub fn remember_library(root: &Path, library: &Path) -> Result<()> {
-    let mut s = read_settings(root)?;
-    s.insert(
-        "library".into(),
-        Value::String(library.to_string_lossy().into_owned()),
-    );
     make_private_root(root)?;
-    let path = settings_path(root);
-    let mut bytes = serde_json::to_vec_pretty(&s)?;
-    bytes.push(b'\n');
-    std::fs::write(&path, bytes).with_context(|| format!("cannot write {}", path.display()))
+    usuyo_core::remember_library(root, library)
+        .with_context(|| format!("cannot write {}", root.join("settings.json").display()))
 }
 
 /// `settings.json` 里记着当前资料库没有。
@@ -80,24 +73,6 @@ pub fn make_private_root(root: &Path) -> Result<()> {
             .with_context(|| format!("cannot restrict {}", root.display()))?;
     }
     Ok(())
-}
-
-/// 写一个只有自己能读（0600）的文件：先写旁边的临时文件再换名，读的一方不会读到一半。
-pub fn write_private(path: &Path, bytes: &[u8]) -> Result<()> {
-    use std::io::Write;
-    let tmp = path.with_extension("tmp");
-    let mut opts = std::fs::OpenOptions::new();
-    opts.write(true).create(true).truncate(true);
-    #[cfg(unix)]
-    std::os::unix::fs::OpenOptionsExt::mode(&mut opts, 0o600);
-    let mut f = opts
-        .open(&tmp)
-        .with_context(|| format!("cannot write {}", tmp.display()))?;
-    #[cfg(unix)]
-    f.set_permissions(std::os::unix::fs::PermissionsExt::from_mode(0o600))?;
-    f.write_all(bytes)
-        .with_context(|| format!("cannot write {}", tmp.display()))?;
-    std::fs::rename(&tmp, path).with_context(|| format!("cannot write {}", path.display()))
 }
 
 /// 退出时去掉令牌文件，只在里面还是自己的令牌时：这次启动的令牌跟着这次启动作废。
@@ -144,30 +119,6 @@ pub fn plugin_settings(root: &Path) -> Result<BTreeMap<String, Value>> {
         }
     }
     Ok(out)
-}
-
-/// `settings.json` 里的 `transforms.auto`（feature 003 §4.4）：没写是开着；写了不是真假的报错。
-pub fn transforms_auto(root: &Path) -> Result<bool> {
-    let s = read_settings(root)?;
-    match s.get("transforms").and_then(|t| t.get("auto")) {
-        None => Ok(true),
-        Some(Value::Bool(b)) => Ok(*b),
-        Some(other) => {
-            anyhow::bail!("settings.json: transforms.auto is {other}, not true or false")
-        }
-    }
-}
-
-/// `settings.json` 里的 `network.proxy`：`system`（没写时）、`direct` 或一个代理地址；写坏了报错，
-/// 错误里不带地址（可能有密码）。
-pub fn proxy_setting(root: &Path) -> Result<usuyo_core::ProxySetting> {
-    let s = read_settings(root)?;
-    match s.get("network").and_then(|n| n.get("proxy")) {
-        None => Ok(usuyo_core::ProxySetting::System),
-        Some(Value::String(text)) => usuyo_core::ProxySetting::parse(text)
-            .map_err(|why| anyhow::anyhow!("settings.json: network.proxy: {why}")),
-        Some(_) => anyhow::bail!("settings.json: network.proxy is not a string"),
-    }
 }
 
 /// 开发时：把 `cargo build` 出来的 `usuyo-plugin-web`（和本程序在同一个目录）和仓库里的清单

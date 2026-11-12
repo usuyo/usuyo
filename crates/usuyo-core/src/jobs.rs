@@ -1032,14 +1032,42 @@ impl Jobs {
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
-    /// 模型到了：等它的回到排着，马上能做。
-    pub fn model_arrived(&self, model: &str, now: i64) -> Result<()> {
-        self.conn().execute(
+    /// 模型到了：等它的回到排着，马上能做。回这几行的条目 id（去重），它们的条目页要重拉。
+    pub fn model_arrived(&self, model: &str, now: i64) -> Result<Vec<String>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
             "UPDATE transform_jobs SET state = 'queued', wait = NULL, due_at = ?2
-             WHERE state = 'waiting' AND wait = ?1",
-            params![format!("model:{model}"), now],
+             WHERE state = 'waiting' AND wait = ?1 RETURNING item_id",
+        )?;
+        let rows = stmt.query_map(params![format!("model:{model}"), now], |r| r.get(0))?;
+        let mut ids: Vec<String> = rows.collect::<rusqlite::Result<_>>()?;
+        ids.sort();
+        ids.dedup();
+        Ok(ids)
+    }
+
+    /// 缺插件、缺程序（`dependency-missing`）停下的：重新排上，启动时看装了没有。
+    pub fn revive_missing(&self, now: i64) -> Result<()> {
+        self.conn().execute(
+            "UPDATE transform_jobs SET state = 'queued', attempts = 0, due_at = ?1,
+                error_code = NULL, error_hint = NULL
+             WHERE state = 'failed' AND error_code = 'dependency-missing'",
+            params![now],
         )?;
         Ok(())
+    }
+
+    /// `transforms.auto` 关掉了：自动排的（不是点名的）、没在跑的都删掉；回删了哪几条。
+    pub fn drop_automatic(&self) -> Result<Vec<String>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
+            "DELETE FROM transform_jobs WHERE priority > 0 AND state != 'running' RETURNING item_id",
+        )?;
+        let rows = stmt.query_map([], |r| r.get(0))?;
+        let mut ids: Vec<String> = rows.collect::<rusqlite::Result<_>>()?;
+        ids.sort();
+        ids.dedup();
+        Ok(ids)
     }
 
     /// 一条的转换任务，按一条里的先后。

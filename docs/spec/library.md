@@ -59,13 +59,13 @@ items/douyin/douyin-4plrcxk343onmyxibmrr672kga/
 |---|---|---|---|
 | `id`、`aliases` | `itemId`；并掉的 id | 宿主 | 不变；集合三方合并 |
 | `identities` | `[{platform, contentId?, url?}]`，`id` 由建条目时的身份算（没有身份的随机），之后只经合并换（[§0.4](conventions.md#04-id)），不看数组位置 | 宿主 | 集合三方合并，按 `identityKey` 认 |
-| `kind` `title` `author` `publishedAt` `publishedAtOriginal` | 取自主快照；没有快照时 `title` 取 `list` 或投递给的值，再没有写原链接；`kind` 写 `unknown` | 宿主 | 跟主快照 |
+| `kind` `title` `author` `publishedAt` `publishedAtOriginal` | 取自主快照；没有快照时 `title` 取 `list` 或投递给的值，再没有写原链接；主快照没有标题、`title` 还是原链接时，取主快照正文里第一行有字的（去掉 Markdown 标题的 `#`，长于 40 个字截到 40 个字加「…」）；`kind` 写 `unknown` | 宿主 | 跟主快照 |
 | `lang` | 宿主从主快照的文字或字幕判断，BCP 47 | 宿主 | 跟主快照 |
 | `addedAt` | 第一次收下的时间 | 宿主 | 取早的 |
 | `origins`、`snapshots` | 见下 | 宿主 | 集合三方合并，按每项的 `id` 认 |
 | `primarySnapshot` | 输出集合最大的，一样大先比 `at` 再比 `id`；没有快照为 `null`。11-11 代码：比的是各快照自己的 `outputs` 个数（不减 `textOnly.removed`），一样多取 `at` 晚的，再一样取 `id` 字符串大的 | 宿主 | 合并后重算 |
 | `outputs` | 各快照 `outputs` 的并集，减去 `textOnly.removed` 涉及的 | 宿主 | 合并后重算 |
-| `missing`、`missingReason` | 各快照 `missing` 的并集 − 条目 `outputs`，`state: text-only` 时只算文字类；快照的 `missing` 由取它的那台在取的时候算好，之后不改：这次的 `--want` − 实际拿到的；`--want` 一般是命中插件声明的 `outputs` ∩ 设置，重试只要缺的、「取评论」和只留文字以后才更窄（评论默认不算；投递来的、文件就是实际拿到的）。只用同步的字段算，两台算出一样的；设置、插件后来变了只影响下一次取。`missingReason` 是给你看的原因；11-11 代码取最新一份、还有缺的输出没补上的快照的 `missingReason` | 宿主 | 合并后重算 |
+| `missing`、`missingReason` | 各快照 `missing` 的并集 − 条目 `outputs`，`state: text-only` 时只算文字类；快照的 `missing` 由取它的那台在取的时候定好，之后不改：这一条有、这次的 `--want` 想要却没交来的，照[协议 §3.7](../protocol/fetch.md#37-fetch-输出)；`--want` 一般是命中插件声明的 `outputs` ∩ 设置，重试只要缺的、「取评论」和只留文字以后才更窄（评论默认不算；投递来的、文件就是实际拿到的）。只用同步的字段算，两台算出一样的；设置、插件后来变了只影响下一次取。`missingReason` 是给你看的原因；11-11 代码取最新一份、还有缺的输出没补上的快照的 `missingReason` | 宿主 | 合并后重算 |
 | `completeness` | `link` `partial` `full`：没有快照是 `link`，否则由 `missing` 算；只升不降（[PRD §8](../PRD.md#8-条目的状态)）：重算出的比现值低时留现值，条目页照 `missing` 说缺什么 | 宿主 | 两边和重算的取高的 |
 | `tags.platform`；`tags.engine` | 快照带的；`[{tag, by, at, confidence}]` | 宿主 | 并集；同一个 `tag` 取 `at` 新的，再比 `by` |
 | `tags.user`、`tags.dismissed` | 你的标签；忽略过、不再建议的 | 你 | 集合三方合并 |
@@ -90,7 +90,7 @@ items/douyin/douyin-4plrcxk343onmyxibmrr672kga/
 
 你在跟着收的预览里自己点收下的，`takenBy: user`、`machinePicked: null`（推断：你一条条挑过）。跟着收按关键词或相似度命中收下的都标「机器挑的」。界面标「机器挑的」：每一项 `origins` 都带 `machinePicked`（你自己也收过一次就不标）；写过、放进主题、引用过都不去掉，它是来历（11-05 定，[§1.10 第 19 条](#110-要你看一眼)）；地图上怎么分开等 [M4](../PRD.md#76-地图)。
 
-**`snapshots[]`**（[协议 §3.5](../protocol/fetch.md#35-canonicalize-与身份)–[§3.7](../protocol/fetch.md#37-fetch-输出)）：`id`（UUIDv7）；`plugin`、`pluginVersion`（交来已取到的内容时：投递接口记 `deliver:<令牌名>`，收件文件夹记 `deliver:inbox`；链接和交给导入插件的文件，记去取它的那个插件）；`at`、`inputUrl`（你给的原链接）、`resolvedUrl`（`canonicalize` 展开的完整链接）；`access`（投递为 `deliver`）、`site`、`upstream`；`outputs`（实际拿到的，比完整度只比它）；`missing`、`missingReason`、`completeness`（宿主在取的时候算，`missing` 是这次的 `--want` − 实际拿到的，之后不改）；`textOrigin`（`platform` 或 `machine`，等[协议 §13](../protocol/open.md#13-待定) 第 24 项）。
+**`snapshots[]`**（[协议 §3.5](../protocol/fetch.md#35-canonicalize-与身份)–[§3.7](../protocol/fetch.md#37-fetch-输出)）：`id`（UUIDv7）；`plugin`、`pluginVersion`（交来已取到的内容时：投递接口记 `deliver:<令牌名>`，收件文件夹记 `deliver:inbox`；链接和交给导入插件的文件，记去取它的那个插件）；`at`、`inputUrl`（你给的原链接）、`resolvedUrl`（`canonicalize` 展开的完整链接）；`access`（投递为 `deliver`）、`site`、`upstream`；`outputs`（实际拿到的，比完整度只比它）；`missing`、`missingReason`、`completeness`（宿主在取的时候定，`missing` 照[协议 §3.7](../protocol/fetch.md#37-fetch-输出)，之后不改）；`textOrigin`（`platform` 或 `machine`，等[协议 §13](../protocol/open.md#13-待定) 第 24 项）。
 
 11-11 代码：快照的 `outputs` 由 `usuyo.fetch.json` 算：有 `text`、`html`、`images`、`media` 里的 `video`、`audio`、`subtitle`，标题、作者、发布时间有一样就算 `meta`，有 `comments`。快照的 `completeness`：没有输出是 `link`，没缺的是 `full`，否则 `partial`。只有 `missing`、`missingReason`，没有别的「缺」字段。11-11 还没做：`inputUrl` 记的是 `canonicalize` 给的 `resolvedUrl`（没有就是收下的链接），`resolvedUrl` 不写。
 

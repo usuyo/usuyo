@@ -63,6 +63,8 @@ pub struct SegmentHit {
     /// 层名；标题、作者、标签、主题那一段是 `"meta"`。
     pub layer: String,
     pub snapshot_id: Option<String>,
+    /// 收下时调用方给的 [`crate::LayerText::source`]，原样返回。
+    pub source: Option<String>,
     /// 收下时调用方给的定位串，原样返回。
     pub locator: String,
     pub snippet: Snippet,
@@ -121,6 +123,7 @@ impl SearchIndex {
             segments.push(SegmentHit {
                 layer: text_of(&doc, f.layer),
                 snapshot_id: opt_text_of(&doc, f.snapshot_id),
+                source: opt_text_of(&doc, f.source),
                 locator: text_of(&doc, f.locator),
                 snippet: snippet::make(&text_of(&doc, f.text), marks),
                 score,

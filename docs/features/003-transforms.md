@@ -509,11 +509,11 @@ export interface Pending {
 | WP1 | **做了。** `run.json` 类型、schema、样例；把 [§8.2](#82-要写回-spec--协议的) 的 SPEC 各条写回 | `crates/usuyo-contract`、`docs/spec/` | 低 | WP5 |
 | WP2 | **做了。** 转换的协议类型、清单词表、`models[]` 新字段；plugin-kit 的 JSON-RPC 循环；把 [§8.2](#82-要写回-spec--协议的) 的协议各条写回 | `crates/usuyo-plugin/src/protocol`、`crates/usuyo-plugin-kit`、`docs/protocol/` | 中 | WP3、WP9、WP10 |
 | WP3 | **做了。** 常驻转换进程：启动、核对、`run`、取消、卡住、闲了关、暂存目录、优先级 | `crates/usuyo-plugin/src/host/transform.rs` | 高 | WP6 |
-| WP4 | 模型下载：续传、镜像、校验、解包、`model.json`、状态 | `crates/usuyo-core/src/models.rs` | 中 | WP6 |
+| WP4 | **做了。** 模型下载：续传、镜像、校验、解包、`model.json`、状态；没下成的写一句给人看的原因，英文的只进日志 | `crates/usuyo-core/src/models.rs` | 中 | WP6 |
 | WP5 | **做了。** 转录写入（暂存后改名）、列出、按层找（`resolve_layer` 认转录、`video` 先给 `play.mp4`、`frame/<runId>/<ms>`）、只留文字移走二进制 | `crates/usuyo-library` | 中 | WP6、WP7 |
-| WP6 | 排任务、配对、编排链、电源和先后、`transform_jobs`、事件 | `crates/usuyo-core/src/transform.rs`、`jobs.rs`、`engine.rs` | 高 | WP7 |
-| WP7 | 条目页的 facets 和 `pending`、标记文字、索引三层和 `source`、搜索的层映射 | `crates/usuyo-core/src/content.rs`、`view.rs`、`index_doc.rs`、`crates/usuyo-index` | 中 | WP12 |
-| WP8 | [§8.1](#81-接口) 的接口 | `apps/desktop/web/src/api/endpoints.ts`、`crates/usuyo-api` | 中 | WP12 |
+| WP6 | **做了。** 排任务、配对、编排链、电源和先后、`transform_jobs`、事件（开始转、转好、等模型、没转出来、模型到了都发 `item-updated`）；没装能做这一样的插件时那一面写「这台电脑上还没有能转口播的插件」一类的话，启动时再看装上没有；插件没给 `hint` 时按错误码写一句中文 | `crates/usuyo-core/src/transform.rs`、`jobs.rs`、`engine.rs` | 高 | WP7 |
+| WP7 | **做了。** 条目页的 facets 和 `pending`、标记文字、索引三层和 `source`、搜索的层映射。读法只在 `crates/usuyo-core/src/transcripts.rs` 一处，条目页和索引都从它来；工具名用模型名，没有模型用插件报的程序名（清单还没有给人看的名字） | `crates/usuyo-core/src/content.rs`、`view.rs`、`index_doc.rs`、`crates/usuyo-index` | 中 | WP12 |
+| WP8 | **做了。** [§8.1](#81-接口) 的接口，照代码写进 [SPEC 本机接口](../spec/local-api.md#本机接口第-2-层11-11-照代码)；另有 `GET`、`PATCH /settings`（`network.proxy`、`transforms.auto`、`trashDays`）和 `POST /trash/release-held`。`endpoints.ts` 由前端那边改 | `apps/desktop/web/src/api/endpoints.ts`、`crates/usuyo-api` | 中 | WP12 |
 | WP9 | **做了。** `builtin/media`：配对时的 `ffprobe`、`play`、`audio:pcm16k`、`keyframes`；精简 LGPL ffmpeg 的编译脚本和 CI；`just dev-plugins` 装上它（开发机链到 Homebrew 的 ffmpeg） | `plugins/media`、`justfile` | 中 | 验收 |
 | WP10 | **做了。** `builtin/asr-sherpa`：VAD 切段、SenseVoice、cue 切分、去标签、`no-speech` | `plugins/asr-sherpa` | 中 | 验收 |
 | WP11 | **做了。** `builtin/ocr-vision`：Swift Package、JSON-RPC 循环、Vision 调用、坐标换算、`no-text` | `plugins/ocr-vision` | 中 | 验收 |

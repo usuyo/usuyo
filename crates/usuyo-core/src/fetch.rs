@@ -511,13 +511,7 @@ impl Engine {
     ) -> Result<()> {
         let out = &snap.output;
         let fetch = fetch_record(out)?;
-        let want = plugin
-            .spec
-            .capabilities
-            .fetch
-            .as_ref()
-            .map(|c| c.outputs.iter().map(|o| o.as_str().to_owned()).collect())
-            .unwrap_or_default();
+        let missing = out.missing.iter().map(|o| o.as_str().to_owned()).collect();
         let access = serde_json::to_value(out.evidence.access)?
             .as_str()
             .unwrap_or_default()
@@ -536,7 +530,7 @@ impl Engine {
             access,
             site: out.evidence.site.clone(),
             upstream,
-            want,
+            missing,
             missing_reason: out.missing_reason.clone(),
             text_origin: None,
             staged: snap.out_dir(),

@@ -8,6 +8,7 @@ fn layer(name: &str, snapshot: Option<&str>, segments: &[(&str, &str)]) -> Layer
     LayerText {
         layer: name.into(),
         snapshot_id: snapshot.map(Into::into),
+        source: None,
         segments: segments
             .iter()
             .map(|(text, locator)| Segment {
@@ -42,14 +43,17 @@ fn corpus() -> Vec<IndexDoc> {
                 "douyin-a",
                 "手冲咖啡：三段式注水",
                 vec![
-                    layer(
-                        "asr",
-                        Some("snap1"),
-                        &[
-                            ("第一段 40 克闷蒸 30 秒", "t=42,48"),
-                            ("然后绕圈注水到 120 克", "t=50,56"),
-                        ],
-                    ),
+                    LayerText {
+                        source: Some("019a6f3e-8c1d-7b2a-9e44-5d0c1a2b3c4d".into()),
+                        ..layer(
+                            "asr",
+                            Some("snap1"),
+                            &[
+                                ("第一段 40 克闷蒸 30 秒", "t=42,48"),
+                                ("然后绕圈注水到 120 克", "t=50,56"),
+                            ],
+                        )
+                    },
                     layer("notes", None, &[("以后试试 V60 的滤杯", "p=3")]),
                 ],
             )
@@ -162,6 +166,10 @@ fn hit_carries_layer_locator_and_highlight() {
     assert_eq!(seg.layer, "asr");
     assert_eq!(seg.locator, "t=42,48");
     assert_eq!(seg.snapshot_id.as_deref(), Some("snap1"));
+    assert_eq!(
+        seg.source.as_deref(),
+        Some("019a6f3e-8c1d-7b2a-9e44-5d0c1a2b3c4d")
+    );
     assert_eq!(hits[0].title, "手冲咖啡：三段式注水");
     let h = &seg.snippet.highlights;
     assert!(!h.is_empty());

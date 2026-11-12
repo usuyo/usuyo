@@ -139,25 +139,10 @@ pub fn create_token(path: &Path) -> Result<String, Error> {
 }
 
 #[cfg(feature = "server")]
-/// 写一个只有自己能读（0600）的文件：先写到旁边的临时文件再换名，读的一方不会读到一半。
+/// 只有自己能读的文件（令牌、投递令牌），经 `usuyo-core` 的同一个写法。
 pub(crate) fn write_private(path: &Path, bytes: &[u8]) -> Result<(), Error> {
-    let io = |source| Error::Io {
+    usuyo_core::write_private(path, bytes).map_err(|source| Error::Io {
         path: path.to_owned(),
         source,
-    };
-    let tmp = path.with_extension("tmp");
-    let mut opts = std::fs::OpenOptions::new();
-    opts.write(true).create(true).truncate(true);
-    #[cfg(unix)]
-    std::os::unix::fs::OpenOptionsExt::mode(&mut opts, 0o600);
-    let mut f = opts.open(&tmp).map_err(io)?;
-    // 临时文件早就在时 `mode` 不管用，再设一次。
-    #[cfg(unix)]
-    f.set_permissions(std::os::unix::fs::PermissionsExt::from_mode(0o600))
-        .map_err(io)?;
-    use std::io::Write;
-    f.write_all(bytes).map_err(io)?;
-    f.sync_all().map_err(io)?;
-    std::fs::rename(&tmp, path).map_err(io)?;
-    Ok(())
+    })
 }

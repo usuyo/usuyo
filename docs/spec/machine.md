@@ -14,7 +14,7 @@
 - 按机器的根目录可以用 `USUYO_HOME` 换成别处（测试用）；Linux 没设 `$XDG_STATE_HOME` 时是 `~/.local/state/usuyo/`。根目录、`libraries/<libraryId>/` 和 `logs/` 只给本人（0700），`jobs.db`、`api-token`、`deliver-tokens.json`、`daemon.json`、`logs/daemon.log` 是 0600。
 - `api-token` 存令牌本身，不存哈希：握手要拿它当密钥（[本机接口](local-api.md#本机接口第-2-层11-11-照代码)）。每次启动守护进程换一个，正常退出时连同 `daemon.json`（`{port, pid}`）一起删掉。
 - `device.json` 是 `{deviceId, libraryPath}`。`jobs.db`（建表分两版，`user_version` 是 1）里有六张表：取内容的任务（每条一行，按 `itemId` 去重，带优先级和所属导入）、插件的暂停（按插件和范围，范围是平台，web 插件按主机，`*` 是你点的「先别试」；记错误码、原因、到什么时候）、上次写的 `content.md` 的哈希、平台的节奏记账（每个平台上次调用结束的时间、今天批量调用了几次，重启后照旧）、导入、导入的清单（每个导入里每条链接一行，记身份、在库里的哪里、收下没有）。失败的任务清掉链接，只留错误码和原因。任务一次跑一个，同一平台同一时间只跑一个调用。
-- `daemon.json` 是 `{port, pid}`。`api-token`、`daemon.json` 的来去见[本机接口](local-api.md#本机接口第-2-层11-11-照代码)。根目录 `settings.json` 现在只有 `library`（当前资料库）和 `plugins.<插件 id>.settings`，别的键读写时原样留着。
+- `daemon.json` 是 `{port, pid}`。`api-token`、`daemon.json` 的来去见[本机接口](local-api.md#本机接口第-2-层11-11-照代码)。根目录 `settings.json` 现在用到的键见上表；设置页（[本机接口](local-api.md#本机接口第-2-层11-11-照代码)的 `PATCH /settings`）改 `network.proxy`、`transforms.auto`，先写临时文件再改名，别的键原样留着。
 - `deliver-tokens.json`：投递令牌的清单，一个数组，每项 `{id, name, kind, secret, createdAt}`，`kind` 取 `extension`、`mobile`、`api`。`secret` 是明文（读文件的权限只有本人），令牌整个只在发的那一次回给调用方；撤销马上生效。
 - `logins.json`：登录站点、访客身份和密钥设置的索引，不含任何值。站点和访客身份各按主机记存下的时间和每个 cookie 的名字、域名、过期时间；密钥设置记每个插件填了哪几项。看登录状态、过期没有只读它，不碰钥匙串。
 - `run/`：一次调用要交凭据给插件时，在这里建这次自己的文件夹 `usuyo-cred-<随机>`（0700），文件 0600：`credentials.json` 和 `cookies.txt`（账号站点）、`visitor.json`（访客身份）、`secrets.json`（密钥设置），路径经 `USUYO_CREDENTIALS`、`USUYO_COOKIES_TXT`、`USUYO_VISITOR`、`USUYO_SECRETS` 传给插件（[协议 §6](../protocol/credentials.md#6-凭据)）；进程结束整个文件夹删掉，守护进程启动时再清一遍上次被杀留下的 `usuyo-cred-*`。没有可交的就不建。

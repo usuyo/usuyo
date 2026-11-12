@@ -39,8 +39,8 @@ pub enum ModelState {
     Absent,
     Downloading,
     Present,
-    /// 上次下载没成，原因是给日志和诊断看的英文。
-    Failed(String),
+    /// 上次下载没成：给人看的一句（英文的原因只进日志）。
+    Failed(&'static str),
 }
 
 /// `model.json`：`{name, sha256, size, license, files: [{path, size, sha256}]}`，`path` 相对模型文件夹。
@@ -96,6 +96,23 @@ pub enum ModelError {
     Task(String),
 }
 
+impl ModelError {
+    /// 给人看的一句，写在模型那一栏「没下成」后面。
+    fn hint(&self) -> &'static str {
+        match self {
+            ModelError::Network(_) | ModelError::Stall(_) | ModelError::Status(_) => {
+                "网络不通，或者下载断了"
+            }
+            ModelError::Refused(_) => "连不到下载地址（看看设置里的代理）",
+            ModelError::Sha256 { .. } | ModelError::TooLarge(_) | ModelError::Short { .. } => {
+                "下载下来的文件和插件说的不一样"
+            }
+            ModelError::Io { .. } => "存不进这台电脑的模型文件夹",
+            _ => "没下成",
+        }
+    }
+}
+
 fn io(path: &Path) -> impl FnOnce(std::io::Error) -> ModelError + '_ {
     move |source| ModelError::Io {
         path: path.to_owned(),
@@ -110,8 +127,8 @@ fn archive(msg: impl Into<String>) -> ModelError {
 /// 下载怎么连。出厂只有一种：[`Net::system`]；测试换成连本机 http 测试服务器的。
 #[derive(Clone)]
 pub(crate) struct Net {
-    /// 和获取插件同一条路：按机器的 `network.proxy`。
-    route: ProxySetting,
+    /// 和获取插件同一条路：按机器的 `network.proxy`；设置页改了马上换。
+    route: Arc<std::sync::RwLock<ProxySetting>>,
     /// 测试固定的地址策略和代理地址；为空时每次下载照这台机器现在的网络环境取严格策略
     /// （假 IP 代理照 `behind_fake_ip_proxy`，代理照 `route`）。
     policy: Option<(Policy, Option<String>)>,
@@ -133,7 +150,7 @@ impl Net {
             .with_root_certificates(roots)
             .with_no_client_auth();
         Ok(Net {
-            route,
+            route: Arc::new(std::sync::RwLock::new(route)),
             policy: None,
             https_only: true,
             connect: CONNECT,
@@ -147,7 +164,11 @@ impl Net {
         if let Some(fixed) = &self.policy {
             return Ok(fixed.clone());
         }
-        let route = self.route.clone();
+        let route = self
+            .route
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
         let (fake, proxy) = tokio::task::spawn_blocking(move || {
             (
                 usuyo_plugin::behind_fake_ip_proxy(),
@@ -371,6 +392,15 @@ impl Models {
         self.busy.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
+    /// 之后的下载走这个代理。
+    pub fn set_route(&self, route: ProxySetting) {
+        *self
+            .net
+            .route
+            .write()
+            .unwrap_or_else(PoisonError::into_inner) = route;
+    }
+
     /// 插件的 `${MODELS}`：`models/<owner>/<repo>/`。
     fn plugin_dir(&self, plugin: &PluginId) -> PathBuf {
         self.root.join(plugin.owner()).join(plugin.repo())
@@ -432,7 +462,7 @@ impl Models {
                 busy.remove(&key);
             }
             Err(e) => {
-                busy.insert(key, ModelState::Failed(e.to_string()));
+                busy.insert(key, ModelState::Failed(e.hint()));
             }
         }
     }

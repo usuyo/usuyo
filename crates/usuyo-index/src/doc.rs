@@ -25,6 +25,8 @@ pub struct IndexDoc {
 pub struct LayerText {
     pub layer: String,
     pub snapshot_id: Option<String>,
+    /// 这一层是哪一份：一次转录的 `runId`，或平台字幕 `sub:<snapshotId>:<文件名>`；原文、评论这类只有一份的不写。
+    pub source: Option<String>,
     pub segments: Vec<Segment>,
 }
 

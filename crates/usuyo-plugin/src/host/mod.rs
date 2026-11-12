@@ -313,8 +313,8 @@ pub struct PluginHost {
     /// 插件 id → 用户给它的非密钥设置（§2.11），调用时写成 `USUYO_SETTINGS` 指的文件。
     settings: BTreeMap<String, Value>,
     logins: Arc<credentials::Logins>,
-    /// 要联网的插件走哪个代理。
-    proxy: ProxySetting,
+    /// 要联网的插件走哪个代理；设置页改了马上换（[`PluginHost::set_proxy`]）。
+    proxy: std::sync::RwLock<ProxySetting>,
 }
 
 impl PluginHost {
@@ -326,15 +326,26 @@ impl PluginHost {
             plugins,
             settings: BTreeMap::new(),
             logins,
-            proxy: ProxySetting::Direct,
+            proxy: std::sync::RwLock::new(ProxySetting::Direct),
         }
     }
 
     /// 要联网的插件经哪个代理出去（按机器的 `network.proxy`）。没调这个时直连。
     /// 调用方：`usuyo-core` 的 `Engine::open`。
     pub fn with_proxy(mut self, proxy: ProxySetting) -> Self {
-        self.proxy = proxy;
+        *self
+            .proxy
+            .get_mut()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = proxy;
         self
+    }
+
+    /// 换代理，下一次调用起用新的。调用方：`usuyo-core` 的设置（`PATCH /settings`）。
+    pub fn set_proxy(&self, proxy: ProxySetting) {
+        *self
+            .proxy
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = proxy;
     }
 
     /// 凭据和密钥存在 `vault`（§6）。`private_dir` 是按机器的目录（不在资料库里）：
@@ -561,9 +572,18 @@ impl PluginHost {
             return Err(invalid(format!("`{twice}` is referenced more than once")));
         }
 
-        // 完整度以宿主算的为准（§3.1）：缺的 = 想要的 − 实际拿到的；一样都没拿到算只认出了链接
+        // 完整度（§3.7）：缺的是插件说缺、又确实没交来的（想要的 − 实际拿到的里头）。这一条本来就没有的
+        // 那一样（只有字的帖子没有图）不算缺，只有插件知道，宿主不按「没交来」猜；插件说缺、其实交来了的，
+        // 或者不在想要的里头的，去掉。一样都没拿到算只认出了链接。
         let obtained = output.obtained();
-        let missing: Vec<OutputKind> = wanted.difference(&obtained).copied().collect();
+        let missing: Vec<OutputKind> = output
+            .missing
+            .iter()
+            .copied()
+            .filter(|o| wanted.contains(o) && !obtained.contains(o))
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
         let completeness = if obtained.is_disjoint(&wanted) {
             Completeness::Link
         } else if missing.is_empty() {
@@ -571,7 +591,8 @@ impl PluginHost {
         } else {
             Completeness::Partial
         };
-        if completeness != output.completeness || missing != output.missing {
+        let claimed: BTreeSet<OutputKind> = output.missing.iter().copied().collect();
+        if completeness != output.completeness || claimed.len() != missing.len() {
             tracing::warn!(
                 plugin = %plugin.id(),
                 claimed = ?output.completeness,
@@ -777,7 +798,11 @@ impl PluginHost {
         }
         // 要联网的插件走和浏览器一样的路：宿主定好代理，插件的 HTTP 客户端照它连（不经 `HTTP_PROXY`）。
         if plugin.header.permissions.network.mode != NetworkMode::None {
-            let setting = self.proxy.clone();
+            let setting = self
+                .proxy
+                .read()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .clone();
             if let Some(proxy) =
                 tokio::task::spawn_blocking(move || network::resolve_proxy(&setting))
                     .await

@@ -168,7 +168,11 @@ fn segment_docs(f: &Fields, doc: &IndexDoc) -> Result<Vec<TantivyDocument>> {
 
     let mut out = Vec::new();
     let mut seq = 0u64;
-    let mut push = |layer: &str, snapshot_id: Option<&str>, text: &str, locator: &str| {
+    let mut push = |layer: &str,
+                    snapshot_id: Option<&str>,
+                    source: Option<&str>,
+                    text: &str,
+                    locator: &str| {
         if text.trim().is_empty() {
             return;
         }
@@ -193,6 +197,9 @@ fn segment_docs(f: &Fields, doc: &IndexDoc) -> Result<Vec<TantivyDocument>> {
         if let Some(s) = snapshot_id {
             d.add_text(f.snapshot_id, s);
         }
+        if let Some(s) = source {
+            d.add_text(f.source, s);
+        }
         d.add_text(f.locator, locator);
         d.add_u64(f.seq, seq);
         d.add_text(f.text, text);
@@ -211,13 +218,14 @@ fn segment_docs(f: &Fields, doc: &IndexDoc) -> Result<Vec<TantivyDocument>> {
         .filter(|s| !s.trim().is_empty())
         .collect::<Vec<_>>()
         .join("\n");
-    push(META_LAYER, None, &meta, "");
+    push(META_LAYER, None, None, &meta, "");
 
     for layer in &doc.layers {
         for segment in &layer.segments {
             push(
                 &layer.layer,
                 layer.snapshot_id.as_deref(),
+                layer.source.as_deref(),
                 &segment.text,
                 &segment.locator,
             );

@@ -164,7 +164,7 @@ async fn take_stores_and_finds_it() {
     assert_eq!(view.stored, Stored::Complete);
     assert_eq!(view.summary.title, "手冲咖啡：三段式注水");
     assert_eq!(view.summary.author.as_deref(), Some("咖啡日常"));
-    let Some(Facet::Image { images }) = view.facets.first() else {
+    let Some(Facet::Image { images, .. }) = view.facets.first() else {
         panic!("{:?}", view.facets)
     };
     assert_eq!(
@@ -174,7 +174,7 @@ async fn take_stores_and_finds_it() {
             taken.id, images[0].key
         )
     );
-    let Some(Facet::Text { segments }) = view.facets.get(1) else {
+    let Some(Facet::Text { segments, .. }) = view.facets.get(1) else {
         panic!("{:?}", view.facets)
     };
     assert_eq!(segments.len(), 2);
@@ -480,7 +480,7 @@ async fn partial_fetch_is_not_complete() {
     assert_eq!(v.stored, Stored::Partial);
     assert!(v.missing.unwrap().contains("图片"), "should name images");
 
-    // 页面本来就没有图：宿主也记一笔 images，但插件没说丢了什么，照都存好了
+    // 页面本来就没有图，插件也没说缺：不算缺，照都存好了
     let f = Fixture::new();
     let plain = FETCH_OK.replace(r#", "images": ["images/001.png"]"#, ", \"images\": []");
     f.install("fake/web", "web", "*", &plain);
@@ -700,4 +700,32 @@ echo '{"ok": false, "error": {"code": "blocked", "message": "captcha", "hint": "
         )
         .unwrap();
     assert!(!url.contains("secret"));
+}
+
+#[tokio::test]
+async fn an_untitled_post_is_named_after_its_first_line_not_its_link() {
+    let f = Fixture::new();
+    let untitled = FETCH_OK
+        .replace("\n \"title\": \"手冲咖啡：三段式注水\",", "\n")
+        .replace("第一段用四十克水闷蒸三十秒。", "#周末 去山里拍了一段溪水");
+    assert!(!untitled.contains("\"title\""), "{untitled}");
+    f.install("fake/web", "web", "*", &untitled);
+    let engine = f.engine();
+    let t = engine
+        .take(
+            "https://example.test/v/1?share=abc&utm_source=x",
+            "link",
+            Via::App,
+        )
+        .await
+        .unwrap();
+    engine.run_due().await.unwrap();
+    let v = engine.item(&t.id, &Links::default()).unwrap();
+    assert_eq!(v.summary.title, "#周末 去山里拍了一段溪水");
+    let content = std::fs::read_to_string(f.item_dir(&t.id).join("content.md")).unwrap();
+    // content.md 的标题行照 Markdown 转义了 `#`
+    assert!(
+        content.starts_with("# \\#周末 去山里拍了一段溪水\n"),
+        "{content}"
+    );
 }

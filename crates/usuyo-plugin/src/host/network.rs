@@ -54,7 +54,8 @@ fn probe() -> bool {
 }
 
 /// 会等 DNS，最多两秒；异步代码里放进 `spawn_blocking`。
-/// 调用方：获取插件的调用（经 `USUYO_NETWORK` 告诉插件）、内核下载模型（`usuyo-core` 的 `models`）。
+/// 调用方：获取插件的调用（经 `USUYO_NETWORK` 告诉插件）、内核下载模型（`usuyo-core` 的 `models`）、
+/// 设置页（`GET /settings` 的 `fakeIp`）。
 pub fn behind_fake_ip_proxy() -> bool {
     let mut last = LAST.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     if let Some((at, value)) = *last

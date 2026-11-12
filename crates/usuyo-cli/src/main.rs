@@ -153,8 +153,8 @@ fn open(root: &std::path::Path, cli: &Cli) -> Result<Engine> {
     roots.extend(config.plugin_roots);
     config.plugin_roots = roots;
     config.plugin_settings = machine::plugin_settings(root)?;
-    config.transforms_auto = machine::transforms_auto(root)?;
-    config.proxy = machine::proxy_setting(root)?;
+    config.transforms_auto = usuyo_core::transforms_auto(root)?;
+    config.proxy = usuyo_core::proxy_setting(root)?;
     // 登录的 cookie 和密钥：macOS、Windows 进系统钥匙串，别的系统是按机器目录里 0600 的文件。
     config.vault = usuyo_core::system_vault(root);
     Engine::open(config).with_context(|| format!("cannot open library {}", library.display()))
@@ -169,10 +169,11 @@ async fn daemon(engine: Engine, root: &std::path::Path, port: u16) -> Result<()>
     let token = usuyo_api::create_token(&token_path)?;
     let pid = std::process::id();
     let info = machine::daemon_path(root);
-    machine::write_private(
+    usuyo_core::write_private(
         &info,
         &serde_json::to_vec(&json!({"port": port, "pid": pid}))?,
-    )?;
+    )
+    .with_context(|| format!("cannot write {}", info.display()))?;
     tracing::info!(
         library = %engine.library_root().display(),
         plugins = ?engine.plugin_ids(),

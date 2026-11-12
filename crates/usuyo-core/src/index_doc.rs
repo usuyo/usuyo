@@ -4,21 +4,40 @@ use usuyo_contract::Manifest;
 use usuyo_index::{IndexDoc, LayerText, Segment};
 
 use crate::content::{Content, paragraphs};
+use crate::facets::locator;
 
-/// 定位串：`p<n>` 是第 n 段，`c<n>` 是第 n 条评论。
+/// 定位串：`p<n>` 是第 n 段，`c<n>` 是第 n 条评论；转出来的三层见 [`locator`]。
+/// 每份转出来的文字（每份平台字幕、每次转录）一层，带 `source`；同一层机器的新的在前，分数一样时先给新的。
 pub(crate) fn index_doc(m: &Manifest, c: &Content) -> IndexDoc {
     let mut layers = Vec::new();
     if let Some((snapshot, paras)) = &c.text {
         layers.push(LayerText {
             layer: "text".into(),
             snapshot_id: snapshot.clone(),
+            source: None,
             segments: numbered("p", paras.iter().cloned()),
+        });
+    }
+    for t in &c.transcripts {
+        layers.push(LayerText {
+            layer: t.layer.as_str().into(),
+            snapshot_id: Some(t.snapshot.clone()),
+            source: Some(t.source.clone()),
+            segments: t
+                .pieces
+                .iter()
+                .map(|p| Segment {
+                    text: p.text.clone(),
+                    locator: locator(&p.spot),
+                })
+                .collect(),
         });
     }
     if let Some((snapshot, comments)) = &c.comments {
         layers.push(LayerText {
             layer: "comments".into(),
             snapshot_id: Some(snapshot.clone()),
+            source: None,
             segments: numbered("c", comments.iter().map(|x| x.text.clone())),
         });
     }
@@ -26,6 +45,7 @@ pub(crate) fn index_doc(m: &Manifest, c: &Content) -> IndexDoc {
         layers.push(LayerText {
             layer: "takeaway".into(),
             snapshot_id: None,
+            source: None,
             segments: vec![Segment {
                 text: t.clone(),
                 locator: String::new(),
@@ -37,6 +57,7 @@ pub(crate) fn index_doc(m: &Manifest, c: &Content) -> IndexDoc {
         layers.push(LayerText {
             layer: "notes".into(),
             snapshot_id: None,
+            source: None,
             segments: numbered("p", notes.into_iter()),
         });
     }

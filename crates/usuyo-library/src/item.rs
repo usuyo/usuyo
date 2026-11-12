@@ -63,8 +63,9 @@ pub struct NewSnapshot {
     pub access: String,
     pub site: Option<String>,
     pub upstream: Option<Value>,
-    /// 这次的 `--want`；`missing` = `want` − 实际拿到的。
-    pub want: Vec<String>,
+    /// 这次缺的输出（`outputs` 的词表），宿主照插件说的、核过以后定的（协议 §3.7）：
+    /// 这一条本来就没有的那一样不算缺。
+    pub missing: Vec<String>,
     pub missing_reason: Option<String>,
     pub text_origin: Option<String>,
     pub staged: PathBuf,
@@ -214,6 +215,13 @@ pub fn refresh(m: &mut Manifest, primary: Option<&FetchRecord>) {
         }
         if let Some(t) = &f.title {
             m.title = t.clone();
+        } else if named_after_link(m)
+            && let Some(t) = f
+                .text
+                .as_deref()
+                .and_then(|t| first_line(t, f.text_format.as_deref() == Some("markdown")))
+        {
+            m.title = t;
         }
         m.author = f.author.clone().or(m.author.take());
         m.published_at = f.published_at.clone().or(m.published_at.take());
@@ -223,6 +231,43 @@ pub fn refresh(m: &mut Manifest, primary: Option<&FetchRecord>) {
             .or(m.published_at_original.take());
     }
     m.sort_arrays();
+}
+
+/// 标题最多几个字：没有标题、拿正文第一行当名字时截到这里。
+const TITLE_FROM_TEXT: usize = 40;
+
+/// 名字还是收下时拿来垫着的链接（或空的）：没有标题，也没有导入清单给的名字。
+fn named_after_link(m: &Manifest) -> bool {
+    let t = m.title.trim();
+    t.is_empty()
+        || m.identities.iter().any(|i| i.url.as_deref() == Some(t))
+        || m.snapshots
+            .iter()
+            .any(|s| s.input_url.as_deref() == Some(t) || s.resolved_url.as_deref() == Some(t))
+}
+
+/// 正文第一行有字的那一行（Markdown 的去掉标题的 `# `；纯文字的 `#` 多半是话题，留着），
+/// 长了截到 [`TITLE_FROM_TEXT`] 个字加「…」。
+fn first_line(text: &str, markdown: bool) -> Option<String> {
+    let line = text
+        .lines()
+        .map(|l| {
+            let l = l.trim();
+            let bare = l.trim_start_matches('#');
+            if markdown && bare.len() < l.len() && bare.starts_with(' ') {
+                bare.trim()
+            } else {
+                l
+            }
+        })
+        .find(|l| !l.is_empty())?;
+    let mut chars = line.chars();
+    let head: String = chars.by_ref().take(TITLE_FROM_TEXT).collect();
+    Some(if chars.next().is_some() {
+        format!("{}…", head.trim_end())
+    } else {
+        head
+    })
 }
 
 /// `content.md` 的字节（SPEC §1.2.3）。`body` 是主快照的 `text`，没有就是 `derived/readable.md`。
@@ -598,12 +643,7 @@ impl Library {
             }
         }
         let outputs = outputs_of(&s.fetch);
-        let missing: Vec<String> = s
-            .want
-            .iter()
-            .filter(|w| !outputs.contains(w))
-            .cloned()
-            .collect();
+        let missing = s.missing;
         let completeness = if outputs.is_empty() {
             Completeness::Link
         } else if missing.is_empty() {
@@ -898,4 +938,27 @@ pub(crate) fn read_dirs(dir: &Path) -> Result<Vec<PathBuf>> {
     }
     out.sort();
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn first_line_of_text_is_a_name() {
+        assert_eq!(
+            first_line("\n  # 三段式注水  \n第二行", true).as_deref(),
+            Some("三段式注水")
+        );
+        assert_eq!(
+            first_line("#周末 去山里 #溪水\n第二行", false).as_deref(),
+            Some("#周末 去山里 #溪水"),
+            "纯文字的话题留着"
+        );
+        let long = "字".repeat(100);
+        let name = first_line(&long, false).unwrap();
+        assert_eq!(name.chars().count(), TITLE_FROM_TEXT + 1);
+        assert!(name.ends_with('…'));
+        assert_eq!(first_line(" \n\n ", false), None);
+    }
 }

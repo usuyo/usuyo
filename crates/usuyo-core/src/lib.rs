@@ -5,6 +5,7 @@
 mod content;
 mod engine;
 mod error;
+mod facets;
 mod fetch;
 mod imports;
 mod inbox;
@@ -12,8 +13,11 @@ mod index_doc;
 mod jobs;
 mod layout;
 mod models;
+mod owner_only;
 mod pace;
 mod registry;
+mod settings;
+mod transcripts;
 mod transform;
 mod trash;
 mod vault;
@@ -26,6 +30,11 @@ pub use inbox::InboxReport;
 pub use jobs::{TransformJob, TransformJobKind, TransformState};
 pub use layout::{HashLayout, Layout, LayoutItem, Placed};
 pub use models::{ModelError, ModelState};
+pub use owner_only::write_private;
+pub use settings::{
+    NetworkMode, NetworkPatch, SettingsPatch, TransformsPatch, proxy_setting, remember_library,
+    transforms_auto,
+};
 pub use transform::{Power, PowerSource, SystemPower};
 pub use trash::{ClockGuard, Expiry};
 pub use usuyo_plugin::{CallLimits, ProxySetting, TransformLimits, Vault};

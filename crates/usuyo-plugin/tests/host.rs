@@ -344,8 +344,8 @@ async fn oversized_stdout_is_cut_off() {
 }
 
 #[tokio::test]
-async fn over_claimed_completeness_is_corrected() {
-    // 插件说 full，实际只有正文：缺的按「想要的 − 实际拿到的」算
+async fn a_part_the_item_never_had_is_not_missing() {
+    // 只有字的帖子：插件说 full、没交图和网页原文。那一条本来就没有，不算缺（协议 §3.7）
     let f = install(
         r#"cat <<'JSON'
 {"ok": true, "kind": "post", "text": "x", "images": [], "media": [], "platformTags": [],
@@ -353,11 +353,30 @@ async fn over_claimed_completeness_is_corrected() {
 JSON"#,
     );
     let snap = f.fetch(None, &CallOptions::default()).await.unwrap();
-    assert_eq!(snap.output.completeness, Completeness::Partial);
-    assert_eq!(
-        snap.output.missing,
-        [OutputKind::Html, OutputKind::Images, OutputKind::Meta]
+    assert_eq!(snap.output.completeness, Completeness::Full);
+    assert!(snap.output.missing.is_empty());
+}
+
+#[tokio::test]
+async fn missing_is_what_the_plugin_says_and_did_not_deliver() {
+    // 插件说缺图片、网页原文、评论：图片其实交来了，评论不在这次想要的里头，都去掉；只剩网页原文
+    let f = install(
+        r#"mkdir -p "$out/images" && printf 'png' > "$out/images/001.png"
+cat <<'JSON'
+{"ok": true, "kind": "post", "text": "x", "images": ["images/001.png"], "media": [], "platformTags": [],
+ "completeness": "partial", "missing": ["images", "html", "comments", "html"],
+ "evidence": {"fetchedAt": "2026-11-01T03:00:01Z", "access": "public-web"}}
+JSON"#,
     );
+    let snap = f
+        .fetch(
+            Some(&[OutputKind::Text, OutputKind::Images, OutputKind::Html]),
+            &CallOptions::default(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(snap.output.completeness, Completeness::Partial);
+    assert_eq!(snap.output.missing, [OutputKind::Html]);
 }
 
 #[tokio::test]

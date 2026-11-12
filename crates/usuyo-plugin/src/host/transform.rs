@@ -183,11 +183,21 @@ impl ResidentTransform {
     }
 
     /// 问插件能不能接 `run`（协议 §3.10）：模型在不在、GPU 能不能用。`ready: false` 不是错误。
-    /// 调用方是 WP8 的 `GET /transforms`。
     pub async fn health(&self) -> Result<Health, PluginError> {
+        let mut state = self.inner.state.lock().await;
+        self.health_on(&mut state).await
+    }
+
+    /// 同 [`health`](Self::health)，但这个进程正在跑一条 `run` 时不等，回 `None`（它在干活）。
+    /// 调用方是 `usuyo-core` 的 `GET /transforms`：一条转写可能跑好几分钟。
+    pub async fn health_if_idle(&self) -> Option<Result<Health, PluginError>> {
+        let mut state = self.inner.state.try_lock().ok()?;
+        Some(self.health_on(&mut state).await)
+    }
+
+    async fn health_on(&self, state: &mut State) -> Result<Health, PluginError> {
         let inner = &self.inner;
-        let mut state = inner.state.lock().await;
-        ensure_live(inner, &mut state, None).await?;
+        ensure_live(inner, state, None).await?;
         let id = state.take_id();
         let frame = inner.encode(&id, METHOD_HEALTH, None::<()>)?;
         let limits = &inner.config.limits;
@@ -198,10 +208,10 @@ impl ResidentTransform {
             None => Ended::Exited(None),
         };
         state.last_used = Instant::now();
-        let value = inner.settle(&mut state, &id, METHOD_HEALTH, ended).await?;
+        let value = inner.settle(state, &id, METHOD_HEALTH, ended).await?;
         let mut health: Health = inner
             .decode(value, "health")
-            .map_err(|m| inner.host_error(&state, &id, ErrorCode::InvalidOutput, m))?;
+            .map_err(|m| inner.host_error(state, &id, ErrorCode::InvalidOutput, m))?;
         envelope_text::health(&mut health);
         Ok(health)
     }

@@ -1,4 +1,4 @@
-//! 一条现在存着什么：原文、评论、图、视频、记一句和笔记。索引和条目页都从这里读，两边一致。
+//! 一条现在存着什么：原文、评论、图、视频、转出来的文字、记一句和笔记。索引和条目页都从这里读，两边一致。
 //!
 //! 这些字大多来自平台，是不可信输入：只当纯文字往外给，不拼进 HTML。
 
@@ -9,6 +9,7 @@ use serde_json::Value;
 use usuyo_contract::{FetchRecord, Manifest};
 use usuyo_library::{Item, LayerSource, Library, Notes};
 
+use crate::transcripts::{self, KeyframeSet, Transcript};
 use crate::{Error, Result};
 
 /// 一条评论。
@@ -34,11 +35,21 @@ pub(crate) struct VideoFile {
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Content {
+    /// 主快照的 id；只有链接时没有。
+    pub primary: Option<String>,
     /// 原文按段分好，带主快照 id。
     pub text: Option<(Option<String>, Vec<String>)>,
     pub comments: Option<(String, Vec<CommentText>)>,
     pub images: Vec<ImageFile>,
+    /// 主快照里有几张图字节一样（`imageKey` 相同），`images` 里只留一张。
+    pub duplicate_images: bool,
     pub video: Option<VideoFile>,
+    /// 平台字幕和每次 `asr`、`ocr`、`frames` 转录（[`transcripts::read`] 的顺序）。
+    pub transcripts: Vec<Transcript>,
+    /// 最新一次 `keyframes`。
+    pub keyframes: Option<KeyframeSet>,
+    /// 最新一次 `play` 的 runId：画面的地址跟着它变，合起来的那份落地以后不用旧的缓存。
+    pub play: Option<String>,
     pub takeaway: Option<String>,
     pub notes: String,
     /// 主快照的 `missingReason`：插件说有些没存下来，哪怕每一类都拿到了一些（例如十张图下了八张）。
@@ -58,6 +69,7 @@ pub(crate) fn read(lib: &Library, item: &Item) -> Result<Content> {
     let Some(primary) = m.primary_snapshot.clone() else {
         return Ok(c);
     };
+    c.primary = Some(primary.clone());
     let text = match lib.resolve_layer(id, "text", None) {
         Ok(LayerSource::Text(t)) => Some(t),
         Ok(LayerSource::File(p)) => {
@@ -80,7 +92,7 @@ pub(crate) fn read(lib: &Library, item: &Item) -> Result<Content> {
         let bytes = std::fs::read(&path).map_err(|e| Error::io(&path, e))?;
         c.comments = Some((primary.clone(), parse_comments(&bytes)));
     }
-    c.images = images(&rec, &raw);
+    (c.images, c.duplicate_images) = images(&rec, &raw);
     c.partial = rec
         .extra
         .get("missingReason")
@@ -96,6 +108,12 @@ pub(crate) fn read(lib: &Library, item: &Item) -> Result<Content> {
             duration_sec: v.extra.get("durationSec").and_then(Value::as_f64),
         });
     }
+    (c.transcripts, c.keyframes) = transcripts::read(lib, id)?;
+    c.play = lib
+        .job_runs(id, "play")?
+        .into_iter()
+        .find(|r| r.outputs.iter().any(|o| o.kind == "play"))
+        .map(|r| r.id);
     Ok(c)
 }
 
@@ -111,6 +129,7 @@ pub(crate) fn read_trashed(dir: &Path, m: &Manifest) -> Result<Content> {
     let Some(primary) = m.primary_snapshot.clone() else {
         return Ok(c);
     };
+    c.primary = Some(primary.clone());
     let raw = dir.join("raw").join(&primary);
     let rec_path = raw.join("usuyo.fetch.json");
     let Some(b) = read_opt(&rec_path)? else {
@@ -144,9 +163,11 @@ fn read_opt(path: &Path) -> Result<Option<Vec<u8>>> {
     }
 }
 
-fn images(rec: &FetchRecord, raw: &Path) -> Vec<ImageFile> {
+/// 图（按 `imageKey` 去重），和有没有字节一样的两张。
+fn images(rec: &FetchRecord, raw: &Path) -> (Vec<ImageFile>, bool) {
     let mut seen = BTreeSet::new();
     let mut out = Vec::new();
+    let mut twice = false;
     for path in &rec.images {
         let Some(f) = rec.files.iter().find(|f| &f.path == path) else {
             continue;
@@ -156,14 +177,19 @@ fn images(rec: &FetchRecord, raw: &Path) -> Vec<ImageFile> {
         };
         let full = raw.join(&f.path);
         // 只留文字以后图在回收站里，不在这里了。
-        if full.is_file() && seen.insert(key.to_owned()) {
+        if !full.is_file() {
+            continue;
+        }
+        if seen.insert(key.to_owned()) {
             out.push(ImageFile {
                 key: key.to_owned(),
                 path: full,
             });
+        } else {
+            twice = true;
         }
     }
-    out
+    (out, twice)
 }
 
 /// 按空行分段，去掉首尾空白，空段不要。

@@ -1,7 +1,7 @@
 <a id="本机接口第-2-层11-11-照代码"></a>
 ## 本机接口（第 2 层，11-11 照代码）
 
-守护进程（`usuyo daemon`，`crates/usuyo-api`）给桌面窗口、命令行、开发服务器和投递端（浏览器扩展、油猴脚本、手机）用的本机 HTTP 接口，照 11-11 的代码写（HEAD 5e98e5a）。完整的第 2 层（MCP、OpenAPI、搜索语法）还没写。**路径和类型以 `apps/desktop/web/src/api/endpoints.ts` 为准**：改接口先改这个文件，Rust 那边照它做。
+守护进程（`usuyo daemon`，`crates/usuyo-api`）给桌面窗口、命令行、开发服务器和投递端（浏览器扩展、油猴脚本、手机）用的本机 HTTP 接口，照 11-12 的代码写。完整的第 2 层（MCP、OpenAPI、搜索语法）还没写。**路径和类型以 `apps/desktop/web/src/api/endpoints.ts` 为准**：改接口先改这个文件，Rust 那边照它做。
 
 - **监听**：只绑 `127.0.0.1`，端口固定 47615（`--port`、`USUYO_PORT` 能改，但窗口的 CSP 只放行 47615）。一个监听口，窗口用的路由和投递接口（`/v1/…`）都在上面，不另开端口。端口被占时守护进程起不来，已有的 `api-token`、`daemon.json` 不动；壳不再起第二个，窗口里说端口被别的程序占着。
 - **谁能调什么**：每个请求过一道门（`guard.rs`），分三种调用方。
@@ -15,22 +15,23 @@
   - `/v1/…`：只认浏览器扩展的来源，以 `chrome-extension://`、`moz-extension://`、`safari-web-extension://` 开头的；窗口的来源、普通网页、`null` 都回 403。
   - `/handshake`：扩展的来源和窗口的来源都认（扩展发令牌以前要先确认对面是内核）。
   - 不合的回 403 `forbidden`，令牌对也一样。开发服务器的来源不在名单里：Vite 代理只接自己页面的同源请求，在服务端带上令牌，去掉 `Origin`、`Referer`。
-  - CORS 头只给窗口的来源（允许 GET、POST、PUT、DELETE，请求头 `Content-Type`、`Authorization`、`Range`，暴露 `Content-Range`、`Accept-Ranges`、`Retry-After`）。`/v1/…` 不回 CORS 头，也不答 CORS 预检（预检不带令牌，落到 401）。
+  - CORS 头只给窗口的来源（允许 GET、POST、PUT、PATCH、DELETE，请求头 `Content-Type`、`Authorization`、`Range`，暴露 `Content-Range`、`Accept-Ranges`、`Retry-After`）。`/v1/…` 不回 CORS 头，也不答 CORS 预检（预检不带令牌，落到 401）。
 - **握手**：客户端先确认端口上是这次启动的守护进程，再发令牌。`POST /handshake`，请求 `{"nonce": "<64 位小写十六进制>", "client": "<投递令牌的 id>"}`，`client` 可省（请求体最多 256 字节，不合格回 400 `invalid-args`），回 `{"proof": "<64 位小写十六进制>"}`：以密钥的 UTF-8 字节为密钥，对 `usuyo-daemon-proof/v1\n127.0.0.1:<端口>\n<nonce>` 做 HMAC-SHA256。不给 `client` 时密钥是主令牌；给了，密钥是那个投递令牌的整个 `<id>.<秘密>`（投递端只发 id，令牌本身不上线路）。不认识的 id 也回一个证明，用随机的密钥，对面分不出那个 id 在不在、撤没撤。端口写进消息，换个端口转来的回答对不上。核对的是客户端，用自己读到的令牌：壳（找守护进程时和每次重新连时）、命令行、Vite 代理（令牌文件变了就重新握手，对不上回 502，不把令牌发过去）、投递端（油猴脚本核对不过就什么都不发）。
 - **投递令牌**：格式 `<id>.<秘密>`，`id` 是 16 位小写十六进制（不是秘密），`秘密` 是 64 位小写十六进制。主令牌调 `POST /deliver-tokens`（`{name, kind}`，`name` 1 到 80 个字，`kind` 取 `extension`、`mobile`、`api`）发一个，整个令牌只在这一次的回答里出现（在 `{id, name, kind, createdAt}` 之外多一项 `token`）；`GET /deliver-tokens` 列出投递端，没有令牌；`DELETE /deliver-tokens/{id}` 撤销，马上生效，回 204，没有这个 id 回 404。存在按机器目录的 `deliver-tokens.json`，见 [§1.1](library.md#11-目录树)。投递令牌的 `kind` 决定条目 `origins[].entry`：`extension`、`mobile`、`api`。
-- **媒体**：`<img>`、`<video>` 带不了头，`ItemView` 里的媒体地址是 `/media/<itemId>/<层>?k=<key>`。`k` 是 HMAC-SHA256 的十六进制，密钥每次启动另生成（和令牌无关），消息是 `usuyo-media/v1\n<itemId>`，只对这一条有效。支持 Range。`Content-Type` 只回允许的几种，别的写 `application/octet-stream`；另带 `Content-Security-Policy: default-src 'none'; sandbox`、`Cache-Control: private, max-age=3600`、`Cross-Origin-Resource-Policy: cross-origin`。所有回答都带 `X-Content-Type-Options: nosniff`。
+- **媒体**：`<img>`、`<video>` 带不了头，`ItemView` 里的媒体地址是 `/media/<itemId>/<层>?k=<key>`。层是 `image/<imageKey>`、`video`（有合起来的 `play.mp4` 时给它，不然给原样的画面）、`audio`、`frame/<runId>/<毫秒>`（那次 `keyframes` 转录的一帧）；有 `play.mp4` 时画面的地址多一个 `v=<那次 play 的 runId>`，合起来的那份落地以后换了地址，不拿缓存里的原样。`k` 是 HMAC-SHA256 的十六进制，密钥每次启动另生成（和令牌无关），消息是 `usuyo-media/v1\n<itemId>`，只对这一条有效。支持 Range。`Content-Type` 只回允许的几种，别的写 `application/octet-stream`；另带 `Content-Security-Policy: default-src 'none'; sandbox`、`Cache-Control: private, max-age=3600`、`Cross-Origin-Resource-Policy: cross-origin`。所有回答都带 `X-Content-Type-Options: nosniff`。
 - **事件**：`GET /events` 是 server-sent events，要带令牌，所以前端用 `fetch` 读，不用 `EventSource`。每条是 `event: <type>` 加 `data: <JSON>`，`data` 里有 `type` 和下面的字段。收到就重新拉对应的数据；落后丢掉的不补发。不受 30 秒的时限，守护进程要停时结束。
 
 | `type` | 什么时候发 | 字段 |
 |---|---|---|
 | `item-added` | 收下了一条新的（粘贴、投递、收件文件夹、导入） | `id` |
-| `item-updated` | 已经有的又被收下一次；取到了内容；记一句、主题、拿回来、只留文字、再取一次这类改了条目；回收站里只留文字移出的媒体被清除了 | `id` |
+| `item-updated` | 已经有的又被收下一次；取到了内容；记一句、主题、拿回来、只留文字、再取一次这类改了条目；回收站里只留文字移出的媒体被清除了；一样转换开始转、转好了、等模型、没转出来、不用转了；等着的模型到了；`transforms.auto` 关上时删掉了自动排的 | `id` |
 | `item-fetch-failed` | 这次没取到；`retry` 为真时过会儿自己再试 | `id`、`code`、`hint`（可省）、`retry` |
 | `item-trashed` | 条目进了回收站 | `id` |
 | `item-removed` | 回收站里的条目到期、或你「立即清除」，从资料库里移除了；再拉它是 404 | `id` |
 | `topic-updated` | 建了主题，或改了关注 | `id` |
 | `import-updated` | 一次导入变了：列了一页、认了一段身份、确认了、停下或接着、收下了一条、删掉了 | `id`（导入的） |
-| `plugins-updated` | 插件的暂停变了（被限流或拦住、「现在再试」「先别试」）、站点的登录、访客身份、密钥设置变了 | 无 |
+| `plugins-updated` | 插件的暂停变了（被限流或拦住、「现在再试」「先别试」）、站点的登录、访客身份、密钥设置、设置里的 `network` 变了 | 无 |
+| `transforms-updated` | 模型开始下、下好了、没下成、删掉了；设置里的 `transforms.auto` 变了 | 无 |
 
 - **错误**：照 [§0.3](conventions.md#03-错误模型)：`application/problem+json`，字段 `type`（`urn:usuyo:problem:<code>`）、`title`、`status`、`detail`、`instance`（`urn:uuid:<随机>`）、`code`、`retryable`；插件报的另带 `plugin`，一律 502。可重试的带 `Retry-After: 5`。没有的路径 404 `not-found`，方法不对 405 `invalid-args`。
 - **上限**：请求体 64 KiB，超了 413 `too-large`；握手 256 字节；登录和访客身份的 cookie 256 KiB；`/v1/batches` 4 MiB；每个请求 30 秒，超了 504 `timeout`，列来源（`GET /plugins/{owner}/{repo}/sources`）120 秒；搜索 `limit` 默认 50，限在 1 到 200。
@@ -51,8 +52,10 @@
 | `POST /items/{id}/trash`；`POST /items/{id}/restore` | 进回收站；整条拿回来 |
 | `POST /items/{id}/text-only`；`POST /items/{id}/restore-media` | 只留文字；把移走的图和视频拿回来 |
 | `POST /items/{id}/refetch` | 再取一次 |
+| `POST /items/{id}/transform` | 见下「转换」；回 202 `{queued: true}` |
 | `GET /trash` | `{trashDays, entries, unreadable?}`：回收站里的整条条目（`reason` 是 `delete`、`undo`）和只留文字移出的媒体（`keep-text`），新的在前；每项 `{id, reason, itemId, title, platform, author?, trashedAt, expiresAt?}`，`id` 是 `trashId`；`trashDays` 是 `null` 时没有 `expiresAt`；读不了的项列进 `unreadable` |
 | `POST /trash/{trashId}/purge` | 立即清除回收站里的一项，204 |
+| `POST /trash/release-held` | 「照时间移除」：时钟守卫拦下的回收站项照时间移除（[§1.7](library.md#17-删掉)），回 `{removed}`（移除了几项） |
 | `GET /search?q=&limit=` | 搜索 |
 | `GET /events` | 事件流 |
 | `GET /plugins` | 装着的获取插件（标签、设置、节奏、暂停）和没加载的（目录和原因） |
@@ -71,9 +74,23 @@
 | `POST /imports/{id}/hold`；`POST /imports/{id}/resume` | 先停下；接着导入 |
 | `GET /deliver-tokens`；`POST /deliver-tokens`；`DELETE /deliver-tokens/{id}` | 见上「投递令牌」 |
 | `GET /inbox` | `{path}`，收件文件夹在哪（[§1.1](library.md#11-目录树)） |
+| `GET /transforms` | `{plugins, auto}`：装着的转换插件，每个 `{id, name, version, jobs, bundled?, models, health, hint?}`；`jobs` 是它能做的 `play`、`asr`、`keyframes`、`ocr`、`frames`；`bundled` 是清单 `upstream` 的 `{name, license}`；`health` 是插件自己报的 `ok` 或 `unavailable`（`hint` 是没过的检查；它声明的模型还没下时只写「要先下载模型」），几个插件同时问，正在转一条的插件不等它、算 `ok`；`models` 每个 `{name, size, license, state, hint?}`，`state` 是 `absent`、`downloading`、`present`、`failed`（`hint` 是一句没下成的原因）。`auto` 是 `transforms.auto` |
+| `POST /transforms/{owner}/{repo}/models/{name}/download` | 下这个模型（[§1.1](library.md#11-目录树) 按机器目录的 `models/`）：已经在了回 200 `{state: "present"}`，开始下或已经在下回 202 `{state: "downloading"}`；插件或模型不在回 404。下完以后等它的转换回到排着，那些条目发 `item-updated` |
+| `POST /transforms/{owner}/{repo}/models/{name}/remove` | 删掉这个模型，204；正在下回 409 `conflict`。插件的进程在后台关掉，之后要它的转换等模型 |
+| `GET /settings`；`PATCH /settings` | 见下「设置」 |
 | `GET /v1/ping` | 投递：`{name: "usuyo", version, protocol: 1, client}`，`client` 是投递令牌的名字，主令牌是 `null` |
 | `POST /v1/deliver` | 投递：见下 |
 | `POST /v1/batches` | 投递：见下 |
+
+**转换**（`POST /items/{id}/transform`）：请求体二选一，别的字段回 400 `invalid-args`。
+- `{jobs: "pending"}`：条目页打开时调。这一条还没做好的转换都挪到最前（点名），在电池上、`transforms.auto` 关着时也转。
+- `{job, plugin?, options?}`：再转一次，或换一个插件、换一组参数转；`job` 是 `play`、`asr`、`keyframes`、`ocr`、`frames`。做好了也再做一次，新的和旧的并排，`redoOf` 指现在最新的那一次。这一样正在转回 409 `conflict`；没有这种 `job`、`plugin` 做不了它、没装能做它的插件回 400 `invalid-args`；只留文字以后回 422 `unsupported-input`；条目不在回 404。
+
+`GET /items/{id}` 的 `facets` 一层可以有几份，每份带 `key`（在一条里唯一）；`asr`、`ocr`、`frames` 三层每份带 `source`（`by: platform` 是平台字幕，`by: machine` 带 `tool`、`runId`、`at`；有语言时 `lang`），段带 `position`。口播是每份平台字幕和每次 `asr` 转录，平台的在前，机器的新的在前；`ocr` 是每次图里的字的转录，`frames` 是每次关键帧上的字的转录，连着几帧一样的一行合成一段；`video` 的 `frames` 是最新一次 `keyframes` 的帧。`remark` 只写量出来的事：「没有声音轨」「没听到人说话」「画面几乎不动」「没认出字」「有几张图是同一张」。`pending` 是还没转出来的那几面，一面一句：`layer` 是 `asr`、`ocr`、`frames`、`video`（`play`、`keyframes` 都算画面），`state` 是 `now`（在转）、`needs-model`（带 `model: {plugin, name, size, license}`）、`failed`（带 `hint`，例如「这台电脑上还没有能转口播的插件」）、`on-power`（在电池上，接上电源时转）、`later`（排着），同一面有几行时取前面那个。没有计数。`GET /search` 命中 `asr`、`ocr`、`frames` 时带 `position`：口播和画面上的字是 `{kind: "time", sec, endSec?, snapshotId, xywh?}`，图里的字是 `{kind: "image", imageKey, xywh}`。
+
+**设置**：
+- `GET /settings` 回 `{library, trashDays, trashHeld?, network: {mode, proxy?, fakeIp}, transforms: {auto}, logs}`。`trashDays` 是资料库的（[§1.1](library.md#11-目录树)），`null` 是一直；`trashHeld: {count, since}` 只在时钟守卫现在拦着到期的项时有，`since` 是记下的最晚时间；`network.mode` 是 `system`、`direct`、`custom`，`custom` 的 `proxy` 不带密码；`fakeIp` 是这台电脑开着假 IP 模式的代理；`logs` 是按机器目录的 `logs/daemon.log`。
+- `PATCH /settings`，`{trashDays?, network?: {mode, proxy?}, transforms?: {auto}}`，给了的几项才改，改好回整份，马上生效。`trashDays` 取 30、90 或 `null`，记一次资料库的 `set-setting`；`network` 写进按机器的 `settings.json` 的 `network.proxy`（`system`、`direct` 或代理地址，`custom` 才带 `proxy`，地址是 `http://`、`socks5://`、`socks5h://`，有主机、没有路径），之后的插件调用和模型下载照它走；`transforms.auto` 关上时自动排的转换（没在跑的）都删掉，打开时照启动那样补排。不认识的字段、不合的值回 400 `invalid-args`，原因里不写代理地址。`settings.json` 里别的键原样留着；这个文件只有自己能读（0600，先写同样 0600 的临时文件再改名），读回来的代理地址不带密码，交回一个不带密码、别处一样的地址时留着存着的密码。
 
 守护进程另有四条，不在 `endpoints.ts` 的 `paths` 里：`POST /handshake`（上面）；`POST /reindex`，命令行用，回 `{items, unreadable}`；`GET /media/<itemId>/<层>`，地址由 `ItemView` 给；`GET /events` 在 `paths` 里，但不走 30 秒的时限。
 

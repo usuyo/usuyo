@@ -48,7 +48,7 @@
 | 本机接口 | 一个口 127.0.0.1:47615；令牌、握手、只能交的令牌；事件流；列出回收站 | `crates/usuyo-api`、契约在 `apps/desktop/web/src/api/endpoints.ts` |
 | 桌面壳 | 起内核、登录窗口、访客身份窗口 | `apps/desktop/src-tauri` |
 | 平台插件 | 小红书（按链接取，清单由浏览器脚本交）、微信视频号（按分享链接取）、B 站（登录、列收藏夹、取）、X（按链接取，书签和喜欢由浏览器脚本交或读官方归档）；`just dev-plugins` 装这四个 | 仓库旁边的 `usuyo-fetch/`，各是一个仓库；[platforms](platforms/README.md) |
-| 变成文字 | 格式、协议、plugin-kit 的循环、常驻转换进程、转录的写入和按层找、三个转换插件（`media`、`asr-sherpa`、`ocr-vision`）做了；模型下载、排任务、条目页和索引、接口、界面还没做 | [feature 003](features/003-transforms.md) |
+| 变成文字 | 格式、协议、plugin-kit 的循环、常驻转换进程、转录的写入和按层找、三个转换插件（`media`、`asr-sherpa`、`ocr-vision`）、模型下载、排任务、条目页的几面和索引、接口做了；界面还没做 | [feature 003](features/003-transforms.md) |
 
 ```mermaid
 flowchart LR
@@ -86,7 +86,7 @@ flowchart LR
 | 资料库格式（[SPEC §1](spec/library.md#1-资料库-v1第-1-层)） | v1 草案，`crates/usuyo-contract`、`crates/usuyo-library` 照它实现 | 联网后并身份；同步（[008](#008-文字同步)） |
 | 改动提议、改动记录（[SPEC §1.5](spec/library.md#15-改动提议)、[§1.6](spec/library.md#16-改动记录)） | v1 草案，资料库层能写能撤 | 接受提议的流程、界面（[006](#006-agent)） |
 | 宿主 ↔ 界面（[SPEC 本机接口](spec/local-api.md#本机接口第-2-层11-11-照代码)） | 照代码写了；契约文件是 `apps/desktop/web/src/api/endpoints.ts` | 窗口用的路径还不带 `/v1/`、分页、OpenAPI 描述 |
-| 内核推的事件 | server-sent events，八种事件（同上） | 补发、信封 |
+| 内核推的事件 | server-sent events，九种事件（同上） | 补发、信封 |
 | MCP 工具 | 没写，没实现 | 内核服务契约和工具（[006](#006-agent)） |
 | 命令行 | `init`、`add`、`get`、`search`、`reindex`、`daemon` | 不再加命令（[§1](#1-用户定下的做法)） |
 | 搜索语法 | tantivy 索引能搜；语法没写 | 查询串、筛选、分页（[006](#006-agent) 的契约里定） |
@@ -135,7 +135,7 @@ flowchart LR
 <a id="003-变成文字"></a>
 ### 003 变成文字
 
-设计、决定、工作包、验收都在 [feature 003](features/003-transforms.md)。做完的：在这台量速度（WP0）、格式和协议（WP1、WP2）、常驻转换进程（WP3）、转录的写入、列出和按层找（WP5）、三个转换插件 `builtin/media`（WP9）、`builtin/asr-sherpa`（WP10）、`builtin/ocr-vision`（WP11），都在 `plugins/` 下、测试全离线。剩下的：模型下载（WP4）、排任务和编排（WP6）、条目页的数据和索引（WP7）、接口（WP8）、界面（WP12）、测试用的获取插件（WP13），以及让 `just dev-plugins` 把三个转换插件也装上；照那份的[工作包](features/003-transforms.md#10-工作包)一节，条目页和获取插件页上的那些按钮一起做完。
+设计、决定、工作包、验收都在 [feature 003](features/003-transforms.md)。做完的：在这台量速度（WP0）、格式和协议（WP1、WP2）、常驻转换进程（WP3）、模型下载（WP4）、转录的写入、列出和按层找（WP5）、排任务和编排（WP6）、条目页的数据和索引（WP7）、接口（WP8）、三个转换插件 `builtin/media`（WP9）、`builtin/asr-sherpa`（WP10）、`builtin/ocr-vision`（WP11），都在 `plugins/` 下、测试全离线。剩下的：界面（WP12）、测试用的获取插件（WP13）；照那份的[工作包](features/003-transforms.md#10-工作包)一节，条目页和获取插件页上的那些按钮一起做完。
 
 <a id="004-拼成思路"></a>
 ### 004 拼成思路

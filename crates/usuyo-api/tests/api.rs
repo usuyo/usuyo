@@ -691,3 +691,114 @@ async fn visitors_are_listed_stored_and_cleared_apart_from_logins() {
     let v = json_of(send(&f.app, authed("/visitors")).await).await;
     assert_eq!(v[0]["state"], "missing");
 }
+
+fn with_body(method: &str, path: &str, body: Value) -> Request<Body> {
+    get(path)
+        .method(method)
+        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body.to_string()))
+        .unwrap()
+}
+
+#[tokio::test]
+async fn transforms_settings_and_the_transform_route() {
+    let f = fixture();
+    // 没装转换插件：列表是空的
+    let t = json_of(send(&f.app, authed("/transforms")).await).await;
+    assert_eq!(t, json!({"plugins": [], "auto": true}));
+    problem(
+        send(
+            &f.app,
+            with_body(
+                "POST",
+                "/transforms/builtin/asr-sherpa/models/x/download",
+                json!({}),
+            ),
+        )
+        .await,
+        StatusCode::NOT_FOUND,
+        "not-found",
+    )
+    .await;
+
+    let taken = f
+        .engine
+        .take("https://example.test/a", "link", Via::Api)
+        .await
+        .unwrap();
+    f.engine.run_due().await.unwrap();
+    let path = format!("/items/{}/transform", taken.id);
+    let res = send(&f.app, with_body("POST", &path, json!({"jobs": "pending"}))).await;
+    assert_eq!(res.status(), StatusCode::ACCEPTED);
+    assert_eq!(json_of(res).await, json!({"queued": true}));
+    for bad in [
+        json!({}),
+        json!({"jobs": "all"}),
+        json!({"jobs": "pending", "job": "asr"}),
+        json!({"job": "nope"}),
+        json!({"job": "asr"}),
+    ] {
+        problem(
+            send(&f.app, with_body("POST", &path, bad)).await,
+            StatusCode::BAD_REQUEST,
+            "invalid-args",
+        )
+        .await;
+    }
+    let item = json_of(send(&f.app, authed(&format!("/items/{}", taken.id))).await).await;
+    assert!(item["pending"].is_array());
+
+    // 设置：读、改、坏的回 400
+    let s = json_of(send(&f.app, authed("/settings")).await).await;
+    assert_eq!(s["trashDays"], 30);
+    assert_eq!(s["network"]["mode"], "system");
+    assert_eq!(s["transforms"]["auto"], true);
+    assert!(s["logs"].as_str().unwrap().ends_with("logs/daemon.log"));
+    assert!(s.get("trashHeld").is_none());
+    let res = send(
+        &f.app,
+        with_body(
+            "PATCH",
+            "/settings",
+            json!({"trashDays": 90, "network": {"mode": "direct"}}),
+        ),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let s = json_of(res).await;
+    assert_eq!(s["trashDays"], 90);
+    assert_eq!(s["network"]["mode"], "direct");
+    problem(
+        send(
+            &f.app,
+            with_body("PATCH", "/settings", json!({"color": "red"})),
+        )
+        .await,
+        StatusCode::BAD_REQUEST,
+        "invalid-args",
+    )
+    .await;
+
+    // 没拦下什么：照时间移除也没有可移除的
+    let res = send(&f.app, with_body("POST", "/trash/release-held", json!({}))).await;
+    assert_eq!(json_of(res).await, json!({"removed": 0}));
+
+    // 窗口能发 PATCH 的预检
+    let pre = get("/settings")
+        .method("OPTIONS")
+        .header(header::ORIGIN, "tauri://localhost")
+        .header(header::ACCESS_CONTROL_REQUEST_METHOD, "PATCH")
+        .body(Body::empty())
+        .unwrap();
+    let res = send(&f.app, pre).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let allowed = res
+        .headers()
+        .get(header::ACCESS_CONTROL_ALLOW_METHODS)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_owned();
+    assert!(allowed.contains("PATCH"), "{allowed}");
+}

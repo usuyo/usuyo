@@ -27,6 +27,7 @@ pub(crate) struct Fields {
     pub private: Field,
     pub layer: Field,
     pub snapshot_id: Field,
+    pub source: Field,
     pub locator: Field,
     /// 条目内的段序号，和 item_id 一起认一段。
     pub seq: Field,
@@ -59,6 +60,7 @@ pub(crate) fn build() -> (Schema, Fields) {
         private: b.add_bool_field("private", tantivy::schema::INDEXED),
         layer: b.add_text_field("layer", STRING | STORED),
         snapshot_id: b.add_text_field("snapshot_id", STORED),
+        source: b.add_text_field("source", STORED),
         locator: b.add_text_field("locator", STORED),
         seq: b.add_u64_field("seq", STORED),
         text: b.add_text_field("text", STORED),

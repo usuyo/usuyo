@@ -71,13 +71,7 @@ fn snapshot(lib: &Library, url: &str, text: &str) -> NewSnapshot {
         access: "public-web".into(),
         site: None,
         upstream: None,
-        want: vec![
-            "text".into(),
-            "html".into(),
-            "images".into(),
-            "media:video".into(),
-            "meta".into(),
-        ],
+        missing: Vec::new(),
         missing_reason: None,
         text_origin: Some("platform".into()),
         files: usuyo_library::hash_staged(&staged).unwrap(),
@@ -2680,4 +2674,40 @@ fn keep_text_entry_restores_after_the_item_comes_back_from_the_trash() {
         usuyo_contract::ItemState::Normal
     );
     assert!(lib.trash_entries().unwrap().is_empty());
+}
+
+#[test]
+fn an_untitled_item_is_named_after_the_first_line_of_its_text() {
+    let e = env();
+    let mut lib = Library::init(&e.root, &e.machine).unwrap();
+    let url = "https://example.com/channels/1";
+    let mut c = capture(&lib, url, "\n今天去山里拍了一段溪水\n后面是别的话");
+    if let Some(s) = c.snapshot.as_mut() {
+        s.fetch.title = None;
+    }
+    let id = lib.add_item(&user(), c).unwrap().id().clone();
+    let m = lib.item(&id).unwrap().manifest;
+    assert_eq!(m.title, "今天去山里拍了一段溪水");
+    let content = fs::read_to_string(e.root.join(id.rel_dir()).join("content.md")).unwrap();
+    assert!(
+        content.starts_with("# 今天去山里拍了一段溪水\n"),
+        "{content}"
+    );
+
+    // 导入清单给了名字的照留着；没有字的照旧是链接
+    let mut c = capture(&lib, "https://example.com/channels/2", "正文第一行");
+    c.title_hint = Some("清单里的名字".into());
+    if let Some(s) = c.snapshot.as_mut() {
+        s.fetch.title = None;
+    }
+    let id = lib.add_item(&user(), c).unwrap().id().clone();
+    assert_eq!(lib.item(&id).unwrap().manifest.title, "清单里的名字");
+    let url = "https://example.com/channels/3";
+    let mut c = capture(&lib, url, "");
+    if let Some(s) = c.snapshot.as_mut() {
+        s.fetch.title = None;
+        s.fetch.text = None;
+    }
+    let id = lib.add_item(&user(), c).unwrap().id().clone();
+    assert_eq!(lib.item(&id).unwrap().manifest.title, url);
 }

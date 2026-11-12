@@ -35,7 +35,7 @@ case "$2" in
   */dash)
     mkdir -p "$out/media"
     printf 'v:7.5' > "$out/media/video.m4s"; printf 'a:7.4' > "$out/media/audio.m4s"
-    printf 'WEBVTT\n' > "$out/media/subtitle.zh.vtt"
+    printf 'WEBVTT\n\n00:00.000 --> 00:02.000\n平台字幕里的话\n' > "$out/media/subtitle.zh.vtt"
     MEDIA='[{"path": "media/video.m4s", "kind": "video"}, {"path": "media/audio.m4s", "kind": "audio"},
             {"path": "media/subtitle.zh.vtt", "kind": "subtitle", "lang": "zh"}]'
     IMAGES='[]'; KIND=video ;;
@@ -554,4 +554,325 @@ async fn restart_backfills_what_is_not_done() {
     worker.abort();
     engine.shutdown().await;
     assert_eq!(f.jobs_of(&f.runs(&id), "ocr").len(), 1);
+}
+
+/// 条目页那一面写的一句。
+fn pending_of(engine: &Engine, id: &str) -> Vec<Value> {
+    let v = serde_json::to_value(engine.item(id, &Links::default()).unwrap()).unwrap();
+    v["pending"].as_array().unwrap().clone()
+}
+
+fn facets_of(engine: &Engine, id: &str, links: &Links) -> Vec<Value> {
+    let v = serde_json::to_value(engine.item(id, links).unwrap()).unwrap();
+    v["facets"].as_array().unwrap().clone()
+}
+
+#[tokio::test]
+async fn the_item_page_shows_every_copy_with_its_source_and_what_is_still_coming() {
+    let f = Fixture::new();
+    let engine = f.engine();
+    let mut events = engine.subscribe();
+    let id = f.take(&engine, "dash").await;
+    let links = Links {
+        base: "http://127.0.0.1:1".into(),
+        key: Some("k".into()),
+    };
+
+    // 还没转：每一面一句，排着、接着电
+    let p = pending_of(&engine, &id);
+    let layers: Vec<&str> = p.iter().map(|x| x["layer"].as_str().unwrap()).collect();
+    assert_eq!(layers, ["video", "asr"], "{p:?}");
+    assert!(p.iter().all(|x| x["state"] == "later"));
+
+    engine.run_transforms_due().await.unwrap();
+    // 口播等模型：那一面写要下哪个、多大、什么许可
+    let p = pending_of(&engine, &id);
+    assert_eq!(p.len(), 1, "{p:?}");
+    assert_eq!(p[0]["layer"], "asr");
+    assert_eq!(p[0]["state"], "needs-model");
+    assert_eq!(
+        p[0]["model"],
+        json!({"plugin": "fake/asr", "name": "fake-voice", "size": 10, "license": "MIT"})
+    );
+    let mut told = false;
+    while let Ok(e) = events.try_recv() {
+        told |= matches!(e, usuyo_core::view::Event::ItemUpdated { id: ref x } if *x == id);
+    }
+    assert!(told, "等模型时条目页要知道");
+
+    // 模型到了：等着的接着转，条目页再收到一次
+    f.place_voice();
+    assert_eq!(engine.run_transforms_due().await.unwrap(), 1);
+    assert!(pending_of(&engine, &id).is_empty());
+
+    let facets = facets_of(&engine, &id, &links);
+    let layers: Vec<&str> = facets
+        .iter()
+        .map(|x| x["layer"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        layers,
+        ["video", "text", "asr", "asr", "frames"],
+        "{facets:?}"
+    );
+    let keys: std::collections::BTreeSet<&str> =
+        facets.iter().map(|x| x["key"].as_str().unwrap()).collect();
+    assert_eq!(keys.len(), facets.len(), "key 在一条里不重");
+
+    let video = &facets[0];
+    let play = f.jobs_of(&f.runs(&id), "play")[0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(
+        video["url"]
+            .as_str()
+            .unwrap()
+            .ends_with(&format!("/video?k=k&v={play}")),
+        "{video}"
+    );
+    let kf = f.jobs_of(&f.runs(&id), "keyframes")[0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(
+        video["frames"],
+        json!([{"sec": 0.5, "url": format!("http://127.0.0.1:1/media/{id}/frame/{kf}/500?k=k")}])
+    );
+
+    // 平台的在前，机器的跟着，各带来源
+    let platform = &facets[2];
+    assert_eq!(platform["source"], json!({"by": "platform", "lang": "zh"}));
+    assert!(
+        platform["key"]
+            .as_str()
+            .unwrap()
+            .starts_with("asr:platform:")
+    );
+    assert_eq!(platform["segments"][0]["text"], "平台字幕里的话");
+    assert_eq!(platform["segments"][0]["position"]["kind"], "time");
+    assert_eq!(platform["segments"][0]["position"]["endSec"], 2.0);
+    let machine = &facets[3];
+    assert_eq!(machine["source"]["by"], "machine");
+    assert_eq!(machine["source"]["tool"], "fake-voice");
+    assert_eq!(machine["source"]["lang"], "zh");
+    assert!(
+        machine["segments"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("咖啡")
+    );
+
+    // 画面上的字：位置是时间、带框和那一帧
+    let frames = &facets[4];
+    let pos = &frames["segments"][0]["position"];
+    assert_eq!(pos["sec"], 0.5);
+    assert_eq!(pos["xywh"], json!([0.1, 0.1, 0.5, 0.1]));
+    assert_eq!(
+        pos["frameUrl"],
+        format!("http://127.0.0.1:1/media/{id}/frame/{kf}/500?k=k")
+    );
+
+    // 这一帧经媒体地址拿得到
+    let file = engine.media(&id, &format!("frame/{kf}/500")).unwrap();
+    assert!(file.ends_with("keyframes/00000500.jpg"));
+
+    // 搜得到口播、画面上的字，带位置
+    let hits = engine.search("平台字幕", 10).unwrap();
+    let h = serde_json::to_value(&hits[0]).unwrap();
+    assert_eq!(h["layer"], "asr", "{h}");
+    assert_eq!(h["position"]["kind"], "time");
+    assert_eq!(h["position"]["endSec"], 2.0);
+    let hits = engine.search("粉水比", 10).unwrap();
+    let h = serde_json::to_value(&hits[0]).unwrap();
+    assert_eq!(h["layer"], "frames", "{h}");
+    assert_eq!(h["position"]["xywh"], json!([0.1, 0.1, 0.5, 0.1]));
+    // 重建索引以后一样
+    engine.reindex().unwrap();
+    let again = serde_json::to_value(&engine.search("粉水比", 10).unwrap()[0]).unwrap();
+    assert_eq!(again, h);
+}
+
+#[tokio::test]
+async fn image_text_and_marks_show_on_their_facets() {
+    let f = Fixture::new();
+    let engine = f.engine();
+    let note = f.take(&engine, "note").await;
+    let silent = f.take(&engine, "silent").await;
+    engine.run_transforms_due().await.unwrap();
+
+    let facets = facets_of(&engine, &note, &Links::default());
+    let image = facets.iter().find(|x| x["layer"] == "image").unwrap();
+    assert_eq!(image["remark"], "有几张图是同一张");
+    let ocr = facets.iter().find(|x| x["layer"] == "ocr").unwrap();
+    let key = image["images"][0]["key"].as_str().unwrap();
+    assert_eq!(ocr["segments"][0]["position"]["imageKey"], key);
+    let hit = serde_json::to_value(&engine.search("粉水比", 10).unwrap()[0]).unwrap();
+    assert_eq!(hit["layer"], "ocr");
+    assert_eq!(hit["position"]["imageKey"], key);
+
+    let facets = facets_of(&engine, &silent, &Links::default());
+    let asr = facets.iter().find(|x| x["layer"] == "asr").unwrap();
+    assert_eq!(asr["remark"], "没有声音轨");
+    assert_eq!(asr["segments"], json!([]));
+    assert!(asr["source"].get("tool").is_none(), "宿主自己判的没有工具");
+}
+
+#[tokio::test]
+async fn without_a_speech_plugin_the_face_says_so_in_words() {
+    let f = Fixture::new();
+    std::fs::remove_dir_all(f.machine().join("plugins/fake/asr")).unwrap();
+    let engine = f.engine();
+    let id = f.take(&engine, "dash").await;
+    engine.run_transforms_due().await.unwrap();
+    let p = pending_of(&engine, &id);
+    assert_eq!(p.len(), 1, "{p:?}");
+    assert_eq!(p[0]["layer"], "asr");
+    assert_eq!(p[0]["state"], "failed");
+    assert_eq!(p[0]["hint"], "这台电脑上还没有能转口播的插件");
+}
+
+#[tokio::test]
+async fn settings_change_the_running_values_and_keep_other_keys() {
+    let f = Fixture::new();
+    std::fs::write(
+        f.machine().join("settings.json"),
+        r#"{"library": "/x", "plugins": {"a/b": {"settings": {"k": 1}}}, "network": {"other": true}}"#,
+    )
+    .unwrap();
+    let engine = f.engine();
+    let id = f.take(&engine, "note").await;
+    assert!(!engine.transform_jobs(&id).unwrap().is_empty());
+
+    let patch: usuyo_core::SettingsPatch = serde_json::from_value(json!({
+        "trashDays": null,
+        "network": {"mode": "custom", "proxy": "http://me:secret@127.0.0.1:7890"},
+        "transforms": {"auto": false}
+    }))
+    .unwrap();
+    let v = serde_json::to_value(engine.patch_settings(patch, Via::App).unwrap()).unwrap();
+    assert_eq!(v["trashDays"], Value::Null);
+    assert_eq!(v["network"]["mode"], "custom");
+    assert_eq!(
+        v["network"]["proxy"], "http://me@127.0.0.1:7890",
+        "不回密码"
+    );
+    assert_eq!(v["transforms"]["auto"], false);
+    assert!(
+        engine.transform_jobs(&id).unwrap().is_empty(),
+        "关掉以后自动的不留着"
+    );
+
+    let file: Value =
+        serde_json::from_slice(&std::fs::read(f.machine().join("settings.json")).unwrap()).unwrap();
+    assert_eq!(file["library"], "/x");
+    assert_eq!(file["plugins"]["a/b"]["settings"]["k"], 1);
+    assert_eq!(file["network"]["other"], true);
+    assert_eq!(file["network"]["proxy"], "http://me:secret@127.0.0.1:7890");
+    assert_eq!(file["transforms"]["auto"], false);
+    // 代理地址带密码：文件只有自己能读，临时文件不留，读回来的和报错里都没有密码
+    let mode = std::fs::metadata(f.machine().join("settings.json"))
+        .unwrap()
+        .permissions()
+        .mode();
+    assert_eq!(mode & 0o777, 0o600);
+    let names: Vec<String> = std::fs::read_dir(f.machine())
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    assert!(!names.iter().any(|n| n.contains("tmp")), "{names:?}");
+    let got = serde_json::to_string(&engine.settings().unwrap()).unwrap();
+    assert!(!got.contains("secret"), "{got}");
+    let patch: usuyo_core::SettingsPatch = serde_json::from_value(
+        json!({"network": {"mode": "custom", "proxy": "ftp://me:secret@127.0.0.1:1"}}),
+    )
+    .unwrap();
+    let err = engine
+        .patch_settings(patch, Via::App)
+        .unwrap_err()
+        .to_string();
+    assert!(!err.contains("secret"), "{err}");
+
+    // 打开：照启动那样补排
+    let patch: usuyo_core::SettingsPatch = serde_json::from_value(
+        json!({"transforms": {"auto": true}, "network": {"mode": "direct"}}),
+    )
+    .unwrap();
+    engine.patch_settings(patch, Via::App).unwrap();
+    assert!(!engine.transform_jobs(&id).unwrap().is_empty());
+
+    for bad in [
+        json!({"trashDays": 7}),
+        json!({"network": {"mode": "custom"}}),
+        json!({"network": {"mode": "custom", "proxy": "ftp://x"}}),
+        json!({"network": {"mode": "direct", "proxy": "http://x:1"}}),
+    ] {
+        let patch: usuyo_core::SettingsPatch = serde_json::from_value(bad.clone()).unwrap();
+        assert!(
+            matches!(
+                engine.patch_settings(patch, Via::App),
+                Err(usuyo_core::Error::InvalidArgs(_))
+            ),
+            "{bad}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn the_transforms_view_lists_plugins_jobs_models_and_health() {
+    let f = Fixture::new();
+    let engine = f.engine();
+    let v = serde_json::to_value(engine.transforms_view().await).unwrap();
+    assert_eq!(v["auto"], true);
+    let plugins = v["plugins"].as_array().unwrap();
+    let by_id = |id: &str| plugins.iter().find(|p| p["id"] == id).unwrap().clone();
+    let media = by_id("fake/media");
+    assert_eq!(media["jobs"], json!(["play", "keyframes"]));
+    assert_eq!(media["health"], "ok");
+    assert_eq!(by_id("fake/ocr")["jobs"], json!(["ocr", "frames"]));
+    let asr = by_id("fake/asr");
+    assert_eq!(asr["jobs"], json!(["asr"]));
+    assert_eq!(
+        asr["models"],
+        json!([{"name": "fake-voice", "size": 10, "license": "MIT", "state": "absent"}])
+    );
+    f.place_voice();
+    let v = serde_json::to_value(engine.transforms_view().await).unwrap();
+    let asr = v["plugins"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["id"] == "fake/asr")
+        .unwrap()
+        .clone();
+    assert_eq!(asr["models"][0]["state"], "present");
+    engine.shutdown().await;
+}
+
+#[tokio::test]
+async fn after_keep_text_the_words_stay_on_the_page_and_in_search() {
+    let f = Fixture::new();
+    let engine = f.engine();
+    f.place_voice();
+    let id = f.take(&engine, "dash").await;
+    engine.run_transforms_due().await.unwrap();
+    let links = Links {
+        base: "http://127.0.0.1:1".into(),
+        key: Some("k".into()),
+    };
+    engine.text_only(&id, Via::App, &links).unwrap();
+    let facets = facets_of(&engine, &id, &links);
+    let layers: Vec<&str> = facets
+        .iter()
+        .map(|x| x["layer"].as_str().unwrap())
+        .collect();
+    assert_eq!(layers, ["text", "asr", "asr", "frames"], "{facets:?}");
+    let frames = facets.iter().find(|x| x["layer"] == "frames").unwrap();
+    let pos = &frames["segments"][0]["position"];
+    assert_eq!(pos["sec"], 0.5);
+    assert!(pos.get("frameUrl").is_none(), "帧进了回收站，不给地址");
+    let hit = serde_json::to_value(&engine.search("粉水比", 10).unwrap()[0]).unwrap();
+    assert_eq!(hit["layer"], "frames");
+    let hit = serde_json::to_value(&engine.search("平台字幕", 10).unwrap()[0]).unwrap();
+    assert_eq!(hit["layer"], "asr");
 }

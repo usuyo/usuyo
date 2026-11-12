@@ -42,24 +42,8 @@ impl Engine {
     pub fn expire_trash(&self, now: &str, guard: ClockGuard) -> Result<Expiry> {
         let now = time::parse(now)?;
         let mut report = Expiry::default();
-        let mut due = Vec::new();
-        let (days, mark) = {
-            let lib = self.lib();
-            let days = lib.settings().trash_days;
-            for e in lib.trash_entries()? {
-                match expiry_of(&e.trashed_at, days) {
-                    Ok(Some(at)) if at <= now => due.push(e.id),
-                    Ok(_) => {}
-                    Err(err) => report.skipped.push(skipped(&e.id, &err.into())),
-                }
-            }
-            (days, self.clock_mark(&lib)?)
-        };
-        if guard == ClockGuard::Check
-            && !due.is_empty()
-            && let (Some(days), Some(mark)) = (days, mark)
-            && now.duration_since(mark) > SignedDuration::from_hours(i64::from(days) * 24)
-        {
+        let (due, mark, held) = self.due_trash(now, &mut report.skipped)?;
+        if guard == ClockGuard::Check && held {
             report.held = due.len();
             return Ok(report);
         }
@@ -75,6 +59,43 @@ impl Engine {
         }
         self.remember_clock(&self.lib(), mark.map_or(now, |m| m.max(now)))?;
         Ok(report)
+    }
+
+    /// 到期的项、记下的最大时间，和时钟守卫拦不拦：本机时间比记下的最大时间晚了超过 `trashDays`。
+    /// 读不了的项记进 `skipped`。
+    fn due_trash(
+        &self,
+        now: Timestamp,
+        skipped_out: &mut Vec<Unreadable>,
+    ) -> Result<(Vec<String>, Option<Timestamp>, bool)> {
+        let lib = self.lib();
+        let days = lib.settings().trash_days;
+        let mut due = Vec::new();
+        for e in lib.trash_entries()? {
+            match expiry_of(&e.trashed_at, days) {
+                Ok(Some(at)) if at <= now => due.push(e.id),
+                Ok(_) => {}
+                Err(err) => skipped_out.push(skipped(&e.id, &err.into())),
+            }
+        }
+        let mark = self.clock_mark(&lib)?;
+        let held = !due.is_empty()
+            && match (days, mark) {
+                (Some(days), Some(mark)) => {
+                    now.duration_since(mark) > SignedDuration::from_hours(i64::from(days) * 24)
+                }
+                _ => false,
+            };
+        Ok((due, mark, held))
+    }
+
+    /// 时钟守卫现在拦着几项、记下的最大时间是什么时候；没拦时 `None`。设置页照它给「照时间移除」。
+    pub(crate) fn trash_hold(&self, now: &str) -> Result<Option<(usize, Timestamp)>> {
+        let (due, mark, held) = self.due_trash(time::parse(now)?, &mut Vec::new())?;
+        Ok(match (held, mark) {
+            (true, Some(m)) => Some((due.len(), m)),
+            _ => None,
+        })
     }
 
     /// 回收站页：整条删掉的条目和只留文字移出来的媒体，新的在前。
@@ -462,10 +483,16 @@ mod tests {
             .unwrap();
         let r = f.engine.expire_trash(&jump, ClockGuard::Check).unwrap();
         assert_eq!((r.purged, r.held), (0, 1));
+        // 设置页照同一个判法看到拦着一项，记下的时间是上次那一轮的。
+        let (count, since) = f.engine.trash_hold(&jump).unwrap().unwrap();
+        assert_eq!(count, 1);
+        assert_eq!(time::format(since), after(&e, 2));
+        assert_eq!(f.engine.trash_hold(&after(&e, 2)).unwrap(), None);
         // 你点了「照时间移除」。
         let r = f.engine.expire_trash(&jump, ClockGuard::Override).unwrap();
         assert_eq!((r.purged, r.held), (1, 0));
         assert!(f.lib_entries().is_empty());
+        assert_eq!(f.engine.trash_hold(&jump).unwrap(), None);
     }
 
     #[tokio::test]

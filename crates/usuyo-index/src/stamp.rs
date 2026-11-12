@@ -11,7 +11,7 @@ use crate::error::Result;
 
 pub(crate) const FILE_NAME: &str = "usuyo-index.json";
 /// 字段布局变了就加一。
-const SCHEMA_VERSION: u32 = 1;
+const SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub(crate) struct Stamp {

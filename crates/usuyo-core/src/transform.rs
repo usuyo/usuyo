@@ -30,7 +30,7 @@ use usuyo_plugin::{
 
 use crate::engine::Engine;
 use crate::fetch::now_ms;
-use crate::jobs::{TransformJob, TransformJobKind, TransformRedo};
+use crate::jobs::{TransformJob, TransformJobKind, TransformRedo, TransformState};
 use crate::models::{Begin, Models};
 use crate::view::Event;
 use crate::{Error, Result};
@@ -88,8 +88,8 @@ pub(crate) struct Transforms {
     plugins: Vec<TransformPlugin>,
     resident: HashMap<String, ResidentTransform>,
     pub models: Models,
-    /// 按机器的 `settings.json` 里的 `transforms.auto`。
-    auto: bool,
+    /// 按机器的 `settings.json` 里的 `transforms.auto`；设置页改了马上换。
+    auto: AtomicBool,
     power: Arc<dyn PowerSource>,
     /// 读不出电源状态时只记一次日志。
     power_unread: AtomicBool,
@@ -135,7 +135,7 @@ impl Transforms {
             plugins: s.plugins,
             resident,
             models: s.models,
-            auto: s.auto,
+            auto: AtomicBool::new(s.auto),
             power: s.power,
             power_unread: AtomicBool::new(false),
             wake: Notify::new(),
@@ -565,7 +565,7 @@ impl Engine {
 
     /// 自动排不排在这台：`transforms.auto` 开着，而且这条最早是在这台收下的（SPEC §1.2.1 的 `origins`）。
     fn transforms_here(&self, lib: &Library, m: &Manifest) -> bool {
-        self.transforms().auto
+        self.transforms().auto.load(Ordering::Relaxed)
             && m.origins
                 .first()
                 .is_some_and(|o| o.device == lib.device_id())
@@ -704,8 +704,10 @@ impl Engine {
 
     /// 启动时补排：在这台收下的、还有没做好的，按导入那一档排；已经有的一行不动。
     fn backfill_transforms(&self) -> Result<()> {
-        let lib = self.lib();
         let now = now_ms();
+        // 上次缺插件、缺程序停下的：这次可能装上了。
+        self.inner.jobs.revive_missing(now)?;
+        let lib = self.lib();
         for id in lib.item_ids()? {
             let item = match lib.item(&id) {
                 Ok(item) => item,
@@ -775,6 +777,10 @@ impl Engine {
                 continue;
             }
             n += 1;
+            // 条目页那一面改成「在转」。
+            self.emit(Event::ItemUpdated {
+                id: row.item_id.clone(),
+            });
             self.transform_one(row).await?;
         }
     }
@@ -790,7 +796,9 @@ impl Engine {
                     .any(|m| m.name == name && t.models.record(p.id(), m).is_some())
             });
             if here {
-                self.inner.jobs.model_arrived(&name, now_ms())?;
+                for id in self.inner.jobs.model_arrived(&name, now_ms())? {
+                    self.emit(Event::ItemUpdated { id });
+                }
             }
         }
         Ok(())
@@ -834,7 +842,8 @@ impl Engine {
                 let hint = failure
                     .hint
                     .clone()
-                    .or_else(|| Some(failure.message.clone()));
+                    .unwrap_or_else(|| failure_hint(failure.code).to_owned());
+                let hint = Some(hint);
                 tracing::info!(item = %row.item_id, job = row.job.as_str(), failure = %failure, "transform failed");
                 let retry_policy = self.inner.retry;
                 if retry && row.attempts + 1 < retry_policy.max_attempts {
@@ -855,15 +864,14 @@ impl Engine {
                         hint.as_deref(),
                     )?;
                 }
-                self.emit(Event::ItemUpdated {
-                    id: row.item_id.clone(),
-                });
             }
         }
+        // 那一面换成转出来的、等模型的、没转出来的，或者不再写什么。
+        self.emit(Event::ItemUpdated { id: row.item_id });
         Ok(())
     }
 
-    /// 一次转录落地以后：`keyframes` 的接着排 `frames`；重建这一条的索引、发事件。
+    /// 一次转录落地以后：`keyframes` 的接着排 `frames`；重建这一条的索引。
     fn after_landing(&self, row: &TransformJob) -> Result<()> {
         let id = ItemId::parse(&row.item_id)?;
         if row.job == TransformJobKind::Keyframes {
@@ -883,8 +891,6 @@ impl Engine {
         }
         let lib = self.lib();
         self.reindex_item(&lib, &id)?;
-        drop(lib);
-        self.emit(Event::ItemUpdated { id: id.to_string() });
         Ok(())
     }
 
@@ -908,13 +914,10 @@ impl Engine {
         let redo = row.trigger == "redo";
         let t = self.transforms();
         let Some(plugin) = t.plugin_for(row.job, row.plugin.as_deref()) else {
-            return Ok(Outcome::Failed {
-                failure: CallFailure::new(
-                    ErrorCode::DependencyMissing,
-                    format!("no installed plugin does `{}`", row.job.as_str()),
-                ),
-                retry: false,
-            });
+            return Ok(missing_plugin(
+                format!("no installed plugin does `{}`", row.job.as_str()),
+                row.job,
+            ));
         };
         let options = t.options(plugin, row)?;
         let m = &item.manifest;
@@ -1010,13 +1013,10 @@ impl Engine {
                     return Ok(Outcome::WaitModel(spec.name.clone()));
                 }
                 let Some(media) = t.helper(Produce::AudioPcm16k) else {
-                    return Ok(Outcome::Failed {
-                        failure: CallFailure::new(
-                            ErrorCode::DependencyMissing,
-                            "no installed plugin extracts audio",
-                        ),
-                        retry: false,
-                    });
+                    return Ok(missing_plugin(
+                        "no installed plugin extracts audio".into(),
+                        TransformJobKind::Play,
+                    ));
                 };
                 let call = Call {
                     plugin: media,
@@ -1171,13 +1171,10 @@ impl Engine {
         cancel: &CancellationToken,
     ) -> Result<std::result::Result<(Vec<Probe>, TransformPlugin, RunResult), Outcome>> {
         let Some(prober) = self.transforms().helper(Produce::Probe) else {
-            return Ok(Err(Outcome::Failed {
-                failure: CallFailure::new(
-                    ErrorCode::DependencyMissing,
-                    "no installed plugin probes media",
-                ),
-                retry: false,
-            }));
+            return Ok(Err(missing_plugin(
+                "no installed plugin probes media".into(),
+                TransformJobKind::Play,
+            )));
         };
         let call = Call {
             plugin: prober,
@@ -1460,8 +1457,13 @@ impl Engine {
                     if let Ok(r) = t.resident(&p) {
                         r.shutdown().await;
                     }
-                    if let Err(e) = this.inner.jobs.model_arrived(&spec.name, now_ms()) {
-                        tracing::error!(error = %e, "jobs database");
+                    match this.inner.jobs.model_arrived(&spec.name, now_ms()) {
+                        Ok(ids) => {
+                            for id in ids {
+                                this.emit(Event::ItemUpdated { id });
+                            }
+                        }
+                        Err(e) => tracing::error!(error = %e, "jobs database"),
                     }
                     t.wake.notify_one();
                 }
@@ -1475,13 +1477,18 @@ impl Engine {
     }
 
     /// 删掉这个模型（按机器目录里的，不是资料库）；之后要它的任务等模型。正在下回 `conflict`。
+    /// 插件的进程在后台关掉（正在转的那一条转完再关），下次起来就看不到这个模型了。
     ///
-    /// 调用方：WP8 的 `POST /transforms/{owner}/{repo}/models/{name}/remove`。
-    pub async fn remove_model(&self, plugin: &str, name: &str) -> Result<bool> {
+    /// 调用方：`POST /transforms/{owner}/{repo}/models/{name}/remove`。
+    pub fn remove_model(&self, plugin: &str, name: &str) -> Result<bool> {
         let (p, spec) = self.model_spec(plugin, name)?;
-        let t = self.transforms();
-        t.resident(&p)?.shutdown().await;
-        let removed = t.models.remove(p.id(), &spec)?;
+        let removed = self.transforms().models.remove(p.id(), &spec)?;
+        let this = self.clone();
+        tokio::spawn(async move {
+            if let Ok(r) = this.transforms().resident(&p) {
+                r.shutdown().await;
+            }
+        });
         self.emit(Event::TransformsUpdated);
         Ok(removed)
     }
@@ -1502,14 +1509,36 @@ impl Engine {
         Ok((p.clone(), spec.clone()))
     }
 
-    /// 装着的转换插件、各做哪几样、模型和它们现在怎样。
+    /// 装着的转换插件、各做哪几样、自己报的能不能用、模型和它们现在怎样，和 `transforms.auto`。
+    /// 能不能用要问插件（没起着的会起一个）；正在转一条的不等它，算能用。
     ///
-    /// 调用方：WP8 的 `GET /transforms`、WP12 的获取插件页（转换插件和模型那一栏）。
-    pub fn transform_plugins(&self) -> Vec<crate::view::TransformPluginView> {
+    /// 调用方：`GET /transforms`、获取插件页的转换插件和模型那一栏。
+    pub async fn transforms_view(&self) -> crate::view::TransformsView {
+        use crate::view::{Bundled, Health, ModelView, TransformPluginView};
         let t = self.transforms();
-        t.plugins
+        // 几个插件同时问，一个起得慢不拖住别的。
+        let asks: Vec<_> = t
+            .plugins
             .iter()
-            .map(|p| crate::view::TransformPluginView {
+            .map(|p| {
+                let (this, p) = (self.clone(), p.clone());
+                tokio::spawn(async move { this.health_of(&p).await })
+            })
+            .collect();
+        let mut plugins = Vec::new();
+        for (p, ask) in t.plugins.iter().zip(asks) {
+            let answer = ask
+                .await
+                .map_err(|e| Error::Task(e.to_string()))
+                .and_then(|r| r);
+            let (health, hint) = match answer {
+                Ok(h) => h,
+                Err(e) => {
+                    tracing::warn!(plugin = %p.id(), error = %e, "transform plugin health");
+                    (Health::Unavailable, Some("这个插件起不来".to_owned()))
+                }
+            };
+            plugins.push(TransformPluginView {
                 id: p.id().to_string(),
                 name: p.header.name.clone(),
                 version: p.header.version.to_string(),
@@ -1518,19 +1547,160 @@ impl Engine {
                     .filter(|j| t.plugin_for(*j, Some(p.id().as_str())).is_some())
                     .map(|j| j.as_str().to_owned())
                     .collect(),
+                bundled: p
+                    .header
+                    .upstream
+                    .iter()
+                    .map(|u| Bundled {
+                        name: u.name.clone(),
+                        license: u.license.clone(),
+                    })
+                    .collect(),
                 models: p
                     .spec
                     .models
                     .iter()
-                    .map(|m| crate::view::ModelView {
-                        name: m.name.clone(),
-                        size: m.size,
-                        license: m.license.clone(),
-                        state: t.models.state(p.id(), m),
+                    .map(|m| {
+                        let state = t.models.state(p.id(), m);
+                        let hint = match &state {
+                            crate::ModelState::Failed(h) => Some((*h).to_owned()),
+                            _ => None,
+                        };
+                        ModelView {
+                            name: m.name.clone(),
+                            size: m.size,
+                            license: m.license.clone(),
+                            state,
+                            hint,
+                        }
                     })
                     .collect(),
-            })
-            .collect()
+                health,
+                hint,
+            });
+        }
+        crate::view::TransformsView {
+            plugins,
+            auto: t.auto.load(Ordering::Relaxed),
+        }
+    }
+
+    /// 插件的 `health`：没过的检查的话（插件给的）当 `hint`。
+    async fn health_of(
+        &self,
+        p: &TransformPlugin,
+    ) -> Result<(crate::view::Health, Option<String>)> {
+        use crate::view::Health;
+        let Some(h) = self.transforms().resident(p)?.health_if_idle().await else {
+            return Ok((Health::Ok, None));
+        };
+        let h = h?;
+        if h.ready {
+            return Ok((Health::Ok, None));
+        }
+        // 缺的是宿主管的模型：模型那一栏已经写着、给着「下载」，这里不转述插件的英文（里面有路径）。
+        let t = self.transforms();
+        if p.spec
+            .models
+            .iter()
+            .any(|m| t.models.record(p.id(), m).is_none())
+        {
+            return Ok((Health::Unavailable, Some("要先下载模型".to_owned())));
+        }
+        let why: Vec<String> = h
+            .checks
+            .iter()
+            .filter(|c| !c.ok)
+            .map(|c| c.message.clone().unwrap_or_else(|| c.name.clone()))
+            .collect();
+        Ok((
+            Health::Unavailable,
+            (!why.is_empty()).then(|| why.join("；")),
+        ))
+    }
+
+    /// 打开或关上 `transforms.auto`：关上时自动排的（没在跑的）都删掉，之后只在打开条目、再转一次时转；
+    /// 打开时照启动那样补排。调用方：设置（`PATCH /settings`）。
+    pub(crate) fn set_transforms_auto(&self, on: bool) -> Result<()> {
+        let was = self.transforms().auto.swap(on, Ordering::Relaxed);
+        if was == on {
+            return Ok(());
+        }
+        if on {
+            self.backfill_transforms()?;
+            self.transforms().wake.notify_one();
+        } else {
+            for id in self.inner.jobs.drop_automatic()? {
+                self.emit(Event::ItemUpdated { id });
+            }
+        }
+        Ok(())
+    }
+
+    /// 条目页那一面写的一句（feature 003 §4.4 的表）：每一面一句，挑最要紧的那一行
+    /// （在转、等模型、没转出来、等电源、排着）。`play`、`keyframes` 都算画面那一面。
+    pub(crate) fn pending(&self, id: &str) -> Result<Vec<crate::view::Pending>> {
+        use crate::view::{Pending, PendingModel, PendingState};
+        let rows = self.inner.jobs.transforms_of(id)?;
+        if rows.is_empty() {
+            return Ok(Vec::new());
+        }
+        let on_mains = self.on_mains_power();
+        let t = self.transforms();
+        let mut out: Vec<Pending> = Vec::new();
+        for r in rows {
+            let layer = match r.job {
+                TransformJobKind::Play | TransformJobKind::Keyframes => "video",
+                TransformJobKind::Asr => "asr",
+                TransformJobKind::Ocr => "ocr",
+                TransformJobKind::Frames => "frames",
+            };
+            let mut model = None;
+            let state = match r.state {
+                TransformState::Running => PendingState::Now,
+                TransformState::Failed => PendingState::Failed,
+                TransformState::Waiting => {
+                    match r.wait.as_deref().and_then(|w| w.strip_prefix("model:")) {
+                        Some(name) => {
+                            model = t.plugins.iter().find_map(|p| {
+                                let m = p.spec.models.iter().find(|m| m.name == name)?;
+                                Some(PendingModel {
+                                    plugin: p.id().to_string(),
+                                    name: m.name.clone(),
+                                    size: m.size,
+                                    license: m.license.clone(),
+                                })
+                            });
+                            PendingState::NeedsModel
+                        }
+                        None => PendingState::OnPower,
+                    }
+                }
+                TransformState::Queued if !on_mains && r.priority > OPEN => PendingState::OnPower,
+                TransformState::Queued => PendingState::Later,
+            };
+            let hint = (state == PendingState::Failed)
+                .then_some(r.error_hint)
+                .flatten();
+            let p = Pending {
+                layer,
+                state,
+                model,
+                hint,
+            };
+            match out.iter_mut().find(|x| x.layer == layer) {
+                Some(x) if p.state < x.state => *x = p,
+                Some(_) => {}
+                None => out.push(p),
+            }
+        }
+        let rank = |l: &str| {
+            ["video", "asr", "ocr", "frames"]
+                .iter()
+                .position(|x| *x == l)
+        };
+        out.sort_by_key(|p| rank(p.layer));
+        Ok(out)
     }
 
     /// 守护进程退出时：关掉所有转换插件的进程（关 stdin，再 SIGTERM、SIGKILL 进程组）。
@@ -1572,6 +1742,39 @@ fn no_audio_track(
                 extra: Default::default(),
             }],
         )),
+    }
+}
+
+/// 这台电脑上没有能做这一样的插件（或做中间一步的插件）：不再自动试，启动时再看装了没有。
+fn missing_plugin(message: String, job: TransformJobKind) -> Outcome {
+    let mut failure = CallFailure::new(ErrorCode::DependencyMissing, message);
+    failure.hint = Some(
+        match job {
+            TransformJobKind::Asr => "这台电脑上还没有能转口播的插件",
+            TransformJobKind::Ocr | TransformJobKind::Frames => {
+                "这台电脑上还没有能认图里的字的插件"
+            }
+            TransformJobKind::Play | TransformJobKind::Keyframes => {
+                "这台电脑上还没有处理音视频的插件"
+            }
+        }
+        .into(),
+    );
+    Outcome::Failed {
+        failure,
+        retry: false,
+    }
+}
+
+/// 插件没给 `hint` 时，条目页那一面「没转出来：」后面写的。插件的 `message` 是英文、给日志的。
+fn failure_hint(code: ErrorCode) -> &'static str {
+    match code {
+        ErrorCode::Timeout => "转得太久，停下了",
+        ErrorCode::Crashed => "转换插件中途退出了",
+        ErrorCode::InvalidOutput => "转换插件交回来的东西不对",
+        ErrorCode::UnsupportedInput => "这个文件转不了",
+        ErrorCode::DependencyMissing => "转换插件缺了要用的东西",
+        _ => "转换插件出了错",
     }
 }
 
