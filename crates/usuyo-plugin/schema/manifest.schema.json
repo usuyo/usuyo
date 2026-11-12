@@ -4,28 +4,6 @@
   "description": "清单的线上形状，也是 `manifest.schema.json` 的来源。种类专属的字段都可选，语义检查再判。",
   "type": "object",
   "properties": {
-    "access": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/Access"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null
-    },
-    "capabilities": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/WireCapabilities"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null
-    },
     "consumes": {
       "type": [
         "array",
@@ -70,17 +48,6 @@
     "license": {
       "type": "string"
     },
-    "login": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/Login"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null
-    },
     "maintainers": {
       "type": "array",
       "items": {
@@ -95,6 +62,16 @@
       "default": null,
       "items": {
         "type": "string"
+      }
+    },
+    "methods": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": null,
+      "items": {
+        "$ref": "#/$defs/WireMethod"
       }
     },
     "models": {
@@ -259,6 +236,46 @@
         "client-hook"
       ]
     },
+    "Account": {
+      "description": "账号在哪里被用到（§2.3.1）。顺序就是同一层里挑方法的先后：先不带账号的。",
+      "oneOf": [
+        {
+          "description": "不用账号。",
+          "type": "string",
+          "const": "none"
+        },
+        {
+          "description": "访客身份（§2.5.1），不是账号。",
+          "type": "string",
+          "const": "visitor"
+        },
+        {
+          "description": "只在你自己的浏览器里。",
+          "type": "string",
+          "const": "own-browser"
+        },
+        {
+          "description": "只在你手机的 App 里。",
+          "type": "string",
+          "const": "own-phone"
+        },
+        {
+          "description": "只在你电脑的客户端里。",
+          "type": "string",
+          "const": "own-app"
+        },
+        {
+          "description": "登录进 usuyo。",
+          "type": "string",
+          "const": "in-usuyo"
+        },
+        {
+          "description": "你申请的开发者凭据。",
+          "type": "string",
+          "const": "developer"
+        }
+      ]
+    },
     "Asset": {
       "type": "object",
       "properties": {
@@ -309,6 +326,13 @@
         "cookies",
         "browser-profile",
         "app"
+      ]
+    },
+    "Delivers": {
+      "description": "不在插件进程里跑的方法交什么给本机接口（§5）。",
+      "type": "string",
+      "enum": [
+        "links"
       ]
     },
     "Device": {
@@ -649,6 +673,38 @@
         "required"
       ]
     },
+    "Risk": {
+      "description": "记录到的一句情况。只是信息，宿主不拿它拦。",
+      "type": "object",
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/RiskSource"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "source"
+      ]
+    },
+    "RiskSource": {
+      "description": "记录到的一句情况的出处。",
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "url"
+      ]
+    },
     "Run": {
       "type": "object",
       "properties": {
@@ -896,19 +952,9 @@
       }
     },
     "WireCapability": {
-      "description": "能力声明的线上形状：三种能力共用一个结构，哪些字段属于哪种能力在语义检查里判。",
+      "description": "能力声明的线上形状：三种能力共用一个结构，哪些字段属于哪种能力在语义检查里判。\n`access`、`login`、`sites`、`visitors`、`interaction`、`perPlatform` 挪到了方法上（§2.3.1）：\n还写在能力里的清单照旧形状拒掉，说清楚挪到了哪里。",
       "type": "object",
       "properties": {
-        "access": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Access"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
         "files": {
           "type": [
             "array",
@@ -929,19 +975,12 @@
             "$ref": "#/$defs/FetchInputKind"
           }
         },
-        "interaction": {
-          "$ref": "#/$defs/Interaction",
-          "default": "background"
-        },
-        "login": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Login"
-            },
-            {
-              "type": "null"
-            }
-          ]
+        "link": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
         },
         "order": {
           "anyOf": [
@@ -964,26 +1003,9 @@
             "$ref": "#/$defs/OutputKind"
           }
         },
-        "perPlatform": {
-          "type": "object",
-          "additionalProperties": false,
-          "default": {},
-          "patternProperties": {
-            "^[a-z0-9][a-z0-9-]*$": {
-              "$ref": "#/$defs/WirePlatformUse"
-            }
-          }
-        },
         "provider": {
           "$ref": "#/$defs/ProviderNeed",
           "default": "none"
-        },
-        "sites": {
-          "type": "array",
-          "default": [],
-          "items": {
-            "type": "string"
-          }
         },
         "sources": {
           "type": [
@@ -1005,13 +1027,6 @@
             }
           ],
           "default": null
-        },
-        "visitors": {
-          "type": "array",
-          "default": [],
-          "items": {
-            "type": "string"
-          }
         }
       }
     },
@@ -1038,6 +1053,99 @@
             "mime"
           ]
         }
+      ]
+    },
+    "WireMethod": {
+      "description": "一种方法的线上形状（§2.3.1）。",
+      "type": "object",
+      "properties": {
+        "access": {
+          "$ref": "#/$defs/Access"
+        },
+        "account": {
+          "$ref": "#/$defs/Account"
+        },
+        "built": {
+          "type": "boolean",
+          "default": true
+        },
+        "capabilities": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WireCapabilities"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "delivers": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Delivers"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "id": {
+          "type": "string"
+        },
+        "interaction": {
+          "$ref": "#/$defs/Interaction",
+          "default": "background"
+        },
+        "login": {
+          "$ref": "#/$defs/Login"
+        },
+        "name": {
+          "type": "string"
+        },
+        "perPlatform": {
+          "type": "object",
+          "additionalProperties": false,
+          "default": {},
+          "patternProperties": {
+            "^[a-z0-9][a-z0-9-]*$": {
+              "$ref": "#/$defs/WirePlatformUse"
+            }
+          }
+        },
+        "risk": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Risk"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "sites": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "visitors": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "access",
+        "login",
+        "account"
       ]
     },
     "WirePermissions": {

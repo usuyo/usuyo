@@ -276,13 +276,20 @@ impl Sources {
     }
 }
 
+/// 画面和音轨从有它们的最新一份快照来（一起，好配对），图从有图的最新一份来（插件协议 §2.3.1）。
 fn sources(lib: &Library, id: &ItemId, m: &Manifest) -> Result<Option<Sources>> {
-    let Some(snapshot) = m.primary_snapshot.clone() else {
+    let Some(primary) = m.primary_snapshot.clone() else {
         return Ok(None);
     };
-    let rec = lib.fetch_record(id, &snapshot)?;
     let dir = lib.root().join(id.rel_dir());
-    Ok(Some(sources_of(&rec, &dir, &snapshot)))
+    let media = usuyo_library::newest_with(m, &["media:video", "media:audio"])
+        .unwrap_or_else(|| primary.clone());
+    let mut s = sources_of(&lib.fetch_record(id, &media)?, &dir, &media);
+    let pictures = usuyo_library::newest_with(m, &["images"]).unwrap_or(primary);
+    if pictures != media {
+        s.images = sources_of(&lib.fetch_record(id, &pictures)?, &dir, &pictures).images;
+    }
+    Ok(Some(s))
 }
 
 fn sources_of(rec: &FetchRecord, dir: &Path, snapshot: &str) -> Sources {

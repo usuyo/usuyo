@@ -23,11 +23,7 @@
 
 **清单现在怎么写出这个拆分。** 按能力分开声明（[协议 §2.3](../protocol/manifest.md#23-获取插件的字段)）：不要账号的写在 `fetch` 上，`login: none`；要账号的写在 `list` 上，`login: required`，`sites` 写是哪个账号；只要访客身份的写 `visitors`，它不算账号，`login: none` 也能写。B站的样子就是 `fetch` 不登录、`list` 要登录。
 
-**协议还说不出的一处：同一个能力里只有某一样要账号。** 视频号的 `fetch` 不登录能取作者、描述、封面，只有视频要借元宝账号。现在只能把整个 `fetch` 写成 `login: optional`，宿主不知道哪一样用得到账号：宿主的代码（`crates/usuyo-plugin/src/host/credentials.rs` 的 `handover`）只看能力的 `login` 不是 `none`、站点存着登录，就把凭据交给这次调用，不看 `--want`，靠插件自己只在那一步用。协议照上面的规矩写了：`login: optional` 时你登录过也不带，账号只用在非它不可的那几样上（[协议 §2.4](../protocol/manifest.md#24-access-与-login)）；宿主不知道是哪几样，所以还做不到。
-
-现行写法能做到的：把要账号的那一样拆成另一个插件，`fetch` 只声明那一样的 `outputs`，宿主照[协议 §3.1](../protocol/fetch.md#31-运行器与节奏) 在第一个插件回 `partial` 时带 `--want=<缺的>` 去试它。代价是同一个平台装两个插件、身份和节奏要对齐。
-
-补法定了，还没做（[协议 §13 第 42 项](../protocol/open.md#13-待定)）：能力声明加一个可选字段 `accountOutputs`，值是 `outputs` 的子集，列出只有带账号才拿得到的几样。宿主只在 `--want` 和它有交集时才传 `USUYO_CREDENTIALS`，别的调用照 `login: none` 处理，不传任何账号凭据；`login: optional` 而没写 `accountOutputs` 的，当作每一样都可能用到账号。视频号写 `accountOutputs: [media:video]`。
+**只有某一样要账号时，写成另一种方法。** 视频号的作者、描述、封面不登录就取得到，只有视频要借元宝账号：清单里 `feed-info` 不带账号取前几样、在 `missing` 里写视频，`yuanbao` 列元宝站点、只取视频。宿主先调不带账号的那种，它说缺视频，再找声明了视频的方法只要视频（[协议 §2.3.1](../protocol/manifest.md#231-方法-methods)）；凭据只交给列了站点的方法，只要文字的调用拿不到元宝的登录。
 
 按创作者主页列、按关键词列，协议也还没有对应的能力，记在[协议 §13](../protocol/open.md#13-待定) 第 26 项；表里这一行只写调研查到的路。
 
@@ -85,11 +81,11 @@
 <a id="3-现在的插件哪里不合这条规矩"></a>
 ## 3. 现在的插件哪里不合这条规矩
 
-照小红书、视频号、B站三个插件的清单和代码（`usuyo-fetch/*/usuyo-plugin.yaml`）：
+照小红书、视频号、B站三个插件的清单和代码（`usuyo-fetch/*/usuyo-plugin.yaml`，11-12 起一种取法一个方法）：
 
 - **小红书**：合。`fetch` 是 `login: none`，只用访客身份；清单由你浏览器里的脚本交，usuyo 不碰你的账号。
-- **视频号**：行为上合，清单写不出来。`fetch` 是 `login: optional`，`sites` 写元宝。代码（`src/fetch.rs`）里匿名那一步从不带 cookie，元宝的 cookie 只在要视频、宿主又交了凭据时发给 `yuanbao.tencent.com`。但宿主不知道只有视频用得到它，你登录过元宝，只要文字的调用也会拿到凭据；要协议补上[第 1 节](#1-怎么读这一页)那个 `accountOutputs` 才说得清。
-- **B站**：合。`fetch` 是 `public-web`、`login: none`，不读凭据、不带 cookie，取标题、简介、封面和低清音视频；字幕要登录才有，不取，文字交给转写。账号只用在 `sources` 和 `list` 上。
+- **视频号**：合。`feed-info` 是 `login: none`，不带任何 cookie；`yuanbao` 只取视频，元宝的凭据只交给它，只发给 `yuanbao.tencent.com`。
+- **B站**：合。`view` 是 `public-web`、`login: none`，不读凭据、不带 cookie，取标题、简介、封面和低清音视频；字幕要登录才有，不取，文字交给转写。别人公开的收藏夹由 `favorites-public` 不带 cookie 列；账号只用在 `favorites`（你自己的收藏夹和稍后再看）上。
 
 <a id="4-怎么相对安全地试"></a>
 ## 4. 怎么相对安全地试

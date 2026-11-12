@@ -26,17 +26,23 @@ license: MIT
 maintainers: [someone]
 platforms: [example]
 match: ["example.com/*"]
-access: public-web
-login: none
-capabilities:
-  fetch:
+methods:
+  - id: page
+    name: 公开页
     access: public-web
     login: none
-    outputs: [text, html, images, meta]
-  list:
-    access: public-web
-    login: none
-    order: newest-first
+    account: none
+    capabilities:
+      fetch:
+        outputs: [text, html, images, meta]
+      list:
+        order: newest-first
+  - id: later
+    name: 还没做的
+    built: false
+    access: session-api
+    login: required
+    account: in-usuyo
 permissions:
   fs: {write: ["${OUT}"]}
 run:
@@ -102,6 +108,7 @@ impl Fixture {
         opts: &CallOptions,
     ) -> Result<usuyo_plugin::FetchedSnapshot, PluginError> {
         let request = FetchRequest {
+            method: "page".into(),
             input: FetchInput::Url(url::Url::parse("https://example.com/post/1?x=1").unwrap()),
             want: want.map(|w| w.iter().copied().collect()),
             input_file: None,
@@ -164,7 +171,10 @@ async fn fetch_succeeds_and_keeps_what_the_plugin_calls_missing() {
     let args: Vec<&str> = args.lines().collect();
     assert_eq!(args[0..2], ["fetch", "https://example.com/post/1?x=1"]);
     assert_eq!(args[2], "--out");
-    assert_eq!(args[4..], ["--want", "text,html,images"]);
+    assert_eq!(
+        args[4..],
+        ["--method", "page", "--want", "text,html,images"]
+    );
 
     let env = std::fs::read_to_string(f.cache().join("env")).unwrap();
     assert!(env.lines().any(|l| l == "USUYO_PROTOCOL=1"), "{env}");
@@ -511,6 +521,7 @@ cat <<'JSON'
 JSON"#,
     );
     let request = ListRequest {
+        method: "page".into(),
         source: "example:favorites".into(),
         cursor: Some("c1".into()),
         since: Some("2026-10-31T00:00:00Z".parse().unwrap()),
@@ -529,6 +540,8 @@ JSON"#,
         [
             "list",
             "example:favorites",
+            "--method",
+            "page",
             "--cursor",
             "c1",
             "--since",
@@ -540,6 +553,7 @@ JSON"#,
         r#"echo '{"ok": true, "items": [{"title": "no link"}], "nextCursor": null, "evidence": {"fetchedAt": "2026-11-01T03:00:01Z", "access": "public-web"}}'"#,
     );
     let request = ListRequest {
+        method: "page".into(),
         source: "example:favorites".into(),
         cursor: None,
         since: None,
@@ -849,5 +863,82 @@ async fn networked_plugins_get_the_proxy_and_others_do_not() {
                     || l.to_ascii_lowercase().starts_with("https_proxy=")),
             "{e}"
         );
+    }
+}
+
+#[tokio::test]
+async fn calls_name_their_method_and_unbuilt_ones_are_not_called() {
+    let f = install(
+        r#"printf '%s\n' "$@" > "$USUYO_CACHE_DIR/args"; echo '{"ok": true, "sources": []}'"#,
+    );
+    let request = FetchRequest {
+        method: "later".into(),
+        input: FetchInput::Url(url::Url::parse("https://example.com/post/1").unwrap()),
+        want: None,
+        input_file: None,
+    };
+    assert!(matches!(
+        f.host
+            .fetch(f.plugin(), request, &CallOptions::default())
+            .await,
+        Err(PluginError::Unsupported { .. })
+    ));
+    assert!(!f.cache().join("args").exists(), "没做的方法不起进程");
+    assert!(matches!(
+        f.host
+            .sources(f.plugin(), "nope", None, &CallOptions::default())
+            .await,
+        Err(PluginError::Unsupported { .. })
+    ));
+    f.host
+        .sources(f.plugin(), "page", None, &CallOptions::default())
+        .await
+        .unwrap();
+    let args = std::fs::read_to_string(f.cache().join("args")).unwrap();
+    assert_eq!(
+        args.lines().collect::<Vec<_>>(),
+        ["sources", "--method", "page"]
+    );
+    // 没声明 `list.link` 的方法不接链接
+    let link = url::Url::parse("https://example.com/u/1").unwrap();
+    assert!(matches!(
+        f.host
+            .sources(f.plugin(), "page", Some(&link), &CallOptions::default())
+            .await,
+        Err(PluginError::Unsupported { .. })
+    ));
+}
+
+#[tokio::test]
+async fn health_reports_checks_per_method_without_a_method_argument() {
+    let f = install(
+        r#"printf '%s\n' "$@" > "$USUYO_CACHE_DIR/args"
+echo '{"ok": true, "ready": true, "protocol": 1, "version": "1.0.0", "checks": [{"name": "yt-dlp", "ok": false, "message": "没找到 yt-dlp", "methods": ["page"]}]}'"#,
+    );
+    let h = f
+        .host
+        .health(f.plugin(), &CallOptions::default())
+        .await
+        .unwrap();
+    assert!(h.ready);
+    assert_eq!(h.checks[0].methods, ["page"]);
+    let args = std::fs::read_to_string(f.cache().join("args")).unwrap();
+    assert_eq!(args.trim(), "health");
+}
+
+#[tokio::test]
+async fn failure_detail_keeps_lines_and_is_cut_to_4k() {
+    let f = install(
+        r#"long=$(printf 'x%.0s' $(seq 1 5000))
+printf '{"ok": false, "error": {"code": "upstream-changed", "message": "bad", "detail": "<html>\\n<body>%s"}}' "$long"
+exit 1"#,
+    );
+    match f.fetch(None, &CallOptions::default()).await {
+        Err(PluginError::Call { failure, .. }) => {
+            let d = *failure.detail.unwrap();
+            assert!(d.starts_with("<html>\n<body>"), "{d:.40}");
+            assert_eq!(d.len(), 4096);
+        }
+        other => panic!("{other:?}"),
     }
 }

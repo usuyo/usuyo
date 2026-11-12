@@ -172,6 +172,16 @@ fn is_text_output(o: &str) -> bool {
     TEXT_OUTPUTS.contains(&o)
 }
 
+/// 有 `outputs` 里任何一样的快照里最新的那份：每次取是一份快照，条目的图、画面、音轨、评论
+/// 各从有它的最新一份来（插件协议 §2.3.1）。原文跟着主快照（`content.md`）。
+pub fn newest_with(m: &Manifest, outputs: &[&str]) -> Option<String> {
+    m.snapshots
+        .iter()
+        .filter(|s| s.outputs.iter().any(|o| outputs.contains(&o.as_str())))
+        .max_by(|a, b| (&a.at, &a.id).cmp(&(&b.at, &b.id)))
+        .map(|s| s.id.clone())
+}
+
 /// 照快照重算宿主写的字段（SPEC §1.2.1）；`primary` 是主快照的 `usuyo.fetch.json`。
 pub fn refresh(m: &mut Manifest, primary: Option<&FetchRecord>) {
     m.primary_snapshot = m
@@ -808,7 +818,15 @@ impl Library {
                 {
                     return Ok(LayerSource::File(play));
                 }
-                let s = snap()?;
+                let output = if name == "video" {
+                    "media:video"
+                } else {
+                    "media:audio"
+                };
+                let s = match snapshot {
+                    Some(_) => snap()?,
+                    None => newest_with(&item.manifest, &[output]).map_or_else(snap, Ok)?,
+                };
                 let rec = self.fetch_record(id, &s)?;
                 let m = rec
                     .media
@@ -820,7 +838,13 @@ impl Library {
             "vision" => existing(dir.join("derived/vision.md")),
             "summary" => existing(dir.join("derived/summary.md")),
             "notes" => existing(dir.join("notes.md")),
-            "comments" => existing(dir.join("raw").join(snap()?).join("comments.json")),
+            "comments" => {
+                let s = match snapshot {
+                    Some(_) => snap()?,
+                    None => newest_with(&item.manifest, &["comments"]).map_or_else(snap, Ok)?,
+                };
+                existing(dir.join("raw").join(s).join("comments.json"))
+            }
             _ => Err(Error::InvalidArgs(format!("unknown layer `{layer}`"))),
         }
     }

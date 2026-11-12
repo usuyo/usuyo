@@ -2,8 +2,8 @@
 
 use usuyo_plugin::PluginError;
 use usuyo_plugin::protocol::{
-    Access, ConsumeKind, FetchInputKind, Login, ModelFormat, OutputKind, PluginKind,
-    PluginManifest, Produce,
+    Access, Account, ConsumeKind, Delivers, FetchInputKind, Login, ModelFormat, OutputKind,
+    PluginKind, PluginManifest, Produce,
 };
 
 fn testdata(name: &str) -> String {
@@ -54,6 +54,17 @@ fn web_plugin_manifest_is_the_minimal_sample() {
 }
 
 #[test]
+fn the_core_fixture_plugin_parses() {
+    let text = std::fs::read_to_string(format!(
+        "{}/../usuyo-core/testdata/transform/fixture/usuyo-plugin.yaml",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap();
+    let m = parse(&text).unwrap();
+    assert_eq!(m.fetch().unwrap().methods[0].id, "sample");
+}
+
+#[test]
 fn valid_samples_parse() {
     let m = parse(&web()).unwrap();
     let spec = m.fetch().unwrap();
@@ -63,15 +74,34 @@ fn valid_samples_parse() {
 
     let m = parse(&douyin()).unwrap();
     let spec = m.fetch().unwrap();
+    // 顶层的层级由做了的方法算：没做的手机镜像不算
     assert_eq!(
-        (spec.access, spec.login),
+        (spec.access(), spec.login()),
         (Access::BrowserSession, Login::Required)
     );
-    let fetch = spec.capabilities.fetch.as_ref().unwrap();
+    let ids: Vec<&str> = spec.methods.iter().map(|m| m.id.as_str()).collect();
+    assert_eq!(ids, ["share-page", "favorites", "userscript", "iphone"]);
+    let share = spec.method("share-page").unwrap();
+    assert!(share.built && share.callable() && share.on_by_default());
+    assert_eq!(share.account, Account::None);
+    let fetch = share.capabilities.fetch.as_ref().unwrap();
     assert!(fetch.outputs.contains(&OutputKind::Comments));
     assert_eq!(fetch.input, [FetchInputKind::Url].into());
     assert_eq!(fetch.uses.timeout.unwrap().get().as_secs(), 600);
-    assert!(spec.capabilities.unfavorite.is_some());
+    let favorites = spec.method("favorites").unwrap();
+    assert_eq!(favorites.sites, ["www.douyin.com"]);
+    assert!(favorites.capabilities.unfavorite.is_some());
+    assert!(
+        favorites
+            .risk
+            .as_ref()
+            .is_some_and(|r| r.source.url.starts_with("https://"))
+    );
+    let script = spec.method("userscript").unwrap();
+    assert_eq!(script.delivers, Some(Delivers::Links));
+    assert!(script.built && !script.callable());
+    let phone = spec.method("iphone").unwrap();
+    assert!(!phone.built && !phone.callable());
     assert_eq!(m.header.permissions.exec, ["chrome"]);
     assert_eq!(m.header.permissions.limits.memory.unwrap().bytes(), 1 << 30);
 
@@ -79,7 +109,7 @@ fn valid_samples_parse() {
     let spec = m.fetch().unwrap();
     assert!(spec.match_patterns.is_empty());
     assert_eq!(
-        spec.capabilities.fetch.as_ref().unwrap().input,
+        spec.methods[0].capabilities.fetch.as_ref().unwrap().input,
         [FetchInputKind::Ref].into()
     );
 
@@ -116,22 +146,13 @@ fn invalid_samples_name_the_field() {
     );
     rejects(&format!("{w}consumes: [text]\n"), "consumes");
     rejects(
-        &replace(&w, "    outputs: [text, html, images, meta]\n", ""),
-        "capabilities.fetch.outputs",
+        &replace(&w, "outputs: [text, html, images, meta]", "input: [url]"),
+        "methods[0].capabilities.fetch.outputs",
     );
     rejects(
         &replace(&w, "outputs: [text, html", "outputs: [video, html"),
-        "capabilities.fetch.outputs[0]",
+        "methods[0].capabilities.fetch.outputs[0]",
     );
-    let message = rejects(
-        &replace(
-            &w,
-            "access: public-web\nlogin",
-            "access: session-api\nlogin",
-        ),
-        "access",
-    );
-    assert!(message.contains("public-web"), "{message}");
     rejects(&replace(&w, "match: [\"*\"]\n", ""), "match");
     rejects(
         &replace(&w, "match: [\"*\"]", "match: [\"https://*\"]"),
@@ -160,18 +181,18 @@ fn invalid_samples_name_the_field() {
     rejects(
         &replace(
             &w,
-            "    login: none\n    outputs",
-            "    login: none\n    timeout: \"10\"\n    outputs",
+            "      fetch:\n        outputs",
+            "      fetch:\n        timeout: \"10\"\n        outputs",
         ),
-        "capabilities.fetch.timeout",
+        "methods[0].capabilities.fetch.timeout",
     );
     rejects(
         &replace(
             &w,
-            "    login: none\n    outputs",
-            "    login: none\n    order: unordered\n    outputs",
+            "      fetch:\n        outputs",
+            "      fetch:\n        order: unordered\n        outputs",
         ),
-        "capabilities.fetch.order",
+        "methods[0].capabilities.fetch.order",
     );
     rejects(
         &replace(&d, "\".douyin.com\"", "\".evil.com\""),
@@ -184,18 +205,18 @@ fn invalid_samples_name_the_field() {
     rejects(
         &replace(
             &d,
-            "    sites: [www.douyin.com]\n    order",
-            "    sites: [www.x.com]\n    order",
+            "    sites: [www.douyin.com]\n    interaction",
+            "    sites: [www.x.com]\n    interaction",
         ),
-        "capabilities.list.sites",
+        "methods[1].sites",
     );
     rejects(
         &replace(
             &d,
-            "    login: none\n    timeout",
-            "    login: none\n    sites: [www.douyin.com]\n    timeout",
+            "    account: none\n    capabilities",
+            "    account: none\n    sites: [www.douyin.com]\n    capabilities",
         ),
-        "capabilities.fetch.sites",
+        "methods[0].sites",
     );
     rejects(
         &replace(&d, "    loginUrl: https://www.douyin.com/\n", ""),
@@ -213,10 +234,7 @@ fn invalid_samples_name_the_field() {
         &replace(&d, "sha256: 4b22", "sha256: XX22"),
         "install.assets.darwin-arm64.sha256",
     );
-    rejects(
-        &replace(&d, "login: required\nsites", "login: optional\nsites"),
-        "login",
-    );
+
     rejects(
         &replace(&testdata("manifest.export.yaml"), ", \"${TARGET}\"", ""),
         "permissions.fs.read",
@@ -249,13 +267,11 @@ fn env_cannot_reach_host_variables_or_agents() {
 fn capability_timeout_has_a_ceiling() {
     let m = parse(&replace(
         &web(),
-        "    login: none\n    outputs",
-        "    login: none\n    timeout: 1000h\n    outputs",
+        "      fetch:\n        outputs",
+        "      fetch:\n        timeout: 1000h\n        outputs",
     ))
     .unwrap();
-    let t = m
-        .fetch()
-        .unwrap()
+    let t = m.fetch().unwrap().methods[0]
         .capabilities
         .fetch
         .as_ref()
@@ -272,15 +288,14 @@ fn capability_timeout_has_a_ceiling() {
 fn visitors_are_declared_apart_from_sites_and_work_without_login() {
     let with = replace(
         &web(),
-        "capabilities:\n  fetch:\n    access: public-web\n    login: none\n",
-        "visitors:\n  - site: www.example.com\n    name: 例子\n    url: https://www.example.com/\n    cookies: [vid]\n    domains: [\".example.com\"]\ncapabilities:\n  fetch:\n    access: public-web\n    login: none\n    visitors: [www.example.com]\n",
+        "methods:\n  - id: page\n    name: 公开网页\n    access: public-web\n    login: none\n    account: none\n",
+        "visitors:\n  - site: www.example.com\n    name: 例子\n    url: https://www.example.com/\n    cookies: [vid]\n    domains: [\".example.com\"]\nmethods:\n  - id: page\n    name: 公开网页\n    access: public-web\n    login: none\n    account: visitor\n    visitors: [www.example.com]\n",
     );
     let m = parse(&with).unwrap();
     let spec = m.fetch().unwrap();
     assert!(spec.sites.is_empty());
     assert_eq!(spec.visitors[0].cookies, ["vid"]);
-    let fetch = spec.capabilities.fetch.as_ref().unwrap();
-    assert_eq!(fetch.uses.visitors, ["www.example.com"]);
+    assert_eq!(spec.methods[0].visitors, ["www.example.com"]);
 
     rejects(
         &replace(
@@ -288,7 +303,11 @@ fn visitors_are_declared_apart_from_sites_and_work_without_login() {
             "visitors: [www.example.com]",
             "visitors: [www.other.test]",
         ),
-        "capabilities.fetch.visitors",
+        "methods[0].visitors",
+    );
+    rejects(
+        &replace(&with, "    visitors: [www.example.com]\n", ""),
+        "methods[0].visitors",
     );
     rejects(
         &replace(&with, "url: https://", "url: http://"),
@@ -314,19 +333,153 @@ fn visitors_are_declared_apart_from_sites_and_work_without_login() {
         ),
         "visitors[0].site",
     );
-    // 访客身份不让 `login: none` 的能力用上账号站点
+    // 访客身份不让 `login: none` 的方法用上账号站点
     rejects(
         &replace(
             &with,
             "    visitors: [www.example.com]\n",
             "    visitors: [www.example.com]\n    sites: [www.example.com]\n",
         ),
-        "capabilities.fetch.sites",
+        "methods[0].sites",
     );
     rejects(
         &format!("{}visitors: []\n", testdata("manifest.transform.yaml")),
         "visitors",
     );
+}
+
+#[test]
+fn methods_are_checked() {
+    let d = douyin();
+    // 旧形状说清楚换成了什么
+    let old = "access: public-web\nlogin: none\ncapabilities:\n  fetch:\n    access: public-web\n    login: none\n    outputs: [text]\n";
+    let message = rejects(
+        &replace(&web(), "methods:\n", &format!("{old}methods:\n")),
+        "access",
+    );
+    assert!(message.contains("methods"), "{message}");
+    rejects(
+        &replace(&web(), "methods:\n", "capabilities: {}\nmethods:\n"),
+        "capabilities",
+    );
+    let message = rejects(
+        &replace(
+            &web(),
+            "      fetch:\n        outputs",
+            "      fetch:\n        login: none\n        outputs",
+        ),
+        "methods[0].capabilities.fetch.login",
+    );
+    assert!(message.contains("method"), "{message}");
+    rejects(
+        &replace(&d, "  - id: favorites", "  - id: share-page"),
+        "methods[1].id",
+    );
+    rejects(
+        &replace(&d, "  - id: favorites", "  - id: Favorites"),
+        "methods[1].id",
+    );
+    // 做了、在插件里跑的要有能力；交链接的不能有
+    rejects(
+        &replace(&d, "    delivers: links\n", ""),
+        "methods[2].capabilities",
+    );
+    rejects(
+        &replace(
+            &d,
+            "    delivers: links\n",
+            "    delivers: links\n    capabilities:\n      fetch: {outputs: [text]}\n",
+        ),
+        "methods[2].capabilities",
+    );
+    // 只有登录进 usuyo 的方法拿得到登录站点
+    rejects(
+        &replace(
+            &d,
+            "    account: own-browser\n",
+            "    account: own-browser\n    sites: [www.douyin.com]\n",
+        ),
+        "methods[2].sites",
+    );
+    rejects(
+        &replace(
+            &d,
+            "    account: in-usuyo\n    sites: [www.douyin.com]\n",
+            "    account: in-usuyo\n",
+        ),
+        "methods[1].sites",
+    );
+    // 没有一种做了的不合格；没做的可以不写能力
+    let none_built = replace(
+        &web(),
+        "    account: none\n",
+        "    account: none\n    built: false\n",
+    );
+    rejects(&none_built, "methods");
+    // 顶层的站点要有方法用它
+    rejects(
+        &replace(
+            &d,
+            "    account: in-usuyo\n    sites: [www.douyin.com]\n",
+            "    account: own-app\n",
+        ),
+        "sites",
+    );
+    // 出处要是链接
+    rejects(
+        &replace(
+            &d,
+            "url: \"https://github.com/usuyo",
+            "url: \"github.com/usuyo",
+        ),
+        "methods[1].risk.source.url",
+    );
+    // 来源从链接开始的写一句给链接框
+    let link = replace(
+        &d,
+        "        order: newest-first\n",
+        "        order: newest-first\n        link: 收藏夹的链接\n",
+    );
+    let m = parse(&link).unwrap();
+    let list = m
+        .fetch()
+        .unwrap()
+        .method("favorites")
+        .unwrap()
+        .capabilities
+        .list
+        .clone();
+    assert_eq!(list.unwrap().link.as_deref(), Some("收藏夹的链接"));
+    rejects(
+        &replace(&link, "link: 收藏夹的链接", "link: \"  \""),
+        "methods[1].capabilities.list.link",
+    );
+    rejects(
+        &replace(
+            &web(),
+            "      fetch:\n        outputs",
+            "      fetch:\n        link: x\n        outputs",
+        ),
+        "methods[0].capabilities.fetch.link",
+    );
+}
+
+#[test]
+fn private_api_and_client_hook_methods_are_off_by_default() {
+    let m = parse(&replace(
+        &web(),
+        "access: public-web\n    login",
+        "access: private-api\n    login",
+    ))
+    .unwrap();
+    assert!(!m.fetch().unwrap().methods[0].on_by_default());
+    let m = parse(&replace(
+        &web(),
+        "access: public-web\n    login",
+        "access: client-hook\n    login",
+    ))
+    .unwrap();
+    assert!(!m.fetch().unwrap().methods[0].on_by_default());
 }
 
 fn asr() -> String {

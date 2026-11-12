@@ -13,6 +13,9 @@ use usuyo_core::{DeliveredLink, Engine, EngineConfig, ImportChoice, Links, Retry
 /// `canonicalize` 认 `example.test/<id>`，`fetch` 取到一段正文。
 const SCRIPT: &str = r#"
 case "$1" in
+  health)
+    echo '{"ok": true, "ready": true, "protocol": 1, "version": "1.0.0"}'
+    ;;
   canonicalize)
     id=${2##*/}
     printf '{"ok": true, "match": true, "identity": {"platform": "example", "contentId": "%s", "url": "https://example.test/%s"}}' "$id" "$id"
@@ -21,9 +24,9 @@ case "$1" in
     echo '{"ok": true, "sources": [{"source": "example:fav", "title": "我的收藏", "action": "favorite"}]}'
     ;;
   list)
-    echo "$4" >> "$USUYO_CACHE_DIR/cursors"
+    echo "$6" >> "$USUYO_CACHE_DIR/cursors"
     if [ -f "$USUYO_CACHE_DIR/fail-list" ]; then cat "$USUYO_CACHE_DIR/fail-list"; exit 1; fi
-    if [ -z "$4" ]; then
+    if [ -z "$6" ]; then
       cat <<'JSON'
 {"ok": true, "items": [
   {"url": "https://example.test/a", "title": "A", "action": "favorite", "actedAt": "2026-10-30T21:00:00+08:00"},
@@ -41,7 +44,7 @@ JSON
     fi
     ;;
   fetch)
-    echo "$2 $6" >> "$USUYO_CACHE_DIR/fetched"
+    echo "$2 $8" >> "$USUYO_CACHE_DIR/fetched"
     id=${2##*/}
     cat <<JSON
 {"ok": true, "identity": {"platform": "example", "contentId": "$id"}, "kind": "article",
@@ -77,22 +80,28 @@ license: MIT
 maintainers: [someone]
 platforms: [example]
 match: ["example.test/*"]
-access: session-api
-login: required
 sites:
   - {{site: www.example.test, name: 例子, credential: cookies, loginUrl: "https://www.example.test/", cookies: [sid]}}
-capabilities:
-  fetch:
+methods:
+  - id: page
+    name: 公开页
     access: public-web
     login: none
-    outputs: [text, images, media:video, meta]
-  list:
+    account: none
+    capabilities:
+      fetch:
+        outputs: [text, images, media:video, meta]
+  - id: saved
+    name: 收藏夹
     access: session-api
     login: required
+    account: in-usuyo
     sites: [www.example.test]
-    order: newest-first
-    sources:
-      - {{source: "example:fav", title: 我的收藏, action: favorite}}
+    capabilities:
+      list:
+        order: newest-first
+        sources:
+          - {{source: "example:fav", title: 我的收藏, action: favorite}}
 {pacing}
 permissions:
   fs: {{write: ["${{OUT}}"]}}
@@ -116,7 +125,17 @@ run:
         self.tmp.path().join("machine")
     }
 
+    /// 登录过的：列的方法要登录才用得上。
     fn engine(&self) -> Engine {
+        let engine = self.engine_logged_out();
+        let state = serde_json::from_value(serde_json::json!({"cookies": [
+            {"name": "sid", "value": "s3cret-value", "domain": ".example.test"}]}))
+        .unwrap();
+        engine.save_site("www.example.test", &state).unwrap();
+        engine
+    }
+
+    fn engine_logged_out(&self) -> Engine {
         let mut config = EngineConfig::new(&self.library, self.machine());
         config.retry = RetryPolicy {
             base: Duration::ZERO,
@@ -192,7 +211,7 @@ async fn pages_through_and_previews_without_creating_anything() {
     let items_before = engine.map().unwrap().points.len();
 
     let imp = engine
-        .start_import("fake/saved", "example:fav", "我的收藏")
+        .start_import("fake/saved", "saved", "example:fav", "我的收藏")
         .unwrap();
     assert_eq!(imp.state, ImportState::Listing);
     list_all(&engine, &imp.id).await;
@@ -261,7 +280,7 @@ async fn bringing_trashed_ones_back_only_when_asked() {
     engine.run_due().await.unwrap();
     engine.trash(&c.id, Via::App, &Links::default()).unwrap();
     let imp = engine
-        .start_import("fake/saved", "example:fav", "")
+        .start_import("fake/saved", "saved", "example:fav", "")
         .unwrap();
     list_all(&engine, &imp.id).await;
     engine.confirm_import(&imp.id, &both()).unwrap();
@@ -287,7 +306,7 @@ async fn takes_only_what_you_chose_entry_by_entry() {
     engine.run_due().await.unwrap();
     engine.trash(&c.id, Via::App, &Links::default()).unwrap();
     let imp = engine
-        .start_import("fake/saved", "example:fav", "")
+        .start_import("fake/saved", "saved", "example:fav", "")
         .unwrap();
     list_all(&engine, &imp.id).await;
     let new = engine.import_entries(&imp.id, Some("new"), 0, 50).unwrap();
@@ -343,7 +362,7 @@ async fn skipping_the_trashed_group_leaves_it_in_the_trash() {
     engine.run_due().await.unwrap();
     engine.trash(&c.id, Via::App, &Links::default()).unwrap();
     let imp = engine
-        .start_import("fake/saved", "example:fav", "")
+        .start_import("fake/saved", "saved", "example:fav", "")
         .unwrap();
     list_all(&engine, &imp.id).await;
     let none = ImportChoice::default();
@@ -366,7 +385,7 @@ async fn stops_and_resumes_across_a_restart() {
     let id = {
         let engine = f.engine();
         let imp = engine
-            .start_import("fake/saved", "example:fav", "")
+            .start_import("fake/saved", "saved", "example:fav", "")
             .unwrap();
         // 列到一半停下
         engine.advance_imports().await.unwrap();
@@ -397,7 +416,7 @@ async fn takes_at_the_platforms_pace() {
     let f = Fixture::new("pacing:\n  example: {batch: true, interval: 1s, daily: 3}");
     let engine = f.engine();
     let imp = engine
-        .start_import("fake/saved", "example:fav", "")
+        .start_import("fake/saved", "saved", "example:fav", "")
         .unwrap();
     // 两页之间要隔一秒：列完第一页，下一页最早一秒后
     let (_, wake) = engine.advance_imports().await.unwrap();
@@ -444,7 +463,7 @@ async fn a_rate_limited_listing_waits_and_try_now_clears_it() {
     );
     let engine = f.engine();
     let imp = engine
-        .start_import("fake/saved", "example:fav", "")
+        .start_import("fake/saved", "saved", "example:fav", "")
         .unwrap();
     let (_, wake) = engine.advance_imports().await.unwrap();
     assert!(wake.unwrap() > usuyo_core_now() + 500_000);
@@ -455,7 +474,7 @@ async fn a_rate_limited_listing_waits_and_try_now_clears_it() {
         ("rate-limited", Some("慢一点"))
     );
     assert!(w.until.is_some());
-    let plugins = engine.plugins().unwrap();
+    let plugins = engine.plugins().await.unwrap();
     let p = &plugins.plugins[0];
     assert_eq!(p.pauses.len(), 1);
     assert_eq!(p.pauses[0].code.as_deref(), Some("rate-limited"));
@@ -463,7 +482,7 @@ async fn a_rate_limited_listing_waits_and_try_now_clears_it() {
 
     std::fs::remove_file(f.machine().join("cache/plugins/fake/saved/fail-list")).unwrap();
     engine.try_plugin_now("fake/saved").unwrap();
-    assert!(engine.plugins().unwrap().plugins[0].pauses.is_empty());
+    assert!(engine.plugins().await.unwrap().plugins[0].pauses.is_empty());
     assert!(
         engine.import(&imp.id).unwrap().waiting.is_none(),
         "现在再试：马上接着列"
@@ -487,7 +506,7 @@ async fn login_or_visitor_required_stops_until_you_resume() {
         );
         let engine = f.engine();
         let imp = engine
-            .start_import("fake/saved", "example:fav", "")
+            .start_import("fake/saved", "saved", "example:fav", "")
             .unwrap();
         engine.advance_imports().await.unwrap();
         let v = engine.import(&imp.id).unwrap();
@@ -510,7 +529,7 @@ async fn hold_and_try_now_on_a_plugin() {
     let p = engine.hold_plugin("fake/saved").unwrap();
     assert!(p.pauses[0].by_you && p.pauses[0].until.is_none());
     let imp = engine
-        .start_import("fake/saved", "example:fav", "")
+        .start_import("fake/saved", "saved", "example:fav", "")
         .unwrap();
     engine.advance_imports().await.unwrap();
     assert_eq!(f.cache("cursors"), "", "先别试的插件不调");
@@ -523,8 +542,8 @@ async fn hold_and_try_now_on_a_plugin() {
 #[tokio::test]
 async fn the_registry_shows_labels_sites_and_pacing() {
     let f = Fixture::new("pacing:\n  example: {batch: true, interval: 5s, daily: 500}");
-    let engine = f.engine();
-    let v = engine.plugins().unwrap();
+    let engine = f.engine_logged_out();
+    let v = engine.plugins().await.unwrap();
     assert!(v.not_loaded.is_empty());
     let p = &v.plugins[0];
     let json = serde_json::to_value(p).unwrap();
@@ -547,10 +566,14 @@ async fn the_registry_shows_labels_sites_and_pacing() {
     let s = engine.save_site("www.example.test", &state).unwrap();
     assert_eq!(serde_json::to_value(&s).unwrap()["login"], "present");
     let shown = serde_json::to_string(&engine.sites().unwrap()).unwrap()
-        + &serde_json::to_string(&engine.plugins().unwrap()).unwrap();
+        + &serde_json::to_string(&engine.plugins().await.unwrap()).unwrap();
     assert!(!shown.contains("s3cret-value"));
-    let sources = engine.plugin_sources("fake/saved").await.unwrap();
-    assert_eq!(sources[0].title, "我的收藏");
+    let sources = engine
+        .plugin_sources("fake/saved", "saved", None)
+        .await
+        .unwrap();
+    assert_eq!(sources[0].source.title, "我的收藏");
+    assert_eq!(sources[0].method, "saved");
 }
 
 #[tokio::test]

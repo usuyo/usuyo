@@ -139,6 +139,83 @@ pub struct UpstreamVersion {
     pub version: String,
 }
 
+/// 获取插件 `health` 的结果（§3.10）。只看本机，不向平台发请求（`--probe` 除外）。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct FetchHealth {
+    /// 所有必要检查都通过、能接调用；登录缺失不影响它。
+    pub ready: bool,
+    pub protocol: u32,
+    pub version: String,
+    #[serde(default)]
+    pub upstream: Vec<UpstreamVersion>,
+    #[serde(default)]
+    pub login: Vec<LoginReport>,
+    #[serde(default)]
+    pub checks: Vec<MethodCheck>,
+}
+
+/// 一个站点的登录，插件报的：`credential: app` 的站点，或 `--probe` 核对的结果。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct LoginReport {
+    pub site: String,
+    pub state: LoginReportState,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum LoginReportState {
+    Present,
+    Missing,
+    Expired,
+    Verified,
+    Rejected,
+}
+
+/// 一项本机检查（§3.10）。`methods` 是它挡的方法；不写是挡整个插件。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct MethodCheck {
+    pub name: String,
+    pub ok: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub methods: Vec<String>,
+}
+
+impl FetchHealth {
+    /// 这个版本的插件、没有检查：插件照它往上加。
+    pub fn new(version: impl Into<String>) -> Self {
+        Self {
+            ready: true,
+            protocol: 1,
+            version: version.into(),
+            upstream: Vec::new(),
+            login: Vec::new(),
+            checks: Vec::new(),
+        }
+    }
+
+    /// 加一项检查；`methods` 空是挡整个插件。没过的整个插件检查让 `ready` 变成 `false`。
+    pub fn check(
+        mut self,
+        name: &str,
+        ok: bool,
+        message: Option<String>,
+        methods: &[&str],
+    ) -> Self {
+        if !ok && methods.is_empty() {
+            self.ready = false;
+        }
+        self.checks.push(MethodCheck {
+            name: name.to_owned(),
+            ok,
+            message,
+            methods: methods.iter().map(|m| (*m).to_owned()).collect(),
+        });
+        self
+    }
+}
+
 /// 这次调用实际怎么拿到的。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]

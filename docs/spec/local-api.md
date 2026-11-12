@@ -30,7 +30,7 @@
 | `item-removed` | 回收站里的条目到期、或你「立即清除」，从资料库里移除了；再拉它是 404 | `id` |
 | `topic-updated` | 建了主题，或改了关注 | `id` |
 | `import-updated` | 一次导入变了：列了一页、认了一段身份、确认了、停下或接着、收下了一条、删掉了 | `id`（导入的） |
-| `plugins-updated` | 插件的暂停变了（被限流或拦住、「现在再试」「先别试」）、站点的登录、访客身份、密钥设置、设置里的 `network` 变了 | 无 |
+| `plugins-updated` | 插件的暂停变了（被限流或拦住、「现在再试」「先别试」）、开关了一种方法、站点的登录、访客身份、密钥设置、设置里的 `network` 变了 | 无 |
 | `transforms-updated` | 模型开始下、下好了、没下成、删掉了；设置里的 `transforms.auto` 变了 | 无 |
 
 - **错误**：照 [§0.3](conventions.md#03-错误模型)：`application/problem+json`，字段 `type`（`urn:usuyo:problem:<code>`）、`title`、`status`、`detail`、`instance`（`urn:uuid:<随机>`）、`code`、`retryable`；插件报的另带 `plugin`，一律 502。可重试的带 `Retry-After: 5`。没有的路径 404 `not-found`，方法不对 405 `invalid-args`。
@@ -58,8 +58,9 @@
 | `POST /trash/release-held` | 「照时间移除」：时钟守卫拦下的回收站项照时间移除（[§1.7](library.md#17-删掉)），回 `{removed}`（移除了几项） |
 | `GET /search?q=&limit=` | 搜索 |
 | `GET /events` | 事件流 |
-| `GET /plugins` | 装着的获取插件（标签、设置、节奏、暂停）和没加载的（目录和原因） |
-| `GET /plugins/{owner}/{repo}/sources` | 这个插件现在能列的来源；会调插件，计入节奏，要等的超过 60 秒就不等，回 422 `unsupported-input` 并说什么时候能再试 |
+| `GET /plugins` | 装着的获取插件和没加载的（目录和原因），见下「获取插件」。会先问一遍各插件过期了的本机检查（`health`，不带凭据、不碰平台，几个插件同时问） |
+| `GET /plugins/{owner}/{repo}/sources?method=&link=` | 这个插件一种方法现在能列的来源，每项 `{source, title, action?, count?, method}`；`method` 必给，`link` 只给 `list` 写了 `link` 的方法（http(s)、带主机、不带用户名密码、至多 4096 字节，不合的回 400 `invalid-args`）。这种方法不能列、没写 `link` 却给了链接、这台机器上用不上，回 422 `unsupported-input`。会调插件，计入节奏，要等的超过 60 秒就不等，回 422 并说什么时候能再试 |
+| `PUT /plugins/{owner}/{repo}/methods/{method}` | `{enabled}`：开或关一种方法，写进按机器的 `settings.json`（[按机器的目录](machine.md#按机器的目录)），马上生效，回整个插件。没做的方法回 422 `unsupported-input`，没有这个插件或方法回 404 |
 | `POST /plugins/{owner}/{repo}/try-now` | 「现在再试」：去掉这个插件所有的暂停（包括「先别试」），排着的任务和导入马上再看 |
 | `POST /plugins/{owner}/{repo}/hold` | 「先别试」：到你点「现在再试」为止哪儿都不调它，别的插件照常 |
 | `PUT /plugins/{owner}/{repo}/secrets/{key}`；`DELETE …` | 填一个密钥设置 `{value}`（空的回 400），存进钥匙串；`DELETE` 去掉。值从不回出来，回的是插件 |
@@ -67,7 +68,7 @@
 | `PUT /sites/{site}/login`；`DELETE …` | 壳的登录窗口交来 storageState，只留属于这个站点的，存进钥匙串，回的里面没有值；`DELETE` 忘掉登录，204 |
 | `GET /visitors` | 装着的插件在清单里声明的访客身份，和有没有存着、最早什么时候过期；不出现在 `/sites` 里 |
 | `PUT /visitors/{site}`；`DELETE …` | 同上，存成 `visitor:<站点>`，和同一主机的账号分开；`DELETE` 去掉，账号不动 |
-| `GET /imports`；`POST /imports` | 全部导入（新的在前）；按 `{pluginId, source, title?}` 从一个插件的来源开始列 |
+| `GET /imports`；`POST /imports` | 全部导入（新的在前）；按 `{pluginId, method, source, title?}` 从一个插件一种方法的来源开始列。导入的视图多一项 `method` |
 | `GET /imports/{id}`；`DELETE …` | 一次导入；不要了：清单和还没收的去掉，已经收下的留着，204 |
 | `GET /imports/{id}/entries?standing=&offset=&limit=` | 预览里的条目；`standing` 取 `new`、`stored`、`trashed`、`unresolved`，不给就是全部；`limit` 默认 100，限在 1 到 500 |
 | `POST /imports/{id}/confirm` | 确认，见下 |
@@ -98,19 +99,26 @@
 - `POST /v1/deliver`，`{url?, text?}`，给一个（两个都给取 `url`）。`text` 是手机分享出来的整段文字，从里面找第一个链接。只收链接，已经取到的内容（multipart）还不收。回 202 `{id, state: "accepted", duplicate}`，`duplicate` 为真是以前收下过。条目的入口取令牌的 `kind`，取内容照常排任务。遇到私密条目不收、不加来源，现在的回答和「收下过」一样（`duplicate: true`），没有单独的 `skipped`。
 - `POST /v1/batches`，`{name?, action?, links: [{url, title?, actedAt?}]}`，进导入的预览，你确认了才按节奏去收。`links` 1 到 5000 条；`action` 取 `favorite`、`like`、`share`、`view`、`unknown`；每条 `url` 要是带主机的 http(s)、不带用户名密码，`actedAt` 要是 RFC 3339，`title` 超过 500 字截掉；`name` 不给写「交进来的一批」，最多 200 字。不合的回 400 `invalid-args`，说是第几条。回 202 `{id}`，是新建的导入的 id（`kind: delivered`，`client` 是令牌名）。每条的身份由宿主重新算，不信交来的；认不出的这一条去掉，记日志；清单里身份相同的合成一条。
 
+**获取插件**（`GET /plugins` 的 `plugins[]`，[协议 §2.3.1](../protocol/manifest.md#231-方法-methods)）：`{id, name, description?, version, platforms, access, login, canList, sources, sites, visitors, settings, pacing, pauses, methods}`。`access`、`login` 是做了的方法里最高的；`canList` 是有做了的方法能列；`sources` 是清单里写死的来源，每项带 `method`；`sites` 是做了的方法用到的登录站点；`pauses` 是所有方法的暂停，每项 `{method, scope, byYou, until?, code?, hint?}`，你点的「先别试」`method`、`scope` 都是 `*`。`methods` 是清单里每一种方法，照清单的顺序，没做的也在：
+- `{id, name, access, login, account: {kind, sites?, where?}, interaction, gets: {fetch?, list?, link?, delivers?}, built, enabled, usable, blockers, lastCall?, pauses, riskNote?}`。
+- `account.kind` 是清单的 `account`（`none`、`visitor`、`own-browser`、`own-phone`、`own-app`、`in-usuyo`、`developer`）；`sites` 是 `in-usuyo` 的登录站点或 `visitor` 的访客身份站点，`where` 是它们的名字（取自清单）。
+- `gets.fetch` 是输出的词表（`text`、`images`、`media:video`…），`gets.list` 是清单里写死的来源名，`gets.link` 是来源从链接开始时链接框上的那句，`gets.delivers` 是 `links`。
+- `usable` 是这台机器上现在用得上；`blockers` 是用不上的原因，每项 `{code, hint}`，`code` 取 `not-built`、`off`、`login-missing`、`login-expired`、`visitor-missing`、`visitor-expired`、`check-failed`（插件的本机检查没过）、`health-failed`（插件没能自查），`hint` 是一句中文，名字取自清单。
+- `lastCall` 是上一次调用 `{at, ok, code?, hint?}`，没调过就没有；`pauses` 是这种方法的暂停加上「先别试」；`riskNote` 是清单的 `risk`。
+
 **导入**：一次导入的状态不单独存，由几项现算：`listing`（还在列）、`ready`（列完了，等你看一眼）、`taking`（确认了，还有排着的任务）、`done`（确认了，没有排着的了），`held` 盖过其余，是你点了「先停下」。走向：
-1. 开始（`POST /imports` 或 `POST /v1/batches`）：`source` 类要这个插件能列（不能回 422 `unsupported-input`），来源非空、最多 512 字节，平台没声明 `batch: false`（声明了回 422）。`source` 类按平台的节奏一页页调插件的 `list`，`delivered` 类每轮认 50 条的身份。每条按身份分成 `new`、`stored`（库里已经有）、`trashed`（在回收站里）；认不出来的是 `unresolved`。这一步不建任何条目。
+1. 开始（`POST /imports` 或 `POST /v1/batches`）：`source` 类要这个插件的这种方法能列、开着、这台机器上用得上（不然回 422 `unsupported-input`，原因写明缺什么），来源非空、最多 512 字节，平台没声明 `batch: false`（声明了回 422）。`source` 类按平台的节奏一页页调插件的 `list`，`delivered` 类每轮认 50 条的身份。每条按身份分成 `new`、`stored`（库里已经有）、`trashed`（在回收站里）；认不出来的是 `unresolved`。这一步不建任何条目。
 2. 列完是 `ready`。`POST /imports/{id}/confirm`，请求体 `{new, trashed, except?}`（不认识的字段回 400）：`new` 是「新的」整组收不收；`trashed` 是「回收站里的」整组收不收，收下就是拿回来；`except` 是 `seq` 的数组，这些条目和自己那组选得反着来（整组收的，它不收；整组不收的，它收）。只交例外：预览按页看，没翻到的条目跟着整组走。`stored` 和 `unresolved` 的不收，也不能出现在 `except` 里，出现了回 400。还在列的、或已经确认过的再确认，回 400。
 3. 确认后，挑中的每条排一个取内容的任务，优先级低于你手动收下的；按平台的节奏一条条来。轮到时先收下（入口 `import`，`takenBy: user`，同一批共用 `importBatch`，带 `action`、`actedAt`），再取内容。这一条已经有任务（你刚手动收过）的不动。轮到时发现已经进了回收站、而你没挑回收站那一组的，不收，`skipped` 加一；私密条目批量导入照收（[§1.7](library.md#17-删掉) 的表）。`taken` 是收下的条数，`notStored` 是收下了但内容取不到的。
 4. `POST /imports/{id}/hold` 随时可以，不再列、不再收，已经收下的不动；`resume` 从停的地方接着，停在要你处理的原因上（例如重新登录以后）也从这里再试。导入页只说事实（列了几页、各几条、收下几条、为什么在等和什么时候），不给还剩多少。
 
-列的时候的错：联网、超时、插件崩了这一类，等 60 秒乘 2 的次方再试，试满 6 次就停下等你；被限流、被拦住记在插件的暂停上（见下），导入照它显示原因，暂停一去掉就接着列；别的错停在这次导入上，`waiting.code` 是错误码（例如 `login-required`，或页面把没有访客身份的请求送回首页时插件报的 `visitor-required`），没有 `until`，等你重新登录或取到访客身份以后点「接着导入」。`waiting.code` 还可能是 `pacing`（等间隔）、`daily-limit`（今天批量的次数用完了）、`held`（你让插件先别试）、`batch-off`（这个平台不做导入）。
+列的时候的错：联网、超时、插件崩了这一类，等 60 秒乘 2 的次方再试，试满 6 次就停下等你；被限流、被拦住记在这种方法的暂停上（见下），导入照它显示原因，暂停一去掉就接着列；别的错停在这次导入上，`waiting.code` 是错误码（例如 `login-required`，或页面把没有访客身份的请求送回首页时插件报的 `visitor-required`），没有 `until`，等你重新登录或取到访客身份以后点「接着导入」。`waiting.code` 还可能是 `pacing`（等间隔）、`daily-limit`（今天批量的次数用完了）、`held`（你让插件先别试）、`batch-off`（这个平台不做导入）。
 
 **节奏和暂停**（[协议 §3.1](../protocol/fetch.md#31-运行器与节奏)）：
 - 节奏来自装着的插件清单里的 `pacing`，同一平台的几个插件取最严的：间隔取最长的，`daily` 取最小的，有一个写了 `batch: false` 就不做导入。没声明的平台不等。
 - `interval`：上一次调用结束到下一次开始的最短间隔，`fetch`、`list` 的一页、`sources` 都算，你手动收下的也守，导入的和手动的在同一个平台上排队。`daily`：批量（导入）的调用一个本地日期最多几次，到本地零点重新数；你手动收下的单条不计入，也不被它挡住，只守间隔。同一平台同一时间只跑一个调用。记账在 `jobs.db`，重启后照旧。`canonicalize` 不计。
 - 列一页要等的超过 60 秒就不等，记下到点的时间，到点再来。
-- 插件报 `rate-limited`：暂停到 `retryAfter` 以后（没给 15 分钟，最多算 1 小时）。报 `blocked`：现在也只暂停 1 小时，到点自己解开；你点「现在再试」更早去掉它。暂停只管这个插件在这个平台上（web 插件按主机），别的插件照常；暂停期间它不被调用，排着的任务往后排，不白白耗掉重试次数。`hold`（「先别试」）没有 `until`，是 `byYou`，一直到「现在再试」。暂停和它的错误码、一句话原因在 `GET /plugins` 的 `pauses` 里。
+- 插件报 `rate-limited`：这种方法暂停到 `retryAfter` 以后（没给 15 分钟，最多算 1 小时）。报 `blocked`：现在也只暂停 1 小时，到点自己解开；你点「现在再试」更早去掉它。暂停只管这个插件的这种方法在这个平台上（web 插件按主机），别的方法、别的插件照常；暂停期间它不被调用，排着的任务往后排，不白白耗掉重试次数。`hold`（「先别试」）没有 `until`，是 `byYou`，一直到「现在再试」。暂停和它的错误码、一句话原因在 `GET /plugins` 的 `pauses` 和各方法的 `pauses` 里。每次调插件失败，另记一行失败日志（[协议 §2.3.1](../protocol/manifest.md#231-方法-methods)）。
 
 **命令行**：`add`、`get`、`search`、`reindex` 先读 `daemon.json` 和 `api-token`，握手，再 `GET /health`；都成了就经守护进程，不然在本进程里直接开库。握手没过不发令牌。`init` 总在本进程。
 

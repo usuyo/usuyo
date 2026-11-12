@@ -1,8 +1,12 @@
 #!/bin/sh
 # fixture/local：canonicalize 认 fixture.test/<名字>；fetch 把 fixtures/<名字>/ 拷进输出目录，
-# 打印它旁边的 fetch.json。参数照协议 §3：`canonicalize <url>`、`fetch <url> --out <dir>`。
+# 打印它旁边的 fetch.json。参数照协议 §3：`canonicalize <url>`、`fetch <url> --out <dir> --method sample`、`health`。
 set -eu
 here=$(dirname "$0")
+if [ "$1" = health ]; then
+  echo '{"ok": true, "ready": true, "protocol": 1, "version": "0.1.0"}'
+  exit 0
+fi
 name=${2##*/}
 name=${name%%\?*}
 case "$name" in

@@ -4,6 +4,7 @@
 //! 任务：按插件顺序 fetch（平台插件在前、通用网页在后）；能换下一个的错就换，
 //! 暂停照插件报的记下；都没取到、又有能重试的，按退避再排；取到了交给资料库当快照。
 
+use std::collections::BTreeSet;
 use std::time::Duration;
 
 use serde_json::Value;
@@ -13,7 +14,7 @@ use usuyo_library::{
     normalize_web_url,
 };
 use usuyo_plugin::protocol::{
-    CallFailure, Canonicalized, ErrorCode, FetchOutput, MAX_PAUSE, Pause,
+    CallFailure, Canonicalized, ErrorCode, FetchOutput, MAX_PAUSE, OutputKind, Pause,
 };
 use usuyo_plugin::{
     CallOptions, FetchInput, FetchPlugin, FetchRequest, FetchedSnapshot, PluginError,
@@ -27,6 +28,9 @@ use crate::{Error, Result};
 
 /// 后台任务每轮最多睡多久；有新任务时会被叫醒。
 const IDLE: Duration = Duration::from_secs(30);
+
+/// 同一条里换方法、补缺时，两次调用之间最多等多久的间隔；再长就留到下一轮。
+const PACE_BETWEEN_MAX: Duration = Duration::from_secs(60);
 
 pub(crate) fn now_ms() -> i64 {
     jiff::Timestamp::now().as_millisecond()
@@ -224,9 +228,8 @@ impl Engine {
                 return Ok((n, wake));
             };
             n += 1;
-            let batch = job.import_id.is_some();
-            let called = match self.run_job(&job).await {
-                Ok(called) => called,
+            match self.run_job(&job, &platform).await {
+                Ok(()) => {}
                 Err(e) => {
                     // 资料库这边出的错（写不进、条目没了）：不再自动重试，原因记在任务上。
                     tracing::error!(item = %job.item_id, error = %e, "fetch job");
@@ -239,13 +242,7 @@ impl Engine {
                         hint: None,
                         retry: false,
                     });
-                    true
                 }
-            };
-            if called {
-                self.inner
-                    .jobs
-                    .record_call(&platform, now_ms(), &pace::today(), batch)?;
             }
             if let Some(import) = &job.import_id {
                 self.emit(Event::ImportUpdated { id: import.clone() });
@@ -260,8 +257,11 @@ impl Engine {
             .map(|w| w.until.unwrap_or(i64::MAX)))
     }
 
-    /// 回这次有没有调过插件（调过才记进节奏）。
-    async fn run_job(&self, job: &FetchJob) -> Result<bool> {
+    /// 取一条（协议 §2.3.1）：照排好的方法一种种试。第一种取到的要是还缺几样，往后找声明了那几样的方法，
+    /// 只要那几样再取，直到不缺或没有方法了；每次取到的都是一份快照。前一种回 `rate-limited`、`network`
+    /// 时照节奏等、不换，回 `cancelled` 停下，别的错换下一种。这个平台的锁已经拿着；每次调用都记进节奏，
+    /// 两次调用之间照 `interval` 等。
+    async fn run_job(&self, job: &FetchJob, platform: &str) -> Result<()> {
         if let Some(import) = job.import_id.clone() {
             let this = self.clone();
             let j = job.clone();
@@ -269,84 +269,93 @@ impl Engine {
                 .await
                 .map_err(|e| Error::Task(e.to_string()))??;
             if !go {
-                return Ok(false);
+                return Ok(());
             }
         }
         let id = ItemId::parse(&job.item_id)?;
-        let platform = id.platform().to_owned();
         let url = url::Url::parse(&job.url)
             // 链接可能带分享参数，原因里不写它：这句会进日志和 `jobs.db`
             .map_err(|e| Error::InvalidArgs(format!("bad job url: {e}")))?;
-        let candidates: Vec<&FetchPlugin> = self
-            .inner
-            .host
-            .candidates(&url)
-            .into_iter()
-            .filter(|p| p.spec.capabilities.fetch.is_some())
-            .collect();
+        let batch = job.import_id.is_some();
+        let (candidates, unusable) = self.fetch_candidates(&url).await?;
 
         let mut last: Option<CallFailure> = None;
         let mut retryable = false;
-        let mut paused_until: Option<i64> = None;
+        let mut paused_any = false;
         let mut called = false;
-        for plugin in candidates {
+        // 取到第一份以后还缺的；`None` 是还没取到。
+        let mut missing: Option<BTreeSet<OutputKind>> = None;
+        for c in &candidates {
+            let (plugin, method) = (&c.plugin, &c.method);
             let pid = plugin.id().to_string();
-            // 通用网页插件的平台是所有网站：按网站暂停，一个站限流不停掉别的站。
-            let scope = if plugin.spec.is_web() {
-                url.host_str().unwrap_or_default()
-            } else {
-                platform.as_str()
+            let Some(cap) = method.capabilities.fetch.as_ref() else {
+                continue;
             };
-            if let Some(p) = self.inner.jobs.paused(&pid, scope, now_ms())? {
-                if let Some(t) = p.until {
-                    paused_until = Some(paused_until.map_or(t, |x| x.min(t)));
-                }
-                last.get_or_insert_with(|| {
-                    let mut f =
-                        CallFailure::new(ErrorCode::RateLimited, format!("{pid} is paused here"));
-                    if p.held {
-                        f.hint = Some("你让这个插件先别试了".into());
+            let want = match &missing {
+                None => None,
+                // 补缺的不找通用网页插件：它的快照是另一个身份的网页。
+                Some(_) if plugin.spec.is_web() => continue,
+                Some(m) => {
+                    let w: BTreeSet<OutputKind> = m.intersection(&cap.outputs).copied().collect();
+                    if w.is_empty() {
+                        continue;
                     }
-                    f
-                });
+                    Some(w)
+                }
+            };
+            let scope = pause_scope(plugin, &url, platform);
+            if let Some(p) = self.inner.jobs.paused(&pid, &method.id, scope, now_ms())? {
+                paused_any = true;
+                if missing.is_none() {
+                    last.get_or_insert_with(|| {
+                        let mut f = CallFailure::new(
+                            ErrorCode::RateLimited,
+                            format!("{pid} {} is paused here", method.id),
+                        );
+                        if p.held {
+                            f.hint = Some("你让这个插件先别试了".into());
+                        }
+                        f
+                    });
+                }
                 continue;
             }
+            if called && !self.pace_between_calls(platform, batch).await? {
+                break;
+            }
             let request = FetchRequest {
+                method: method.id.clone(),
                 input: FetchInput::Url(url.clone()),
-                want: None,
+                want,
                 input_file: None,
             };
             called = true;
-            match self
+            let result = self
                 .inner
                 .host
                 .fetch(plugin, request, &CallOptions::default())
-                .await
-            {
+                .await;
+            self.inner
+                .jobs
+                .record_call(platform, now_ms(), &pace::today(), batch)?;
+            match result {
                 Ok(snap) => {
-                    // 先在锁外算好哈希，大文件也不让别的请求等着资料库
-                    let staged = snap.out_dir();
-                    let files = tokio::task::spawn_blocking(move || hash_staged(&staged))
-                        .await
-                        .map_err(|e| Error::Task(e.to_string()))??;
-                    let this = self.clone();
-                    let plugin = plugin.clone();
-                    let input_url = job.url.clone();
-                    let item = id.clone();
-                    let imported = job.import_id.is_some();
-                    tokio::task::spawn_blocking(move || {
-                        this.attach(&item, &plugin, input_url, snap, files, imported)
-                    })
-                    .await
-                    .map_err(|e| Error::Task(e.to_string()))??;
-                    self.inner.jobs.finish(id.as_str())?;
-                    self.emit(Event::ItemUpdated { id: id.to_string() });
-                    return Ok(true);
+                    self.record_method_call(plugin, &method.id, url.host_str(), Ok(()))?;
+                    let still: BTreeSet<OutputKind> = match &missing {
+                        None => snap.output.missing.iter().copied().collect(),
+                        Some(m) => m.difference(&snap.obtained).copied().collect(),
+                    };
+                    self.store_snapshot(&id, plugin, job, snap).await?;
+                    if still.is_empty() {
+                        missing = Some(still);
+                        break;
+                    }
+                    missing = Some(still);
                 }
                 Err(PluginError::Call { failure, .. }) => {
-                    tracing::info!(plugin = %pid, item = %id, failure = %failure, "fetch failed");
-                    // 「等用户点继续」还没有入口：被拦也按最长的暂停记，到点自己解开。
-                    // 被拦的这一条不因暂停重试（`blocked` 不可重试），只有限流的到点再试。
+                    tracing::info!(plugin = %pid, method = %method.id, item = %id, failure = %failure, "fetch failed");
+                    self.record_method_call(plugin, &method.id, url.host_str(), Err(&failure))?;
+                    // 被拦也按最长的暂停记，到点自己解开；被拦的这一条不因暂停重试，只有限流的到点再试。
                     let (pause, retry_after_pause) = match failure.pause() {
                         Some(Pause::For(d)) => (Some(d), true),
                         Some(Pause::UntilResumed) => (Some(MAX_PAUSE), false),
@@ -357,30 +366,44 @@ impl Engine {
                         let until = now_ms().saturating_add(ms);
                         self.inner.jobs.pause(
                             &pid,
+                            &method.id,
                             scope,
                             until,
                             failure.code.as_str(),
                             failure.hint.as_deref(),
                         )?;
+                        self.emit(Event::PluginsUpdated);
                         if retry_after_pause {
-                            paused_until = Some(paused_until.map_or(until, |p| p.min(until)));
+                            paused_any = true;
                         }
                     }
-                    retryable |= failure.code.retryable();
-                    let stop = !failure.code.tries_next();
-                    last = Some(*failure);
-                    if stop {
+                    let waits = matches!(
+                        failure.code,
+                        ErrorCode::RateLimited | ErrorCode::Network | ErrorCode::Cancelled
+                    );
+                    if missing.is_none() {
+                        retryable |= failure.code.retryable();
+                        last = Some(*failure);
+                    }
+                    if waits {
                         break;
                     }
                 }
                 Err(e @ PluginError::Unsupported { .. }) => {
-                    last = Some(CallFailure::new(ErrorCode::UnsupportedInput, e.to_string()));
+                    if missing.is_none() {
+                        last = Some(CallFailure::new(ErrorCode::UnsupportedInput, e.to_string()));
+                    }
                 }
                 Err(e) => return Err(e.into()),
             }
         }
 
-        let failure = last.unwrap_or_else(|| {
+        if missing.is_some() {
+            self.inner.jobs.finish(id.as_str())?;
+            self.emit(Event::ItemUpdated { id: id.to_string() });
+            return Ok(());
+        }
+        let failure = last.or(unusable).unwrap_or_else(|| {
             CallFailure::new(
                 ErrorCode::UnsupportedInput,
                 "no installed plugin can fetch this link",
@@ -391,13 +414,32 @@ impl Engine {
             .clone()
             .or_else(|| Some(failure.message.clone()));
         let code = failure.code.as_str();
-        let can_retry = retryable || paused_until.is_some();
+        let can_retry = retryable || paused_any;
         if can_retry && job.attempts + 1 < self.inner.retry.max_attempts {
             let backoff =
                 i64::try_from(self.inner.retry.delay(job.attempts).as_millis()).unwrap_or(i64::MAX);
+            // 等到最早有一种方法能再试：都停着时等最早到点的那种；有没停的（例如限流以后还没轮到的下一种），退避以后就试它。
+            let mut available_at = i64::MAX;
+            for c in &candidates {
+                let scope = pause_scope(&c.plugin, &url, platform);
+                let at = match self.inner.jobs.paused(
+                    c.plugin.id().as_str(),
+                    &c.method.id,
+                    scope,
+                    now_ms(),
+                )? {
+                    Some(p) => p.until.unwrap_or(i64::MAX),
+                    None => 0,
+                };
+                available_at = available_at.min(at);
+            }
             let due = now_ms()
                 .saturating_add(backoff)
-                .max(paused_until.unwrap_or(0));
+                .max(if available_at == i64::MAX {
+                    0
+                } else {
+                    available_at
+                });
             self.inner
                 .jobs
                 .retry(id.as_str(), due, code, hint.as_deref())?;
@@ -410,7 +452,45 @@ impl Engine {
             hint,
             retry: can_retry,
         });
-        Ok(called)
+        Ok(())
+    }
+
+    /// 同一条里接着调下一种方法之前照节奏等：要等的超过 [`PACE_BETWEEN_MAX`] 就不等了，回 `false`。
+    async fn pace_between_calls(&self, platform: &str, batch: bool) -> Result<bool> {
+        let pacing = self.inner.pacing.get(platform);
+        let Some(at) = pace::ready_at(pacing, &self.inner.jobs, platform, batch, now_ms())? else {
+            return Ok(true);
+        };
+        let wait = until(at, now_ms());
+        if wait > PACE_BETWEEN_MAX {
+            return Ok(false);
+        }
+        tokio::time::sleep(wait).await;
+        Ok(true)
+    }
+
+    /// 取到的一份：在锁外算好哈希，再交给资料库当快照。
+    async fn store_snapshot(
+        &self,
+        id: &ItemId,
+        plugin: &FetchPlugin,
+        job: &FetchJob,
+        snap: FetchedSnapshot,
+    ) -> Result<()> {
+        let staged = snap.out_dir();
+        let files = tokio::task::spawn_blocking(move || hash_staged(&staged))
+            .await
+            .map_err(|e| Error::Task(e.to_string()))??;
+        let this = self.clone();
+        let plugin = plugin.clone();
+        let input_url = job.url.clone();
+        let item = id.clone();
+        let imported = job.import_id.is_some();
+        tokio::task::spawn_blocking(move || {
+            this.attach(&item, &plugin, input_url, snap, files, imported)
+        })
+        .await
+        .map_err(|e| Error::Task(e.to_string()))?
     }
 
     /// 导入里的一条轮到了：先收下（只有链接，记 `entry: import`），再取内容。
@@ -569,6 +649,15 @@ fn fetch_record(out: &FetchOutput) -> Result<FetchRecord> {
         }
     }
     Ok(serde_json::from_value(v)?)
+}
+
+/// 暂停记在哪个范围：通用网页插件的平台是所有网站，按网站暂停，一个站限流不停掉别的站；别的按平台。
+fn pause_scope<'a>(plugin: &FetchPlugin, url: &'a url::Url, platform: &'a str) -> &'a str {
+    if plugin.spec.is_web() {
+        url.host_str().unwrap_or_default()
+    } else {
+        platform
+    }
 }
 
 /// 条目 id 前面那段就是平台（SPEC §0.4）。

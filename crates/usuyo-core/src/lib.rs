@@ -12,6 +12,7 @@ mod inbox;
 mod index_doc;
 mod jobs;
 mod layout;
+mod methods;
 mod models;
 mod owner_only;
 mod pace;

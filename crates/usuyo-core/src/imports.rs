@@ -15,15 +15,16 @@ use std::future::Future;
 use std::time::Duration;
 
 use usuyo_library::{ItemId, Whereabouts};
-use usuyo_plugin::protocol::{ErrorCode, ListItem, Pause, SourceInfo};
+use usuyo_plugin::protocol::{ErrorCode, ListItem, Method, Pause};
 use usuyo_plugin::{CallOptions, FetchPlugin, ListRequest, PluginError};
 
 use crate::engine::Engine;
 use crate::fetch::{now_ms, platform_of};
 use crate::jobs::{EntryRow, ImportRow};
+use crate::methods::blockers;
 use crate::pace;
 use crate::view::{
-    Event, ImportEntryView, ImportKind, ImportState, ImportView, PreviewCounts, Waiting,
+    Event, ImportEntryView, ImportKind, ImportState, ImportView, PreviewCounts, SourceView, Waiting,
 };
 use crate::{Error, Result};
 
@@ -76,14 +77,16 @@ fn ts(ms: i64) -> String {
 }
 
 impl Engine {
-    /// 从一个插件的来源开始导入（先列，列完给你看）。
-    pub fn start_import(&self, plugin_id: &str, source: &str, title: &str) -> Result<ImportView> {
+    /// 从一个插件一种方法的来源开始导入（先列，列完给你看）。
+    pub fn start_import(
+        &self,
+        plugin_id: &str,
+        method: &str,
+        source: &str,
+        title: &str,
+    ) -> Result<ImportView> {
         let plugin = self.fetch_plugin(plugin_id)?;
-        if plugin.spec.capabilities.list.is_none() {
-            return Err(Error::UnsupportedInput(format!(
-                "{plugin_id} cannot list what you saved"
-            )));
-        }
+        self.list_method(&plugin, method)?;
         if source.trim().is_empty() || source.len() > 512 {
             return Err(Error::InvalidArgs("source is empty or too long".into()));
         }
@@ -96,6 +99,7 @@ impl Engine {
             id: usuyo_library::uuid7(),
             kind: "source".into(),
             plugin: Some(plugin_id.to_owned()),
+            method: Some(method.to_owned()),
             source: Some(source.to_owned()),
             client: None,
             title,
@@ -135,6 +139,7 @@ impl Engine {
             id: usuyo_library::uuid7(),
             kind: "delivered".into(),
             plugin: None,
+            method: None,
             source: None,
             client: client.map(str::to_owned),
             title: match name.trim() {
@@ -303,50 +308,111 @@ impl Engine {
         Ok(())
     }
 
-    /// 一个插件现在能列的来源（`sources`，计入节奏）。
-    pub async fn plugin_sources(&self, plugin_id: &str) -> Result<Vec<SourceInfo>> {
+    /// 一个插件一种方法现在能列的来源（`sources`，计入节奏）。`link` 是你给的一条链接，
+    /// 只给声明了 `list.link` 的方法（协议 §2.3.1）。
+    pub async fn plugin_sources(
+        &self,
+        plugin_id: &str,
+        method: &str,
+        link: Option<&url::Url>,
+    ) -> Result<Vec<SourceView>> {
         let plugin = self.fetch_plugin(plugin_id)?;
-        if plugin.spec.capabilities.list.is_none() {
+        let m = self.list_method(&plugin, method)?;
+        if link.is_some()
+            && m.capabilities
+                .list
+                .as_ref()
+                .is_some_and(|l| l.link.is_none())
+        {
             return Err(Error::UnsupportedInput(format!(
-                "{plugin_id} cannot list what you saved"
+                "{plugin_id} {method} does not start from a link"
             )));
         }
         let platform = pace_scope(&plugin);
         let host = &self.inner.host;
-        match self
+        let r = match self
             .paced(
                 &platform,
                 false,
                 PACE_WAIT_MAX,
-                host.sources(&plugin, &CallOptions::default()),
+                host.sources(&plugin, method, link, &CallOptions::default()),
             )
             .await?
         {
-            Ok(r) => self.after_call(&plugin, &platform, r),
-            Err(at) => Err(Error::UnsupportedInput(format!(
-                "this platform is pacing calls; try again after {}",
-                ts(at)
-            ))),
-        }
+            Ok(r) => r,
+            Err(at) => {
+                return Err(Error::UnsupportedInput(format!(
+                    "this platform is pacing calls; try again after {}",
+                    ts(at)
+                )));
+            }
+        };
+        let link_host = link.and_then(|l| l.host_str());
+        let sources = self.after_call(&plugin, method, &platform, link_host, r)?;
+        Ok(sources
+            .into_iter()
+            .map(|source| SourceView {
+                source,
+                method: method.to_owned(),
+            })
+            .collect())
     }
 
-    /// 插件报的错要暂停它的，照记下（和取内容时一样）。
+    /// 这种方法能列：做了、在插件进程里跑、有 `list`、开着、这台机器上用得上。
+    fn list_method(&self, plugin: &FetchPlugin, method: &str) -> Result<Method> {
+        let m = plugin
+            .spec
+            .method(method)
+            .filter(|m| m.callable() && m.capabilities.list.is_some())
+            .ok_or_else(|| {
+                Error::UnsupportedInput(format!(
+                    "{} has no method `{method}` that lists what you saved",
+                    plugin.id()
+                ))
+            })?;
+        let enabled = self.inner.methods.enabled(plugin, m);
+        let health = self.inner.methods.health_seen(plugin.id().as_str());
+        let host = &self.inner.host;
+        if let Some(b) = blockers(
+            m,
+            enabled,
+            health.as_ref(),
+            &host.sites()?,
+            &host.visitors()?,
+        )
+        .into_iter()
+        .next()
+        {
+            return Err(Error::UnsupportedInput(format!("{}：{}", m.name, b.hint)));
+        }
+        Ok(m.clone())
+    }
+
+    /// 记下这次调用；插件报的错要暂停这种方法的，照记下（和取内容时一样）。
     fn after_call<T>(
         &self,
         plugin: &FetchPlugin,
+        method: &str,
         scope: &str,
+        link_host: Option<&str>,
         r: std::result::Result<T, PluginError>,
     ) -> Result<T> {
-        if let Err(PluginError::Call { failure, .. }) = &r {
-            self.pause_for(plugin, scope, failure)?;
+        match &r {
+            Ok(_) => self.record_method_call(plugin, method, link_host, Ok(()))?,
+            Err(PluginError::Call { failure, .. }) => {
+                self.record_method_call(plugin, method, link_host, Err(failure))?;
+                self.pause_for(plugin, method, scope, failure)?;
+            }
+            Err(_) => {}
         }
         Ok(r?)
     }
 
-    /// 被限流、被拦：这个插件在这里暂停（被拦也按最长的暂停，到点自己解开）。回暂停到什么时候。
+    /// 被限流、被拦：这种方法在这里暂停（被拦也按最长的暂停，到点自己解开）。回暂停到什么时候。
     pub(crate) fn pause_for(
         &self,
         plugin: &FetchPlugin,
+        method: &str,
         scope: &str,
         failure: &usuyo_plugin::protocol::CallFailure,
     ) -> Result<Option<i64>> {
@@ -358,6 +424,7 @@ impl Engine {
         let until = now_ms().saturating_add(i64::try_from(d.as_millis()).unwrap_or(i64::MAX));
         self.inner.jobs.pause(
             plugin.id().as_str(),
+            method,
             scope,
             until,
             failure.code.as_str(),
@@ -483,6 +550,7 @@ impl Engine {
             },
             title: r.title,
             plugin_id: r.plugin,
+            method: r.method,
             source: r.source,
             client: r.client,
             created_at: ts(r.created_at),
@@ -514,7 +582,12 @@ impl Engine {
             return Ok(None);
         };
         let scope = pace_scope(plugin);
-        if let Some(p) = self.inner.jobs.paused(plugin.id().as_str(), &scope, now)? {
+        let method = r.method.as_deref().unwrap_or_default();
+        if let Some(p) = self
+            .inner
+            .jobs
+            .paused(plugin.id().as_str(), method, &scope, now)?
+        {
             return Ok(Some(pause_wait(&p)));
         }
         let pacing = self.inner.pacing.get(scope.as_str());
@@ -603,11 +676,13 @@ impl Engine {
         };
         let scope = pace_scope(&plugin);
         let now = now_ms();
-        if let Some(p) = jobs.paused(plugin.id().as_str(), &scope, now)? {
-            // 停着的插件不列；到点（或你点了「现在再试」）再来
+        let method = r.method.clone().unwrap_or_default();
+        if let Some(p) = jobs.paused(plugin.id().as_str(), &method, &scope, now)? {
+            // 停着的方法不列；到点（或你点了「现在再试」）再来
             return Ok(p.until);
         }
         let request = ListRequest {
+            method: method.clone(),
             source: r.source.clone().unwrap_or_default(),
             cursor: r.cursor.clone(),
             since: None,
@@ -636,10 +711,14 @@ impl Engine {
             }
         };
         let page = match result {
-            Ok(page) => page,
+            Ok(page) => {
+                self.record_method_call(&plugin, &method, None, Ok(()))?;
+                page
+            }
             Err(PluginError::Call { failure, .. }) => {
-                // 被限流、被拦：只记在插件的暂停上（导入照它显示原因），「现在再试」一去掉就接着列
-                if let Some(until) = self.pause_for(&plugin, &scope, &failure)? {
+                self.record_method_call(&plugin, &method, None, Err(&failure))?;
+                // 被限流、被拦：只记在这种方法的暂停上（导入照它显示原因），「现在再试」一去掉就接着列
+                if let Some(until) = self.pause_for(&plugin, &method, &scope, &failure)? {
                     return Ok(Some(until));
                 }
                 let transient = matches!(
@@ -874,16 +953,31 @@ impl Engine {
             return Ok(None);
         };
         let mut found: Option<Wait> = None;
-        for plugin in self.inner.host.candidates(&url) {
-            if plugin.spec.capabilities.fetch.is_none() {
-                continue;
-            }
+        let fetching = self
+            .inner
+            .host
+            .candidates(&url)
+            .into_iter()
+            .flat_map(|plugin| {
+                plugin
+                    .spec
+                    .methods
+                    .iter()
+                    .filter(|m| m.callable() && m.capabilities.fetch.is_some())
+                    .filter(|m| self.inner.methods.enabled(plugin, m))
+                    .map(move |m| (plugin, m))
+            });
+        for (plugin, method) in fetching {
             let scope = if plugin.spec.is_web() {
                 url.host_str().unwrap_or_default()
             } else {
                 platform
             };
-            match self.inner.jobs.paused(plugin.id().as_str(), scope, now)? {
+            match self
+                .inner
+                .jobs
+                .paused(plugin.id().as_str(), &method.id, scope, now)?
+            {
                 None => return Ok(None),
                 Some(p) => {
                     let w = pause_wait(&p);

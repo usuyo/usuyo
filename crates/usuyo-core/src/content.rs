@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 use usuyo_contract::{FetchRecord, Manifest};
-use usuyo_library::{Item, LayerSource, Library, Notes};
+use usuyo_library::{Item, LayerSource, Library, Notes, newest_with};
 
 use crate::transcripts::{self, KeyframeSet, Transcript};
 use crate::{Error, Result};
@@ -85,26 +85,44 @@ pub(crate) fn read(lib: &Library, item: &Item) -> Result<Content> {
         }
     }
 
+    // 每次取是一份快照：图、画面、评论各从有它的最新一份来（插件协议 §2.3.1）。
+    let newest = |outputs: &[&str]| newest_with(m, outputs).unwrap_or_else(|| primary.clone());
+    // 主快照说缺的，后来别的快照取到了，就不再算缺。
     let rec = lib.fetch_record(id, &primary)?;
-    let raw = dir.join("raw").join(&primary);
-    if rec.extra.get("comments").and_then(Value::as_str).is_some() {
-        let path = raw.join("comments.json");
-        let bytes = std::fs::read(&path).map_err(|e| Error::io(&path, e))?;
-        c.comments = Some((primary.clone(), parse_comments(&bytes)));
-    }
-    (c.images, c.duplicate_images) = images(&rec, &raw);
+    let covered = |kind: &String| {
+        m.snapshots
+            .iter()
+            .any(|s| s.id != primary && s.outputs.contains(kind))
+    };
+    let still_short = m
+        .snapshots
+        .iter()
+        .find(|s| s.id == primary)
+        .is_none_or(|s| s.missing.is_empty() || !s.missing.iter().all(covered));
     c.partial = rec
         .extra
         .get("missingReason")
         .and_then(Value::as_str)
         .map(str::trim)
-        .filter(|r| !r.is_empty())
+        .filter(|r| !r.is_empty() && still_short)
         .map(str::to_owned);
+    let snap = newest(&["comments"]);
+    let rec = lib.fetch_record(id, &snap)?;
+    if rec.extra.get("comments").and_then(Value::as_str).is_some() {
+        let path = dir.join("raw").join(&snap).join("comments.json");
+        let bytes = std::fs::read(&path).map_err(|e| Error::io(&path, e))?;
+        c.comments = Some((snap.clone(), parse_comments(&bytes)));
+    }
+    let snap = newest(&["images"]);
+    let rec = lib.fetch_record(id, &snap)?;
+    (c.images, c.duplicate_images) = images(&rec, &dir.join("raw").join(&snap));
+    let snap = newest(&["media:video"]);
+    let rec = lib.fetch_record(id, &snap)?;
     if let Some(v) = rec.media.iter().find(|m| m.kind == "video")
-        && raw.join(&v.path).is_file()
+        && dir.join("raw").join(&snap).join(&v.path).is_file()
     {
         c.video = Some(VideoFile {
-            snapshot: primary.clone(),
+            snapshot: snap.clone(),
             duration_sec: v.extra.get("durationSec").and_then(Value::as_f64),
         });
     }

@@ -23,10 +23,11 @@ use tower_http::services::ServeFile;
 use tower_http::set_header::SetResponseHeaderLayer;
 use usuyo_core::view::{
     ImportEntryView, ImportView, ItemView, MapView, PluginView, PluginsView, SearchHit,
-    SettingsView, SiteView, TakeResponse, Topic, TransformsView, TrashView, VisitorView,
+    SettingsView, SiteView, SourceView, TakeResponse, Topic, TransformsView, TrashView,
+    VisitorView,
 };
 use usuyo_core::{DeliveredLink, Engine, ImportChoice, Links, SettingsPatch, Via};
-use usuyo_plugin::protocol::{SourceInfo, StorageState};
+use usuyo_plugin::protocol::StorageState;
 
 use crate::clients::{Client, ClientKind};
 use crate::guard::{self, Caller, Gate};
@@ -111,6 +112,10 @@ pub(crate) fn build(engine: Engine, gate: Arc<Gate>, origins: &[String]) -> Rout
         .route("/plugins", get(plugins))
         .route("/plugins/{owner}/{repo}/try-now", post(plugin_try_now))
         .route("/plugins/{owner}/{repo}/hold", post(plugin_hold))
+        .route(
+            "/plugins/{owner}/{repo}/methods/{method}",
+            put(plugin_method_switch),
+        )
         .route(
             "/plugins/{owner}/{repo}/secrets/{key}",
             put(plugin_secret_set).delete(plugin_secret_forget),
@@ -520,15 +525,66 @@ fn plugin_id(owner: &str, repo: &str) -> String {
 }
 
 async fn plugins(State(s): State<AppState>) -> ApiResult<PluginsView> {
-    Ok(Json(blocking(move || s.engine.plugins()).await?))
+    Ok(Json(s.engine.plugins().await?))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SourcesQuery {
+    method: String,
+    /// 来源从这条链接开始（协议 §2.3.1）。
+    #[serde(default)]
+    link: Option<String>,
 }
 
 async fn plugin_sources(
     State(s): State<AppState>,
     Path((owner, repo)): Path<(String, String)>,
-) -> ApiResult<Vec<SourceInfo>> {
+    q: Result<Query<SourcesQuery>, QueryRejection>,
+) -> ApiResult<Vec<SourceView>> {
+    let Query(q) = q.map_err(|e| Problem::new("invalid-args", e.body_text()))?;
+    let link = q.link.as_deref().map(parse_link).transpose()?;
     Ok(Json(
-        s.engine.plugin_sources(&plugin_id(&owner, &repo)).await?,
+        s.engine
+            .plugin_sources(&plugin_id(&owner, &repo), &q.method, link.as_ref())
+            .await?,
+    ))
+}
+
+/// 你给的一条链接：带主机的 http(s)，不带用户名密码，至多 4096 字节。原因里不写链接本身。
+fn parse_link(text: &str) -> Result<url::Url, Problem> {
+    let bad = |why: &str| Problem::new("invalid-args", format!("link: {why}"));
+    if text.len() > 4096 || text.chars().any(char::is_control) {
+        return Err(bad("too long or has control characters"));
+    }
+    let u = url::Url::parse(text.trim()).map_err(|_| bad("not a link"))?;
+    if !matches!(u.scheme(), "http" | "https") || u.host_str().is_none() {
+        return Err(bad("not an http(s) link with a host"));
+    }
+    if !u.username().is_empty() || u.password().is_some() {
+        return Err(bad("links with a user name or password are not taken"));
+    }
+    Ok(u)
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MethodSwitchRequest {
+    enabled: bool,
+}
+
+async fn plugin_method_switch(
+    State(s): State<AppState>,
+    Path((owner, repo, method)): Path<(String, String, String)>,
+    req: Result<Json<MethodSwitchRequest>, JsonRejection>,
+) -> ApiResult<PluginView> {
+    let req = body(req)?;
+    Ok(Json(
+        blocking(move || {
+            s.engine
+                .set_method(&plugin_id(&owner, &repo), &method, req.enabled)
+        })
+        .await?,
     ))
 }
 
@@ -661,6 +717,7 @@ async fn imports(State(s): State<AppState>) -> ApiResult<Vec<ImportView>> {
 #[serde(rename_all = "camelCase")]
 struct StartImportRequest {
     plugin_id: String,
+    method: String,
     source: String,
     #[serde(default)]
     title: String,
@@ -674,7 +731,7 @@ async fn start_import(
     Ok(Json(
         blocking(move || {
             s.engine
-                .start_import(&req.plugin_id, &req.source, &req.title)
+                .start_import(&req.plugin_id, &req.method, &req.source, &req.title)
         })
         .await?,
     ))

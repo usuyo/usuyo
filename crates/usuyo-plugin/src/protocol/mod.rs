@@ -18,18 +18,19 @@ pub use envelope::{
     WaitReason,
 };
 pub use fetch::{
-    Author, Canonicalized, Completeness, Evidence, FetchOutput, ItemKind, ListAction, ListItem,
-    ListPage, Media, MediaKind, OutputKind, SourceInfo, SourcesOutput, TextFormat, UpstreamVersion,
+    Author, Canonicalized, Completeness, Evidence, FetchHealth, FetchOutput, ItemKind, ListAction,
+    ListItem, ListPage, LoginReport, LoginReportState, Media, MediaKind, MethodCheck, OutputKind,
+    SourceInfo, SourcesOutput, TextFormat, UpstreamVersion,
 };
 pub use identity::Identity;
 pub use manifest::{
-    Access, Asset, Capabilities, CapabilityUse, Consume, ConsumeKind, Credential, Device,
-    ExportSpec, ExportWrites, FetchCapability, FetchInputKind, FetchSpec, FsPermissions, Inject,
-    Install, Interaction, Limits, ListCapability, ListOrder, Login, MANIFEST_FILE, MatchPattern,
-    ModelFormat, ModelSpec, NetworkMode, NetworkPermissions, Pacing, Permissions, PlatformUse,
-    PluginHeader, PluginKind, PluginKindTag, PluginManifest, Produce, ProviderNeed, Run,
-    RuntimeRequirement, SUPPORTED_PROTOCOLS, Setting, SettingType, Site, TransformSpec, Upstream,
-    Visitor,
+    Access, Account, Asset, Capabilities, CapabilityUse, Consume, ConsumeKind, Credential,
+    Delivers, Device, ExportSpec, ExportWrites, FetchCapability, FetchInputKind, FetchSpec,
+    FsPermissions, Inject, Install, Interaction, Limits, ListCapability, ListOrder, Login,
+    MANIFEST_FILE, MatchPattern, Method, ModelFormat, ModelSpec, NetworkMode, NetworkPermissions,
+    Pacing, Permissions, PlatformUse, PluginHeader, PluginKind, PluginKindTag, PluginManifest,
+    Produce, ProviderNeed, Risk, RiskSource, Run, RuntimeRequirement, SUPPORTED_PROTOCOLS, Setting,
+    SettingType, Site, TransformSpec, Upstream, Visitor,
 };
 pub use schema::schemas;
 pub use transform::{

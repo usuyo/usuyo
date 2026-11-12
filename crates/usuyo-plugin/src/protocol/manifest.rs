@@ -457,21 +457,13 @@ struct WirePlatformUse {
 }
 
 /// 能力声明的线上形状：三种能力共用一个结构，哪些字段属于哪种能力在语义检查里判。
+/// `access`、`login`、`sites`、`visitors`、`interaction`、`perPlatform` 挪到了方法上（§2.3.1）：
+/// 还写在能力里的清单照旧形状拒掉，说清楚挪到了哪里。
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct WireCapability {
-    access: Option<Access>,
-    login: Option<Login>,
-    #[serde(default)]
-    sites: Vec<String>,
-    #[serde(default)]
-    visitors: Vec<String>,
     #[serde(default)]
     timeout: Option<DurationSpec>,
-    #[serde(default)]
-    per_platform: BTreeMap<PlatformId, WirePlatformUse>,
-    #[serde(default)]
-    interaction: Interaction,
     #[serde(default)]
     provider: ProviderNeed,
     // fetch
@@ -486,6 +478,27 @@ struct WireCapability {
     sources: Option<Vec<SourceInfo>>,
     #[serde(default)]
     files: Option<Vec<String>>,
+    #[serde(default)]
+    link: Option<String>,
+    // 旧形状
+    #[serde(default)]
+    #[schemars(skip)]
+    access: Option<serde_json::Value>,
+    #[serde(default)]
+    #[schemars(skip)]
+    login: Option<serde_json::Value>,
+    #[serde(default)]
+    #[schemars(skip)]
+    sites: Option<serde_json::Value>,
+    #[serde(default)]
+    #[schemars(skip)]
+    visitors: Option<serde_json::Value>,
+    #[serde(default)]
+    #[schemars(skip)]
+    interaction: Option<serde_json::Value>,
+    #[serde(default)]
+    #[schemars(skip)]
+    per_platform: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
@@ -496,6 +509,80 @@ struct WireCapabilities {
     list: Option<WireCapability>,
     #[serde(default)]
     unfavorite: Option<WireCapability>,
+}
+
+/// 账号在哪里被用到（§2.3.1）。顺序就是同一层里挑方法的先后：先不带账号的。
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum Account {
+    /// 不用账号。
+    None,
+    /// 访客身份（§2.5.1），不是账号。
+    Visitor,
+    /// 只在你自己的浏览器里。
+    OwnBrowser,
+    /// 只在你手机的 App 里。
+    OwnPhone,
+    /// 只在你电脑的客户端里。
+    OwnApp,
+    /// 登录进 usuyo。
+    InUsuyo,
+    /// 你申请的开发者凭据。
+    Developer,
+}
+
+/// 不在插件进程里跑的方法交什么给本机接口（§5）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum Delivers {
+    Links,
+}
+
+/// 记录到的一句情况的出处。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct RiskSource {
+    pub label: String,
+    pub url: String,
+}
+
+/// 记录到的一句情况。只是信息，宿主不拿它拦。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Risk {
+    pub text: String,
+    pub source: RiskSource,
+}
+
+/// 一种方法的线上形状（§2.3.1）。
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+struct WireMethod {
+    id: String,
+    name: String,
+    #[serde(default = "yes")]
+    built: bool,
+    access: Access,
+    login: Login,
+    account: Account,
+    #[serde(default)]
+    sites: Vec<String>,
+    #[serde(default)]
+    visitors: Vec<String>,
+    #[serde(default)]
+    per_platform: BTreeMap<PlatformId, WirePlatformUse>,
+    #[serde(default)]
+    interaction: Interaction,
+    #[serde(default)]
+    delivers: Option<Delivers>,
+    #[serde(default)]
+    capabilities: Option<WireCapabilities>,
+    #[serde(default)]
+    risk: Option<Risk>,
+}
+
+fn yes() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -539,17 +626,23 @@ pub(crate) struct WireManifest {
     #[serde(default, rename = "match")]
     match_patterns: Option<Vec<String>>,
     #[serde(default)]
-    access: Option<Access>,
-    #[serde(default)]
-    login: Option<Login>,
-    #[serde(default)]
     sites: Option<Vec<Site>>,
     #[serde(default)]
     visitors: Option<Vec<Visitor>>,
     #[serde(default)]
-    capabilities: Option<WireCapabilities>,
+    methods: Option<Vec<WireMethod>>,
     #[serde(default)]
     pacing: Option<BTreeMap<PlatformId, Pacing>>,
+    // 旧形状：顶层的 `access`、`login`、`capabilities` 由方法代替（§2.3.1），写了就拒。
+    #[serde(default)]
+    #[schemars(skip)]
+    access: Option<serde_json::Value>,
+    #[serde(default)]
+    #[schemars(skip)]
+    login: Option<serde_json::Value>,
+    #[serde(default)]
+    #[schemars(skip)]
+    capabilities: Option<serde_json::Value>,
     // transform
     #[serde(default)]
     consumes: Option<Vec<WireConsume>>,
@@ -601,16 +694,15 @@ pub enum PluginKind {
     Export(ExportSpec),
 }
 
-/// 获取插件的字段（协议 §2.3）。
+/// 获取插件的字段（协议 §2.3）。几种取法各是一个方法（§2.3.1）。
 #[derive(Debug, Clone, PartialEq)]
 pub struct FetchSpec {
     pub platforms: Vec<PlatformId>,
     pub match_patterns: Vec<MatchPattern>,
-    pub access: Access,
-    pub login: Login,
     pub sites: Vec<Site>,
     pub visitors: Vec<Visitor>,
-    pub capabilities: Capabilities,
+    /// 照清单里写的顺序；至少一种做了。
+    pub methods: Vec<Method>,
     pub pacing: BTreeMap<PlatformId, Pacing>,
 }
 
@@ -624,30 +716,89 @@ impl FetchSpec {
     pub fn matches(&self, url: &url::Url) -> bool {
         self.match_patterns.iter().any(|p| p.matches(url))
     }
+
+    pub fn method(&self, id: &str) -> Option<&Method> {
+        self.methods.iter().find(|m| m.id == id)
+    }
+
+    /// 做了的方法。
+    pub fn built(&self) -> impl Iterator<Item = &Method> {
+        self.methods.iter().filter(|m| m.built)
+    }
+
+    /// 做了的方法里最高的一层（含 `perPlatform`），列表上显示。
+    pub fn access(&self) -> Access {
+        self.built()
+            .flat_map(|m| {
+                std::iter::once(m.access).chain(m.per_platform.values().map(|p| p.access))
+            })
+            .max()
+            .unwrap_or(Access::OfficialExport)
+    }
+
+    /// 做了的方法里最高的一档 `login`。
+    pub fn login(&self) -> Login {
+        self.built()
+            .flat_map(|m| std::iter::once(m.login).chain(m.per_platform.values().map(|p| p.login)))
+            .max()
+            .unwrap_or(Login::None)
+    }
 }
 
+/// 一种方法（§2.3.1）：自己的层级、账号用在哪、交哪些站点的凭据、能做什么。
 #[derive(Debug, Clone, PartialEq)]
+pub struct Method {
+    pub id: String,
+    pub name: String,
+    /// `false`：声明了、还没做的。照样列出来，开不了，宿主不调。
+    pub built: bool,
+    pub access: Access,
+    pub login: Login,
+    pub account: Account,
+    /// 宿主只把这几个站点的凭据交给这种方法。
+    pub sites: Vec<String>,
+    /// 交哪些访客身份；和 `login` 无关。
+    pub visitors: Vec<String>,
+    pub per_platform: BTreeMap<PlatformId, PlatformUse>,
+    pub interaction: Interaction,
+    /// 不在插件进程里跑：由浏览器脚本一类把链接交给本机接口。这时没有能力。
+    pub delivers: Option<Delivers>,
+    pub capabilities: Capabilities,
+    pub risk: Option<Risk>,
+}
+
+impl Method {
+    /// 没写开关时开不开（§2.3.1）：`private-api`、`client-hook` 两层关着，其余开着。
+    pub fn on_by_default(&self) -> bool {
+        self.access < Access::PrivateApi
+    }
+
+    /// 宿主会不会调它：做了、在插件进程里跑。
+    pub fn callable(&self) -> bool {
+        self.built && self.delivers.is_none()
+    }
+
+    /// 挑方法的先后（§2.3.1）：先层级低的，同一层先不带账号的。
+    pub fn rank(&self) -> (Access, Account) {
+        (self.access, self.account)
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Capabilities {
     pub fetch: Option<FetchCapability>,
     pub list: Option<ListCapability>,
     pub unfavorite: Option<CapabilityUse>,
 }
 
-/// 一个能力实际怎么用平台：每种能力都有的那几项。
-#[derive(Debug, Clone, PartialEq)]
+/// 每种能力都有的那几项；层级、账号、站点在方法上。
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct CapabilityUse {
-    pub access: Access,
-    pub login: Login,
-    pub sites: Vec<String>,
-    /// 交哪些访客身份；和 `login` 无关，`login: none` 也可以有。
-    pub visitors: Vec<String>,
     pub timeout: Option<DurationSpec>,
-    pub per_platform: BTreeMap<PlatformId, PlatformUse>,
-    pub interaction: Interaction,
     pub provider: ProviderNeed,
 }
 
-/// 多平台插件里某个平台走的路不同时的覆盖；没写的项沿用能力本身的。
+/// 多平台插件里某个平台走的路不同时的覆盖；没写的项沿用方法本身的。
 #[derive(Debug, Clone, PartialEq)]
 pub struct PlatformUse {
     pub access: Access,
@@ -669,6 +820,9 @@ pub struct ListCapability {
     pub sources: Vec<SourceInfo>,
     /// 导入插件能读的导出文件名 glob（§3.9）。
     pub files: Vec<String>,
+    /// 来源从你给的一条链接开始（§2.3.1）：导入页给一个链接框，框上写这句；
+    /// `sources` 带 `--link` 时插件把链接换成来源。
+    pub link: Option<String>,
 }
 
 /// 转换插件的字段（协议 §2.9）。消息见 [`super::transform`]，宿主一侧是 `ResidentTransform`。
@@ -1154,18 +1308,24 @@ fn check_sha256(field: &str, value: &str) -> Check<()> {
 
 /// 种类专属的字段出现在别的种类里就报错，免得写错种类没人发现。
 fn reject_foreign(w: &WireManifest) -> Check<()> {
-    let present: [(&str, bool, PluginKindTag); 15] = [
+    for (field, set) in [
+        ("access", w.access.is_some()),
+        ("login", w.login.is_some()),
+        ("capabilities", w.capabilities.is_some()),
+    ] {
+        if set {
+            return Err(invalid(
+                field,
+                "top-level `access`, `login` and `capabilities` were replaced by `methods` (protocol §2.3.1): list each way of fetching as a method with its own `access`, `login`, `account` and `capabilities`",
+            ));
+        }
+    }
+    let present: [(&str, bool, PluginKindTag); 13] = [
         ("platforms", w.platforms.is_some(), PluginKindTag::Fetch),
         ("match", w.match_patterns.is_some(), PluginKindTag::Fetch),
-        ("access", w.access.is_some(), PluginKindTag::Fetch),
-        ("login", w.login.is_some(), PluginKindTag::Fetch),
         ("sites", w.sites.is_some(), PluginKindTag::Fetch),
         ("visitors", w.visitors.is_some(), PluginKindTag::Fetch),
-        (
-            "capabilities",
-            w.capabilities.is_some(),
-            PluginKindTag::Fetch,
-        ),
+        ("methods", w.methods.is_some(), PluginKindTag::Fetch),
         ("pacing", w.pacing.is_some(), PluginKindTag::Fetch),
         ("consumes", w.consumes.is_some(), PluginKindTag::Transform),
         ("produces", w.produces.is_some(), PluginKindTag::Transform),
@@ -1203,84 +1363,51 @@ fn fetch_spec(w: &WireManifest) -> Check<FetchSpec> {
     if platforms.iter().collect::<BTreeSet<_>>().len() != platforms.len() {
         return Err(invalid("platforms", "a platform is listed twice"));
     }
-    let access = *required("access", &w.access)?;
-    let login = *required("login", &w.login)?;
     let sites = w.sites.clone().unwrap_or_default();
     check_sites(&sites)?;
-    if login != Login::None && sites.is_empty() {
-        return Err(invalid(
-            "sites",
-            "plugins that log in must declare their sites",
-        ));
-    }
     let visitors = w.visitors.clone().unwrap_or_default();
     check_visitors(&visitors)?;
 
-    let caps = required("capabilities", &w.capabilities)?;
-    if caps.fetch.is_none() && caps.list.is_none() {
-        return Err(invalid("capabilities", "declare `fetch`, `list` or both"));
-    }
+    let wire_methods = required("methods", &w.methods)?;
     let ctx = CapabilityContext {
         platforms: &platforms,
         sites: &sites,
         visitors: &visitors,
     };
-    let fetch = caps
-        .fetch
-        .as_ref()
-        .map(|c| fetch_capability(c, &ctx))
-        .transpose()?;
-    let list = caps
-        .list
-        .as_ref()
-        .map(|c| list_capability(c, &ctx))
-        .transpose()?;
-    let unfavorite = caps
-        .unfavorite
-        .as_ref()
-        .map(|c| {
-            only_fields(c, "capabilities.unfavorite", &[])?;
-            capability_use(c, "capabilities.unfavorite", &ctx)
-        })
-        .transpose()?;
-
-    let uses = fetch
-        .iter()
-        .map(|c| &c.uses)
-        .chain(list.iter().map(|c| &c.uses))
-        .chain(unfavorite.iter());
-    let mut top_access = None;
-    let mut top_login = None;
-    for u in uses {
-        for (a, l) in std::iter::once((u.access, u.login))
-            .chain(u.per_platform.values().map(|p| (p.access, p.login)))
-        {
-            top_access = top_access.max(Some(a));
-            top_login = top_login.max(Some(l));
+    let mut methods: Vec<Method> = Vec::new();
+    for (i, m) in wire_methods.iter().enumerate() {
+        let method = method(m, &format!("methods[{i}]"), &ctx)?;
+        if methods.iter().any(|x| x.id == method.id) {
+            return Err(invalid(
+                format!("methods[{i}].id"),
+                format!("`{}` is declared twice", method.id),
+            ));
+        }
+        methods.push(method);
+    }
+    if !methods.iter().any(|m| m.built) {
+        return Err(invalid(
+            "methods",
+            "declare at least one method that is built",
+        ));
+    }
+    for s in &sites {
+        if !methods.iter().any(|m| {
+            m.sites.contains(&s.site) || m.per_platform.values().any(|p| p.sites.contains(&s.site))
+        }) {
+            return Err(invalid(
+                "sites",
+                format!("`{}` is not used by any method", s.site),
+            ));
         }
     }
-    if top_access != Some(access) {
-        return Err(invalid(
-            "access",
-            format!(
-                "must be the highest `access` among capabilities ({})",
-                label(top_access)
-            ),
-        ));
-    }
-    if top_login != Some(login) {
-        return Err(invalid(
-            "login",
-            format!(
-                "must be the highest `login` among capabilities ({})",
-                label(top_login)
-            ),
-        ));
-    }
 
-    let takes_urls = fetch
-        .as_ref()
-        .is_some_and(|f| f.input.contains(&FetchInputKind::Url));
+    let takes_urls = methods.iter().filter(|m| m.built).any(|m| {
+        m.capabilities
+            .fetch
+            .as_ref()
+            .is_some_and(|f| f.input.contains(&FetchInputKind::Url))
+    });
     let match_patterns = match (&w.match_patterns, takes_urls) {
         (Some(list), _) if !list.is_empty() => list
             .iter()
@@ -1290,7 +1417,7 @@ fn fetch_spec(w: &WireManifest) -> Check<FetchSpec> {
         (_, true) => {
             return Err(invalid(
                 "match",
-                "required when `capabilities.fetch.input` takes `url`",
+                "required when a method's `fetch` takes `url` input",
             ));
         }
         _ => Vec::new(),
@@ -1309,23 +1436,148 @@ fn fetch_spec(w: &WireManifest) -> Check<FetchSpec> {
     Ok(FetchSpec {
         platforms,
         match_patterns,
-        access,
-        login,
         sites,
         visitors,
-        capabilities: Capabilities {
-            fetch,
-            list,
-            unfavorite,
-        },
+        methods,
         pacing,
     })
 }
 
-fn label<T: Serialize>(v: Option<T>) -> String {
-    v.and_then(|v| serde_json::to_value(v).ok())
-        .and_then(|v| v.as_str().map(str::to_owned))
-        .unwrap_or_else(|| "none declared".into())
+/// 方法 id：小写字母、数字、连字符，最多 64 字节；调用时经 `--method` 传。
+fn is_method_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 64
+        && !id.starts_with('-')
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+}
+
+fn method(m: &WireMethod, path: &str, ctx: &CapabilityContext<'_>) -> Check<Method> {
+    let f = |name: &str| format!("{path}.{name}");
+    if !is_method_id(&m.id) {
+        return Err(invalid(
+            f("id"),
+            format!("`{}` must be lowercase letters, digits and `-`", m.id),
+        ));
+    }
+    non_empty(&f("name"), &m.name)?;
+    check_method_sites(
+        &f("sites"),
+        m.built,
+        m.account,
+        m.login,
+        &m.sites,
+        ctx.sites,
+    )?;
+    for name in &m.visitors {
+        if !ctx.visitors.iter().any(|v| &v.site == name) {
+            return Err(invalid(
+                f("visitors"),
+                format!("`{name}` is not declared in top-level `visitors`"),
+            ));
+        }
+    }
+    if m.built && m.account == Account::Visitor && m.visitors.is_empty() {
+        return Err(invalid(
+            f("visitors"),
+            "`account: visitor` methods name the visitor identities they use",
+        ));
+    }
+    let mut per_platform = BTreeMap::new();
+    for (platform, o) in &m.per_platform {
+        let p = format!("{path}.perPlatform.{platform}");
+        if !ctx.platforms.contains(platform) {
+            return Err(invalid(p, "is not one of `platforms`"));
+        }
+        let pu = PlatformUse {
+            access: o.access.unwrap_or(m.access),
+            login: o.login.unwrap_or(m.login),
+            sites: o.sites.clone().unwrap_or_else(|| m.sites.clone()),
+        };
+        check_method_sites(
+            &format!("{p}.sites"),
+            m.built,
+            m.account,
+            pu.login,
+            &pu.sites,
+            ctx.sites,
+        )?;
+        per_platform.insert(platform.clone(), pu);
+    }
+    if let Some(r) = &m.risk {
+        non_empty(&f("risk.text"), &r.text)?;
+        non_empty(&f("risk.source.label"), &r.source.label)?;
+        check_http_url(&r.source.url).map_err(|e| invalid(f("risk.source.url"), e))?;
+    }
+    let capabilities = match (&m.capabilities, m.delivers, m.built) {
+        (Some(_), Some(_), _) => {
+            return Err(invalid(
+                f("capabilities"),
+                "methods that deliver links run outside the plugin and have no capabilities",
+            ));
+        }
+        (None, None, true) => {
+            return Err(invalid(
+                f("capabilities"),
+                "built methods that run in the plugin need `capabilities`",
+            ));
+        }
+        (None, _, _) => Capabilities::default(),
+        (Some(caps), None, _) => capabilities(caps, &f("capabilities"))?,
+    };
+    if m.built
+        && m.delivers.is_none()
+        && capabilities.fetch.is_none()
+        && capabilities.list.is_none()
+    {
+        return Err(invalid(
+            f("capabilities"),
+            "declare `fetch`, `list` or both",
+        ));
+    }
+    Ok(Method {
+        id: m.id.clone(),
+        name: m.name.clone(),
+        built: m.built,
+        access: m.access,
+        login: m.login,
+        account: m.account,
+        sites: m.sites.clone(),
+        visitors: m.visitors.clone(),
+        per_platform,
+        interaction: m.interaction,
+        delivers: m.delivers,
+        capabilities,
+        risk: m.risk.clone(),
+    })
+}
+
+fn capabilities(caps: &WireCapabilities, path: &str) -> Check<Capabilities> {
+    let fetch = caps
+        .fetch
+        .as_ref()
+        .map(|c| fetch_capability(c, &format!("{path}.fetch")))
+        .transpose()?;
+    let list = caps
+        .list
+        .as_ref()
+        .map(|c| list_capability(c, &format!("{path}.list")))
+        .transpose()?;
+    let unfavorite = caps
+        .unfavorite
+        .as_ref()
+        .map(|c| {
+            let p = format!("{path}.unfavorite");
+            only_fields(c, &p, &[])?;
+            Ok(capability_use(c))
+        })
+        .transpose()?;
+    Ok(Capabilities {
+        fetch,
+        list,
+        unfavorite,
+    })
 }
 
 fn check_sites(sites: &[Site]) -> Check<()> {
@@ -1425,14 +1677,30 @@ struct CapabilityContext<'a> {
     visitors: &'a [Visitor],
 }
 
-/// 能力字段属于哪种能力：`allowed` 之外的专属字段出现了就报错。
+/// 能力字段属于哪种能力：`allowed` 之外的专属字段出现了就报错。挪到方法上的字段说清挪到哪里。
 fn only_fields(c: &WireCapability, path: &str, allowed: &[&str]) -> Check<()> {
+    for (name, set) in [
+        ("access", c.access.is_some()),
+        ("login", c.login.is_some()),
+        ("sites", c.sites.is_some()),
+        ("visitors", c.visitors.is_some()),
+        ("interaction", c.interaction.is_some()),
+        ("perPlatform", c.per_platform.is_some()),
+    ] {
+        if set {
+            return Err(invalid(
+                format!("{path}.{name}"),
+                format!("`{name}` moved from the capability to its method (protocol §2.3.1)"),
+            ));
+        }
+    }
     let present = [
         ("outputs", c.outputs.is_some()),
         ("input", c.input.is_some()),
         ("order", c.order.is_some()),
         ("sources", c.sources.is_some()),
         ("files", c.files.is_some()),
+        ("link", c.link.is_some()),
     ];
     for (name, set) in present {
         if set && !allowed.contains(&name) {
@@ -1445,54 +1713,20 @@ fn only_fields(c: &WireCapability, path: &str, allowed: &[&str]) -> Check<()> {
     Ok(())
 }
 
-fn capability_use(
-    c: &WireCapability,
-    path: &str,
-    ctx: &CapabilityContext<'_>,
-) -> Check<CapabilityUse> {
-    let access = c
-        .access
-        .ok_or_else(|| invalid(format!("{path}.access"), "is required"))?;
-    let login = c
-        .login
-        .ok_or_else(|| invalid(format!("{path}.login"), "is required"))?;
-    check_capability_sites(&format!("{path}.sites"), login, &c.sites, ctx.sites)?;
-    for name in &c.visitors {
-        if !ctx.visitors.iter().any(|v| &v.site == name) {
-            return Err(invalid(
-                format!("{path}.visitors"),
-                format!("`{name}` is not declared in top-level `visitors`"),
-            ));
-        }
-    }
-    let mut per_platform = BTreeMap::new();
-    for (platform, o) in &c.per_platform {
-        let p = format!("{path}.perPlatform.{platform}");
-        if !ctx.platforms.contains(platform) {
-            return Err(invalid(p, "is not one of `platforms`"));
-        }
-        let pu = PlatformUse {
-            access: o.access.unwrap_or(access),
-            login: o.login.unwrap_or(login),
-            sites: o.sites.clone().unwrap_or_else(|| c.sites.clone()),
-        };
-        check_capability_sites(&format!("{p}.sites"), pu.login, &pu.sites, ctx.sites)?;
-        per_platform.insert(platform.clone(), pu);
-    }
-    Ok(CapabilityUse {
-        access,
-        login,
-        sites: c.sites.clone(),
-        visitors: c.visitors.clone(),
+fn capability_use(c: &WireCapability) -> CapabilityUse {
+    CapabilityUse {
         timeout: c.timeout.map(|t| t.at_most(CAPABILITY_TIMEOUT_MAX)),
-        per_platform,
-        interaction: c.interaction,
         provider: c.provider,
-    })
+    }
 }
 
-fn check_capability_sites(
+/// 方法的站点（§2.3.1）：宿主只把这几个站点的凭据交给它。登录进 usuyo 的方法做了就要写；
+/// 账号在你手机或电脑客户端里的只能写 `credential: app` 的站点（宿主什么都不交，插件在 `health` 里报登录）；
+/// 别的方法宿主拿不到账号，不写站点。
+fn check_method_sites(
     path: &str,
+    built: bool,
+    account: Account,
     login: Login,
     names: &[String],
     declared: &[Site],
@@ -1500,13 +1734,13 @@ fn check_capability_sites(
     if login == Login::None && !names.is_empty() {
         return Err(invalid(
             path,
-            "`login: none` capabilities get no account, so no sites",
+            "`login: none` methods get no account, so no sites",
         ));
     }
-    if login != Login::None && names.is_empty() {
+    if built && account == Account::InUsuyo && login != Login::None && names.is_empty() {
         return Err(invalid(
             path,
-            "capabilities that log in must name their sites",
+            "methods that log in to usuyo must name their sites",
         ));
     }
     let mut profiles = 0;
@@ -1517,6 +1751,19 @@ fn check_capability_sites(
                 format!("`{name}` is not declared in top-level `sites`"),
             ));
         };
+        let fits = match account {
+            Account::InUsuyo => true,
+            Account::OwnPhone | Account::OwnApp => site.credential == Credential::App,
+            _ => false,
+        };
+        if !fits {
+            return Err(invalid(
+                path,
+                format!(
+                    "`{name}`: only `account: in-usuyo` methods take login sites (and `own-phone`, `own-app` ones `credential: app` sites)"
+                ),
+            ));
+        }
         if site.credential == Credential::BrowserProfile {
             profiles += 1;
         }
@@ -1524,16 +1771,15 @@ fn check_capability_sites(
     if profiles > 1 {
         return Err(invalid(
             path,
-            "a capability may use at most one `browser-profile` site",
+            "a method may use at most one `browser-profile` site",
         ));
     }
     Ok(())
 }
 
-fn fetch_capability(c: &WireCapability, ctx: &CapabilityContext<'_>) -> Check<FetchCapability> {
-    let path = "capabilities.fetch";
+fn fetch_capability(c: &WireCapability, path: &str) -> Check<FetchCapability> {
     only_fields(c, path, &["outputs", "input"])?;
-    let uses = capability_use(c, path, ctx)?;
+    let uses = capability_use(c);
     let outputs: BTreeSet<_> = c
         .outputs
         .as_ref()
@@ -1564,18 +1810,21 @@ fn fetch_capability(c: &WireCapability, ctx: &CapabilityContext<'_>) -> Check<Fe
     })
 }
 
-fn list_capability(c: &WireCapability, ctx: &CapabilityContext<'_>) -> Check<ListCapability> {
-    let path = "capabilities.list";
-    only_fields(c, path, &["order", "sources", "files"])?;
-    let uses = capability_use(c, path, ctx)?;
+fn list_capability(c: &WireCapability, path: &str) -> Check<ListCapability> {
+    only_fields(c, path, &["order", "sources", "files", "link"])?;
+    let uses = capability_use(c);
     let order = c
         .order
         .ok_or_else(|| invalid(format!("{path}.order"), "is required"))?;
+    if let Some(label) = &c.link {
+        non_empty(&format!("{path}.link"), label)?;
+    }
     Ok(ListCapability {
         uses,
         order,
         sources: c.sources.clone().unwrap_or_default(),
         files: c.files.clone().unwrap_or_default(),
+        link: c.link.clone(),
     })
 }
 

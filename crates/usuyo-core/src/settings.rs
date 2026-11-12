@@ -1,5 +1,6 @@
 //! 设置页的那几项：按机器的 `settings.json` 里的 `network.proxy`、`transforms.auto`，资料库的 `trashDays`，
-//! 时钟守卫拦下的回收站项。按机器的 `settings.json` 只在这里读写这两项，别的键原样留着；改了马上生效。
+//! 时钟守卫拦下的回收站项。按机器的 `settings.json` 只经这里的 [`read`]、[`write`]（方法的开关在 `methods`），
+//! 别的键原样留着；改了马上生效。
 
 use std::path::{Path, PathBuf};
 
@@ -17,7 +18,7 @@ fn settings_path(machine_root: &Path) -> PathBuf {
     machine_root.join("settings.json")
 }
 
-fn read(machine_root: &Path) -> Result<Map<String, Value>> {
+pub(crate) fn read(machine_root: &Path) -> Result<Map<String, Value>> {
     let path = settings_path(machine_root);
     match std::fs::read(&path) {
         Ok(b) => serde_json::from_slice(&b)
@@ -28,7 +29,7 @@ fn read(machine_root: &Path) -> Result<Map<String, Value>> {
 }
 
 /// 按机器的 `settings.json` 只经这里写：只有自己能读（代理地址可能带密码），先写临时文件再换名。
-fn write(machine_root: &Path, map: &Map<String, Value>) -> Result<()> {
+pub(crate) fn write(machine_root: &Path, map: &Map<String, Value>) -> Result<()> {
     let path = settings_path(machine_root);
     let mut bytes = serde_json::to_vec_pretty(map)?;
     bytes.push(b'\n');

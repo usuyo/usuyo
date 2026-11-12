@@ -44,30 +44,27 @@ upstream:
 |---|---|---|---|---|
 | `platforms` | 字符串数组 | 是 | 平台 id，取自 plugin-kit 里的平台列表（`douyin`、`xiaohongshu`、`bilibili`、`wechat-mp`、`wechat-channels`、`x`、`web`……）；新平台向 plugin-kit 提 PR 加名字。平台列表的每一项除了 id，还规定 `contentId` 的格式（正则）和规范链接的模板，例如 `douyin` 是十进制作品 ID，`bilibili` 用 BV 号、分 P 写成 `BV…:p2`；plugin-kit 为每个平台附一份共用的 `testdata/canonicalize.json`。同一平台的所有插件共用节奏和去重，所以 id 和 `contentId` 的写法都不能各起各的 | `[douyin]` |
 | `match` | 字符串数组 | `fetch.input` 含 `url` 时必填 | 粗筛链接用的 `host/path` glob，不含 scheme；`*.` 前缀匹配子域但不含裸域；最终身份由 `canonicalize` 判定（[02 §15.1](../research/02-adapter-ecosystems.md#151-声明与匹配)） | `["v.douyin.com/*", "www.douyin.com/video/*"]` |
-| `access` | 枚举 | 是 | 所有能力里最高的一层，见 [§2.4](#24-access-与-login) | `browser-session` |
-| `login` | 枚举 | 是 | 所有能力里最高的一档：`none` < `optional` < `required` | `required` |
-| `sites` | 对象数组 | 有登录时必填 | 会用到哪些账号，见 [§2.5](#25-登录站点-sites) | |
+| `sites` | 对象数组 | 有方法登录进 usuyo 时必填 | 会用到哪些账号，见 [§2.5](#25-登录站点-sites)；每一项都要有方法用它 | |
 | `visitors` | 对象数组 | 否 | 会用到哪些站点的访客身份（不是账号），见 [§2.5.1](#251-访客身份-visitors) | |
-| `capabilities` | 对象 | 是 | 能力名到能力声明的映射，见下表 | |
+| `methods` | 对象数组 | 是 | 这个平台的几种取法，没做的也列，见 [§2.3.1](#231-方法-methods)；至少一种做了 | |
 | `pacing` | 对象 | 否 | 按平台给的节奏建议：`batch`（`false` 表示只接受用户一条条收下）、`interval`（同一平台上两次调用的最短间隔）、`daily`（每天的调用次数上限）。宿主取同平台所有已装插件里最严的作默认值，用户可以改；计哪些调用见 [§3.1](fetch.md#31-运行器与节奏) | `{douyin: {batch: true, interval: 8s, daily: 300}}` |
 
-每个能力的声明：
+顶层没有 `access`、`login`、`capabilities`：写了的清单不合格，原因写明换成了 `methods`。界面上插件的那一层、那一档由宿主从做了的方法里取最高的（含 `perPlatform`）。
+
+每种方法的能力（`methods[].capabilities`）的声明：
 
 | 字段 | 适用 | 必填 | 含义 | 例子 |
 |---|---|---|---|---|
-| `access` | 全部 | 是 | 这个能力实际用到的那一层 | `public-web` |
-| `login` | 全部 | 是 | `none`、`optional`、`required` | `none` |
-| `sites` | 全部 | 有登录时必填 | 用到 `sites` 里的哪几个，写 `site` 值 | `[www.douyin.com]` |
-| `visitors` | 全部 | 否 | 用到 `visitors` 里的哪几个，写 `site` 值；和 `login` 无关，`login: none` 也可以写（[§2.5.1](#251-访客身份-visitors)） | `[www.example.com]` |
 | `timeout` | 全部 | 否 | 覆盖 [§3.4](fetch.md#34-超时与取消) 的默认总时长；获取插件只用这一处，不用 `permissions.limits.timeout` | `2h` |
-| `perPlatform` | 全部 | 否 | 多平台插件里某个平台走的路不同时，按平台覆盖 `access`、`login`、`sites` | `{bilibili: {access: private-api, login: optional}}` |
 | `outputs` | `fetch` | 是 | 能取到哪些东西，固定词表：`text`、`html`、`images`、`media:video`、`media:audio`、`subtitle`、`meta`、`comments` | `[text, images, media:video]` |
 | `input` | `fetch` | 否 | 接什么：`[url]`（默认）、`[ref]`（只接 `list` 返回的 `ref`，导入插件这样写）或 `[url, ref]` | `[ref]` |
 | `order` | `list` | 是 | `newest-first`（按加入时间从新到旧）或 `unordered`，决定跟着收怎么停（[§3.8](fetch.md#38-list-与跟着收)） | `newest-first` |
 | `sources` | `list` | 否 | 固定的来源，界面在登录前就能显示；运行时以 `sources` 子命令为准 | `[{source: "douyin:favorites", title: 我的收藏夹, action: favorite}]` |
 | `files` | `list` | 导入插件必填 | 能读的导出文件名 glob（[§3.9](fetch.md#39-从文件导入)） | `["twitter-*.zip"]` |
-| `interaction` | 全部 | 否，默认 `background` | 这次调用用户看不看得见：`background` 只读，不弹菜单、不改剪贴板、不抢焦点、不动指针、不占手机屏幕；`foreground` 是上面任何一样会发生。宿主只拿它排程和加锁（[§3.1](fetch.md#31-运行器与节奏)），不拦、不弹确认 | `foreground` |
+| `link` | `list` | 否 | 来源从你给的一条链接开始（[§2.3.1](#231-方法-methods)）：写导入页链接框上的那句。有它时 `sources` 带 `--link` 调用 | `收藏夹或个人空间的链接` |
 | `provider` | 全部 | 否，默认 `none` | 这个能力要不要模型：`none`、`optional`、`required`，含义同 [§2.9](#29-转换插件的字段)；不是 `none` 时经宿主代发（[§4.3](transform-export.md#43-模型与密钥由宿主代发)） | `optional` |
+
+能力里不再写 `access`、`login`、`sites`、`visitors`、`interaction`、`perPlatform`，这几项在方法上；写了的清单不合格，原因写明挪到了方法上。
 
 一个按 [06 §1.3](../research/06-platform-access-and-account-risk.md#13-混合路径视觉层拿链接公开页面取内容) 混合路径写的抖音插件，源清单是这样（cookie 名是示例；`install` 发版时生成，见 [§2.8](#28-安装与启动)）：
 
@@ -86,26 +83,39 @@ upstream:
     license: MIT
 platforms: [douyin]
 match: ["v.douyin.com/*", "www.douyin.com/video/*", "www.iesdouyin.com/share/video/*"]
-access: browser-session
-login: required
 sites:
   - site: www.douyin.com
     name: 抖音
     credential: browser-profile
     loginUrl: https://www.douyin.com/
     cookies: [sessionid]
-capabilities:
-  fetch:
+methods:
+  - id: share-page
+    name: 分享页
     access: public-web
     login: none
-    outputs: [text, images, media:video, meta]
-  list:
+    account: none
+    capabilities:
+      fetch:
+        outputs: [text, images, media:video, meta]
+  - id: favorites
+    name: 收藏夹
     access: browser-session
     login: required
+    account: in-usuyo
     sites: [www.douyin.com]
-    order: newest-first
-    sources:
-      - {source: "douyin:favorites", title: 我的收藏夹, action: favorite}
+    capabilities:
+      list:
+        order: newest-first
+        sources:
+          - {source: "douyin:favorites", title: 我的收藏夹, action: favorite}
+  - id: iphone
+    name: 手机镜像
+    built: false
+    access: vision-ui
+    login: required
+    account: own-phone
+    interaction: foreground
 pacing:
   douyin: {batch: true, interval: 8s, daily: 300}
 permissions:
@@ -128,32 +138,39 @@ run:
 <a id="231-方法-methods"></a>
 ### 2.3.1 方法 methods
 
-定了（11-12），代码在做；做完以前 [§2.3](#23-获取插件的字段) 的顶层 `capabilities` 还在用。
-
-一个平台一个插件，插件里有几种方法：同一样东西可以由不带账号的接口取，也可以由你浏览器里的脚本、登录进 usuyo 的会话、手机上的 App 取，层级和用不用账号各不相同。清单把它们一种一种列出来，没做的也列。获取插件有了 `methods` 以后，顶层不再写 `access`、`login`、`capabilities`（最高的一层由宿主从做了的方法里算）；`platforms`、`match`、`sites`、`visitors`、`pacing`、`permissions`、`run` 还在顶层。
+一个平台一个插件，插件里有几种方法：同一样东西可以由不带账号的接口取，也可以由你浏览器里的脚本、登录进 usuyo 的会话、手机上的 App 取，层级和用不用账号各不相同。清单把它们一种一种列出来，没做的也列。顶层不写 `access`、`login`、`capabilities`（最高的一层由宿主从做了的方法里算）；`platforms`、`match`、`sites`、`visitors`、`pacing`、`permissions`、`run` 在顶层。
 
 | 字段 | 必填 | 含义 | 例子 |
 |---|---|---|---|
-| `id` | 是 | 方法的名字，小写字母、数字、连字符，一个插件里不重复；调用时经 `--method` 传给插件 | `guest` |
+| `id` | 是 | 方法的名字，小写字母、数字、连字符，最多 64 字节，一个插件里不重复；调用时经 `--method` 传给插件 | `guest` |
 | `name` | 是 | 给人看的名字 | `访客接口` |
 | `built` | 否，默认 `true` | `false` 是声明了、还没做的：照样列出来，开不了，宿主不调 | `false` |
 | `access` | 是 | 这种方法用到的那一层（[§2.4](#24-access-与-login)） | `public-web` |
 | `login` | 是 | `none`、`optional`、`required` | `none` |
 | `account` | 是 | 账号在哪里被用到：`none`、`visitor`（访客身份，不是账号）、`own-browser`（只在你自己的浏览器里）、`own-phone`（只在你手机的 App 里）、`own-app`（只在你电脑的客户端里）、`in-usuyo`（登录进 usuyo）、`developer`（你申请的开发者凭据） | `own-browser` |
-| `sites` | 有登录时必填 | 用到顶层 `sites` 里的哪几个。宿主只把这几个站点的凭据交给这种方法 | `[x.com]` |
-| `visitors` | 否 | 用到顶层 `visitors` 里的哪几个 | |
-| `interaction` | 否，默认 `background` | 同 [§2.3](#23-获取插件的字段) 能力表里的那一项 | `foreground` |
-| `delivers` | 否 | `links`：这种方法不在插件进程里跑（浏览器脚本、扩展），由它把链接交给本机接口（[§5](delivery.md#5-投递接口)）。这时没有 `capabilities` | `links` |
-| `capabilities` | 做了、又没写 `delivers` 时必填 | 能力名到能力声明：`fetch`（`outputs`、`input`、`timeout`、`provider`）、`list`（`order`、`sources`、`files`、`timeout`）和别的能力，字段同 [§2.3](#23-获取插件的字段) 的能力表，去掉已经挪到方法上的 `access`、`login`、`sites`、`visitors`、`interaction` | |
-| `risk` | 否 | 记录到的一句情况和出处，`{text, source: {label, url}}`。只是信息，宿主不拿它拦 | |
+| `sites` | `account: in-usuyo` 又做了时必填 | 用到顶层 `sites` 里的哪几个。宿主只把这几个站点的凭据交给这种方法。只有 `account: in-usuyo` 的方法写得了登录站点；`own-phone`、`own-app` 的只能写 `credential: app` 的站点（宿主什么都不交，插件在 `health` 里报登录）；`login: none` 的不写；一种方法最多一个 `browser-profile` 站点 | `[www.bilibili.com]` |
+| `visitors` | `account: visitor` 又做了时必填 | 用到顶层 `visitors` 里的哪几个；和 `login` 无关 | `[www.xiaohongshu.com]` |
+| `perPlatform` | 否 | 多平台插件里某个平台走的路不同时，按平台覆盖这种方法的 `access`、`login`、`sites` | `{bilibili: {access: private-api, login: optional}}` |
+| `interaction` | 否，默认 `background` | 这次调用用户看不看得见：`background` 只读，不弹菜单、不改剪贴板、不抢焦点、不动指针、不占手机屏幕；`foreground` 是上面任何一样会发生。宿主只拿它排程和加锁（[§3.1](fetch.md#31-运行器与节奏)），不拦、不弹确认 | `foreground` |
+| `delivers` | 否 | `links`：这种方法不在插件进程里跑（浏览器脚本、扩展），由它把链接交给本机接口（[§5](delivery.md#5-投递接口)）。这时不能写 `capabilities` | `links` |
+| `capabilities` | 做了、又没写 `delivers` 时必填 | 能力名到能力声明：`fetch`、`list`、`unfavorite`，字段见 [§2.3](#23-获取插件的字段) 的能力表；做了的至少有 `fetch` 或 `list`。没做的可以写，写了也照样检查 | |
+| `risk` | 否 | 记录到的一句情况和出处，`{text, source: {label, url}}`，`url` 是 http(s)。只是信息，宿主不拿它拦 | |
 
-**开和关。** 每种方法在获取插件页上有自己的开关，记在按机器的 `settings.json`（`plugins.<插件 id>.methods.<方法 id>.enabled`）。没写时：`private-api`、`client-hook` 两层关着，其余开着；要登录的方法开着但要等登录以后才用得上。`built: false` 的没有开关。
+**开和关。** 每种做了的方法在获取插件页上有自己的开关，记在按机器的 `settings.json`（`plugins.<插件 id>.methods.<方法 id>.enabled`，[机器目录](../spec/machine.md#按机器的目录)）。没写时：`private-api`、`client-hook` 两层关着，其余开着；要登录的方法开着，但要等登录以后才用得上。`built: false` 的没有开关。`delivers: links` 的方法宿主不调，开关只记你的选择，关着时页上写它用不上。
 
-**宿主怎么选。** 取一条链接时，候选是 `match` 对得上的插件里做了的、开着的、这台机器上现在用得上的、有 `fetch` 的方法，先层级低的，同一层先不带账号的（`account` 照上表的顺序），调第一个。它的回答 `missing` 里还有东西时，往后找 `outputs` 里声明了那几样的方法，只要那几样（`--want`）再调，直到不缺或没有方法了；每次调用是一份快照，第一份是主快照。前一种方法回 `not-found`、`login-required`、`unsupported-input`、`upstream-changed` 时换下一种；回 `rate-limited`、`network` 时照节奏等，不换。`list` 的来源各属于一种方法，由用户在导入页选。`canonicalize` 不分方法。
+**宿主怎么选。** 取一条链接时，候选是 `match` 对得上的插件里做了的、开着的、这台机器上现在用得上的、`fetch` 接链接的方法：平台插件的在前，`platforms` 含 `web` 的在后；各自里先层级低的，同一层先不带账号的（`account` 照上表的顺序），再照插件的顺序和清单里写的顺序。调第一个，不给 `--want`。
 
-**这台机器上用不用得上。** 一种方法用得上，是做了、开着、要的登录和访客身份都在、[`health`](fetch.md#310-health) 里没有落在它身上的没过的检查。`health` 的 `checks[]` 每一项可以带 `methods`（方法 id 的数组），没过时只挡这几种方法；不带就是挡整个插件。检查只看本机：系统版本、要的程序和版本、设备连没连上、系统授权给没给、要的本机服务在不在。获取插件页上每种方法一行，写明用得上，或者缺什么（一句话），和上一次调用的结果。
+- **换下一种。** 前一种回 `rate-limited`、`network` 时照节奏等，这一轮不换；回 `cancelled` 停下；别的错（`not-found`、`login-required`、`visitor-required`、`unsupported-input`、`upstream-changed`、`blocked`、`dependency-missing`、`invalid-args`、`internal`，宿主记的 `timeout`、`crashed`、`invalid-output`、`profile-busy`）换下一种。停着的方法（限流、被拦、你点的「先别试」）不当候选：限流以后过了退避就试下一种，不等它的暂停到点。
+- **补缺。** 一种方法的回答 `missing` 里还有东西时，往后找 `outputs` 里声明了那几样的方法，只要那几样（`--want`）再调，直到不缺或没有方法了；通用网页一类不拿来补缺。没给 `--want` 时，`missing` 可以写这种方法的 `outputs` 以外的几样：这一条有、这种方法取不到（例如要另一种方法登录才取得到的视频），宿主据此去找（[§3.7](fetch.md#37-fetch-输出)）。补缺的那次失败了不算这一条失败，这一条照前面取到的存，缺的照写。
+- **快照。** 每次调用是一份快照。条目的图、画面、音轨、评论各从有它的最新一份快照来，转换（合起来能播、口播、画面上的字）也照它；原文和 `content.md` 跟着主快照（输出最多的那份，一样多取新的，[SPEC §1.2.1](../spec/library.md#121-manifestjson-v1)）。主快照说缺的、后来别的快照取到了，条目页就不再说缺。
+- 两次调用之间照平台的 `interval` 等，都计入节奏（[§3.1](fetch.md#31-运行器与节奏)）；要等一分钟以上就留到下一轮。
+- `list` 的来源各属于一种方法，由你在导入页选；`canonicalize`、`health` 不分方法。
 
-**试跑和失败。** 插件的错误回答可以带 `detail`：平台原样回答的开头，至多 4 KB，宿主照别的字段一样洗掉凭据。宿主把每次失败记进按机器目录的 `logs/fetch-failures.jsonl`（时间、插件、方法、链接的主机、错误码、`message`、`hint`、`detail`），获取插件页上每种方法能看到最近一次。
+**来源从链接开始。** 有的 `list` 方法不靠账号列你自己的，而是列一条链接指着的东西，例如一个公开的收藏夹或一个人的个人空间。这种方法的 `list` 写 `link`（导入页链接框上的那句）。导入页给一个链接框，宿主调 `sources --method <id> --link <链接>`（常驻模式是 `sources` 的 `link` 参数，[§3.12](fetch.md#312-常驻模式-serve)），插件把链接换成来源（一个收藏夹就是它自己，一个人就是他公开的几个收藏夹），你选一个照常开始导入。来源字符串要能不经这次调用就写出来（例如 `bilibili:fav-public:<收藏夹 id>`），`list` 只认它。链接认不出时回 `unsupported-input` 加一句 `hint`。链接不进 `match`：它不是一条内容。
+
+**这台机器上用不用得上。** 一种方法用得上，是做了、开着、`login: required` 时要的登录站点都存着且没过期、列了的访客身份都存着且没过期、[`health`](fetch.md#310-health) 里没有落在它身上的没过的检查。`health` 的 `checks[]` 每一项可以带 `methods`（方法 id 的数组），没过时只挡这几种方法；不带就是挡整个插件；`health` 本身调不成（崩了、超时、回答不合格）也挡整个插件。检查只看本机：系统版本、要的程序和版本、设备连没连上、系统授权给没给、要的本机服务在不在。宿主把 `health` 的结果留 10 分钟，「现在再试」时清掉。一种方法都用不上时，条目记排在最前那种的原因（你关掉的不算原因）：要登录的照 `login-required`，要访客身份的照 `visitor-required`，别的照 `unsupported-input`，一句话写明是哪种方法、缺什么。获取插件页上每种方法一行，写明用得上，或者缺什么（一句话），和上一次调用的结果（[本机接口](../spec/local-api.md#本机接口第-2-层11-11-照代码)）。
+
+**试跑和失败。** 插件的错误回答可以带 `detail`：平台原样回答的开头，至多 4 KB（[§3.3](fetch.md#33-信封与错误码)）。宿主照别的字段一样洗掉交出去的凭据，截到 4 KB，多行照留；它只进失败日志，不进 `jobs.db`、事件和本机接口。宿主把每次失败（取内容、列一页、列来源）记进按机器目录的 `logs/fetch-failures.jsonl`，一次一行：`at`、`plugin`、`method`、`host`（链接的主机，没有链接时不写）、`code`、`message`、`hint`、`detail`；文件 0600，过 1 MiB 时改名成 `fetch-failures.1.jsonl`（盖掉更早的那份）重新开始。每种方法上一次调用的时间、成没成、错误码和一句话记在 `jobs.db`，获取插件页上看得到。
 
 <a id="24-access-与-login"></a>
 ### 2.4 access 与 login
@@ -172,14 +189,14 @@ run:
 
 规则：
 
-- **按能力分别声明，顶层取最高。** 列表走登录侧、单条走公开页这类混合路径要分开写；顶层 `access`、`login` 是所有能力（含 `perPlatform`）里最高的一档，用于列表展示。
+- **按方法分别声明，顶层由宿主算。** 列表走登录侧、单条走公开页这类混合路径写成两种方法；界面上插件的那一层、那一档是做了的方法（含 `perPlatform`）里最高的，宿主自己算，清单不写。
 - **按实际默认路径填，不按宣传填。** 一条路径用到多层时取最高的一层；上游工具有不同模式时，按插件实际调用的模式填。
 - **读界面的插件怎么填。** 只读无障碍树、控件树或截图，动作走无障碍接口或系统输入的，填 `vision-ui`：读用户日常浏览器里渲染出来的网页、经 ADB 或手机上的程序读安卓控件树再发输入，都算；开后台虚拟屏、以 shell 身份起助手进程不改变层级。经 CDP、远程调试、扩展或页面脚本读 DOM 或请求的，填 `browser-session`。带调试端口重启官方客户端、在它的渲染进程里执行脚本（例如对抖音、B站这类 Electron 客户端用 agent-desktop 的 `launch --cdp`），或注入、Hook 目标 App 的进程、读它的私有数据，填 `client-hook`（[调研 10](../research/10-desktop-and-android-agents.md)）。
 - **它们是给用户挑选用的标签，不是闸门。** 宿主不据此推风险档、不拦截、不弹单独的确认；运行器只按用户排的顺序试（[§3.1](fetch.md#31-运行器与节奏)）。
-- **`login: none` 的能力拿不到任何平台账号凭据**：宿主不传 cookie、站点存储和浏览器资料目录（[§6](credentials.md#6-凭据)）。插件自己的密钥设置照 [§2.11](#211-插件设置-settings) 另行传入，访客身份照 [§2.5.1](#251-访客身份-visitors) 另行传入，都和 `login` 无关。`optional` 表示没有凭据也能跑；用户登录过也不带，见下。
+- **`login: none` 的方法拿不到任何平台账号凭据**：宿主不传 cookie、站点存储和浏览器资料目录（[§6](credentials.md#6-凭据)）。插件自己的密钥设置照 [§2.11](#211-插件设置-settings) 另行传入，访客身份照 [§2.5.1](#251-访客身份-visitors) 另行传入，都和 `login` 无关。`optional` 表示没有凭据也能跑；用户登录过也不带，见下。
 - **新版本调高 `access` 或 `login`** 时，客户端在更新说明里标出，不停用这个版本（[§8.5](distribution.md#85-添加来源更新与权限扩大)）。
 
-`optional` 表示没有凭据也能跑；不带账号能拿到的一律不带，用户登录过也不带，账号只用在非它不可的那几样上。
+`optional` 表示没有凭据也能跑；不带账号能拿到的一律不带，用户登录过也不带，账号只用在非它不可的那几样上：只有某一样要账号时，把那一样写成另一种方法（例如视频号的 `feed-info` 不带账号取作者、描述、封面，`yuanbao` 用元宝的登录只取视频）。
 
 <a id="25-登录站点-sites"></a>
 ### 2.5 登录站点 sites
@@ -199,32 +216,34 @@ run:
 
 ```yaml
 platforms: [wechat-channels]
-access: browser-session
-login: required
 sites:
   - site: yuanbao.tencent.com
     name: 腾讯元宝
     credential: browser-profile
     loginUrl: https://yuanbao.tencent.com/
     cookies: ["<登录后才有的 cookie 名>"]
-capabilities:
-  fetch:
+methods:
+  - id: yuanbao-page
+    name: 元宝页内换视频
     access: browser-session
     login: required
+    account: in-usuyo
     sites: [yuanbao.tencent.com]
-    outputs: [text, media:video, meta]
+    capabilities:
+      fetch:
+        outputs: [media:video]
 requires:
   runtime: ["chrome>=136"]
 ```
 
-一个能力最多声明一个 `credential: browser-profile` 的站点，因为一次调用只交出一个资料目录。这个目录（`${PROFILE}`）不用在 `permissions.fs` 里声明：`sites` 本身就是声明，宿主只在用到这个站点的那次调用（或那个常驻进程，[§3.12](fetch.md#312-常驻模式-serve)）里放行读写。
+一种方法最多声明一个 `credential: browser-profile` 的站点，因为一次调用只交出一个资料目录。这个目录（`${PROFILE}`）不用在 `permissions.fs` 里声明：`sites` 本身就是声明，宿主只在用到这个站点的那次调用（或那个常驻进程，[§3.12](fetch.md#312-常驻模式-serve)）里放行读写。
 
 视频号借元宝登录态的插件在 README 里多写一句「元宝可以用微信登录，这时这个元宝账号和你的微信号关联」；两边是否共用风控没查到，不写进界面。
 
 <a id="251-访客身份-visitors"></a>
 ### 2.5.1 访客身份 visitors
 
-有的站点不登录也要一份访客身份才取得稳：任何没登录的访客打开一页，站点都会给一组 cookie。它不是账号，所以不写在 `sites` 里：宿主另开一个不登录的窗口，打开 `url`，存下页面自己生成的 cookie，经 `USUYO_VISITOR` 交给列了它的能力（[§3.2](fetch.md#32-调用约定)、[§6](credentials.md#6-凭据)）。
+有的站点不登录也要一份访客身份才取得稳：任何没登录的访客打开一页，站点都会给一组 cookie。它不是账号，所以不写在 `sites` 里：宿主另开一个不登录的窗口，打开 `url`，存下页面自己生成的 cookie，经 `USUYO_VISITOR` 交给列了它的方法（[§3.2](fetch.md#32-调用约定)、[§6](credentials.md#6-凭据)）。
 
 | 字段 | 类型 | 必填 | 含义 | 例子 |
 |---|---|---|---|---|
@@ -235,22 +254,24 @@ requires:
 | `domains` | 字符串数组 | 否 | 和 [§2.5](#25-登录站点-sites) 的 `domains` 同一套规则：和 `site` 同一个可注册域名，不能是公共后缀 | `[".example.com"]` |
 
 ```yaml
-access: public-web
-login: none
 visitors:
   - site: www.example.com
     name: 例子
     url: https://www.example.com/
-capabilities:
-  fetch:
+methods:
+  - id: page
+    name: 公开页
     access: public-web
     login: none
+    account: visitor
     visitors: [www.example.com]
-    outputs: [text, images, meta]
+    capabilities:
+      fetch:
+        outputs: [text, images, meta]
 ```
 
 - **和同一主机的账号是两回事。** 访客身份和账号各存一份（钥匙串里分开的两项），登录窗口和访客窗口各用一份网页数据；以后登录这个主机，不会和访客身份混在一起。只列了访客身份的调用拿不到账号的 cookie，只列了 `sites` 的调用拿不到访客身份。
-- **能力里的每一项都要在顶层 `visitors` 里声明**，否则清单不合格。`login: none` 的能力可以列访客身份，照样不能列 `sites`。
+- **方法里的每一项都要在顶层 `visitors` 里声明**，否则清单不合格。`login: none` 的方法可以列访客身份，照样不能列 `sites`。
 - 页面要访客身份而没有交来、或交来的页面仍不收时，插件回 `visitor-required`（不是 `login-required`），在 `message` 里分清是哪一种；界面据此写「要先取访客身份」或「换一份」，不会让人去找一个不存在的登录。
 - 访客身份只存 cookie，不存 localStorage；`credentialsUpdate` 只写回账号站点（[§6](credentials.md#6-凭据)），不改访客身份。
 - 界面只说有没有、什么时候存下的、最早哪个 cookie 什么时候过期；不出现在登录站点的列表里，也不算「还没登录」。
@@ -258,14 +279,19 @@ capabilities:
 <a id="26-账号写操作"></a>
 ### 2.6 账号写操作
 
-对平台账号做写操作的能力要单独声明。v1 只定义一个：`unfavorite`，在平台上取消收藏（[回答表 D3](../answers.md)）。
+对平台账号做写操作的能力要单独声明，写在用到那个账号的方法的 `capabilities` 里。v1 只定义一个：`unfavorite`，在平台上取消收藏（[回答表 D3](../answers.md)）。
 
 ```yaml
-capabilities:
-  unfavorite:
+methods:
+  - id: favorites
+    name: 收藏夹
     access: browser-session
     login: required
+    account: in-usuyo
     sites: [www.douyin.com]
+    capabilities:
+      list: {order: newest-first}
+      unfavorite: {}
 ```
 
 - 默认关。用户在插件详情里打开后才会被调用；每次批量执行前，宿主列出要取消的条目让用户确认。
@@ -290,7 +316,7 @@ capabilities:
 | `gpu` | 布尔 | `false` | 要不要 GPU | `false` |
 | `devices` | 枚举数组 | `[]` | 设备类权限，见下 | `[ios-device, clipboard]` |
 | `limits.memory` | 大小 | `1GiB` | 内存上限，超了宿主杀进程 | `4GiB` |
-| `limits.timeout` | 时长 | 按调用 | 转换、导出插件单次 `run` 的总时长；获取插件改用能力里的 `timeout`（[§3.4](fetch.md#34-超时与取消)） | `4h` |
+| `limits.timeout` | 时长 | 按调用 | 转换、导出插件单次 `run` 的总时长；获取插件改用方法里能力的 `timeout`（[§3.4](fetch.md#34-超时与取消)） | `4h` |
 
 占位符：
 
@@ -318,7 +344,7 @@ capabilities:
 | `clipboard` | 读写剪贴板，例如「分享 → 复制链接」后读链接 |
 
 - `accessibility`、`screen-capture`、`clipboard`、`audio-capture` 指电脑本机。安卓上的读屏、截图、剪贴板都经 `adb`，不另声明这几项。
-- 不为虚拟屏、合成输入另加取值：开不开后台虚拟屏是插件的做法，做成插件设置（[§2.11](#211-插件设置-settings)）；会不会动指针、弹菜单、占屏幕，由能力的 `interaction` 说（[§2.3](#23-获取插件的字段)）。
+- 不为虚拟屏、合成输入另加取值：开不开后台虚拟屏是插件的做法，做成插件设置（[§2.11](#211-插件设置-settings)）；会不会动指针、弹菜单、占屏幕，由方法的 `interaction` 说（[§2.3.1](#231-方法-methods)）。
 - 插件推到手机上的文件、装的 App 或输入法、改的设置，要在 README 列出，并在进程退出前还原。
 
 各平台能强制到什么程度见 [§7](isolation.md#7-权限与隔离)。

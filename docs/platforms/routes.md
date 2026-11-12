@@ -28,7 +28,7 @@
 - 包的工具里发帖、点赞、关注、私信的命令，取法不调：命令行只调表里写的子命令；MCP 只调读的工具，写的工具在上游的权限配置里关掉（[协议 §9.3](../protocol/wrapping.md#93-包装-mcp-服务)）；手机流程只点白名单里的字（[phone.md §5](phone.md#5-流程永远不做的事)）。
 - GPL 系的工具由你安装，取法以独立进程或本机 HTTP 调用；MIT、Apache、BSD、Unlicense 的可以进资产，第三方程序只取上游官方 release，锁 sha256（[协议 §2.8](../protocol/manifest.md#28-安装与启动)、[§9.6](../protocol/wrapping.md#96-许可证)、[ADR-003 §8](../decisions/ADR-003-plugins.md#8-gpl-工具)）。非商业或源码可见许可的工具不调，那几行写「等法律意见」。没有 release 二进制的 MIT 项目，把用到的那一段移植成自己的代码，保留版权声明。
 - `client-hook` 的取法放 `usuyo-fetch-hook/<平台>`（[CLAUDE.md](../../CLAUDE.md) 原则 1），列在每张表最后。
-- 一个仓库里几种取法，清单现在一个能力只能声明一份（[协议 §2.3](../protocol/manifest.md#23-获取插件的字段)）；一个仓库能写几份 `fetch`、`list` 的写法，协议还没有。
+- 一个仓库里几种取法，清单里一种取法一个方法，`取法` 一栏就是方法的 `id`（[协议 §2.3.1](../protocol/manifest.md#231-方法-methods)）；没做的也列，`client-hook` 那几行在另一个组织的仓库里。
 
 <a id="2-先做的十个"></a>
 ## 2. 先做的十个
@@ -73,8 +73,8 @@
 
 | 取法 | 拿到什么 | 账号 | 层级 | 做成什么样 | 你要装或给的 | 已有 | 记录到的情况 | 不用账号能试 |
 |---|---|---|---|---|---|---|---|---|
-| `feed-info` | 单条：作者、描述、封面 | 不要 | `public-web` | 自己写，移植 ParseHub 的 `wxchannels.py`（MIT）（[wechat-channels.md §3.4](wechat-channels.md#34-插件做成的样子)） | — | 做了；2026-11-12 对真链接跑通 | 匿名接口给的字段在收紧（[wechat-channels.md §3.2](wechat-channels.md#32-取单条)） | 能 |
-| `yuanbao` | 单条视频 | 要在 usuyo 里登录腾讯元宝 | `session-api` | 同上，元宝换临时凭证 | 登录元宝 | 做了；账号只用在视频这一样，清单要等 `accountOutputs`（[README 第 1 节](README.md#1-怎么读这一页)） | 公开部署的解析服务被大量调用后，元宝账号被封（[ltaoo #495](https://github.com/ltaoo/wx_channels_download/issues/495)） | 不能 |
+| `feed-info` | 单条：作者、描述、封面、发布时间 | 不要 | `public-web` | 自己写，移植 ParseHub 的 `wxchannels.py`（MIT）（[wechat-channels.md §3.4](wechat-channels.md#34-插件做成的样子)）；视频它取不到，总在 `missing` 里写视频 | — | 做了；11-12 拆成单独的方法，当天对真链接跑通（只调它，存下描述、封面、作者，视频记缺） | 匿名接口给的字段在收紧（[wechat-channels.md §3.2](wechat-channels.md#32-取单条)） | 能 |
+| `yuanbao` | 单条：只取视频 | 要在 usuyo 里登录腾讯元宝 | `session-api` | 同上，元宝换临时凭证；`feed-info` 说缺视频时宿主只要视频调它 | 登录元宝 | 做了；11-12 拆成单独的方法，元宝的凭据只交给它；没在真平台跑过 | 公开部署的解析服务被大量调用后，元宝账号被封（[ltaoo #495](https://github.com/ltaoo/wx_channels_download/issues/495)） | 不能 |
 | `userscript` | 存过的：收藏、赞过、看过的 | 账号只在你自己的浏览器里 | `browser-session` | 照页面公开的脚本读（2026-11-12，没登录）：网页版 `channels.weixin.qq.com/web/pages/account/like`、`…/account/history` 的列表不经 fetch、XHR、WebSocket 出页面，都走 `WeixinJSBridge.invoke("finderH5ExtTransfer")`，这个桥只有微信桌面客户端注入；页面没有扫码登录，普通浏览器里落到「当前版本暂不支持」。条目里没有分享码，要再经桥调 `FinderGetFeedH5Url` 才换得到 `weixin.qq.com/sph/` 链接 | 脚本管理器和探针脚本 | 做了探针（`userscript/usuyo-sph-probe.user.js`，只报结构、不带内容，不联网）；正式脚本没有：照代码看普通浏览器里做不了，等你跑一次探针确认 | 同 `iphone` 一行的协议措辞。在客户端里读这个桥就是改客户端，归 `client-hook` | 不能 |
 | `iphone` | 存过的：「赞和收藏」 | 账号在你手机的微信里 | `vision-ui` | 自己写的流程，iPhone 驱动（[phone.md §7.1](phone.md#71-视频号赞和收藏)） | 同小红书 `iphone` | 没有；分享菜单里有「复制链接」，复制的东西 Mac 拿得到（用户 11-12） | 微信协议 8.2.1.6 禁止用第三方软件读界面、自动操作；处罚记录在 PC 微信 UI 自动化和安卓系统级注入上，镜像没有报告（[06 §1.2](../research/06-platform-access-and-account-risk.md#12-视觉层的风险从哪里来)） | 不能 |
 | `mac` | 存过的：「赞和收藏」 | 账号在你电脑的微信里 | `vision-ui` | 自己写的流程，资产里带 agent-desktop（Apache-2.0，v1.2.0，2026-11-05） | usuyo 的辅助功能 | 没有；等你看 Mac 微信里有没有「赞和收藏」（[调研 10 §0](../research/10-desktop-and-android-agents.md#0-结论) 问题 4） | 视频号窗口由 `WeChatAppEx` 承载，树里有什么没核；Mac 微信 4.1 在 macOS 26 上树只剩空按钮 | 不能 |
@@ -92,7 +92,7 @@
 | 取法 | 拿到什么 | 账号 | 层级 | 做成什么样 | 你要装或给的 | 已有 | 记录到的情况 | 不用账号能试 |
 |---|---|---|---|---|---|---|---|---|
 | `view` | 单条：标题、简介、封面、分 P、低清音视频 | 不要 | `public-web` | 自己写（[bilibili.md §4.4](bilibili.md#44-插件做成的样子)） | — | 做了 | 2026-06 起缺指纹参数的部分接口回 412（[BiliNote #397](https://github.com/JefferyHcool/BiliNote/issues/397)） | 能 |
-| `favorites-public` | 存过的：公开的收藏夹（给收藏夹或个人空间的链接） | 不要 | `public-web` | 自己写：和 `favorites` 同两个接口，不带 cookie。2026-11-12 不带账号实测：`x/v3/fav/folder/created/list-all?up_mid=` 列出这个人公开的收藏夹，`x/v3/fav/resource/list?media_id=` 分页回每条的 `bvid` 和收藏时间；内容由 `view` 取 | — | 没有；等清单里的 `methods`（[BUILD 011](../BUILD.md#011-更多平台)） | 只有公开的收藏夹列得到；设成私密的和稍后再看要 `favorites` 或 `userscript` | 能 |
+| `favorites-public` | 存过的：公开的收藏夹（给收藏夹或个人空间的链接） | 不要 | `public-web` | 自己写：和 `favorites` 同两个接口，不带 cookie。2026-11-12 不带账号实测：`x/v3/fav/folder/created/list-all?up_mid=` 列出这个人公开的收藏夹，`x/v3/fav/resource/list?media_id=` 分页回每条的 `bvid` 和收藏时间；内容由 `view` 取。导入页给链接框，`sources --link` 把个人空间换成他公开的收藏夹、把收藏夹链接换成它自己（[协议 §2.3.1](../protocol/manifest.md#231-方法-methods)） | — | 做了（11-12）；当天对一个公开收藏夹列了第一页，20 条，有下一页 | 只有公开的收藏夹列得到；设成私密的和稍后再看要 `favorites` 或 `userscript`；那一页 20 条按收藏时间从旧到新排，所以清单写 `order: unordered`，不拿 `--since` 提前停；别的收藏夹是不是也这样没核 | 能 |
 | `favorites` | 存过的：收藏夹、稍后再看 | 要在 usuyo 里登录 | `session-api` | 自己写，不签名的接口 | 扫码登录 B站 | 做了 | 一例大会员被冻结，因果不明（[yutto #452](https://github.com/yutto-dev/yutto/issues/452)） | 不能 |
 | `userscript` | 存过的：收藏夹、稍后再看 | 账号只在你自己的浏览器里 | `browser-session` | 自己写，照 [bilibili-favorites-exporter](https://github.com/ayasa520/bilibili-favorites-exporter)（MIT，2025-09-09 后没推送）只读页面自己拿回的数据，交 `/v1/batches` | 脚本 | 做了（脚本 0.1.0，11-12）；没在真浏览器里跑过，稍后再看的回答形状没实测 | 同类脚本（X）调研里没有处罚记录 | 不能 |
 | `yutto` | 单条：高清音视频、字幕 | 要在 usuyo 里登录 | `session-api` | 包 [yutto](https://github.com/yutto-dev/yutto)（GPL-3.0，v2.3.1，2026-08-28；`uv tool install yutto`）：`yutto <链接> --subtitle-only --no-danmaku --auth-file <0600 的临时文件>`，画面、声音分两次 `--video-only`、`--audio-only`；输出目录参数和下完是否调 ffmpeg，命令待核 | 安装 yutto | 没有 | B站 2026 年给接口文档、SDK、下载器的维护者发律师函，点名登录态、签名鉴权的适配（[06 §16.3](../research/06-platform-access-and-account-risk.md#163-下架停更与法律风险)） | 不能 |
@@ -107,7 +107,8 @@
 
 | 取法 | 拿到什么 | 账号 | 层级 | 做成什么样 | 你要装或给的 | 已有 | 记录到的情况 | 不用账号能试 |
 |---|---|---|---|---|---|---|---|---|
-| `tweet` | 单条：正文、图片、视频、引用 | 不要 | `public-web` | 自己写（[x.md §3](x.md#3-取单条)） | — | 做了 | 访客令牌在有的出口被拒（[gallery-dl #9505](https://github.com/mikf/gallery-dl/issues/9505)） | 能 |
+| `guest` | 单条：正文、图片、视频、引用 | 不要 | `public-web` | 自己写，访客令牌调帖子接口（[x.md §3](x.md#3-取单条)） | — | 做了；11-12 经系统代理对真帖子跑通一次 | 访客令牌在有的出口被拒（[gallery-dl #9505](https://github.com/mikf/gallery-dl/issues/9505)）；被拒回 `blocked`，宿主换 `embed`；限流回 `rate-limited`，宿主等一轮再换 | 能 |
+| `embed` | 单条：正文、图片、视频、引用；长帖只有前一段 | 不要 | `public-web` | 自己写，嵌入用的 syndication 接口（[x.md §3](x.md#3-取单条)） | — | 做了；11-12 从 `guest` 里拆出来；没单独在真平台跑过 | — | 能 |
 | `userscript` | 存过的：书签、喜欢 | 账号只在你自己的浏览器里 | `browser-session` | 自己写，照 twitter-web-exporter（MIT，v1.4.3） | 脚本 | 做了 | 没有使用者被锁的报告（[06 §16.2](../research/06-platform-access-and-account-risk.md#162-issue-里的账号问题)） | 不能 |
 | `archive` | 存过的：喜欢，可能有书签 | 不要（导出时你登录 X） | `official-export` | 自己写，照 birdclaw（MIT，v0.17.0）读 zip | 一份 X 归档 | 做了 | 归档里有没有书签没核（[x.md §2](x.md#2-列出你存过的)） | 不能（要你的文件） |
 | `xurl` | 存过的：书签、喜欢 | 开发者账号加你的 OAuth 授权 | `official-export` | 包 [xurl](https://github.com/xdevplatform/xurl)（MIT）：`GET /2/users/:id/bookmarks`、`GET /2/users/:id/liked_tweets` | 开发者账号，按量付费的套餐 | 没有 | 价格和上限没核 | 不能 |

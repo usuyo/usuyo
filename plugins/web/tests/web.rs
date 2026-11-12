@@ -211,6 +211,7 @@ impl Fixture {
         let url = url::Url::parse(&format!("{}{path}", self.base)).unwrap();
         let plugin = self.host.candidates(&url)[0];
         let request = FetchRequest {
+            method: "page".into(),
             input: FetchInput::Url(url),
             want: None,
             input_file: None,
@@ -232,6 +233,7 @@ fn run(url: &str, want: Option<&str>, settings: Option<&str>) -> Run {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_usuyo-plugin-web"));
     cmd.args(["fetch", url, "--out"])
         .arg(out.path())
+        .args(["--method", "page"])
         .env_remove("USUYO_SETTINGS");
     if let Some(want) = want {
         cmd.args(["--want", want]);

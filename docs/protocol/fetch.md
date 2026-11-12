@@ -7,8 +7,8 @@
 宿主怎么用获取插件，插件作者要知道的部分：
 
 - **身份**：收下一个链接时，宿主在 `match` 命中的插件上按用户排的顺序调 `canonicalize`，取第一个 `match: true` 的结果作为身份（[SPEC §0.4](../spec/conventions.md#04-id)）。`identity.contentId` 要符合平台列表里的格式（[§2.3](manifest.md#23-获取插件的字段)），不符合的按 `invalid-output` 处理（平台列表还没有，宿主现在只查非空、不超过 256 字节、没有控制字符）。
-- **顺序**：每个平台按用户排的顺序依次调 `fetch`，失败换下一个，全部失败停在 `link` 并记下各自的原因。默认顺序见本节末尾。不论 `access` 高低都照这个顺序换。平台插件和 `platforms` 含 `web` 的插件都命中时，先把平台插件全部试完，再轮到 `web` 插件。
-- **暂停单个插件**：插件返回 `rate-limited` 时，宿主在 `retryAfter` 之内（没给就 15 分钟）不再在这个平台上调它；返回 `blocked` 时，暂停一小时，用户在插件那一行点「现在再试」可以更早去掉，这一条不因这次暂停重试。`retryAfter` 最多算一小时（更长的按一小时）；`platforms` 含 `web` 的插件按链接的主机暂停，别的按平台；`jobs.db` 打开时丢掉比现在晚一小时以上的旧暂停。别的插件照常按顺序试，包括用同一个账号的插件：平台的限流常按接口分开计，换一个插件、换一个接口可能还取得到（推断）。
+- **顺序**：取一条链接时，宿主把 `match` 命中的插件里能用的方法排好一种种试，什么时候换下一种、什么时候补缺，见 [§2.3.1](manifest.md#231-方法-methods)。平台插件和 `platforms` 含 `web` 的插件都命中时，先把平台插件的方法试完，再轮到 `web` 插件。都没取到停在 `link`，记下排在最前的原因。
+- **暂停单种方法**：一种方法返回 `rate-limited` 时，宿主在 `retryAfter` 之内（没给就 15 分钟）不再在这个平台上调它；返回 `blocked` 时，暂停一小时，用户在插件那一行点「现在再试」可以更早去掉，这一条不因这次暂停重试。`retryAfter` 最多算一小时（更长的按一小时）；`platforms` 含 `web` 的插件按链接的主机暂停，别的按平台；`jobs.db` 打开时丢掉比现在晚一小时以上的旧暂停。别的方法照常按顺序试，包括同一个插件里的、用同一个账号的：平台的限流常按接口分开计，换一个接口可能还取得到（推断）。「先别试」「现在再试」管整个插件的所有方法。
 - **完整度只升不降**：宿主给每个快照记下实际拿到的输出集合（`outputs` 词表里的值）。新快照算不算升级、用户改了「只留文字」之类的设置后要不要再取，比的是这个集合，不比 `full`、`partial` 这两个字样。失败不降级。
 
 **节奏。** 每个平台一组上限，该平台所有获取插件共用（目的是不被限流、能一直用）：
@@ -26,7 +26,7 @@
 
 | 情况 | 宿主怎么做 |
 |---|---|
-| 插件回 `ok: true`、`completeness: partial` | 记下这个快照，每个成功的快照都保留。顺序里后面的插件 `outputs` 能补上 `missing` 的，宿主可以带 `--want=<missing>` 去试它，后面的插件只取缺的部分。默认自动接着试，见本节末尾。插件拿到一部分就回 `partial`，不要回错误 |
+| 插件回 `ok: true`、`completeness: partial` | 记下这个快照，每个成功的快照都保留。顺序里后面的方法 `outputs` 能补上 `missing` 的，宿主带 `--want=<那几样>` 接着调它（[§2.3.1](manifest.md#231-方法-methods)）。插件拿到一部分就回 `partial`，不要回错误 |
 | 插件回 `ok: true`、`completeness: link` | 按 `unsupported-input` 处理，换下一个 |
 | 插件自报的 `completeness`、`missing` 和实际输出对不上 | 宿主照 [§3.7](#37-fetch-输出) 的规则重算，以宿主算的为准，并记日志 |
 | 退出码 `2` 且没有信封 | 记 `invalid-args`，当 bug 记下，换下一个 |
@@ -34,7 +34,7 @@
 | `match` 命中的插件都没回 `match: true`，且有一个 `canonicalize` 因 `network` 或 `timeout` 失败（例如离线时收下的短链） | 不交给 `web` 插件。宿主拿这条链接本身算 `web:` 身份，马上建只有链接的条目（`completeness: link`，还没有快照；之后的快照照记 `inputUrl`），重试记进本机 `jobs.db`（[SPEC §1.1](../spec/library.md#11-目录树)）；之后再调 `canonicalize`，拿到平台身份就照 [SPEC §0.4](../spec/conventions.md#04-id) 并过去，`web-` id 留作别名；跟着收的不建，这一次不算跑完，联网后整次重跑 |
 | 常驻进程崩溃 | 记 `crashed`，下一次调用时重启；连续崩溃 3 次就停用这个插件，直到用户在插件那一行点「继续」 |
 
-默认顺序：先试不用账号的，再试用账号的；同一类里按 `access` 从低到高，相同的按安装顺序；用户拖动排过的平台照用户排的。拿到一部分时默认接着试：顺序里后面能补上 `missing` 的插件，宿主带 `--want=<missing>` 接着调，直到拿全或试完，每个成功的快照都留。
+默认顺序：先层级低的，同一层先不带账号的，再照安装顺序和清单里写的顺序（[§2.3.1](manifest.md#231-方法-methods)）。用户拖动排序还没做。
 
 你正一条条收下时碰到 `blocked`，宿主打开 usuyo 里的窗口显示那一页，你当场完成验证后接着收这一条；跟着收和批量导入时不弹，平台那一行写「需要你完成一次验证」，点了再打开那一页。不自动识别验证码。
 
@@ -43,15 +43,15 @@
 
 ```
 <command> canonicalize <url>
-<command> fetch <url-or-ref> --out <dir> [--want text,images,media:video]
-<command> sources
-<command> list <source> [--cursor <c>] [--since <time>]
+<command> fetch <url-or-ref> --out <dir> --method <id> [--want text,images,media:video]
+<command> sources --method <id> [--link <url>]
+<command> list <source> --method <id> [--cursor <c>] [--since <time>]
 <command> health [--probe]
-<command> unfavorite <url> --source <source>
+<command> unfavorite <url> --source <source> --method <id>
 <command> serve
 ```
 
-`<command>` 是 `run.command` 展开后的命令。各子命令的输入输出见 [§3.5](#35-canonicalize-与身份) 到 [§3.12](#312-常驻模式-serve)。
+`<command>` 是 `run.command` 展开后的命令。`--method` 是清单里的方法 id（[§2.3.1](manifest.md#231-方法-methods)），宿主只调做了、不是 `delivers` 的方法里声明了这个能力的；插件照它分派，认不出的方法回 `invalid-args`。`canonicalize`、`health` 不分方法。`--link` 只给 `list` 写了 `link` 的方法。参数的位置照上面写（`--out` 紧跟在输入后面），plugin-kit 的 `fetch::Call` 读它们。各子命令的输入输出见 [§3.5](#35-canonicalize-与身份) 到 [§3.12](#312-常驻模式-serve)。
 
 **环境变量。** 宿主清空环境后只传下面这些，加上 `permissions.env` 声明的变量（哪些已经传了见 [§3.13](#313-宿主和-plugin-kit-现在做到的11-11)）：
 
@@ -67,9 +67,9 @@
 | `USUYO_SETTINGS` | 有设置时 | 非密钥设置的 JSON 文件路径（[§3.13](#313-宿主和-plugin-kit-现在做到的11-11)） |
 | `USUYO_SECRETS` | 插件声明了 `secret: true` 的设置、且用户填了值时，和 `login` 无关 | 一个 0600 的临时文件，内容只有 `{"<key>": "<value>"}`，调用结束即删 |
 | `USUYO_INPUT` | 导入调用（[§3.9](#39-从文件导入)） | `${INPUT}`，导入文件的副本 |
-| `USUYO_CREDENTIALS` | 这次调用要带账号、且用户已登录时（[§2.4](manifest.md#24-access-与-login)） | 凭据 JSON 文件路径（[§6](credentials.md#6-凭据)） |
+| `USUYO_CREDENTIALS` | 这次的方法 `login` 不是 `none`、列了站点、且用户已登录时（[§2.4](manifest.md#24-access-与-login)）；只有这种方法列了的站点 | 凭据 JSON 文件路径（[§6](credentials.md#6-凭据)） |
 | `USUYO_COOKIES_TXT` | 同上，`credential: cookies` | 同一批 cookie 的 Netscape 格式文件，给 yt-dlp 一类工具的 `--cookies` 用；可写，调用结束后丢弃 |
-| `USUYO_VISITOR` | 这次的能力列了 `visitors`、且存着那份访客身份时，和 `login` 无关（[§2.5.1](manifest.md#251-访客身份-visitors)） | 访客身份的 JSON 文件路径，形状和 `USUYO_CREDENTIALS` 一样，`source` 是 `visitor-window`、没有 localStorage；0600，调用结束即删 |
+| `USUYO_VISITOR` | 这次的方法列了 `visitors`、且存着那份访客身份时，和 `login` 无关（[§2.5.1](manifest.md#251-访客身份-visitors)） | 访客身份的 JSON 文件路径，形状和 `USUYO_CREDENTIALS` 一样，`source` 是 `visitor-window`、没有 localStorage；0600，调用结束即删 |
 | `USUYO_BROWSER_PROFILE` | `credential: browser-profile` | `${PROFILE}` |
 | `USUYO_PROVIDER` | 能力的 `provider` 不是 `none`、用户配了模型时（[§4.3](transform-export.md#43-模型与密钥由宿主代发)） | 这次调用的代发参数，JSON 文件路径，内容是 `{baseUrl, token, model}` |
 | `ADB_SERVER_SOCKET` | 声明了 `devices: [adb]` | 宿主管的 adb 服务，`tcp:127.0.0.1:<端口>`（[§7](isolation.md#7-权限与隔离)）；adb 认这个变量 |
@@ -135,6 +135,7 @@
 | `site` | 否 | 和哪个登录站点有关 |
 | `reason` | 否 | `not-found` 的细分：`deleted`、`private`、`paid`、`region`、`link-expired` |
 | `needs` | `dependency-missing` 必填 | 缺的东西一次列全，例如 `["runtime:yt-dlp", "setting:endpoint", "device:ios-device"]`。不叫 `missing`，免得和 fetch 输出里「缺的输出」混在一起 |
+| `detail` | 否 | 平台原样回答的开头，至多 4096 字节，可以多行；接口改了、状态码不对、回答读不出时带上，给修插件的人看。宿主洗掉凭据后只记进失败日志（[§2.3.1](manifest.md#231-方法-methods)） |
 
 `needs` 的每一项是「前缀:值」：
 
@@ -160,10 +161,10 @@
 | `not-found` | 内容不存在、已删除或当前身份看不到；能分清时填 `reason` | 换下一个。只有全部是 `not-found` 且 `reason` 都是 `deleted` 时，条目才记「平台上已看不到」；有 `link-expired` 时提示用户重新分享或重新导出链接；其余记「取不到」并列出原因 |
 | `login-required` | 没登录，或登录已过期 | 换下一个；插件那一行提示重新登录 `site` |
 | `visitor-required` | 站点要一份访客身份（[§2.5.1](manifest.md#251-访客身份-visitors)）：没有交来，或交来的页面仍不收 | 换下一个；界面写成要取或要换访客身份，不说登录；和 `login-required` 一样不自己暂停 |
-| `rate-limited` | 被平台限流 | 换下一个；这个插件在这个平台暂停到 `retryAfter` |
-| `blocked` | 平台出现验证页、风控提示或拦截 | 换下一个；这个插件在这个平台暂停一小时，用户点「现在再试」可更早解开（[§3.1](#31-运行器与节奏)） |
+| `rate-limited` | 被平台限流 | 这一轮不换，照节奏等；这种方法在这个平台暂停到 `retryAfter`，下一轮跳过它 |
+| `blocked` | 平台出现验证页、风控提示或拦截 | 换下一个；这种方法在这个平台暂停一小时，用户点「现在再试」可更早解开（[§3.1](#31-运行器与节奏)） |
 | `upstream-changed` | 页面或接口改版，解析不出 | 换下一个；记进插件的最近失败 |
-| `network` | 网络不通、DNS、TLS 或插件自己的请求超时 | 换下一个 |
+| `network` | 网络不通、DNS、TLS 或插件自己的请求超时 | 这一轮不换，退避后再试 |
 | `dependency-missing` | 缺运行时、外部程序、设备、设置、系统授权、本机服务，或要用户处理的状态 | 换下一个；界面列出 `needs` |
 | `invalid-args` | 参数不对，多半是宿主或插件的 bug | 换下一个；记 bug |
 | `cancelled` | 收到取消 | 不再换 |
@@ -188,7 +189,7 @@
 | `unfavorite` | 30 s |
 | 转换的 `run` | 3600 s；清单写了 `permissions.limits.timeout` 时换成它 |
 
-- 两种计时同时生效。**总时长**：默认照上表，获取插件用能力里的 `timeout` 改，转换、导出插件用 `permissions.limits.timeout` 改；用户可以在设置里再加长，不设硬上限，下一个大视频、在 CPU 上转写几小时的播客都放得下（宿主现在把能力里超过 2 小时的 `timeout` 按 2 小时算，设置还没有）。**无进度时长**：插件发过 `progress` 之后，120 s 内没有新的 `progress` 就算超时，用来发现卡住的调用；从没发过 `progress` 的调用只受总时长约束。
+- 两种计时同时生效。**总时长**：默认照上表，获取插件用方法里能力的 `timeout` 改，转换、导出插件用 `permissions.limits.timeout` 改；用户可以在设置里再加长，不设硬上限，下一个大视频、在 CPU 上转写几小时的播客都放得下（宿主现在把能力里超过 2 小时的 `timeout` 按 2 小时算，设置还没有）。**无进度时长**：插件发过 `progress` 之后，120 s 内没有新的 `progress` 就算超时，用来发现卡住的调用；从没发过 `progress` 的调用只受总时长约束。
 - 插件发出 `waiting` 后，两种计时都暂停，直到下一个 `progress` 事件，最长等 10 分钟（一次调用里所有 `waiting` 的时间加起来算）；等用户在弹出的窗口里过验证时不会被杀。
 - 取消与超时：宿主先发 SIGTERM（Windows 上向进程组发 `CTRL_BREAK_EVENT`），插件应在 5 秒内收尾退出，能输出 `cancelled` 信封就输出；5 秒后宿主杀掉整个进程组（Windows 上终止 Job Object），插件启动的浏览器一并结束。
 - 被取消或超时的调用，输出目录整个丢掉。
@@ -279,7 +280,7 @@
 | `evidence.status` | 只在 HTTP 类请求时填 |
 | 其余字段 | `kind`、`title`、`author`、`publishedAt`、`text`、`html`、`images`、`platformTags`、`completeness`、`missing`、`evidence.fetchedAt`；时间一律 RFC 3339 带偏移，宿主把 `publishedAt` 换成 UTC 存，偏移不是 `Z` 的另存 `publishedAtOriginal` |
 
-- `completeness` 和 `missing`：`missing` 只写这一条有、这次想要（`--want`）却没交来的；这一条本来就没有的那一样（只有字的帖子没有图和视频）不是缺，不写。`full` 是没有缺的，`partial` 是有缺的，`link` 是只认出了身份。哪一样这一条本来就没有，只有插件知道，宿主不照「想要的 − 交来的」猜；一样可以交来一部分、还缺一部分（九张图下到六张），照样写进 `missing`，原因写进 `missingReason`。宿主只去掉 `missing` 里不在 `--want` 里的，再照剩下的定 `completeness`；按 `text`、`html`、`images`、`media[].kind` 实际交来了哪些看，想要的一样都没交来算 `link`。比较完整度时比的是实际拿到的输出集合（[§3.1](#31-运行器与节奏)）。
+- `completeness` 和 `missing`：`missing` 只写这一条有、这次想要（`--want`）却没交来的；没给 `--want` 是什么都想要，这时可以写这种方法 `outputs` 以外的几样（这一条有、这种方法取不到），宿主据此找能补的方法（[§2.3.1](manifest.md#231-方法-methods)）；这一条本来就没有的那一样（只有字的帖子没有图和视频）不是缺，不写。`full` 是没有缺的，`partial` 是有缺的，`link` 是只认出了身份。哪一样这一条本来就没有，只有插件知道，宿主不照「想要的 − 交来的」猜；一样可以交来一部分、还缺一部分（九张图下到六张），照样写进 `missing`，原因写进 `missingReason`。宿主只去掉 `missing` 里不在 `--want` 里的（没给 `--want` 时一样都不去），再照剩下的定 `completeness`；按 `text`、`html`、`images`、`media[].kind` 实际交来了哪些看，想要的一样都没交来算 `link`。比较完整度时比的是实际拿到的输出集合（[§3.1](#31-运行器与节奏)）。
 - `text` 是平台原文的文字，宿主据此生成 `content.md`：只读副本，总照主快照重写；原样在 `raw/`（[SPEC §1.2.3](../spec/library.md#123-contentmd-和各栏)）。
 - 数组字段总是出现，可以为空。
 
@@ -287,7 +288,7 @@
 ### 3.8 list 与跟着收
 
 ```
-<command> sources
+<command> sources --method favorites
 ```
 
 ```json
@@ -298,7 +299,7 @@
 ```
 
 ```
-<command> list "bilibili:fav:50948568" --cursor "eyJwbiI6Mn0" --since 2026-10-31T00:00:00Z
+<command> list "bilibili:fav:50948568" --method favorites --cursor "eyJwbiI6Mn0" --since 2026-10-31T00:00:00Z
 ```
 
 ```json
@@ -312,7 +313,7 @@
 }
 ```
 
-- `source` 是插件自己定的字符串，建议写 `<platform>:<kind>[:<id>]`；`file:` 开头的留给导入（[§3.9](#39-从文件导入)）。`sources` 列出用户能选的来源，要登录时也要先登录。
+- `source` 是插件自己定的字符串，建议写 `<platform>:<kind>[:<id>]`；`file:` 开头的留给导入（[§3.9](#39-从文件导入)）。`sources` 列出用户能选的来源，要登录时也要先登录。每个来源属于调它的那种方法，宿主记下，之后的 `list` 照这种方法调。`list` 写了 `link` 的方法，`sources` 带 `--link <url>`，回这条链接指着的来源（[§2.3.1](manifest.md#231-方法-methods)）。
 - 每页由宿主单独调用，页与页之间按节奏等待；不传 `--cursor` 是第一页，`nextCursor: null` 是最后一页。游标是插件私有的不透明字符串。
 - 条目字段：`url` 或 `ref` 至少一个；`identity`、`title`、`author`、`publishedAt`、`action`（`favorite`、`like`、`share`、`view`、`unknown`）、`actedAt` 能给就给，时间 RFC 3339 带偏移。拿不到加入时间时 `actedAt` 留空，不用抓取时间冒充（[02 §15.5](../research/02-adapter-ecosystems.md#155-批量导入与同步)）。
 - 只有 `url` 的条目，宿主按 [§3.1](#31-运行器与节奏) 的顺序去取内容；带 `ref` 的条目，宿主回到这个插件调 `fetch <ref>`。`ref` 由插件自己定，对宿主不透明；宿主为每个 `ref` 记下它来自哪个插件、哪个 `source`，调 `fetch <ref>` 时按这个 `source` 设好 `${INPUT}` 一类的上下文。
@@ -329,17 +330,19 @@
 导入插件读用户已经导出的文件（`access: official-export`、`login: none`、`network.mode: none`），复用 `list` 和 `fetch`：
 
 ```yaml
-capabilities:
-  list:
+methods:
+  - id: archive
+    name: 官方归档
     access: official-export
     login: none
-    order: unordered
-    files: ["twitter-*.zip"]
-  fetch:
-    access: official-export
-    login: none
-    input: [ref]
-    outputs: [text, images, media:video, meta]
+    account: none
+    capabilities:
+      list:
+        order: unordered
+        files: ["twitter-*.zip"]
+      fetch:
+        input: [ref]
+        outputs: [text, images, media:video, meta]
 permissions:
   fs:
     read: ["${INPUT}"]
@@ -348,7 +351,7 @@ permissions:
 ```
 
 ```
-USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip"
+USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip" --method archive
 ```
 
 ```json
@@ -378,12 +381,16 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip"
   "protocol": 1,
   "version": "0.3.1",
   "upstream": [{"name": "chrome", "version": "…"}],
-  "login": [{"site": "www.douyin.com", "state": "present"}],
-  "checks": [{"name": "chrome", "ok": true, "message": "找到 Chrome"}]
+  "login": [{"site": "www.douyin.com", "state": "verified"}],
+  "checks": [
+    {"name": "chrome", "ok": true, "message": "找到 Chrome"},
+    {"name": "yt-dlp", "ok": false, "message": "没找到 yt-dlp", "methods": ["ytdlp"]}
+  ]
 }
 ```
 
-- `ready`：所有必要检查都通过、能接调用；登录缺失不影响 `ready`，只影响要登录的能力。
+- `ready`：所有挡整个插件的检查都通过、能接调用；登录缺失不影响 `ready`，只影响要登录的方法。
+- `checks[].methods`：这一项只关这几种方法（方法 id）；没过时只挡它们。不写是整个插件（[§2.3.1](manifest.md#231-方法-methods)）。`login[].state` 取 `present`、`missing`、`expired`、`verified`、`rejected`。形状见 `crates/usuyo-plugin/schema/health-output.schema.json`；plugin-kit 的 `protocol::FetchHealth::new(version).check(name, ok, message, methods)` 拼它。
 - 登录状态谁来判断：
   - `credential: cookies`、`browser-profile` 的站点，`present`（`sites.cookies` 都在且没过期）、`missing`、`expired` 由宿主按 `sites.cookies` 自己算，插件不填；不带 `--probe` 的 `health` 也拿不到凭据。
   - `credential: app` 的站点（微信这类）宿主判断不了，由插件在 `login[]` 里报。
@@ -420,17 +427,19 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip"
 |---|---|---|
 | `canonicalize` | `{input}` | 同 [§3.5](#35-canonicalize-与身份) 的信封去掉 `ok` |
 | `fetch` | `{input, out, want, context}` | 同 [§3.7](#37-fetch-输出) |
-| `sources` | `{context}` | 同 [§3.8](#38-list-与跟着收) |
+| `sources` | `{link, context}` | 同 [§3.8](#38-list-与跟着收)；`link` 只给写了 `list.link` 的方法 |
 | `list` | `{source, cursor, since, context}` | 同上 |
 | `health` | `{probe}` | 同 [§3.10](#310-health) |
 | `unfavorite` | `{input, source, context}` | 同 [§3.11](#311-unfavorite) |
 
+`context.method` 是这次的方法 id，对应一次一进程时的 `--method`；`health` 没有。
+
 ```json
-{"jsonrpc":"2.0","id":3,"method":"list","params":{"source":"douyin:favorites","cursor":null,"since":null,"context":{"credentials":"/private/var/folders/xx/usuyo-proc-07/cred/3/credentials.json","cookiesTxt":null,"browserProfile":"/Users/me/Library/Application Support/usuyo/profiles/www.douyin.com","settings":null,"secrets":null,"input":null}}}
+{"jsonrpc":"2.0","id":3,"method":"list","params":{"source":"douyin:favorites","cursor":null,"since":null,"context":{"method":"favorites","credentials":"/private/var/folders/xx/usuyo-proc-07/cred/3/credentials.json","cookiesTxt":null,"browserProfile":"/Users/me/Library/Application Support/usuyo/profiles/www.douyin.com","settings":null,"secrets":null,"input":null}}}
 ```
 
-- `context` 里是这一次调用的文件路径，对应一次一进程时的环境变量：`credentials` ↔ `USUYO_CREDENTIALS`、`cookiesTxt` ↔ `USUYO_COOKIES_TXT`、`browserProfile` ↔ `USUYO_BROWSER_PROFILE`、`settings` ↔ `USUYO_SETTINGS`、`secrets` ↔ `USUYO_SECRETS`、`input` ↔ `USUYO_INPUT`、`provider` ↔ `USUYO_PROVIDER`（这一个是代发参数本身，不是路径）。这些路径都在进程的暂存目录里（[§7.1](isolation.md#71-常驻进程的路径)），凭据和密钥文件在这次响应之后删除。`HOME`、代理等进程级的变量在启动时给定。
-- **按站点集合分进程。** `permissions` 按插件声明，沙箱按进程生效，凭据按能力发。所以宿主按「这次调用用到的站点集合」分别起常驻进程，沙箱也按这个集合生成：`login: none` 的能力只发给不带站点的那个进程。抖音的例子里，`fetch` 和 `list` 各一个进程，`list` 那个进程里开着带登录的浏览器，`fetch` 那个进程碰不到它。
+- `context` 里是这一次调用的方法（`method`）和文件路径，文件路径对应一次一进程时的环境变量：`credentials` ↔ `USUYO_CREDENTIALS`、`cookiesTxt` ↔ `USUYO_COOKIES_TXT`、`browserProfile` ↔ `USUYO_BROWSER_PROFILE`、`settings` ↔ `USUYO_SETTINGS`、`secrets` ↔ `USUYO_SECRETS`、`input` ↔ `USUYO_INPUT`、`provider` ↔ `USUYO_PROVIDER`（这一个是代发参数本身，不是路径）。这些路径都在进程的暂存目录里（[§7.1](isolation.md#71-常驻进程的路径)），凭据和密钥文件在这次响应之后删除。`HOME`、代理等进程级的变量在启动时给定。
+- **按站点集合分进程。** `permissions` 按插件声明，沙箱按进程生效，凭据按方法发。所以宿主按「这次调用用到的站点集合」分别起常驻进程，沙箱也按这个集合生成：`login: none` 的方法只发给不带站点的那个进程。抖音的例子里，`fetch` 和 `list` 各一个进程，`list` 那个进程里开着带登录的浏览器，`fetch` 那个进程碰不到它。
 - **资料目录的交接。** 带 `browser-profile` 站点的常驻进程从第一次用到这个目录起持有它的锁，调用之间可以让浏览器开着。别的进程要用同一个目录时，宿主先让持有它的进程退出，再交出去（[§6](credentials.md#6-凭据)）。
 - 失败返回 JSON-RPC `error`：`code: -32000`，`data` 是 [§3.3](#33-信封与错误码) 的错误对象。
 - 宿主同一时间只向一个进程发一个请求；节奏照 [§3.1](#31-运行器与节奏)。常驻进程正忙时，`canonicalize` 改用一次一进程的方式调用，不排在它后面。
@@ -443,6 +452,8 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip"
 
 照 `crates/usuyo-plugin`、`crates/usuyo-core` 写。和上面不一样的以这里为准。
 
+- **方法**（11-12）：清单只认 `methods`（[§2.3.1](manifest.md#231-方法-methods)），旧的顶层 `access`、`login`、`capabilities` 和能力里的 `access`、`login`、`sites`、`visitors`、`interaction`、`perPlatform` 都拒，原因写明换成了什么。挑方法、换下一种、补缺、开关、这台机器上用得上、`health` 的 10 分钟缓存、失败日志都照 [§2.3.1](manifest.md#231-方法-methods) 做了；暂停按方法记，「先别试」「现在再试」管整个插件。plugin-kit 的 `fetch::Call` 读子命令和参数，`protocol::FetchHealth` 拼 `health` 的回答。用户拖动排序没做。
+
 - **找插件**：按机器目录的 `plugins/<owner>/<repo>/<版本>/usuyo-plugin.yaml`（内核可以配几个根目录，同一个 id 以先找到的为准；开发版另把 web 插件放进 `dev-plugins/builtin/web/<版本>/`），同一个插件只用最高版本，最高版本不合格整个不加载，不退回旧版本；`id`、`version` 要和目录对上。清单里不认识的字段只记警告。签名和来源证明还不查（[§8.3](distribution.md#83-校验与来源证明)）。只有一次一进程的调用，`serve` 还没做。
 - **环境变量**：先清空，再放 `permissions.env` 里列的、宿主自己环境里有的，再放宿主设的（同名的以宿主为准，清单也不许列它们，[§2.7](manifest.md#27-权限-permissions)）。宿主设：`USUYO_PROTOCOL=1`、`USUYO_PLUGIN_DIR`、`USUYO_CACHE_DIR`（按机器目录的 `cache/plugins/<owner>/<repo>/`）、`USUYO_CALL_ID`（UUIDv7）、`USUYO_LOCALE`、导入时的 `USUYO_INPUT`、`HOME`、`XDG_CONFIG_HOME`、`XDG_CACHE_HOME`、`TMPDIR`、`TMP`、`TEMP`、`PATH`（`${TMP}/bin` 加系统目录）。工作目录是 `${TMP}`，stdin 是空的。
 - **`USUYO_SETTINGS`**：按机器 `settings.json` 里 `plugins.<插件 id>.settings` 有值时，宿主把它写成这次调用文件夹里的 `settings.json`，变量指向它；没有就不设。
@@ -452,9 +463,9 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip"
 - **`USUYO_PROXY`**（11-12）：现在交的是用户的代理，本机代理做出来以后改成指向本机代理、用户的代理由它转发（上面的「网络出口」）。路线是按机器设置 `network.proxy`：`system`（没写时）、`direct`、或一个代理地址。`system` 在 macOS 上读 `scutil --proxy`（两秒内，结果留一分钟），先取 https 的，再 SOCKS，再 http 的；别的系统暂时读环境变量；读不到就直连，记一条日志。只有清单里有网络权限的插件拿到这个变量；宿主自己下模型走同一条路。
 - **还没传的**：`USUYO_BROWSER_PROFILE`、`USUYO_PROVIDER`、`ADB_SERVER_SOCKET`、`ANDROID_SERIAL`、`HTTP_PROXY` 一类的代理变量。本机代理和沙箱（[§7](isolation.md#7-权限与隔离)）都还没做；插件的出站现在靠 plugin-kit 的客户端自己把关（[§10.1](plugin-kit.md#101-plugin-kit-的-http-客户端11-11)）。
 - **调用文件夹**：资料库的 `.usuyo/tmp/usuyo-call-<UUIDv7>-<随机>/`，里面 `tmp/`、`tmp/home/`、`tmp/bin/`，`fetch` 另有 `out/`；用完整个删掉，崩溃留下的在下次打开库时清掉。
-- **时长**：`canonicalize` 10 s、`fetch` 300 s、`sources` 30 s、`list` 每页 60 s；发过 `progress` 以后 120 s 没有新的算卡住；一次调用里 `waiting` 加起来最多 600 s，等的时候另两个时钟停；能力的 `timeout` 最多按 2 小时算。超时或取消先给进程组 SIGTERM，5 秒后 SIGKILL；正常退出后也给进程组发一次 SIGKILL，留下的子进程一起结束。Windows 上只结束这一个进程（还没有 Job Object）。
+- **时长**：`canonicalize` 10 s、`fetch` 300 s、`sources` 30 s、`list` 每页 60 s、`health` 10 s；发过 `progress` 以后 120 s 没有新的算卡住；一次调用里 `waiting` 加起来最多 600 s，等的时候另两个时钟停；能力的 `timeout` 最多按 2 小时算。超时或取消先给进程组 SIGTERM，5 秒后 SIGKILL；正常退出后也给进程组发一次 SIGKILL，留下的子进程一起结束。Windows 上只结束这一个进程（还没有 Job Object）。
 - **stdout、stderr**：stdout 最多 32 MiB，超了 `invalid-output`；stderr 留最后 200 行，每行最多 8 KiB；解析不了的 `@usuyo ` 行忽略。
-- **信封里的字**：标题、作者的 `name`、`platformId`、`url`，错误的 `message`、`hint`、`site`，`missingReason`、`evidence.site`，`list` 条目的标题和作者，`sources` 的标题：各截到 1024 字节（按字符边界），控制字符（含换行）换成空格。`platformTags` 最多 64 个，每个截到 100 字节。正文 `text` 不动。这些是截断，不拒。
+- **信封里的字**：错误的 `detail` 洗掉凭据后截到 4096 字节，多行照留。标题、作者的 `name`、`platformId`、`url`，错误的 `message`、`hint`、`site`，`missingReason`、`evidence.site`，`list` 条目的标题和作者，`sources` 的标题：各截到 1024 字节（按字符边界），控制字符（含换行）换成空格。`platformTags` 最多 64 个，每个截到 100 字节。正文 `text` 不动。这些是截断，不拒。
 - **会拒的**：插件给的链接（`identity.url`、`resolvedUrl`、`list` 的 `items[].url`）超过 4096 字节或有控制字符；`contentId` 空、超过 256 字节或有控制字符；身份的 `platform` 不在清单的 `platforms` 里；`comments` 不是 `comments.json`；同一个文件引用两次、引用的文件不在；输出目录不合 [§3.6](#36-fetch-与输出目录)（最多 10,000 项，默认 8 GiB）；插件报宿主才用的码（`timeout`、`crashed`、`invalid-output`、`profile-busy`）；`dependency-missing` 不带 `needs`。都记 `invalid-output`。
 - **完整度**：宿主照 `--want` 和实际输出重算，和插件报的不一样记警告；算出来是 `link` 按 `unsupported-input`。
 - **暂停**：`rate-limited` 按 `retryAfter`，没给 15 分钟，最多一小时；`blocked` 一小时；通用网页插件按主机暂停，别的按平台（[§3.1](#31-运行器与节奏)）。重试按 30 秒乘 4 的次方退后，最多 6 小时、6 次。

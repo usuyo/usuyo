@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "HealthOutput",
+  "description": "获取插件 `health` 的结果（§3.10）。只看本机，不向平台发请求（`--probe` 除外）。",
+  "type": "object",
+  "properties": {
+    "checks": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/MethodCheck"
+      }
+    },
+    "login": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/LoginReport"
+      }
+    },
+    "ok": {
+      "const": true
+    },
+    "protocol": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "ready": {
+      "description": "所有必要检查都通过、能接调用；登录缺失不影响它。",
+      "type": "boolean"
+    },
+    "upstream": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/UpstreamVersion"
+      }
+    },
+    "version": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "ok",
+    "ready",
+    "protocol",
+    "version"
+  ],
+  "$defs": {
+    "LoginReport": {
+      "description": "一个站点的登录，插件报的：`credential: app` 的站点，或 `--probe` 核对的结果。",
+      "type": "object",
+      "properties": {
+        "site": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/LoginReportState"
+        }
+      },
+      "required": [
+        "site",
+        "state"
+      ]
+    },
+    "LoginReportState": {
+      "type": "string",
+      "enum": [
+        "present",
+        "missing",
+        "expired",
+        "verified",
+        "rejected"
+      ]
+    },
+    "MethodCheck": {
+      "description": "一项本机检查（§3.10）。`methods` 是它挡的方法；不写是挡整个插件。",
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "methods": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "name": {
+          "type": "string"
+        },
+        "ok": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "ok"
+      ]
+    },
+    "UpstreamVersion": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ]
+    }
+  }
+}

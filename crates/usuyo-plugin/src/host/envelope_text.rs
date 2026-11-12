@@ -3,7 +3,8 @@
 //! 这些字会进 manifest、地图、`jobs.db` 和日志；往里走的代码不再查。
 
 use crate::protocol::{
-    Author, CallFailure, FetchOutput, Health, ListPage, MAX_PAUSE, RunResult, SourceInfo,
+    Author, CallFailure, FetchHealth, FetchOutput, Health, ListPage, MAX_PAUSE, RunResult,
+    SourceInfo,
 };
 
 /// 标题、作者、原因、提示这类一行的字段最多多少字节。
@@ -20,6 +21,11 @@ fn line(s: &mut String, max: usize) {
             .map(|c| if c.is_control() { ' ' } else { c })
             .collect();
     }
+    cut(s, max);
+}
+
+/// 截到 `max` 字节，不切开字符。
+fn cut(s: &mut String, max: usize) {
     if s.len() > max {
         let mut end = max;
         while !s.is_char_boundary(end) {
@@ -44,10 +50,18 @@ fn author(a: &mut Option<Author>) {
 }
 
 /// 插件报的错。`retryAfter` 也在这里封顶：一个页面给的 `Retry-After` 不能让取内容停很久。
+/// `detail` 是平台原样回答的开头，多行照留，只截到 4 KB（凭据在这之前已经洗掉）。
 pub(super) fn failure(f: &mut CallFailure) {
     line(&mut f.message, LINE_BYTES);
     opt_line(&mut f.hint);
-    opt_line(&mut f.site);
+    if let Some(site) = &mut f.site {
+        let mut s = site.to_string();
+        line(&mut s, LINE_BYTES);
+        *site = s.into();
+    }
+    if let Some(d) = &mut f.detail {
+        cut(d, CallFailure::DETAIL_BYTES);
+    }
     if let Some(secs) = &mut f.retry_after {
         *secs = (*secs).min(MAX_PAUSE.as_secs());
     }
@@ -89,6 +103,17 @@ pub(super) fn run(r: &mut RunResult) {
             line(codec, TAG_BYTES);
         }
     }
+}
+
+/// 获取插件 `health` 的各项检查：同下。
+pub(super) fn fetch_health(h: &mut FetchHealth) {
+    h.checks.truncate(TAGS);
+    for check in &mut h.checks {
+        line(&mut check.name, TAG_BYTES);
+        opt_line(&mut check.message);
+        check.methods.truncate(TAGS);
+    }
+    h.login.truncate(TAGS);
 }
 
 /// `health` 的各项检查：最多 64 项，名字和说明各一行。

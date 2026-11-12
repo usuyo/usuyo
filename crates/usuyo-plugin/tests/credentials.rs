@@ -71,12 +71,12 @@ JSON
 esac
 "#;
 
-/// `fetch_login` 是 fetch 能力的 `login`；list 总要登录。
+/// `fetch_login` 是取单条的方法 `get` 的 `login`；列的方法 `saved` 总要登录。
 fn manifest(id: &str, site: &str, fetch_login: &str, extra: &str) -> String {
     let fetch_sites = if fetch_login == "none" {
-        String::new()
+        "\n    account: none".to_owned()
     } else {
-        format!("\n    sites: [{site}]")
+        format!("\n    account: in-usuyo\n    sites: [{site}]")
     };
     format!(
         r#"protocol: 1
@@ -88,8 +88,6 @@ license: MIT
 maintainers: [someone]
 platforms: [example]
 match: ["example.com/*"]
-access: session-api
-login: required
 sites:
   - site: {site}
     name: 站点
@@ -98,16 +96,23 @@ sites:
     cookies: [sid]
     domains: [".{domain}"]
 {extra}
-capabilities:
-  fetch:
+methods:
+  - id: get
+    name: 取单条
     access: session-api
     login: {fetch_login}{fetch_sites}
-    outputs: [text, meta]
-  list:
+    capabilities:
+      fetch:
+        outputs: [text, meta]
+  - id: saved
+    name: 列出存过的
     access: session-api
     login: required
+    account: in-usuyo
     sites: [{site}]
-    order: newest-first
+    capabilities:
+      list:
+        order: newest-first
 permissions:
   fs: {{write: ["${{OUT}}"]}}
 run:
@@ -127,24 +132,30 @@ license: MIT
 maintainers: [someone]
 platforms: [example]
 match: ["example.com/*"]
-access: public-web
-login: none
 visitors:
   - site: www.example.com
     name: 站点
     url: https://www.example.com/
     cookies: [vid]
     domains: [".example.com"]
-capabilities:
-  fetch:
+methods:
+  - id: get
+    name: 访客取单条
     access: public-web
     login: none
+    account: visitor
     visitors: [www.example.com]
-    outputs: [text, meta]
-  list:
+    capabilities:
+      fetch:
+        outputs: [text, meta]
+  - id: saved
+    name: 列出
     access: public-web
     login: none
-    order: newest-first
+    account: none
+    capabilities:
+      list:
+        order: newest-first
 permissions:
   fs: {write: ["${OUT}"]}
 run:
@@ -260,6 +271,7 @@ impl Fixture {
 
 fn fetch_request() -> FetchRequest {
     FetchRequest {
+        method: "get".into(),
         input: FetchInput::Url(url::Url::parse("https://example.com/p/1").unwrap()),
         want: None,
         input_file: None,
@@ -374,6 +386,7 @@ async fn values_are_scrubbed_from_errors_and_stderr() {
         .list(
             f.plugin("fake/a"),
             ListRequest {
+                method: "saved".into(),
                 source: "example:favorites".into(),
                 cursor: None,
                 since: None,
@@ -407,7 +420,7 @@ async fn values_are_scrubbed_from_host_made_errors() {
     f.login();
     let e = f
         .host
-        .sources(f.plugin("fake/a"), &CallOptions::default())
+        .sources(f.plugin("fake/a"), "saved", None, &CallOptions::default())
         .await
         .unwrap_err();
     let PluginError::Call { failure, .. } = &e else {
@@ -555,6 +568,7 @@ async fn the_visitor_reaches_only_calls_that_list_it() {
         .list(
             f.plugin("fake/visitor"),
             ListRequest {
+                method: "saved".into(),
                 source: "example:favorites".into(),
                 cursor: None,
                 since: None,
@@ -647,6 +661,7 @@ async fn visitor_values_are_scrubbed_and_foreign_cookies_refused() {
         .fetch(
             f.plugin("fake/visitor"),
             FetchRequest {
+                method: "get".into(),
                 input: FetchInput::Url(url::Url::parse("https://example.com/fail").unwrap()),
                 want: None,
                 input_file: None,

@@ -25,8 +25,8 @@ cat <<JSON
 JSON
 "#;
 
-const NO_MATCH: &str =
-    r#"if [ "$1" = canonicalize ]; then echo '{"ok": true, "match": false}'; exit 0; fi"#;
+const NO_MATCH: &str = r#"if [ "$1" = canonicalize ]; then echo '{"ok": true, "match": false}'; exit 0; fi
+if [ "$1" = health ]; then echo '{"ok": true, "ready": true, "protocol": 1, "version": "1.0.0"}'; exit 0; fi"#;
 
 struct Fixture {
     tmp: TempDir,
@@ -59,13 +59,15 @@ license: MIT
 maintainers: [someone]
 platforms: [{platforms}]
 match: ["{matches}"]
-access: public-web
-login: none
-capabilities:
-  fetch:
+methods:
+  - id: page
+    name: 公开页
     access: public-web
     login: none
-    outputs: [text, html, images, meta]
+    account: none
+    capabilities:
+      fetch:
+        outputs: [text, html, images, meta]
 permissions:
   fs: {{write: ["${{OUT}}"]}}
 run:
@@ -568,8 +570,8 @@ async fn a_pause_saved_before_the_cap_does_not_hold_the_queue() {
     db.execute("UPDATE fetch_jobs SET due_at = 101794421686988", [])
         .unwrap();
     db.execute(
-        "INSERT INTO pauses (plugin, platform, until_at) VALUES
-         ('fake/web', 'web', 101794421686988), ('fake/web', 'example.test', NULL)",
+        "INSERT INTO pauses (plugin, method, platform, until_at) VALUES
+         ('fake/web', 'page', 'web', 101794421686988), ('fake/web', 'page', 'example.test', NULL)",
         [],
     )
     .unwrap();

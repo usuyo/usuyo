@@ -33,8 +33,8 @@ pub use transform::{
 
 use crate::PluginError;
 use crate::protocol::{
-    CallFailure, Canonicalized, CapabilityUse, Completeness, ErrorCode, FetchInputKind,
-    FetchOutput, FetchSpec, Identity, ListPage, MANIFEST_FILE, NetworkMode, OutputKind,
+    CallFailure, Canonicalized, Completeness, ErrorCode, FetchHealth, FetchInputKind, FetchOutput,
+    FetchSpec, Identity, ListPage, MANIFEST_FILE, Method, NetworkMode, OutputKind,
     PLUGIN_DIR_PLACEHOLDER, PluginEvent, PluginHeader, PluginId, PluginKind, PluginManifest,
     Rfc3339, Site, SourceInfo, SourcesOutput, StorageState, TransformSpec,
 };
@@ -48,6 +48,8 @@ pub struct CallLimits {
     pub sources: Duration,
     /// list 每页的总时长。
     pub list: Duration,
+    /// 不带 `--probe` 的 health。
+    pub health: Duration,
     /// 发过 progress 之后，多久没有新的 progress 算卡住。
     pub idle: Duration,
     /// 发出 waiting 之后最长等多久。
@@ -67,6 +69,7 @@ impl Default for CallLimits {
             fetch: Duration::from_secs(300),
             sources: Duration::from_secs(30),
             list: Duration::from_secs(60),
+            health: Duration::from_secs(10),
             idle: Duration::from_secs(120),
             waiting: Duration::from_secs(600),
             grace: Duration::from_secs(5),
@@ -100,6 +103,21 @@ pub struct FetchPlugin {
 impl FetchPlugin {
     pub fn id(&self) -> &PluginId {
         &self.header.id
+    }
+
+    /// 宿主能调的这种方法（做了、在插件进程里跑）；没有就是调用方的错，回 `Unsupported`。
+    pub fn callable(&self, method: &str) -> Result<&Method, PluginError> {
+        match self.spec.method(method) {
+            Some(m) if m.callable() => Ok(m),
+            Some(_) => Err(PluginError::Unsupported {
+                plugin: self.id().clone(),
+                message: format!("method `{method}` is not built or does not run in the plugin"),
+            }),
+            None => Err(PluginError::Unsupported {
+                plugin: self.id().clone(),
+                message: format!("no method `{method}`"),
+            }),
+        }
     }
 }
 
@@ -269,6 +287,8 @@ pub enum FetchInput {
 
 #[derive(Debug, Clone)]
 pub struct FetchRequest {
+    /// 用哪种方法取（§2.3.1）。
+    pub method: String,
     pub input: FetchInput,
     /// 想要的输出，`outputs` 的子集；`None` 是全要。
     pub want: Option<BTreeSet<OutputKind>>,
@@ -278,6 +298,8 @@ pub struct FetchRequest {
 
 #[derive(Debug, Clone)]
 pub struct ListRequest {
+    /// 这个来源属于哪种方法。
+    pub method: String,
     pub source: String,
     pub cursor: Option<String>,
     /// 这个来源上次跟着收跑完的时间。
@@ -450,7 +472,7 @@ impl PluginHost {
                 Invocation {
                     args,
                     input_file: None,
-                    cap: None,
+                    method: None,
                     total: self.config.limits.canonicalize,
                 },
                 opts,
@@ -475,12 +497,12 @@ impl PluginHost {
             plugin: plugin.id().clone(),
             message,
         };
-        let cap = plugin
-            .spec
+        let method = plugin.callable(&request.method)?;
+        let cap = method
             .capabilities
             .fetch
             .as_ref()
-            .ok_or_else(|| unsupported("no `fetch` capability".into()))?;
+            .ok_or_else(|| unsupported(format!("method `{}` has no `fetch`", method.id)))?;
         let (kind, input) = match &request.input {
             FetchInput::Url(u) => (FetchInputKind::Url, u.as_str().to_owned()),
             FetchInput::Ref(r) => (FetchInputKind::Ref, r.clone()),
@@ -505,6 +527,8 @@ impl PluginHost {
             input.into(),
             "--out".into(),
             out.clone().into(),
+            "--method".into(),
+            method.id.clone().into(),
         ];
         if let Some(want) = &request.want {
             let joined: Vec<&str> = want.iter().map(|w| w.as_str()).collect();
@@ -521,7 +545,7 @@ impl PluginHost {
                 Invocation {
                     args,
                     input_file: request.input_file.as_deref(),
-                    cap: Some(&cap.uses),
+                    method: Some(method),
                     total,
                 },
                 opts,
@@ -574,13 +598,15 @@ impl PluginHost {
 
         // 完整度（§3.7）：缺的是插件说缺的、这次想要的那几样。这一条本来就没有的那一样（只有字的帖子没有图）
         // 不算缺，一样交来了一部分还缺一部分（九张图下到六张）也算缺：这两件事只有插件知道，宿主不按
-        // 「交没交来」猜，只去掉不在想要的里头的。想要的一样都没拿到算只认出了链接。
+        // 「交没交来」猜，只去掉不在 `--want` 里的。没给 `--want` 时什么都想要：这条有、这种方法取不到的
+        // （例如要另一种方法登录才取得到的视频）照插件说的留着，宿主往后找声明了它的方法（§2.3.1）。
+        // 想要的一样都没拿到算只认出了链接。
         let obtained = output.obtained();
         let missing: Vec<OutputKind> = output
             .missing
             .iter()
             .copied()
-            .filter(|o| wanted.contains(o))
+            .filter(|o| request.want.as_ref().is_none_or(|w| w.contains(o)))
             .collect::<BTreeSet<_>>()
             .into_iter()
             .collect();
@@ -618,35 +644,43 @@ impl PluginHost {
         })
     }
 
-    /// 列出用户能选的来源（§3.8）。
+    /// 列出用户能选的来源（§3.8）。`link` 是你给的一条链接，只给声明了 `list.link` 的方法（§2.3.1）。
     pub async fn sources(
         &self,
         plugin: &FetchPlugin,
+        method: &str,
+        link: Option<&url::Url>,
         opts: &CallOptions,
     ) -> Result<Vec<SourceInfo>, PluginError> {
-        let cap =
-            plugin
-                .spec
-                .capabilities
-                .list
-                .as_ref()
-                .ok_or_else(|| PluginError::Unsupported {
-                    plugin: plugin.id().clone(),
-                    message: "no `list` capability".into(),
-                })?;
+        let method = plugin.callable(method)?;
+        let cap = list_of(plugin, method)?;
+        if link.is_some() && cap.link.is_none() {
+            return Err(PluginError::Unsupported {
+                plugin: plugin.id().clone(),
+                message: format!("method `{}` does not start from a link", method.id),
+            });
+        }
         let call = self.start_call(plugin, false)?;
         let total = cap
             .uses
             .timeout
             .map_or(self.config.limits.sources, |t| t.get());
+        let mut args: Vec<OsString> = vec![
+            "sources".into(),
+            "--method".into(),
+            method.id.clone().into(),
+        ];
+        if let Some(link) = link {
+            args.extend(["--link".into(), link.as_str().into()]);
+        }
         let (finished, _) = self
             .run(
                 plugin,
                 &call,
                 Invocation {
-                    args: vec!["sources".into()],
+                    args,
                     input_file: None,
-                    cap: Some(&cap.uses),
+                    method: Some(method),
                     total,
                 },
                 opts,
@@ -657,6 +691,31 @@ impl PluginHost {
         Ok(out.sources)
     }
 
+    /// 插件自己报这台机器上缺什么（§3.10）：不交凭据，不向平台发请求。
+    pub async fn health(
+        &self,
+        plugin: &FetchPlugin,
+        opts: &CallOptions,
+    ) -> Result<FetchHealth, PluginError> {
+        let call = self.start_call(plugin, false)?;
+        let (finished, _) = self
+            .run(
+                plugin,
+                &call,
+                Invocation {
+                    args: vec!["health".into()],
+                    input_file: None,
+                    method: None,
+                    total: self.config.limits.health,
+                },
+                opts,
+            )
+            .await?;
+        let mut out: FetchHealth = call.decode(plugin, finished)?;
+        envelope_text::fetch_health(&mut out);
+        Ok(out)
+    }
+
     /// 列一页（§3.8）。翻页和节奏由调用方管，这里只调一次。
     pub async fn list(
         &self,
@@ -664,18 +723,15 @@ impl PluginHost {
         request: ListRequest,
         opts: &CallOptions,
     ) -> Result<ListPage, PluginError> {
-        let cap =
-            plugin
-                .spec
-                .capabilities
-                .list
-                .as_ref()
-                .ok_or_else(|| PluginError::Unsupported {
-                    plugin: plugin.id().clone(),
-                    message: "no `list` capability".into(),
-                })?;
+        let method = plugin.callable(&request.method)?;
+        let cap = list_of(plugin, method)?;
         let call = self.start_call(plugin, false)?;
-        let mut args: Vec<OsString> = vec!["list".into(), request.source.into()];
+        let mut args: Vec<OsString> = vec![
+            "list".into(),
+            request.source.into(),
+            "--method".into(),
+            method.id.clone().into(),
+        ];
         if let Some(c) = request.cursor {
             args.extend(["--cursor".into(), c.into()]);
         }
@@ -696,7 +752,7 @@ impl PluginHost {
                 Invocation {
                     args,
                     input_file: request.input_file.as_deref(),
-                    cap: Some(&cap.uses),
+                    method: Some(method),
                     total,
                 },
                 opts,
@@ -764,7 +820,7 @@ impl PluginHost {
         let Invocation {
             args,
             input_file,
-            cap,
+            method,
             total,
         } = inv;
         let (program, mut command_args) = resolve_command(&plugin.header, &plugin.dir)
@@ -775,8 +831,8 @@ impl PluginHost {
         let handover = {
             let logins = Arc::clone(&self.logins);
             let plugin = plugin.clone();
-            let cap = cap.cloned();
-            tokio::task::spawn_blocking(move || logins.handover(&plugin, cap.as_ref()))
+            let method = method.cloned();
+            tokio::task::spawn_blocking(move || logins.handover(&plugin, method.as_ref()))
                 .await
                 .map_err(|e| PluginError::Vault(format!("credentials: {e}")))??
         };
@@ -839,12 +895,26 @@ impl PluginHost {
     }
 }
 
-/// 一次进程要的：参数、导入文件、这次用的能力（决定交哪些站点的凭据，`canonicalize` 没有）、总时长。
+/// 一次进程要的：参数、导入文件、这次用的方法（决定交哪些站点的凭据，`canonicalize`、`health` 没有）、总时长。
 struct Invocation<'a> {
     args: Vec<OsString>,
     input_file: Option<&'a Path>,
-    cap: Option<&'a CapabilityUse>,
+    method: Option<&'a Method>,
     total: Duration,
+}
+
+fn list_of<'m>(
+    plugin: &FetchPlugin,
+    method: &'m Method,
+) -> Result<&'m crate::protocol::ListCapability, PluginError> {
+    method
+        .capabilities
+        .list
+        .as_ref()
+        .ok_or_else(|| PluginError::Unsupported {
+            plugin: plugin.id().clone(),
+            message: format!("method `{}` has no `list`", method.id),
+        })
 }
 
 /// 一次调用的 id、暂存目录和缓存目录。
@@ -964,6 +1034,9 @@ impl Call {
                             credentials::scrub(&mut error.message, &scrub);
                             if let Some(h) = &mut error.hint {
                                 credentials::scrub(h, &scrub);
+                            }
+                            if let Some(d) = &mut error.detail {
+                                credentials::scrub(d, &scrub);
                             }
                             envelope_text::failure(&mut error);
                             error

@@ -6,7 +6,7 @@ use schemars::{JsonSchema, Schema, schema_for};
 use serde_json::{Value, json};
 
 use super::envelope::{CallFailure, PluginEvent};
-use super::fetch::{Canonicalized, FetchOutput, ListPage, SourcesOutput};
+use super::fetch::{Canonicalized, FetchHealth, FetchOutput, ListPage, SourcesOutput};
 use super::manifest::WireManifest;
 use super::transform::{Cancel, Describe, Health, Progress, RpcError, RunParams, RunResult};
 
@@ -69,6 +69,10 @@ pub fn schemas() -> Vec<(&'static str, Schema)> {
             success::<SourcesOutput>("SourcesOutput"),
         ),
         ("list-output.schema.json", success::<ListPage>("ListOutput")),
+        (
+            "health-output.schema.json",
+            success::<FetchHealth>("HealthOutput"),
+        ),
         ("error-output.schema.json", failure()),
         ("event.schema.json", schema_for!(PluginEvent)),
         (

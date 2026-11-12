@@ -201,6 +201,8 @@ pub(crate) struct Inner {
     pub machine_root: PathBuf,
     /// 改 `settings.json` 时一次一个。
     pub settings_lock: Mutex<()>,
+    /// 获取插件里各方法的开关和本机检查（协议 §2.3.1）。
+    pub methods: crate::methods::Methods,
 }
 
 #[derive(Clone)]
@@ -295,6 +297,7 @@ impl Engine {
         .with_proxy(config.proxy.clone())
         .with_vault(config.vault, &config.machine_root);
         host.sweep_credentials()?;
+        let methods = crate::methods::Methods::load(&config.machine_root)?;
         let (events, _) = broadcast::channel(256);
         let engine = Engine {
             inner: Arc::new(Inner {
@@ -316,6 +319,7 @@ impl Engine {
                 transforms,
                 machine_root: config.machine_root,
                 settings_lock: Mutex::new(()),
+                methods,
             }),
         };
         if engine.inner.index.needs_rebuild() {

@@ -129,66 +129,13 @@
 <a id="9-清单"></a>
 ## 9. 清单
 
-照现行协议的词（[协议 §2.3](../protocol/manifest.md#23-获取插件的字段)）：
+清单就是插件仓库里的 `usuyo-plugin.yaml`，照[协议 §2.3.1](../protocol/manifest.md#231-方法-methods) 一种取法一个方法：`guest`（访客接口）、`embed`（嵌入接口）、`userscript`（浏览器脚本，`delivers: links`）、`archive`（官方归档，`list` 读 `twitter-*.zip`）做了；`deliver-content`、`session`、`signed`、`xurl`、`iphone` 列着、没做。节奏照[第 8 节](#8-节奏)，`permissions.network.hosts` 是 `api.x.com`、`x.com`、`cdn.syndication.twimg.com`、`pbs.twimg.com`、`video.twimg.com`、`t.co`。
 
-```yaml
-protocol: 1
-id: usuyo-fetch/x
-kind: fetch
-name: X
-description: 按帖子链接取正文、图片、视频和引用的帖子，不用账号；书签和喜欢由你浏览器里的脚本交来，或读你下载的官方归档
-version: 0.1.0
-license: MIT
-maintainers: [Fldicoahkiin]
-upstream:
-  - name: twitter-web-exporter（脚本截获书签、喜欢的做法）
-    url: https://github.com/prinsss/twitter-web-exporter
-    license: MIT
-  - name: react-tweet（syndication 的请求）
-    url: https://github.com/vercel/react-tweet
-    license: MIT
-platforms: [x]
-match:
-  - "x.com/*"
-  - "*.x.com/*"
-  - "twitter.com/*"
-  - "*.twitter.com/*"
-  - "t.co/*"
-  - "fxtwitter.com/*"
-  - "fixupx.com/*"
-access: public-web
-login: none
-capabilities:
-  fetch:
-    access: public-web
-    login: none
-    timeout: 30m
-    outputs: [text, images, media:video, meta]
-  list:
-    access: official-export
-    login: none
-    order: unordered
-    files: ["twitter-*.zip"]
-pacing:
-  x: {batch: true, interval: 10s, daily: 300}
-permissions:
-  fs:
-    read: ["${INPUT}"]
-    write: ["${OUT}"]
-  network:
-    mode: allowlist
-    hosts: ["api.x.com", "x.com", "cdn.syndication.twimg.com", "pbs.twimg.com", "video.twimg.com", "t.co"]
-  env: []
-  devices: []
-  gpu: false
-run:
-  command: ["${PLUGIN_DIR}/usuyo-fetch-x"]
-```
 
 - 没有 `sites`：usuyo 里不登录 X。没有 `visitors`：访客令牌是插件自己换的，不是宿主开窗口取的 cookie（[第 3 节](#3-取单条)）。
 - `match` 写宽，粗筛交给 `canonicalize`（[协议 §3.5](../protocol/fetch.md#35-canonicalize-与身份)）；`*.` 前缀不含裸域，所以两种都写。
-- `list` 只读归档，交的条目只带 `url`，内容照样由 `fetch` 去取（[协议 §3.9](../protocol/fetch.md#39-从文件导入)）。归档的文件名照协议的例子写成 `twitter-*.zip`，X 现在给的文件名要你核。这个插件有网络权限，所以读归档的 `list` 也照节奏排，不能像 `network.mode: none` 的导入插件那样并行；归档一次几千条，可以接受。
-- 浏览器脚本不在清单里：它不是宿主启动的进程，走[协议 §9.4](../protocol/wrapping.md#94-浏览器扩展与油猴脚本)，交来的链接按 `fetch` 取。
+- `archive` 的 `list` 只读归档，交的条目只带 `url`，内容照样由 `guest`、`embed` 去取（[协议 §3.9](../protocol/fetch.md#39-从文件导入)）。归档的文件名照协议的例子写成 `twitter-*.zip`，X 现在给的文件名要你核。这个插件有网络权限，所以读归档的 `list` 也照节奏排，不能像 `network.mode: none` 的导入插件那样并行；归档一次几千条，可以接受。
+- 浏览器脚本在清单里是 `delivers: links` 的方法：它不是宿主启动的进程，走[协议 §9.4](../protocol/wrapping.md#94-浏览器扩展与油猴脚本)，交来的链接按 `fetch` 取。
 
 <a id="10-风险和证据"></a>
 ## 10. 风险和证据

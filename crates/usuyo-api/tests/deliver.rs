@@ -19,6 +19,7 @@ const TOKEN: &str = "owner-token";
 
 const PLUGIN: &str = r#"#!/bin/sh
 if [ "$1" = canonicalize ]; then echo '{"ok": true, "match": false}'; exit 0; fi
+if [ "$1" = health ]; then echo '{"ok": true, "ready": true, "protocol": 1, "version": "1.0.0"}'; exit 0; fi
 echo '{"ok": false, "error": {"code": "network", "message": "offline in tests"}}'; exit 1
 "#;
 
@@ -31,16 +32,18 @@ license: MIT
 maintainers: [someone]
 platforms: [web]
 match: ["*"]
-access: session-api
-login: optional
 sites:
   - {site: www.example.test, name: 例子, credential: cookies, loginUrl: "https://www.example.test/login", cookies: [sid], domains: [".example.test"]}
-capabilities:
-  fetch:
+methods:
+  - id: session
+    name: 登录后取
     access: session-api
     login: optional
+    account: in-usuyo
     sites: [www.example.test]
-    outputs: [text, meta]
+    capabilities:
+      fetch:
+        outputs: [text, meta]
 permissions:
   fs: {write: ["${OUT}"]}
 run:

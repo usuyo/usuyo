@@ -20,6 +20,7 @@ const TOKEN: &str = "test-token";
 
 const PLUGIN: &str = r#"#!/bin/sh
 if [ "$1" = canonicalize ]; then echo '{"ok": true, "match": false}'; exit 0; fi
+if [ "$1" = health ]; then echo '{"ok": true, "ready": true, "protocol": 1, "version": "1.0.0", "checks": [{"name": "tool", "ok": false, "message": "没找到要的程序", "methods": ["later-tool"]}]}'; exit 0; fi
 out="$4"
 mkdir -p "$out/images" && printf '0123456789' > "$out/images/001.png"
 printf '<script>alert(1)</script>' > "$out/page.html"
@@ -40,18 +41,50 @@ license: MIT
 maintainers: [someone]
 platforms: [web]
 match: ["*"]
-access: public-web
-login: none
 visitors:
   - site: www.example.com
     name: 例子
     url: https://www.example.com/
-capabilities:
-  fetch:
+methods:
+  - id: page
+    name: 公开页
     access: public-web
     login: none
+    account: none
+    capabilities:
+      fetch:
+        outputs: [text, html, images, meta]
+  - id: visitor
+    name: 访客页
+    access: public-web
+    login: none
+    account: visitor
     visitors: [www.example.com]
-    outputs: [text, html, images, meta]
+    capabilities:
+      fetch:
+        outputs: [text]
+  - id: later-tool
+    name: 包一个工具
+    access: public-web
+    login: none
+    account: none
+    capabilities:
+      fetch:
+        outputs: [text]
+  - id: signed
+    name: 签名接口
+    access: private-api
+    login: none
+    account: none
+    capabilities:
+      fetch:
+        outputs: [text]
+  - id: phone
+    name: 手机
+    built: false
+    access: vision-ui
+    login: required
+    account: own-phone
 permissions:
   fs: {write: ["${OUT}"]}
 run:
@@ -801,4 +834,129 @@ async fn transforms_settings_and_the_transform_route() {
         .unwrap()
         .to_owned();
     assert!(allowed.contains("PATCH"), "{allowed}");
+}
+
+#[tokio::test]
+async fn plugins_list_every_method_with_what_blocks_it_and_switches_one() {
+    let f = fixture();
+    let plugins = json_of(send(&f.app, authed("/plugins")).await).await;
+    let p = &plugins["plugins"][0];
+    // 顶层的层级由做了的方法算；没做的手机不算
+    assert_eq!(p["access"], "private-api");
+    let methods = p["methods"].as_array().unwrap();
+    let by = |id: &str| methods.iter().find(|m| m["id"] == id).unwrap().clone();
+    assert_eq!(methods.len(), 5);
+    let page = by("page");
+    assert_eq!(
+        (page["usable"].clone(), page["enabled"].clone()),
+        (json!(true), json!(true))
+    );
+    assert_eq!(page["account"], json!({"kind": "none"}));
+    assert_eq!(
+        page["gets"]["fetch"],
+        json!(["text", "html", "images", "meta"])
+    );
+    let visitor = by("visitor");
+    assert_eq!(
+        visitor["account"],
+        json!({"kind": "visitor", "sites": ["www.example.com"], "where": "例子"})
+    );
+    assert_eq!(visitor["usable"], false);
+    assert_eq!(visitor["blockers"][0]["code"], "visitor-missing");
+    // 插件的本机检查只挡它点名的方法
+    let tool = by("later-tool");
+    assert_eq!(
+        tool["blockers"],
+        json!([{"code": "check-failed", "hint": "没找到要的程序"}])
+    );
+    // private-api 默认关着；没做的开不了
+    let signed = by("signed");
+    assert_eq!(
+        (
+            signed["enabled"].clone(),
+            signed["blockers"][0]["code"].clone()
+        ),
+        (json!(false), json!("off"))
+    );
+    let phone = by("phone");
+    assert_eq!(
+        (phone["built"].clone(), phone["blockers"][0]["code"].clone()),
+        (json!(false), json!("not-built"))
+    );
+
+    let switch = |method: &str, body: &str| {
+        get(&format!("/plugins/fake/web/methods/{method}"))
+            .method("PUT")
+            .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_owned()))
+            .unwrap()
+    };
+    let res = send(&f.app, switch("signed", r#"{"enabled": true}"#)).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let p = json_of(res).await;
+    let signed = p["methods"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["id"] == "signed")
+        .unwrap()
+        .clone();
+    assert_eq!(
+        (signed["enabled"].clone(), signed["usable"].clone()),
+        (json!(true), json!(true))
+    );
+    let res = send(&f.app, switch("page", r#"{"enabled": false}"#)).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    problem(
+        send(&f.app, switch("phone", r#"{"enabled": true}"#)).await,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "unsupported-input",
+    )
+    .await;
+    problem(
+        send(&f.app, switch("nope", r#"{"enabled": true}"#)).await,
+        StatusCode::NOT_FOUND,
+        "not-found",
+    )
+    .await;
+    problem(
+        send(&f.app, switch("page", r#"{"on": true}"#)).await,
+        StatusCode::BAD_REQUEST,
+        "invalid-args",
+    )
+    .await;
+
+    // 开关写进按机器的 settings.json
+    let settings: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(f._tmp.path().join("machine/settings.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        settings["plugins"]["fake/web"]["methods"],
+        json!({"signed": {"enabled": true}, "page": {"enabled": false}})
+    );
+    // 来源要说是哪种方法；不能列的方法和坏链接回 4xx
+    problem(
+        send(&f.app, authed("/plugins/fake/web/sources")).await,
+        StatusCode::BAD_REQUEST,
+        "invalid-args",
+    )
+    .await;
+    problem(
+        send(&f.app, authed("/plugins/fake/web/sources?method=page")).await,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "unsupported-input",
+    )
+    .await;
+    problem(
+        send(
+            &f.app,
+            authed("/plugins/fake/web/sources?method=page&link=ftp%3A%2F%2Fa.test%2F"),
+        )
+        .await,
+        StatusCode::BAD_REQUEST,
+        "invalid-args",
+    )
+    .await;
 }

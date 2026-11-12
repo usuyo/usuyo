@@ -418,6 +418,9 @@ pub struct ImportView {
     pub title: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plugin_id: Option<String>,
+    /// 来源属于插件的哪种方法。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub method: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
     /// 交进来的那个投递令牌的名字。
@@ -476,15 +479,98 @@ pub struct PluginView {
     /// 能列出你存过的（有 `list`）。
     pub can_list: bool,
     /// 清单里写死的来源，登录前就能显示；运行时以 `/plugins/{id}/sources` 为准。
-    pub sources: Vec<usuyo_plugin::protocol::SourceInfo>,
+    pub sources: Vec<SourceView>,
     /// 会用到哪些站点的账号；登录状态见 `/sites`。
     pub sites: Vec<String>,
     /// 会用到哪些站点的访客身份（不是账号）；有没有见 `/visitors`。
     pub visitors: Vec<String>,
     pub settings: Vec<SettingView>,
     pub pacing: Vec<PacingView>,
-    /// 现在停着的地方和原因。
+    /// 现在停着的地方和原因，所有方法的；你点的「先别试」方法是 `*`。
     pub pauses: Vec<PauseView>,
+    /// 清单里的每一种方法，没做的也在（协议 §2.3.1）。
+    pub methods: Vec<MethodView>,
+}
+
+/// 一个来源，带它属于哪种方法：开始导入时一起交回。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceView {
+    #[serde(flatten)]
+    pub source: usuyo_plugin::protocol::SourceInfo,
+    pub method: String,
+}
+
+/// 一种方法（`/plugins` 的 `methods[]`）。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MethodView {
+    pub id: String,
+    pub name: String,
+    pub access: usuyo_plugin::protocol::Access,
+    pub login: usuyo_plugin::protocol::Login,
+    pub account: AccountView,
+    pub interaction: usuyo_plugin::protocol::Interaction,
+    pub gets: GetsView,
+    pub built: bool,
+    pub enabled: bool,
+    /// 这台机器上现在用得上：做了、开着、要的登录和访客身份都在、本机检查没挡它。
+    pub usable: bool,
+    /// 为什么用不上，一项一句。
+    pub blockers: Vec<Blocker>,
+    /// 上一次调用。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_call: Option<LastCall>,
+    /// 这种方法停着的地方，加上你点的「先别试」。
+    pub pauses: Vec<PauseView>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub risk_note: Option<usuyo_plugin::protocol::Risk>,
+}
+
+/// 账号用在哪；`sites` 是登录站点（`in-usuyo`）或访客身份的站点（`visitor`），`where` 是它们的名字。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountView {
+    pub kind: usuyo_plugin::protocol::Account,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub sites: Vec<String>,
+    #[serde(rename = "where", skip_serializing_if = "Option::is_none")]
+    pub where_: Option<String>,
+}
+
+/// 取得到什么：`fetch` 是输出的词表（`text`、`images`、`media:video`…），`list` 是清单里写死的来源名，
+/// `link` 是来源从一条链接开始时链接框上的那句，`delivers: links` 是由别处把链接交进来。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetsView {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fetch: Option<Vec<usuyo_plugin::protocol::OutputKind>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub list: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub link: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivers: Option<usuyo_plugin::protocol::Delivers>,
+}
+
+/// 用不上的一个原因：`code` 是 `not-built`、`off`、`login-missing`、`login-expired`、`visitor-missing`、
+/// `visitor-expired`、`check-failed`（插件的本机检查没过）、`health-failed`（插件没能自查）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Blocker {
+    pub code: String,
+    pub hint: String,
+}
+
+/// 一种方法上一次调用：`ok` 为假时带错误码和一句话。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LastCall {
+    pub at: String,
+    pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hint: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -513,6 +599,8 @@ pub struct PacingView {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PauseView {
+    /// 停的是哪种方法；`*` 是你点的「先别试」，整个插件。
+    pub method: String,
     /// 平台，或通用网页插件的网站；`*` 是你点的「先别试」。
     pub scope: String,
     /// 你点了「先别试」。

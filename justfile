@@ -88,17 +88,27 @@ dev-plugins fetch="../usuyo-fetch":
     else
       echo "跳过 builtin/ocr-vision：只在 macOS 上有"
     fi
-    for name in xiaohongshu wechat-channels bilibili x; do
-      src="{{fetch}}/$name"
-      manifest="$src/usuyo-plugin.yaml"
-      id=$(sed -n 's/^id:[[:space:]]*//p' "$manifest" | head -1)
-      version=$(sed -n 's/^version:[[:space:]]*//p' "$manifest" | head -1)
-      bin="usuyo-fetch-$name"
-      cargo build --release --locked --offline --manifest-path "$src/Cargo.toml" --bin "$bin"
+    # 旁边 usuyo-fetch/ 里每个有 usuyo-plugin.yaml 的文件夹都装；可执行文件名取自清单的 run.command，
+    # 编不过的跳过、说一声，别的照装。这些插件共用一个编译目录（usuyo-fetch/.target）：依赖只编一遍
+    shared="$(cd "{{fetch}}" && pwd)/.target"
+    for manifest in "{{fetch}}"/*/usuyo-plugin.yaml; do
+      [ -f "$manifest" ] || continue
+      src=$(dirname "$manifest")
+      id=$(field id "$manifest")
+      version=$(field version "$manifest")
+      bin=$(grep -o '[$]{PLUGIN_DIR}/[^"]*' "$manifest" | head -1 | sed 's|.*/||' || true)
+      if [ -z "$id" ] || [ -z "$version" ] || [ -z "$bin" ]; then
+        echo "跳过 $src：清单里读不出 id、version 或 run.command 里的可执行文件"
+        continue
+      fi
+      if ! CARGO_TARGET_DIR="$shared" cargo build --release --locked --offline --manifest-path "$src/Cargo.toml" --bin "$bin"; then
+        echo "跳过 $src：编不过"
+        continue
+      fi
       dest="$root/$id/$version"
       mkdir -p "$dest"
       cp "$manifest" "$dest/usuyo-plugin.yaml"
-      cp "$src/target/release/$bin" "$dest/$bin"
+      cp "$shared/release/$bin" "$dest/$bin"
       echo "装好了 $id $version → $dest"
     done
 

@@ -1,5 +1,5 @@
 //! 预装的通用网页获取插件 `builtin/web`（协议 §8.4）：只读公开网页，不登录，
-//! 没有任何站点专用的规则。子命令照协议 §3.2：`canonicalize`、`fetch`、`health`。
+//! 没有任何站点专用的规则。子命令照协议 §3.2：`canonicalize`、`fetch`、`health`；只有一种方法 `page`。
 
 mod page;
 
@@ -8,9 +8,10 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use serde::{Deserialize, Serialize};
+use usuyo_plugin_kit::fetch::{Call, USAGE};
 use usuyo_plugin_kit::http::Policy;
 use usuyo_plugin_kit::protocol::{
-    CallFailure, Canonicalized, Envelope, ErrorCode, Identity, OutputKind,
+    CallFailure, Canonicalized, Envelope, ErrorCode, FetchHealth, Identity,
 };
 
 /// 插件能报的失败，带着协议的错误对象穿过 `anyhow`，在入口变回信封。
@@ -29,34 +30,28 @@ fn fail(code: ErrorCode, message: impl Into<String>) -> anyhow::Error {
     Fail(CallFailure::new(code, message)).into()
 }
 
-const USAGE: &str = "usage: usuyo-plugin-web canonicalize <url> | fetch <url> --out <dir> [--want a,b] | health [--probe]";
+/// 清单里唯一的方法。
+const PAGE: &str = "page";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let printed = match args.first().map(String::as_str) {
-        Some("canonicalize") if args.len() == 2 => print(canonicalize(&args[1])),
-        Some("fetch") => match parse_fetch(&args[1..]) {
-            Some((url, out, want)) => print(settings().and_then(|s| {
-                page::fetch(
-                    &url,
-                    &out,
-                    want.as_ref(),
-                    s.allow_private_network,
-                    &Policy::from_host(),
-                )
-            })),
-            None => usage(),
-        },
-        Some("health") if args.len() <= 2 && args.get(1).is_none_or(|a| a == "--probe") => {
-            print(Ok(serde_json::json!({
-                "ready": true,
-                "protocol": 1,
-                "version": env!("CARGO_PKG_VERSION"),
-                "upstream": [],
-                "login": [],
-                "checks": []
-            })))
-        }
+    let printed = match Call::parse(&args) {
+        Some(Call::Canonicalize { url }) => print(canonicalize(&url)),
+        Some(Call::Fetch {
+            input,
+            out,
+            method,
+            want,
+        }) if method == PAGE => print(settings().and_then(|s| {
+            page::fetch(
+                &input,
+                &out,
+                want.as_ref(),
+                s.allow_private_network,
+                &Policy::from_host(),
+            )
+        })),
+        Some(Call::Health { .. }) => print(Ok(FetchHealth::new(env!("CARGO_PKG_VERSION")))),
         _ => usage(),
     };
     ExitCode::from(printed)
@@ -111,28 +106,6 @@ fn print<T: Serialize>(result: anyhow::Result<T>) -> u8 {
             1
         }
     }
-}
-
-fn parse_fetch(args: &[String]) -> Option<(String, PathBuf, Option<Vec<OutputKind>>)> {
-    let (url, rest) = args.split_first()?;
-    let mut out = None;
-    let mut want = None;
-    let mut it = rest.iter();
-    while let Some(flag) = it.next() {
-        match flag.as_str() {
-            "--out" => out = Some(PathBuf::from(it.next()?)),
-            "--want" => {
-                want = Some(
-                    it.next()?
-                        .split(',')
-                        .map(OutputKind::parse)
-                        .collect::<Option<Vec<_>>>()?,
-                );
-            }
-            _ => return None,
-        }
-    }
-    Some((url.clone(), out?, want))
 }
 
 /// 认身份：任何 http(s) 链接都是自己的。不发请求：通用网页分不出哪些是短链。
@@ -201,19 +174,5 @@ mod tests {
         );
         assert_eq!(url_of("ftp://example.com/a"), None);
         assert_eq!(url_of("not a url"), None);
-    }
-
-    #[test]
-    fn fetch_args() {
-        let args: Vec<String> = ["https://a.b/", "--out", "/tmp/o", "--want", "text,images"]
-            .map(String::from)
-            .to_vec();
-        let (_, out, want) = parse_fetch(&args).unwrap();
-        assert_eq!(out, PathBuf::from("/tmp/o"));
-        assert_eq!(want, Some(vec![OutputKind::Text, OutputKind::Images]));
-        let bad: Vec<String> = ["https://a.b/", "--want", "video"]
-            .map(String::from)
-            .to_vec();
-        assert!(parse_fetch(&bad).is_none());
     }
 }

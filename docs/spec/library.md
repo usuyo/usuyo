@@ -167,11 +167,13 @@ items/douyin/douyin-4plrcxk343onmyxibmrr672kga/
 | 原文 | 主快照 `raw/<snapshotId>/usuyo.fetch.json` 的 `text`，或 `derived/readable.md`；`content.md` 是只读副本 | 平台；机器 | `text` |
 | 图里的字 | `ocr` 转录的 `derived/runs/<runId>/ocr.json` | 机器 | `ocr/<imageKey>`、`image/<imageKey>` |
 | 口播 | 平台字幕 `raw/…/media/*.vtt`，加各次 `asr` 转录的 `derived/runs/<runId>/asr.vtt`，几份并排 | 平台；机器 | `asr`、`video`、`audio` |
-| 画面 | `play` 转录的 `play.mp4`，没有就是原样的画面；加最新一次 `keyframes` 转录的关键帧 | 原样；机器 | `video` |
+| 画面 | `play` 转录的 `play.mp4`，没有就是有画面的最新一份快照里原样的画面（[协议 §2.3.1](../protocol/manifest.md#231-方法-methods)）；加最新一次 `keyframes` 转录的关键帧 | 原样；机器 | `video` |
 | 画面里的字 | `frames` 转录的 `derived/runs/<runId>/ocr.json` | 机器 | `video`，带 `#t=` 和 `xywh`（[§0.4](conventions.md#04-id)） |
 | 画面描述、AI 摘要 | `derived/vision.md`、`derived/summary.md` | 机器 | `vision`、`summary` |
 | 你的笔记 | `notes.md` | 你 | `notes` |
-| 评论（可选） | `raw/<snapshotId>/comments.json` | 平台 | `comments` |
+| 评论（可选） | `raw/<snapshotId>/comments.json`，有评论的最新一份快照的 | 平台 | `comments` |
+
+链接里不给快照时，`video`、`audio`、`comments` 和条目页的图、画面、评论各从有它的最新一份快照来，转换的输入（画面和音轨一起、图另取）也照它；原文跟着主快照。一种取法只取得到一部分、另一种补上其余的，就是这样的几份快照（[协议 §2.3.1](../protocol/manifest.md#231-方法-methods)）。
 
 评论默认不取，`settings.json` 里按平台打开、设上限；单条在条目页点「取评论」，那是一次只 `--want comments` 的获取，存成新快照，评论留着当时的样子。
 

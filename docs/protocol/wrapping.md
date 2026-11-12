@@ -13,13 +13,15 @@ id: someone/usuyo-fetch-youtube
 kind: fetch
 platforms: [youtube]
 match: ["www.youtube.com/watch*", "youtu.be/*", "www.youtube.com/shorts/*"]
-access: private-api
-login: none
-capabilities:
-  fetch:
+methods:
+  - id: ytdlp
+    name: yt-dlp
     access: private-api
     login: none
-    outputs: [text, media:video, subtitle, meta]
+    account: none
+    capabilities:
+      fetch:
+        outputs: [text, media:video, subtitle, meta]
 requires:
   runtime: ["yt-dlp>=2026.10", "deno>=2", "ffmpeg"]
 permissions:
@@ -55,11 +57,15 @@ yt-dlp --ignore-config --no-playlist --no-progress --write-info-json --write-sub
 settings:
   - {key: endpoint, label: XHS-Downloader 服务地址, type: string, default: "http://127.0.0.1:5556"}
   - {key: xhs-token, label: XHS-Downloader 访问令牌, type: string, secret: true}
-capabilities:
-  fetch:
+methods:
+  - id: xhs-downloader
+    name: XHS-Downloader
     access: public-web
     login: none
-    outputs: [text, images, media:video, meta]
+    account: none
+    capabilities:
+      fetch:
+        outputs: [text, images, media:video, meta]
 permissions:
   network:
     mode: allowlist
@@ -129,22 +135,24 @@ function sendTousuyo(links) {
 
 ```yaml
 platforms: [wechat-mp]
-access: vision-ui
-login: required
 sites:
   - {site: weixin.qq.com, name: 微信, credential: app}
 upstream:
   - {name: agent-desktop, url: https://github.com/vercel-labs/agent-desktop, license: Apache-2.0}
-capabilities:
-  list:
+methods:
+  - id: favorites-mac
+    name: 电脑微信的收藏
     access: vision-ui
     login: required
+    account: own-app
     sites: [weixin.qq.com]
-    order: newest-first
     interaction: foreground
-    timeout: 10m
-    sources:
-      - {source: "wechat:favorites:articles", title: 微信收藏里的文章, action: favorite}
+    capabilities:
+      list:
+        order: newest-first
+        timeout: 10m
+        sources:
+          - {source: "wechat:favorites:articles", title: 微信收藏里的文章, action: favorite}
 pacing:
   wechat-mp: {batch: true, interval: 6s, daily: 30}
 permissions:
@@ -163,20 +171,22 @@ permissions:
 
 ```yaml
 platforms: [xiaohongshu]
-access: vision-ui
-login: required
 sites:
   - {site: www.xiaohongshu.com, name: 小红书, credential: app}
-capabilities:
-  list:
+methods:
+  - id: android
+    name: 安卓手机
     access: vision-ui
     login: required
+    account: own-phone
     sites: [www.xiaohongshu.com]
-    order: newest-first
     interaction: foreground
-    timeout: 10m
-    sources:
-      - {source: "xiaohongshu:favorites", title: 我在手机上收藏的笔记, action: favorite}
+    capabilities:
+      list:
+        order: newest-first
+        timeout: 10m
+        sources:
+          - {source: "xiaohongshu:favorites", title: 我在手机上收藏的笔记, action: favorite}
 pacing:
   xiaohongshu: {batch: true, interval: 10s, daily: 60}
 settings:

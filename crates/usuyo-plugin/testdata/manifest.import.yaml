@@ -7,19 +7,19 @@ version: 1.0.0
 license: MIT
 maintainers: [someone]
 platforms: [youtube]
-access: official-export
-login: none
-capabilities:
-  list:
+methods:
+  - id: takeout
+    name: Takeout 文件
     access: official-export
     login: none
-    order: unordered
-    files: ["takeout-*.zip"]
-  fetch:
-    access: official-export
-    login: none
-    input: [ref]
-    outputs: [text, meta]
+    account: none
+    capabilities:
+      list:
+        order: unordered
+        files: ["takeout-*.zip"]
+      fetch:
+        input: [ref]
+        outputs: [text, meta]
 permissions:
   fs:
     read: ["${INPUT}"]

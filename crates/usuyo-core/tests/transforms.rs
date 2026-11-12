@@ -76,13 +76,15 @@ license: MIT
 maintainers: [someone]
 platforms: [web]
 match: ["*"]
-access: public-web
-login: none
-capabilities:
-  fetch:
+methods:
+  - id: page
+    name: 公开页
     access: public-web
     login: none
-    outputs: [text, images, media:video, media:audio, subtitle, meta]
+    account: none
+    capabilities:
+      fetch:
+        outputs: [text, images, media:video, media:audio, subtitle, meta]
 permissions:
   fs: {write: ["${OUT}"]}
 run:
@@ -154,7 +156,7 @@ impl Fixture {
         std::fs::write(
             &script,
             format!(
-                "#!/bin/sh\nout=\"\"\nif [ \"$1\" = canonicalize ]; then echo '{{\"ok\": true, \"match\": false}}'; exit 0; fi\nif [ \"$1\" = fetch ]; then out=\"$4\"; fi\n{FETCH}\n"
+                "#!/bin/sh\nout=\"\"\nif [ \"$1\" = canonicalize ]; then echo '{{\"ok\": true, \"match\": false}}'; exit 0; fi\nif [ \"$1\" = health ]; then echo '{{\"ok\": true, \"ready\": true, \"protocol\": 1, \"version\": \"1.0.0\"}}'; exit 0; fi\nif [ \"$1\" = fetch ]; then out=\"$4\"; fi\n{FETCH}\n"
             ),
         )
         .unwrap();

@@ -4,6 +4,7 @@
 
 - `protocol`：插件协议 v1 的类型，原样转自 `usuyo-plugin`。
 - `http`：获取插件发请求用的客户端。
+- `fetch`：获取插件的子命令。`fetch::Call::parse(&args)` 读出 `canonicalize`、`fetch`、`sources`、`list`、`health` 和它们的参数，`fetch`、`sources`、`list` 带清单里的方法（`--method`），作者照它分派；读不出时打 `fetch::USAGE`、退出码 2。`health` 的回答用 `protocol::FetchHealth::new(version).check(name, ok, message, methods)` 拼，`methods` 是这项检查挡的方法，空的是挡整个插件。
 - `transform`：转换插件的 JSON-RPC 循环（见文末）。
 
 ```toml

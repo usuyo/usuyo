@@ -31,6 +31,6 @@
 - **39.** 按语言的提示：`hint` 一次只按 `USUYO_LOCALE` 写一种语言，没有按语言分开给的写法。
 - **40.** 只有登录才看得到：`not-found` 的 `reason` 里没有这一种。X 上成人内容和受保护账号的帖子不登录看不到，插件现在回 `reason: private`，界面分不出「作者设了私密」和「登录了就看得到」（[platforms/x.md](../platforms/x.md#3-取单条)）。
 - **41.** 哪条路取到的：一个插件在一个能力里有几条路（X 的帖子接口和嵌入用的 syndication 接口），`evidence` 没有字段写这次是哪一条答的，出了错、改了版对不上是哪条路。
-- **42.** 只有某几样要账号（已定，还没做）：能力加可选字段 `accountOutputs`，值是这个能力 `outputs` 的子集，列出只有带账号才拿得到的几样；宿主只在 `--want` 和它有交集时交凭据，别的调用照 `login: none` 办；`login: optional` 而没写 `accountOutputs` 的，当作每一样都可能用到账号。视频号写 `accountOutputs: [media:video]`（[platforms](../platforms/README.md#1-怎么读这一页)）。现在宿主只看能力的 `login` 不是 `none`、站点存着登录，就交凭据。
+- **42.** 只有某几样要账号：定了、做了（11-12），不加字段，写成另一种方法（[§2.3.1](manifest.md#231-方法-methods)）；凭据只交给列了站点的方法。视频号是 `feed-info` 和 `yuanbao`。
 
 调研 11 建议的其余几处还没编号：`owner` 的含义、同时带 `url` 和 `ref` 时先用哪个、`sites[].site` 引用设置项、`feed:` 来源按主机算节奏（`origin.subscription` 写在 [§3.8](fetch.md#38-list-与跟着收)），见[调研 11 §6.2](../research/11-subscriptions-compat-and-wx-cli.md#62-要补的地方)。

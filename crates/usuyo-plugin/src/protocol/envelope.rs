@@ -204,13 +204,18 @@ pub struct CallFailure {
     /// `rate-limited` 时多少秒后再试。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retry_after: Option<u64>,
+    /// 和哪个登录站点有关。`Box<str>` 和下面 `detail` 的 `Box` 一样，是为了让错误对象小（不到 128 字节）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub site: Option<String>,
+    pub site: Option<Box<str>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<NotFoundReason>,
     /// `dependency-missing` 必填，缺的一次列全。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub needs: Vec<Need>,
+    /// 平台原样回答的开头，至多 [`CallFailure::DETAIL_BYTES`]（§2.3.1）。宿主洗掉凭据以后记进失败日志，
+    /// 不给界面、不进 `jobs.db`。装在 `Box` 里：插件到处把错误对象当 `Err` 回，不让它变大。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<Box<String>>,
 }
 
 /// 限流没给 `retryAfter` 时暂停多久（协议 §3.1）。
@@ -237,7 +242,21 @@ impl CallFailure {
             site: None,
             reason: None,
             needs: Vec::new(),
+            detail: None,
         }
+    }
+
+    /// `detail` 最多多少字节。
+    pub const DETAIL_BYTES: usize = 4096;
+
+    /// 带上平台原样回答的开头：截到 [`Self::DETAIL_BYTES`]，不切开字符。插件出错时用它留下平台的话。
+    pub fn with_detail(mut self, answer: &str) -> Self {
+        let mut end = answer.len().min(Self::DETAIL_BYTES);
+        while !answer.is_char_boundary(end) {
+            end -= 1;
+        }
+        self.detail = Some(Box::new(answer[..end].to_owned()));
+        self
     }
 
     pub fn pause(&self) -> Option<Pause> {

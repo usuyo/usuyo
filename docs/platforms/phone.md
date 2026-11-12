@@ -74,17 +74,21 @@ settings:
   - {key: mirroir-endpoint, label: mirroir serve 的地址, type: string, default: "http://127.0.0.1:<端口>"}
   - {key: mirroir-token, label: mirroir serve 的令牌, type: string, secret: true}
   - {key: dry-run, label: 只看不点, type: bool, default: false}
-capabilities:
-  list:
+methods:
+  - id: iphone
+    name: iPhone 镜像
     access: vision-ui
     login: required
+    account: own-phone
     sites: [www.xiaohongshu.com]
-    order: newest-first
     interaction: foreground
-    timeout: 10m
-    sources:
-      - {source: "xiaohongshu:favorites", title: 我在 iPhone 上收藏的笔记, action: favorite}
-      - {source: "xiaohongshu:likes", title: 我在 iPhone 上赞过的笔记, action: like}
+    capabilities:
+      list:
+        order: newest-first
+        timeout: 10m
+        sources:
+          - {source: "xiaohongshu:favorites", title: 我在 iPhone 上收藏的笔记, action: favorite}
+          - {source: "xiaohongshu:likes", title: 我在 iPhone 上赞过的笔记, action: like}
 pacing:
   xiaohongshu: {batch: true, interval: 60s, daily: 20}
 permissions:
@@ -92,7 +96,7 @@ permissions:
   network: {mode: allowlist, hosts: ["${setting.mirroir-endpoint}"]}
 ```
 
-屏幕录制和辅助功能在 mirroir serve 身上，清单只写插件自己读的 `clipboard`；声明了 `screen-capture`、`accessibility` 的插件，宿主会请你把授权给 usuyo（[协议 §7](../protocol/isolation.md#7-权限与隔离)）。权限页上要写出「经 mirroir serve 看屏幕、替你点」，`devices` 现在没有对应的写法。一个平台仓库里这一种取法和 `userscript`、`note-page` 并排，清单怎么写几份 `list`，协议还没有（[routes.md §1](routes.md#1-怎么读这一页)）。
+屏幕录制和辅助功能在 mirroir serve 身上，清单只写插件自己读的 `clipboard`；声明了 `screen-capture`、`accessibility` 的插件，宿主会请你把授权给 usuyo（[协议 §7](../protocol/isolation.md#7-权限与隔离)）。权限页上要写出「经 mirroir serve 看屏幕、替你点」，`devices` 现在没有对应的写法。一个平台仓库里这一种取法和 `userscript`、`note-page` 并排，各是清单里的一种方法（[协议 §2.3.1](../protocol/manifest.md#231-方法-methods)）。
 
 <a id="5-流程永远不做的事"></a>
 ## 5. 流程永远不做的事

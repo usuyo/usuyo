@@ -11,13 +11,15 @@ license: MIT
 maintainers: [usuyo]
 platforms: [fixture]
 match: ["fixture.test/*"]
-access: public-web
-login: none
-capabilities:
-  fetch:
+methods:
+  - id: sample
+    name: 合成的样例
     access: public-web
     login: none
-    outputs: [text, images, media:video, media:audio, subtitle, meta]
+    account: none
+    capabilities:
+      fetch:
+        outputs: [text, images, media:video, media:audio, subtitle, meta]
 permissions:
   fs: {write: ["${OUT}"]}
 run:

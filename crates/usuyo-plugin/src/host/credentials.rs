@@ -16,8 +16,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::PluginError;
 use crate::protocol::{
-    CapabilityUse, Cookie, Credential, CredentialSite, Credentials, Login, OriginState, PluginId,
-    Site, StorageState, Visitor,
+    Cookie, Credential, CredentialSite, Credentials, Login, Method, OriginState, PluginId, Site,
+    StorageState, Visitor,
 };
 
 use super::FetchPlugin;
@@ -583,18 +583,19 @@ impl Logins {
             .unwrap_or_default())
     }
 
-    /// 准备这次调用要交的：`cap` 是这次用的能力（`canonicalize` 没有）。读钥匙串，会阻塞。
+    /// 准备这次调用要交的：`method` 是这次用的方法（`canonicalize`、`health` 没有）。
+    /// 凭据只交方法列了的站点，访客身份只交方法列了的。读钥匙串，会阻塞。
     pub fn handover(
         &self,
         plugin: &FetchPlugin,
-        cap: Option<&CapabilityUse>,
+        method: Option<&Method>,
     ) -> Result<Handover, PluginError> {
         let index = self.read_index()?;
         let now = now_secs();
         let mut sites = Vec::new();
-        if let Some(cap) = cap.filter(|c| c.login != Login::None) {
-            let mut names: Vec<&String> = cap.sites.iter().collect();
-            for p in cap.per_platform.values().filter(|p| p.login != Login::None) {
+        if let Some(m) = method.filter(|m| m.login != Login::None) {
+            let mut names: Vec<&String> = m.sites.iter().collect();
+            for p in m.per_platform.values().filter(|p| p.login != Login::None) {
                 names.extend(p.sites.iter());
             }
             for name in names {
@@ -625,9 +626,9 @@ impl Logins {
                 }
             }
         }
-        // 访客身份和 `login` 无关：能力列了、存着，就交。只读 `visitor:` 那份，不碰账号。
+        // 访客身份和 `login` 无关：方法列了、存着，就交。只读 `visitor:` 那份，不碰账号。
         let mut visitors: Vec<(Visitor, StorageState)> = Vec::new();
-        for name in cap.map(|c| c.visitors.as_slice()).unwrap_or_default() {
+        for name in method.map(|m| m.visitors.as_slice()).unwrap_or_default() {
             let Some(v) = plugin.spec.visitors.iter().find(|v| &v.site == name) else {
                 continue;
             };

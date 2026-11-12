@@ -1,4 +1,4 @@
-# 协议 §2.3 的抖音例子：列表走登录侧，单条走公开页（混合路径）。
+# 协议 §2.3 的抖音例子：列表走登录侧，单条走公开页（混合路径）；几种取法各是一个方法（§2.3.1）。
 protocol: 1
 id: someone/usuyo-fetch-douyin
 kind: fetch
@@ -14,8 +14,6 @@ upstream:
     license: MIT
 platforms: [douyin]
 match: ["v.douyin.com/*", "www.douyin.com/video/*", "www.iesdouyin.com/share/video/*"]
-access: browser-session
-login: required
 sites:
   - site: www.douyin.com
     name: 抖音
@@ -23,24 +21,45 @@ sites:
     loginUrl: https://www.douyin.com/
     cookies: [sessionid]
     domains: [".douyin.com"]
-capabilities:
-  fetch:
+methods:
+  - id: share-page
+    name: 分享页
     access: public-web
     login: none
-    timeout: 10m
-    outputs: [text, images, media:video, meta, comments]
-  list:
+    account: none
+    capabilities:
+      fetch:
+        timeout: 10m
+        outputs: [text, images, media:video, meta, comments]
+  - id: favorites
+    name: 收藏夹
     access: browser-session
     login: required
+    account: in-usuyo
     sites: [www.douyin.com]
-    order: newest-first
     interaction: background
-    sources:
-      - {source: "douyin:favorites", title: 我的收藏夹, action: favorite}
-  unfavorite:
+    capabilities:
+      list:
+        order: newest-first
+        sources:
+          - {source: "douyin:favorites", title: 我的收藏夹, action: favorite}
+      unfavorite: {}
+    risk:
+      text: 页面外带 cookie 调收藏接口常回 403
+      source: {label: 调研 06 §0, url: "https://github.com/usuyo/usuyo/blob/main/docs/research/06-platform-access-and-account-risk.md"}
+  - id: userscript
+    name: 浏览器脚本
     access: browser-session
     login: required
-    sites: [www.douyin.com]
+    account: own-browser
+    delivers: links
+  - id: iphone
+    name: 手机镜像
+    built: false
+    access: vision-ui
+    login: required
+    account: own-phone
+    interaction: foreground
 pacing:
   douyin: {batch: true, interval: 8s, daily: 300}
 settings:

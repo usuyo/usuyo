@@ -108,6 +108,33 @@ CREATE TABLE transform_jobs (
 PRAGMA user_version = 2;
 ";
 
+/// 版本 3：获取插件里有几种方法（协议 §2.3.1）。暂停按 (插件, 方法, 范围) 记，「先别试」的方法和范围都是 `*`；
+/// 导入记它的来源属于哪种方法；每种方法上一次调用的结果（成没成、错误码和一句话）。
+/// 旧的暂停只是一时的，不搬。
+const SCHEMA_V3: &str = "
+DROP TABLE pauses;
+CREATE TABLE pauses (
+    plugin   TEXT NOT NULL,
+    method   TEXT NOT NULL,
+    platform TEXT NOT NULL,
+    until_at INTEGER,
+    code     TEXT,
+    hint     TEXT,
+    held     INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (plugin, method, platform)
+);
+ALTER TABLE imports ADD COLUMN method TEXT;
+CREATE TABLE method_calls (
+    plugin TEXT NOT NULL,
+    method TEXT NOT NULL,
+    at     INTEGER NOT NULL,
+    code   TEXT,
+    hint   TEXT,
+    PRIMARY KEY (plugin, method)
+);
+PRAGMA user_version = 3;
+";
+
 /// 手动收下的排在导入前面（协议 §3.1 的队列顺序）。
 pub(crate) const PRIORITY_MANUAL: i64 = 0;
 pub(crate) const PRIORITY_IMPORT: i64 = 2;
@@ -159,11 +186,22 @@ impl JobState {
 /// 一个插件在一个范围上的暂停。`until` 为空是你点了「先别试」，到你点「现在再试」为止。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PauseRow {
+    /// 停的是哪种方法；`*` 是你点的「先别试」，整个插件。
+    pub method: String,
     pub scope: String,
     pub until: Option<i64>,
     pub code: Option<String>,
     pub hint: Option<String>,
     pub held: bool,
+}
+
+/// 一种方法上一次调用：什么时候结束、成没成（`code` 空是成了）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MethodCall {
+    pub method: String,
+    pub at: i64,
+    pub code: Option<String>,
+    pub hint: Option<String>,
 }
 
 /// 一个平台的节奏记账：上次调用什么时候结束，今天（本地日期）批量调用了几次。
@@ -180,6 +218,8 @@ pub struct ImportRow {
     pub id: String,
     pub kind: String,
     pub plugin: Option<String>,
+    /// `source` 类：来源属于插件的哪种方法。
+    pub method: Option<String>,
     pub source: Option<String>,
     pub client: Option<String>,
     pub title: String,
@@ -224,7 +264,8 @@ fn ms(d: std::time::Duration) -> i64 {
 const JOB_COLUMNS: &str =
     "item_id, url, state, attempts, due_at, error_code, error_hint, priority, import_id";
 const IMPORT_COLUMNS: &str = "id, kind, plugin, source, client, title, action, created_at, cursor,
-    listed, pages, attempts, wait_until, stop_code, stop_hint, held, confirmed_at, also_trashed, skipped";
+    listed, pages, attempts, wait_until, stop_code, stop_hint, held, confirmed_at, also_trashed, skipped,
+    method";
 const ENTRY_COLUMNS: &str = "seq, url, title, action, acted_at, identity, item_id, standing, added";
 
 impl Jobs {
@@ -249,6 +290,9 @@ impl Jobs {
         }
         if version < 2 {
             conn.execute_batch(&format!("BEGIN; {SCHEMA_V2} COMMIT;"))?;
+        }
+        if version < 3 {
+            conn.execute_batch(&format!("BEGIN; {SCHEMA_V3} COMMIT;"))?;
         }
         conn.execute(
             "UPDATE fetch_jobs SET state = 'queued' WHERE state = 'running'",
@@ -377,49 +421,59 @@ impl Jobs {
 
     // —— 暂停 ——
 
-    /// 这个插件在这个范围上暂停到 `until`（Unix 毫秒），记下原因。你点的「先别试」不被它盖掉。
+    /// 这个插件的这种方法在这个范围上暂停到 `until`（Unix 毫秒），记下原因。你点的「先别试」不被它盖掉。
     pub fn pause(
         &self,
         plugin: &str,
+        method: &str,
         scope: &str,
         until: i64,
         code: &str,
         hint: Option<&str>,
     ) -> Result<()> {
         self.conn().execute(
-            "INSERT INTO pauses (plugin, platform, until_at, code, hint, held) VALUES (?1, ?2, ?3, ?4, ?5, 0)
-             ON CONFLICT (plugin, platform) DO UPDATE SET
+            "INSERT INTO pauses (plugin, method, platform, until_at, code, hint, held)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0)
+             ON CONFLICT (plugin, method, platform) DO UPDATE SET
                 until_at = excluded.until_at, code = excluded.code, hint = excluded.hint
              WHERE pauses.held = 0",
-            params![plugin, scope, until, code, hint],
+            params![plugin, method, scope, until, code, hint],
         )?;
         Ok(())
     }
 
-    /// 你点了「先别试」：这个插件在哪儿都不试（范围记成 `*`），到你点「现在再试」为止。
+    /// 你点了「先别试」：这个插件的哪种方法在哪儿都不试（方法和范围记成 `*`），到你点「现在再试」为止。
     pub fn hold(&self, plugin: &str) -> Result<()> {
         self.conn().execute(
-            "INSERT INTO pauses (plugin, platform, until_at, code, hint, held) VALUES (?1, '*', NULL, NULL, NULL, 1)
-             ON CONFLICT (plugin, platform) DO UPDATE SET until_at = NULL, code = NULL, hint = NULL, held = 1",
+            "INSERT INTO pauses (plugin, method, platform, until_at, code, hint, held)
+             VALUES (?1, '*', '*', NULL, NULL, NULL, 1)
+             ON CONFLICT (plugin, method, platform) DO UPDATE SET
+                until_at = NULL, code = NULL, hint = NULL, held = 1",
             params![plugin],
         )?;
         Ok(())
     }
 
-    /// 「现在再试」：这个插件的暂停全去掉。
+    /// 「现在再试」：这个插件所有方法的暂停全去掉。
     pub fn clear_pauses(&self, plugin: &str) -> Result<()> {
         self.conn()
             .execute("DELETE FROM pauses WHERE plugin = ?1", params![plugin])?;
         Ok(())
     }
 
-    /// 这个插件在这个范围上停着没有（你点的「先别试」哪儿都算）；到点的暂停顺手删掉。
-    pub fn paused(&self, plugin: &str, scope: &str, now: i64) -> Result<Option<PauseRow>> {
+    /// 这种方法在这个范围上停着没有（你点的「先别试」哪儿都算）；到点的暂停顺手删掉。
+    pub fn paused(
+        &self,
+        plugin: &str,
+        method: &str,
+        scope: &str,
+        now: i64,
+    ) -> Result<Option<PauseRow>> {
         let conn = self.conn();
         let held = conn
             .query_row(
-                "SELECT platform, until_at, code, hint, held FROM pauses
-                 WHERE plugin = ?1 AND platform = '*' AND held = 1",
+                "SELECT method, platform, until_at, code, hint, held FROM pauses
+                 WHERE plugin = ?1 AND method = '*' AND platform = '*' AND held = 1",
                 params![plugin],
                 row_to_pause,
             )
@@ -429,8 +483,9 @@ impl Jobs {
         }
         let row = conn
             .query_row(
-                "SELECT platform, until_at, code, hint, held FROM pauses WHERE plugin = ?1 AND platform = ?2",
-                params![plugin, scope],
+                "SELECT method, platform, until_at, code, hint, held FROM pauses
+                 WHERE plugin = ?1 AND method = ?2 AND platform = ?3",
+                params![plugin, method, scope],
                 row_to_pause,
             )
             .optional()?;
@@ -438,8 +493,8 @@ impl Jobs {
             Some(p) if p.held || p.until.is_some_and(|t| t > now) => Ok(Some(p)),
             Some(_) => {
                 conn.execute(
-                    "DELETE FROM pauses WHERE plugin = ?1 AND platform = ?2",
-                    params![plugin, scope],
+                    "DELETE FROM pauses WHERE plugin = ?1 AND method = ?2 AND platform = ?3",
+                    params![plugin, method, scope],
                 )?;
                 Ok(None)
             }
@@ -451,10 +506,46 @@ impl Jobs {
     pub fn pauses_of(&self, plugin: &str, now: i64) -> Result<Vec<PauseRow>> {
         let conn = self.conn();
         let mut stmt = conn.prepare(
-            "SELECT platform, until_at, code, hint, held FROM pauses
-             WHERE plugin = ?1 AND (held = 1 OR until_at > ?2) ORDER BY platform",
+            "SELECT method, platform, until_at, code, hint, held FROM pauses
+             WHERE plugin = ?1 AND (held = 1 OR until_at > ?2) ORDER BY method, platform",
         )?;
         let rows = stmt.query_map(params![plugin, now], row_to_pause)?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    // —— 每种方法上一次调用 ——
+
+    /// 记下这种方法这一次调用的结果，盖掉上一次的；`code` 空是成了。
+    pub fn record_method_call(
+        &self,
+        plugin: &str,
+        method: &str,
+        at: i64,
+        code: Option<&str>,
+        hint: Option<&str>,
+    ) -> Result<()> {
+        self.conn().execute(
+            "INSERT INTO method_calls (plugin, method, at, code, hint) VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT (plugin, method) DO UPDATE SET
+                at = excluded.at, code = excluded.code, hint = excluded.hint",
+            params![plugin, method, at, code, hint],
+        )?;
+        Ok(())
+    }
+
+    /// 这个插件每种方法上一次调用的结果。
+    pub fn method_calls(&self, plugin: &str) -> Result<Vec<MethodCall>> {
+        let conn = self.conn();
+        let mut stmt =
+            conn.prepare("SELECT method, at, code, hint FROM method_calls WHERE plugin = ?1")?;
+        let rows = stmt.query_map(params![plugin], |r| {
+            Ok(MethodCall {
+                method: r.get(0)?,
+                at: r.get(1)?,
+                code: r.get(2)?,
+                hint: r.get(3)?,
+            })
+        })?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
@@ -496,10 +587,19 @@ impl Jobs {
 
     pub fn insert_import(&self, i: &ImportRow) -> Result<()> {
         self.conn().execute(
-            "INSERT INTO imports (id, kind, plugin, source, client, title, action, created_at, listed)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            "INSERT INTO imports (id, kind, plugin, method, source, client, title, action, created_at, listed)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
-                i.id, i.kind, i.plugin, i.source, i.client, i.title, i.action, i.created_at, i.listed
+                i.id,
+                i.kind,
+                i.plugin,
+                i.method,
+                i.source,
+                i.client,
+                i.title,
+                i.action,
+                i.created_at,
+                i.listed
             ],
         )?;
         Ok(())
@@ -1223,11 +1323,12 @@ fn row_to_job(r: &rusqlite::Row<'_>) -> rusqlite::Result<FetchJob> {
 
 fn row_to_pause(r: &rusqlite::Row<'_>) -> rusqlite::Result<PauseRow> {
     Ok(PauseRow {
-        scope: r.get(0)?,
-        until: r.get(1)?,
-        code: r.get(2)?,
-        hint: r.get(3)?,
-        held: r.get(4)?,
+        method: r.get(0)?,
+        scope: r.get(1)?,
+        until: r.get(2)?,
+        code: r.get(3)?,
+        hint: r.get(4)?,
+        held: r.get(5)?,
     })
 }
 
@@ -1252,6 +1353,7 @@ fn row_to_import(r: &rusqlite::Row<'_>) -> rusqlite::Result<ImportRow> {
         confirmed_at: r.get(16)?,
         also_trashed: r.get(17)?,
         skipped: r.get(18)?,
+        method: r.get(19)?,
     })
 }
 
@@ -1305,24 +1407,35 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("jobs.db");
         let jobs = Jobs::open(&path, 0).unwrap();
-        jobs.pause("a/b", "a.test", 100, "rate-limited", Some("慢点"))
+        jobs.pause("a/b", "guest", "a.test", 100, "rate-limited", Some("慢点"))
             .unwrap();
-        let p = jobs.paused("a/b", "a.test", 50).unwrap().unwrap();
+        let p = jobs.paused("a/b", "guest", "a.test", 50).unwrap().unwrap();
         assert_eq!(
-            (p.until, p.code.as_deref()),
-            (Some(100), Some("rate-limited"))
+            (p.until, p.code.as_deref(), p.method.as_str()),
+            (Some(100), Some("rate-limited"), "guest")
         );
-        assert_eq!(jobs.paused("a/b", "a.test", 100).unwrap(), None);
+        assert_eq!(
+            jobs.paused("a/b", "embed", "a.test", 50).unwrap(),
+            None,
+            "一种方法停着，别的方法照常"
+        );
+        assert_eq!(jobs.paused("a/b", "guest", "a.test", 100).unwrap(), None);
         jobs.hold("a/b").unwrap();
-        jobs.pause("a/b", "a.test", 10, "rate-limited", None)
+        jobs.pause("a/b", "guest", "a.test", 10, "rate-limited", None)
             .unwrap();
         assert!(
-            jobs.paused("a/b", "a.test", 1_000).unwrap().unwrap().held,
+            jobs.paused("a/b", "guest", "a.test", 1_000)
+                .unwrap()
+                .unwrap()
+                .held,
             "限流不盖掉你点的"
         );
         assert!(
-            jobs.paused("a/b", "b.test", 1_000).unwrap().unwrap().held,
-            "哪儿都算"
+            jobs.paused("a/b", "embed", "b.test", 1_000)
+                .unwrap()
+                .unwrap()
+                .held,
+            "哪种方法、哪儿都算"
         );
         drop(jobs);
         let jobs = Jobs::open(&path, 0).unwrap();
@@ -1332,6 +1445,40 @@ mod tests {
         );
         jobs.clear_pauses("a/b").unwrap();
         assert!(jobs.pauses_of("a/b", 0).unwrap().is_empty());
+    }
+
+    #[test]
+    fn last_call_per_method_survives_a_restart() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("jobs.db");
+        let jobs = Jobs::open(&path, 0).unwrap();
+        jobs.record_method_call("a/b", "guest", 5, Some("blocked"), Some("要验证"))
+            .unwrap();
+        jobs.record_method_call("a/b", "guest", 9, None, None)
+            .unwrap();
+        jobs.record_method_call("a/b", "embed", 7, Some("network"), None)
+            .unwrap();
+        drop(jobs);
+        let jobs = Jobs::open(&path, 0).unwrap();
+        let mut calls = jobs.method_calls("a/b").unwrap();
+        calls.sort_by(|x, y| x.method.cmp(&y.method));
+        assert_eq!(
+            calls,
+            vec![
+                MethodCall {
+                    method: "embed".into(),
+                    at: 7,
+                    code: Some("network".into()),
+                    hint: None
+                },
+                MethodCall {
+                    method: "guest".into(),
+                    at: 9,
+                    code: None,
+                    hint: None
+                },
+            ]
+        );
     }
 
     #[test]
