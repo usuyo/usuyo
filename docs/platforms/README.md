@@ -1,14 +1,14 @@
 <a id="各平台怎么取"></a>
 # 各平台怎么取
 
-每个平台每一样东西要不要账号、走哪条路、做到哪，都在这一页。一个平台的细节（请求、身份、存下什么、错误怎么报）写在那个平台自己的设计里：[小红书](xiaohongshu.md)、[视频号](wechat-channels.md)、[B站](bilibili.md)、[X](x.md)。小红书、视频号、B站这三份照 2026-11-11 用 `gh api` 读的源码、README、release 和 issue 写，没有登录任何账号，没有对平台发请求，没有运行第三方代码，也没有读本机的微信数据目录；标「推断」的没有实测。证据和来源在[调研 06](../research/06-platform-access-and-account-risk.md)，这里不重抄。
+每个平台每一样东西要不要账号、走哪条路、做到哪，都在这一页。一个平台的细节（请求、身份、存下什么、错误怎么报）写在那个平台自己的设计里：[小红书](xiaohongshu.md)、[视频号](wechat-channels.md)、[B站](bilibili.md)、[X](x.md)。小红书、视频号、B站这三份照 2026-11-11 用 `gh api` 读的源码、README、release 和 issue 写，没有登录任何账号，没有对平台发请求，没有运行第三方代码，也没有读本机的微信数据目录；标「推断」的没有实测。证据和来源在[调研 06](../research/06-platform-access-and-account-risk.md)，这里不重抄。每个平台仓库里有哪几种取法、各用什么做成，在 [routes.md](routes.md)；手机上替你复制链接的那几种取法，在 [phone.md](phone.md)。
 
 <a id="1-怎么读这一页"></a>
 ## 1. 怎么读这一页
 
 **层级。** 表里的 `public-web`、`browser-session`、`session-api` 这些词照[插件协议 §2.4](../protocol/manifest.md#24-access-与-login) 的定义，这里不再解释；它们是给你挑的标签，不拦。
 
-**要不要账号**，表里用五个说法：
+**要不要账号**，表里用六个说法：
 
 | 说法 | 意思 |
 |---|---|
@@ -16,6 +16,7 @@
 | 访客身份 | 不登录，但要一份站点给任何访客的 cookie，usuyo 开一个不登录的窗口取（[协议 §2.5.1](../protocol/manifest.md#251-访客身份-visitors)） |
 | 账号只在你自己的浏览器里 | 你在日常浏览器里登录着，脚本只看页面自己拿回来的东西，把链接交给 usuyo（[协议 §9.4](../protocol/wrapping.md#94-浏览器扩展与油猴脚本)）；usuyo 碰不到你的 cookie |
 | 要在 usuyo 里登录 | 你在 usuyo 的登录窗口里登录，插件带你的 cookie 调平台接口（[协议 §2.5](../protocol/manifest.md#25-登录站点-sites)） |
+| 账号在你手机的 App 里 | 你手机上登录着的 App，经 iPhone 镜像或 adb 替你点「分享 → 复制链接」，只交链接（[phone.md](phone.md)）；usuyo 碰不到你的账号 |
 | 没有路 | 调研里没找到可用的做法 |
 
 **账号只用在非它不可的地方**（[BUILD §1](../BUILD.md#1-用户定下的做法)）。每个平台按「这一样要不要账号」拆开：不要账号能拿到的，一律不带账号去取，你登录过也不带；账号只用在没有别的办法的那几样上，多半是「列出你存过的」。这是分路的规矩，不是一个共用的下载器：每个平台还是一个插件，插件按能力声明各走各的路。
@@ -39,11 +40,11 @@
 |---|---|---|---|---|---|
 | 小红书 | 图文 | 访客身份 | 公开笔记页，读页面里的状态对象，不签名（`public-web`） | 做了 | `usuyo-fetch/xiaohongshu`；[xiaohongshu.md §2.2](xiaohongshu.md#22-取单条) |
 | 小红书 | 视频 | 访客身份 | 同一个 `fetch`，下载页面给的地址；不登录只有低清（`public-web`） | 做了 | 同上 |
-| 小红书 | 存过的 | 账号只在你自己的浏览器里 | 油猴脚本只记收藏页、赞过页自己的请求，交 `/v1/batches`（`browser-session`） | 做了 | `usuyo-fetch/xiaohongshu/userscript/`；[xiaohongshu.md §2.1](xiaohongshu.md#21-列出你存过的) |
+| 小红书 | 存过的 | 账号只在你自己的浏览器里；或账号在你手机的 App 里 | 油猴脚本只记收藏页、赞过页自己的请求，交 `/v1/batches`（`browser-session`）；或 iPhone 镜像替你逐条复制链接（`vision-ui`） | 脚本做了；手机设计了 | `usuyo-fetch/xiaohongshu/userscript/`；[xiaohongshu.md §2.1](xiaohongshu.md#21-列出你存过的)；[phone.md §7.2](phone.md#72-小红书收藏) |
 | 小红书 | 创作者 / 关键词 | 不要（推断） | RSSHub 用不登录的无头浏览器截获主页请求（`public-web`）；搜索只找到要签名的（`private-api`） | 只有调研 | [多平台笔记 RSSHub 表](../research/notes/multi-platform-tier-table-and-base-deps.md#rsshub) |
 | 视频号 | 图文 | 不要 | 分享链接对应的匿名接口，只有作者、描述、封面（`public-web`） | 做了 | `usuyo-fetch/wechat-channels`；[wechat-channels.md §3.2](wechat-channels.md#32-取单条) |
 | 视频号 | 视频 | 要在 usuyo 里登录（腾讯元宝，不是微信） | 元宝换临时凭证，再匿名要视频地址（`session-api`） | 做了 | 同上 |
-| 视频号 | 存过的 | 没有路 | 只有改写微信客户端的工具（`client-hook`），每次微信更新都失效；能做的是手机上逐条「复制链接」放进收件文件夹 | 只有调研 | [wechat-channels.md §3.1](wechat-channels.md#31-列出你存过的) |
+| 视频号 | 存过的 | 账号在你手机的 App 里 | iPhone 镜像替你在「赞和收藏」里逐条复制链接（`vision-ui`，微信记中）；改写微信客户端的工具（`client-hook`）每次微信更新都失效 | 设计了 | [phone.md §7.1](phone.md#71-视频号赞和收藏)；[wechat-channels.md §3.1](wechat-channels.md#31-列出你存过的) |
 | 视频号 | 创作者 / 关键词 | 没有路 | 调研没查到 | 只有调研 | — |
 | B站 | 图文 | 不要 | `view` 接口取标题、简介、封面、分 P（`public-web`） | 做了 | `usuyo-fetch/bilibili`；[bilibili.md §4.2](bilibili.md#42-取单条) |
 | B站 | 视频 | 不要 | 不签名的 `playurl` 取低清音视频（`public-web`）；高清和字幕要登录，不取，文字交给转写 | 做了 | 同上 |
@@ -55,11 +56,11 @@
 | X | 创作者 / 关键词 | 账号只在你自己的浏览器里 | 不登录看不到主页时间线和搜索；只能由脚本记你自己翻到的 | 设计了（等[协议 §13](../protocol/open.md#13-待定) 第 26 项） | [x.md](x.md#4-按创作者或关键词列) |
 | 抖音 | 图文 | 不要 | 分享页服务端渲染的数据（`public-web`） | 只有调研 | [调研 06 §1.3](../research/06-platform-access-and-account-risk.md#13-混合路径视觉层拿链接公开页面取内容) |
 | 抖音 | 视频 | 不要 | 同一个分享页给的播放地址（`public-web`）；yt-dlp 那条路要一份新的访客 cookie | 只有调研 | 同上；[yt-dlp 笔记](../research/notes/tier-ytdlp-and-sph-attribution.md) |
-| 抖音 | 存过的 | 账号只在你自己的浏览器里 | 在真抖音页面里发请求取收藏（`browser-session`）；页面外的请求 2026 下半年被拦；另有官方「个人信息下载」，包里有什么没核实 | 只有调研 | [抖音笔记](../research/notes/douyin-direction-findings.md) |
+| 抖音 | 存过的 | 账号只在你自己的浏览器里；或不要（读你申请的导出） | 在真抖音页面里由页面自己的请求取收藏（`browser-session`）；页面外的请求 2026 下半年被拦；官方「个人信息下载」的导入（`official-export`），包里有什么没核实 | 只有调研 | [抖音笔记](../research/notes/douyin-direction-findings.md)；[routes.md §7](routes.md#7-抖音) |
 | 抖音 | 创作者 / 关键词 | 不要（创作者）；关键词没有路 | 不登录的无头浏览器截获主页请求（`public-web`）；搜索出验证码 | 只有调研 | [多平台笔记 RSSHub 表](../research/notes/multi-platform-tier-table-and-base-deps.md#rsshub) |
 | 快手 | 图文 | 不要 | 分享链接的页面数据（`public-web`） | 只有调研 | [调研 06 §1.3](../research/06-platform-access-and-account-risk.md#13-混合路径视觉层拿链接公开页面取内容) |
 | 快手 | 视频 | 不要 | 同上；频繁请求要验证 | 只有调研 | 同上 |
-| 快手 | 存过的 | 没有路 | 没找到浏览器里取收藏的工具；只能手机逐条分享 | 只有调研 | 同上 |
+| 快手 | 存过的 | 账号在你手机的 App 里 | 没找到浏览器里取收藏的工具；手机上替你逐条复制链接（`vision-ui`） | 只有调研 | [routes.md §8](routes.md#8-快手) |
 | 快手 | 创作者 / 关键词 | 没有路 | 按账号批量在 KS-Downloader 里被注释掉 | 只有调研 | 同上 |
 | 微博 | 图文 | 访客身份 | 访客握手后调不签名接口（`public-web`） | 只有调研 | [多平台笔记的口径](../research/notes/multi-platform-tier-table-and-base-deps.md#口径) |
 | 微博 | 视频 | 访客身份 | 同上 | 只有调研 | 同上 |
@@ -76,8 +77,8 @@
 | YouTube | 创作者 / 关键词 | 不要（创作者）；关键词没查 | 频道的公开订阅源（`public-web`） | 只有调研 | [调研 06 §2](../research/06-platform-access-and-account-risk.md#2-覆盖矩阵每个平台有哪些层级可选) |
 | 公众号 | 图文 | 不要 | 文章页（`public-web`）；批量取会出环境验证 | 只有调研 | [调研 06 §1.3](../research/06-platform-access-and-account-risk.md#13-混合路径视觉层拿链接公开页面取内容) |
 | 公众号 | 视频 | 不要 | 文中的视频号卡片只有元数据和封面，视频照视频号那一行 | 只有调研 | 同上 |
-| 公众号 | 存过的 | 账号在你自己的微信里 | 电脑版微信收藏里逐条复制链接（`vision-ui`，微信上记中风险） | 只有调研 | 同上 |
-| 公众号 | 创作者 / 关键词 | 要在 usuyo 里登录（公众号后台） | 公众号后台的文章列表（`session-api`），会话 2–4 天过期 | 只有调研 | [调研 06 §16.2](../research/06-platform-access-and-account-risk.md#162-issue-里的账号问题) |
+| 公众号 | 存过的 | 账号在你手机的 App 里，或你电脑的微信里 | iPhone 镜像或电脑版微信替你在收藏里逐条复制文章链接（`vision-ui`，微信记中） | 设计了 | [phone.md §7.3](phone.md#73-微信收藏里的文章)；[协议 §9.5](../protocol/wrapping.md#95-视觉层流程) |
+| 公众号 | 创作者 / 关键词 | 要在 usuyo 里登录（公众号后台） | 公众号后台的文章列表（`session-api`）；wechat-article-exporter 用的那条 2026-07 下旬关闭（[#200](https://github.com/wechat-article/wechat-article-exporter/issues/200)），we-mp-rss 2026-11-10 仍有推送，现在能不能用没核 | 只有调研 | [routes.md §13](routes.md#13-公众号和微信收藏) |
 
 从表里看：单条的文字、图、视频，除了视频号的视频、B站的高清和字幕、X 上要登录才看得到的帖子，都不要账号（贴吧例外，不要账号的路一条都没找到）；要账号的几乎都是「存过的」。YouTube 不要账号但层级是 `private-api`，要不要账号和层级是两回事。
 
