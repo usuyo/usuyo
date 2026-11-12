@@ -137,7 +137,7 @@
 
 | 取法 | 拿到什么 | 账号 | 层级 | 做成什么样 | 你要装或给的 | 已有 | 记录到的情况 | 不用账号能试 |
 |---|---|---|---|---|---|---|---|---|
-| `share-page` | 单条图文、视频 | 不要 | `public-web` | 自己写，移植 parse-video 的快手解析（MIT）；对照 [ParseHub](https://github.com/z-mio/ParseHub) `kuaishou.py`（MIT，v2.4.1，cookie 可选）和 Downvid 的快手解析器（MIT，v1.12.0） | — | 没有 | 频繁请求要验证（[06 §1.3](../research/06-platform-access-and-account-risk.md#13-混合路径视觉层拿链接公开页面取内容)） | 能 |
+| `share-page` | 单条图文、视频 | 不要 | `public-web` | 自己写，移植 parse-video 的快手解析（MIT）；对照 [ParseHub](https://github.com/z-mio/ParseHub) `kuaishou.py`（MIT，v2.4.1，cookie 可选）和 Downvid 的快手解析器（MIT，v1.12.0） | — | 做了（`usuyo-fetch/kuaishou`，11-12）；不带账号对真平台跑通：短链和 `short-video/<id>` 各取到一条完整的视频（封面、57 MB 的视频、原始数据），删掉的作品回 `not-found`。图集的形状没实测 | 频繁请求要验证（[06 §1.3](../research/06-platform-access-and-account-risk.md#13-混合路径视觉层拿链接公开页面取内容)） | 能 |
 | `ks-downloader` | 单条图文、视频 | 不要（一份不登录的网页 cookie） | `public-web` | 包 [KS-Downloader](https://github.com/JoeanAmier/KS-Downloader)（GPL-3.0，1.6，官方 release 有 macOS 包）：`python main.py api`，文档在 `127.0.0.1:5557/docs`；接口路径命令待核 | 安装并开 API 模式 | 没有 | 同上 | 能 |
 | `iphone`、`android` | 存过的：收藏、赞过 | 账号在你手机的 App 里 | `vision-ui` | 手机驱动上的流程 | 同小红书 `iphone`、`android` | 没有 | 浏览器里没有取收藏的工具；调研里没有处罚记录 | 不能 |
 
@@ -219,6 +219,8 @@
 ## 15. yt-dlp 通用视频
 
 `usuyo-fetch/ytdlp`，包 [yt-dlp](https://github.com/yt-dlp/yt-dlp)（Unlicense，2026.10.26；Homebrew，或官方 release 的 `yt-dlp_macos`，release 带 `SHA2-256SUMS` 和签名）。只有 `fetch`，`login: none`，不传 cookie，不用 `--cookies-from-browser`。各平台的层级用 `perPlatform` 写（[协议 §2.3](../protocol/manifest.md#23-获取插件的字段)）。默认顺序照[协议 §3.1](../protocol/fetch.md#31-运行器与节奏)：不要账号的在前，同类按层级从低到高，再按安装顺序；你拖动过的照你排的。
+
+**现状（11-12）。** 做了，一种方法 `ytdlp`。经宿主实测（这台机器的 yt-dlp 是 2026.03.17）：知乎视频完整取到（720p 的 mp4、音频、封面）；YouTube 只拿到标题、作者、简介，YouTube 回「先确认你不是机器人」，原因没分清是出口还是 yt-dlp 太旧；其余站点没跑。调用时带 `--ignore-config --no-config-locations --no-cookies --no-cookies-from-browser --no-plugin-dirs`，代理只听宿主的；字幕的语言名只认普通的名字。YouTube、微博、Instagram 在这种方法里按 `private-api` 算。
 
 不带 cookie 的路径，依据[多平台笔记 yt-dlp 表](../research/notes/multi-platform-tier-table-and-base-deps.md#yt-dlp)（读的是 master `b77c930`，比 2026.10.26 多三个提交，没有改抽取器）：
 
