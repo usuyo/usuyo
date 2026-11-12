@@ -2344,6 +2344,52 @@ fn ocr_resolves_by_run_and_by_image_key() {
     );
 }
 
+/// 资料库的文件在 usuyo 外被动过：产物路径经过一个指到条目外的符号链接文件夹。
+/// 只留文字不跟着它走，条目外的文件原样留着。
+#[cfg(unix)]
+#[test]
+fn keep_text_never_moves_files_outside_the_item() {
+    let e = env();
+    let mut lib = Library::init(&e.root, &e.machine).unwrap();
+    let (id, sid, path, sha) = video_item(&mut lib, "https://example.com/v");
+    let (play_id, _) = media_runs(&mut lib, &id, &sid, &path, &sha);
+    let item_dir = e.root.join(id.rel_dir());
+
+    let outside = e.root.parent().unwrap().join("outside");
+    fs::create_dir_all(&outside).unwrap();
+    fs::write(outside.join("play.mp4"), b"not ours").unwrap();
+    fs::write(outside.join("video.mp4"), b"not ours either").unwrap();
+
+    // 转录里：`sub` 指到条目外，run.json 的产物路径改成经过它。
+    let run_dir = item_dir.join("derived/runs").join(&play_id);
+    std::os::unix::fs::symlink(&outside, run_dir.join("sub")).unwrap();
+    let record = run_dir.join("run.json");
+    let mut rec: serde_json::Value = serde_json::from_slice(&fs::read(&record).unwrap()).unwrap();
+    rec["outputs"][0]["path"] = json!("sub/play.mp4");
+    fs::write(&record, serde_json::to_vec(&rec).unwrap()).unwrap();
+
+    // 原样里：`media` 整个换成指到条目外的符号链接。
+    let media = item_dir.join("raw").join(&sid).join("media");
+    fs::remove_dir_all(&media).unwrap();
+    std::os::unix::fs::symlink(&outside, &media).unwrap();
+
+    lib.apply(&user(), &item_target(&id), Op::KeepText {})
+        .unwrap();
+
+    assert_eq!(fs::read(outside.join("play.mp4")).unwrap(), b"not ours");
+    assert_eq!(
+        fs::read(outside.join("video.mp4")).unwrap(),
+        b"not ours either"
+    );
+    let removed = lib.item(&id).unwrap().manifest.text_only.unwrap().removed;
+    assert!(
+        removed
+            .iter()
+            .all(|r| !r.contains("sub/") && !r.contains("/media/")),
+        "{removed:?}"
+    );
+}
+
 #[test]
 fn keep_text_moves_exactly_the_binary_products_and_restore_brings_them_back() {
     let e = env();

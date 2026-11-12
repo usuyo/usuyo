@@ -11,6 +11,7 @@ use usuyo_contract::{
 use crate::fsx::{self, list_files, read_opt, write_json};
 use crate::hash::hash_tag;
 use crate::id::{ItemId, uuid7};
+use crate::item::contained_file;
 use crate::journal::{Batch, Step, target};
 use crate::link::FORGOTTEN;
 use crate::segments::all_segment_files;
@@ -262,6 +263,15 @@ impl Library {
             }
         }
         moved.extend(self.run_binaries(id)?);
+        // 资料库的文件可能在 usuyo 外被动过：只挪解析掉符号链接以后还在条目文件夹里的，别的留在原处。
+        moved.retain(|rel| {
+            let inside =
+                contained_file(&dir, &dir.join(rel), || Error::NotFound(rel.clone())).is_ok();
+            if !inside {
+                tracing::warn!(item = %id, path = %rel, "left in place: it resolves outside the item folder");
+            }
+            inside
+        });
         let tid = uuid7();
         let tdir = self.trash_path(&tid)?;
         for rel in &moved {
