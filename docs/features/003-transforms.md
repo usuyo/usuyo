@@ -142,7 +142,7 @@ raw 里的图、封面 ──ocr──▶ 图里的字
 平台给的字幕 ──（不转）──▶ 直接摆出来、进索引
 ```
 
-**哪两个文件是一段**：宿主按内容配，不按平台。同一个快照的 `media[]` 里恰好一个 `video`、一个 `audio`，`ffprobe` 看画面文件没有音轨、音频文件没有画面，两者时长差不超过 1 秒或 2%（取大的），就配成一对，交给 `play`。配不上的不合，各自照常转。协议 [§13 第 38 项](../plugin-protocol.md#13-待定) 加一个 `group` 字段以后，有 `group` 先按它（[§8.2](#82-要写回-spec--协议的)）。画面文件本来就带音轨的（小红书、视频号）不需要 `play`。
+**哪两个文件是一段**：宿主按内容配，不按平台。同一个快照的 `media[]` 里恰好一个 `video`、一个 `audio`，`ffprobe` 看画面文件没有音轨、音频文件没有画面，两者时长差不超过 1 秒或 2%（取大的），就配成一对，交给 `play`。配不上的不合，各自照常转。fetch 输出的 `media[]` 带 `group` 时先按它（[协议 §3.7](../plugin-protocol.md#37-fetch-输出)）。画面文件本来就带音轨的（小红书、视频号）不需要 `play`。
 
 <a id="42-宿主要加的"></a>
 ### 4.2 宿主要加的
@@ -483,7 +483,7 @@ export interface Pending {
 2. [x] [§2.9](../plugin-protocol.md#29-转换插件的字段) `models[]` 加 `format`（`file`、`tar.bz2`、`tar.gz`、`zip`，压缩包由宿主解到 `${MODELS}/<名字>/`）、`mirrors`（同一个 sha256 的别的地址）、`license`（下载前给你看）；`size` 改必填。
 3. [x] [§4.2](../plugin-protocol.md#42-转换的-run) `run` 的参数加 `want`（这次要哪几种产出，一个插件能做几种时用）；`inputs[]` 加 `snapshot`、`imageKey`、`frameSec`、`role`（`video`、`audio`）；结果加 `tool {name, version}`、`options`（实际用的参数，含默认值）、`marks[]`、每个输出的 `kind`；宿主照它写 `run.json`，不再写 `<文件>.meta.json`。`empty` 的 `reason` 词表：`no-speech`、`no-audio-track`、`no-text`。
 4. [x] [§4.1](../plugin-protocol.md#41-分帧与生命周期)：转换进程闲了可以关掉；`progress` 只用来判断卡住，不往界面报。
-5. [x] [§13 第 38 项](../plugin-protocol.md#13-待定) 的答案：fetch 输出的 `media[]` 加可选 `group`，同一个字符串表示同一段时间线拆开的几个文件；没有 `group` 时宿主照 [§4.1](#41-四个转换插件) 的内容规则配。B 站插件交 `video.m4s`、`audio.m4s` 时写同一个 `group`。
+5. [x] [§3.7](../plugin-protocol.md#37-fetch-输出)：fetch 输出的 `media[]` 加可选 `group`，同一个字符串表示同一段时间线拆开的几个文件；没有 `group` 时宿主照 [§4.1](#41-四个转换插件) 的内容规则配。B 站插件交 `video.m4s`、`audio.m4s` 时写同一个 `group`。
 6. [x] [§7.1](../plugin-protocol.md#71-常驻进程的路径)：没有沙箱时硬链接进 `in/` 挡不住插件改原文件，原样靠 `usuyo.fetch.json` 的哈希查出来（同步前和「检查与修复」时）；有沙箱以后照原文。
 
 <a id="9-给-004-的"></a>
