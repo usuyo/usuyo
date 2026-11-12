@@ -24,6 +24,11 @@ dev:
 app:
     cd apps/desktop/src-tauri && cargo tauri build --bundles app
 
+# 桌面应用的开发窗口：前端改了当场生效，带 react-grab（点界面上的一处，复制出它所在的组件和源文件）。
+# 要 5173 端口空着；和装好的应用用同一个守护进程端口，两个不同时开。
+app-dev:
+    cd apps/desktop/src-tauri && cargo tauri dev
+
 build:
     cargo build --release -p usuyo-cli
 

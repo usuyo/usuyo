@@ -6,6 +6,9 @@ import { DaemonUnreachableError } from "./api/client";
 import { createAppRouter } from "./router";
 import "./styles.css";
 
+// 开发窗口里点底部的小工具条再点界面上的一处（或指着它按 ⌘C），复制出这个元素、它所在的组件和源文件；安装包里没有这一段
+if (import.meta.env.DEV) void import("react-grab");
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
