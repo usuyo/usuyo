@@ -35,7 +35,7 @@ docs +files:
     for f in {{files}}; do python3 -I tools/check_md.py "$f"; done
     python3 -I tools/resolve_links.py .
 
-# 开发时、只在自己的机器上：把旁边 `../usuyo-fetch/` 下三个平台获取插件编成 release，照安装的样子
+# 开发时、只在自己的机器上：把旁边 `../usuyo-fetch/` 下的平台获取插件编成 release，照安装的样子
 # 放进按机器目录的 `plugins/<owner>/<repo>/<version>/`（认 `USUYO_HOME`，没设就是系统的位置）。
 # 平台插件不进本仓库、不进安装包（CLAUDE.md 原则 1）；装好以后重启守护进程才会找到。
 dev-plugins fetch="../usuyo-fetch":
@@ -46,7 +46,7 @@ dev-plugins fetch="../usuyo-fetch":
       *) default="${XDG_STATE_HOME:-$HOME/.local/state}/usuyo" ;;
     esac
     root="${USUYO_HOME:-$default}/plugins"
-    for name in xiaohongshu wechat-channels bilibili; do
+    for name in xiaohongshu wechat-channels bilibili x; do
       src="{{fetch}}/$name"
       manifest="$src/usuyo-plugin.yaml"
       id=$(sed -n 's/^id:[[:space:]]*//p' "$manifest" | head -1)
