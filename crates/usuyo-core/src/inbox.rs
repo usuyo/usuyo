@@ -10,7 +10,6 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
 use crate::engine::{Engine, Via};
-use crate::fetch::first_url;
 use crate::{Error, Result};
 
 /// 多久看一次。
@@ -27,31 +26,12 @@ pub struct InboxReport {
     pub files: usize,
 }
 
-/// 一段文字里的全部 http(s) 链接，按出现的顺序；每条到空白或全角标点为止（同 [`first_url`]）。
+/// 一段文字里的全部 http(s) 链接，按出现的顺序（规则同 [`crate::link_in`]）。
 fn all_urls(text: &str) -> Vec<url::Url> {
-    // 只改 ASCII 的大小写，字节位置不变
-    let lower = text.to_ascii_lowercase();
-    let mut out = Vec::new();
-    let mut pos = 0;
-    while out.len() < MAX_LINKS {
-        let Some(start) = [lower[pos..].find("https://"), lower[pos..].find("http://")]
-            .into_iter()
-            .flatten()
-            .min()
-            .map(|i| pos + i)
-        else {
-            break;
-        };
-        let rest = &text[start..];
-        let end = rest
-            .find(|c: char| c.is_whitespace() || (!c.is_ascii() && !c.is_alphanumeric()))
-            .unwrap_or(rest.len());
-        if let Some(u) = first_url(&rest[..end]) {
-            out.push(u);
-        }
-        pos = start + end.max(1);
-    }
-    out
+    crate::share_text::link_runs(text)
+        .filter_map(crate::link_in)
+        .take(MAX_LINKS)
+        .collect()
 }
 
 fn unique(dir: &Path, name: &str) -> PathBuf {

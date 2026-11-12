@@ -6,7 +6,7 @@
 - **监听**：只绑 `127.0.0.1`，端口固定 47615（`--port`、`USUYO_PORT` 能改，但窗口的 CSP 只放行 47615）。一个监听口，窗口用的路由和投递接口（`/v1/…`）都在上面，不另开端口。端口被占时守护进程起不来，已有的 `api-token`、`daemon.json` 不动；壳不再起第二个，窗口里说端口被别的程序占着。
 - **谁能调什么**：每个请求过一道门（`guard.rs`），分三种调用方。
   - 带主令牌的（`api-token` 里的那个：壳、命令行、开发代理、别的本机程序）：所有路由，包括 `/v1/…`；经 `/v1/deliver` 收下的记入口 `api`。
-  - 带投递令牌的：只能进 `GET /v1/ping`、`POST /v1/deliver`、`POST /v1/batches`，名单以外一律 401 `unauthorized`，和没带令牌一样。
+  - 带投递令牌的：只能进 `GET /v1/ping`、`POST /v1/deliver`、`POST /v1/batches`、`POST /v1/file-imports`，名单以外一律 401 `unauthorized`，和没带令牌一样。
   - 不带令牌也放行的：CORS 预检（只限窗口用的路径）、`POST /handshake`、带对的 `k` 的 `/media/<itemId>/…`。
 - **令牌**：除了上面三种，每个请求都带 `Authorization: Bearer <令牌>`，`/health`、`/events` 也要。主令牌是 32 字节随机数的小写十六进制，每次启动新生成，绑上端口以后写进按机器目录的 `api-token`（0600，先写临时文件再改名），正常退出时连同 `daemon.json` 删掉（只删还是自己写的那份）。按定长时间比对；错了回 401 `unauthorized`。
 - **`Host`**：最先查，只认 `127.0.0.1:<端口>`、`localhost:<端口>`、`[::1]:<端口>`（不分大小写），别的回 403 `forbidden`。
@@ -33,8 +33,8 @@
 | `plugins-updated` | 插件的暂停变了（被限流或拦住、「现在再试」「先别试」）、开关了一种方法、站点的登录、访客身份、密钥设置、设置里的 `network` 变了 | 无 |
 | `transforms-updated` | 模型开始下、下好了、没下成、删掉了；设置里的 `transforms.auto` 变了 | 无 |
 
-- **错误**：照 [§0.3](conventions.md#03-错误模型)：`application/problem+json`，字段 `type`（`urn:usuyo:problem:<code>`）、`title`、`status`、`detail`、`instance`（`urn:uuid:<随机>`）、`code`、`retryable`；插件报的另带 `plugin`，一律 502。可重试的带 `Retry-After: 5`。没有的路径 404 `not-found`，方法不对 405 `invalid-args`。
-- **上限**：请求体 64 KiB，超了 413 `too-large`；握手 256 字节；登录和访客身份的 cookie 256 KiB；`/v1/batches` 4 MiB；每个请求 30 秒，超了 504 `timeout`，列来源（`GET /plugins/{owner}/{repo}/sources`）120 秒；搜索 `limit` 默认 50，限在 1 到 200。
+- **错误**：照 [§0.3](conventions.md#03-错误模型)：`application/problem+json`，字段 `type`（`urn:usuyo:problem:<code>`）、`title`、`status`、`detail`、`instance`（`urn:uuid:<随机>`）、`code`、`retryable`、`hint?`；插件报的另带 `plugin`，一律 502。`hint` 是给人看的一句中文：插件给了就是它的；内核自己报的，列来源、开始导入、翻预览、确认、从文件导入、交内容这几条的 400、422（还有找不到读文件的插件的 404、文件太大的 413）都带，这时 `detail` 是英文，留给日志。可重试的带 `Retry-After: 5`。没有的路径 404 `not-found`，方法不对 405 `invalid-args`。
+- **上限**：请求体 64 KiB，超了 413 `too-large`；握手 256 字节；登录和访客身份的 cookie 256 KiB；`/v1/batches` 4 MiB；交文件 `POST /file-imports` 16 GiB、`POST /v1/file-imports` 256 MiB（内核边收边数，超了 413 带 `hint`，写了一半的副本去掉）；每个请求 30 秒，超了 504 `timeout`，列来源（`GET /plugins/{owner}/{repo}/sources`）120 秒，交文件 30 分钟；搜索 `limit` 默认 50，限在 1 到 200。
 - **日志**：守护进程和命令行的日志里，链接 `?`、`#` 以后的部分和 `Bearer ` 后面的字换成 `…`。
 
 `endpoints.ts` 的 `paths` 和 `deliverPaths`（11-11）：
@@ -59,7 +59,7 @@
 | `GET /search?q=&limit=` | 搜索 |
 | `GET /events` | 事件流 |
 | `GET /plugins` | 装着的获取插件和没加载的（目录和原因），见下「获取插件」。会先问一遍各插件过期了的本机检查（`health`，不带凭据、不碰平台，几个插件同时问） |
-| `GET /plugins/{owner}/{repo}/sources?method=&link=` | 这个插件一种方法现在能列的来源，每项 `{source, title, action?, count?, method}`；`method` 必给，`link` 只给 `list` 写了 `link` 的方法（http(s)、带主机、不带用户名密码、至多 4096 字节，不合的回 400 `invalid-args`）。这种方法不能列、没写 `link` 却给了链接、这台机器上用不上，回 422 `unsupported-input`。会调插件，计入节奏，要等的超过 60 秒就不等，回 422 并说什么时候能再试 |
+| `GET /plugins/{owner}/{repo}/sources?method=&link=` | 这个插件一种方法现在能列的来源，每项 `{source, title, action?, count?, method}`；`method` 必给，`link` 只给 `list` 写了 `link` 的方法（一条链接，或带链接的分享文字，照下面「链接从哪来」取；http(s)、带主机、不带用户名密码、至多 4096 字节，不合的回 400 `invalid-args`）。这种方法不能列、没写 `link` 却给了链接、这台机器上用不上，回 422 `unsupported-input`。会调插件，计入节奏，要等的超过 60 秒就不等，回 422 并说什么时候能再试 |
 | `PUT /plugins/{owner}/{repo}/methods/{method}` | `{enabled}`：开或关一种方法，写进按机器的 `settings.json`（[按机器的目录](machine.md#按机器的目录)），马上生效，回整个插件。没做的方法回 422 `unsupported-input`，没有这个插件或方法回 404 |
 | `POST /plugins/{owner}/{repo}/try-now` | 「现在再试」：去掉这个插件所有的暂停（包括「先别试」），排着的任务和导入马上再看 |
 | `POST /plugins/{owner}/{repo}/hold` | 「先别试」：到你点「现在再试」为止哪儿都不调它，别的插件照常 |
@@ -68,13 +68,15 @@
 | `PUT /sites/{site}/login`；`DELETE …` | 壳的登录窗口交来 storageState，只留属于这个站点的，存进钥匙串，回的里面没有值；`DELETE` 忘掉登录，204 |
 | `GET /visitors` | 装着的插件在清单里声明的访客身份，和有没有存着、最早什么时候过期；不出现在 `/sites` 里 |
 | `PUT /visitors/{site}`；`DELETE …` | 同上，存成 `visitor:<站点>`，和同一主机的账号分开；`DELETE` 去掉，账号不动 |
-| `GET /imports`；`POST /imports` | 全部导入（新的在前）；按 `{pluginId, method, source, title?}` 从一个插件一种方法的来源开始列。导入的视图多一项 `method` |
+| `GET /imports`；`POST /imports` | 全部导入（新的在前）；按 `{pluginId, method, source, title?}` 从一个插件一种方法的来源开始列。导入的视图多一项 `method`；`kind` 是 `source`、`delivered`、`file`，`file` 类多一项 `file: {name, reader}`（交来的文件名、读它的插件的名字） |
 | `GET /imports/{id}`；`DELETE …` | 一次导入；不要了：清单和还没收的去掉，已经收下的留着，204 |
-| `GET /imports/{id}/entries?standing=&offset=&limit=` | 预览里的条目；`standing` 取 `new`、`stored`、`trashed`、`unresolved`，不给就是全部；`limit` 默认 100，限在 1 到 500 |
+| `GET /imports/{id}/entries?standing=&offset=&limit=` | 预览里的条目；`standing` 取 `new`、`stored`、`trashed`、`unresolved`，不给就是全部；`limit` 默认 100，限在 1 到 500；从文件导入时只有插件的 `ref`、没有链接的条目没有 `url` |
 | `POST /imports/{id}/confirm` | 确认，见下 |
 | `POST /imports/{id}/hold`；`POST /imports/{id}/resume` | 先停下；接着导入 |
 | `GET /deliver-tokens`；`POST /deliver-tokens`；`DELETE /deliver-tokens/{id}` | 见上「投递令牌」 |
 | `GET /inbox` | `{path}`，收件文件夹在哪（[§1.1](library.md#11-目录树)） |
+| `GET /file-readers` | 能读文件的方法（做了的、`list` 写了 `files` 的），照插件和清单的顺序，每项 `{id, name, plugin, reads, patterns, lists, note?}`：`id` 是 `<插件 id>#<方法 id>`，`name` 是方法的名字，`plugin` 是插件的名字，`reads` 是清单的 `list.reads`，`patterns` 是 `list.files`，`lists` 是 `list.sources` 的名字，`note` 是方法的 `risk.text` |
+| `POST /file-imports?reader=&name=` | 从文件导入（[协议 §3.9](../protocol/fetch.md#39-从文件导入)）：请求体是文件本身（任何 `Content-Type`），`reader` 是 `GET /file-readers` 的 `id`，`name` 是文件名，只当显示的字。那种方法要能读文件、开着、用得上（不然 422 `unsupported-input`，插件不在 404），空文件 400。副本存进按机器目录的 `imports/<导入 id>/input[.扩展名]`，马上列第一页：读不了回 400 `invalid-args`，`hint` 是插件的那句话，什么都不留；读得了回 200 `ImportView`（`kind: file`，`state` 是 `listing` 或 `ready`），之后照下面「导入」看预览、确认 |
 | `GET /transforms` | `{plugins, auto}`：装着的转换插件，每个 `{id, name, version, jobs, bundled?, models, health, hint?}`；`jobs` 是它能做的 `play`、`asr`、`keyframes`、`ocr`、`frames`；`bundled` 是清单 `upstream` 的 `{name, license}`；`health` 是插件自己报的 `ok` 或 `unavailable`（`hint` 是没过的检查；它声明的模型还没下时只写「要先下载模型」），几个插件同时问，正在转一条的插件不等它、算 `ok`；`models` 每个 `{name, size, license, state, hint?}`，`state` 是 `absent`、`downloading`、`present`、`failed`（`hint` 是一句没下成的原因）。`auto` 是 `transforms.auto` |
 | `POST /transforms/{owner}/{repo}/models/{name}/download` | 下这个模型（[§1.1](library.md#11-目录树) 按机器目录的 `models/`）：已经在了回 200 `{state: "present"}`，开始下或已经在下回 202 `{state: "downloading"}`；插件或模型不在回 404。下完以后等它的转换回到排着，那些条目发 `item-updated` |
 | `POST /transforms/{owner}/{repo}/models/{name}/remove` | 删掉这个模型，204；正在下回 409 `conflict`。插件的进程在后台关掉，之后要它的转换等模型 |
@@ -82,12 +84,13 @@
 | `GET /v1/ping` | 投递：`{name: "usuyo", version, protocol: 1, client}`，`client` 是投递令牌的名字，主令牌是 `null` |
 | `POST /v1/deliver` | 投递：见下 |
 | `POST /v1/batches` | 投递：见下 |
+| `POST /v1/file-imports?reader=&name=` | 投递：交一个装着已取到内容的文件，见下 |
 
 **转换**（`POST /items/{id}/transform`）：请求体二选一，别的字段回 400 `invalid-args`。
 - `{jobs: "pending"}`：条目页打开时调。这一条还没做好的转换都挪到最前（点名），在电池上、`transforms.auto` 关着时也转。
 - `{job, plugin?, options?}`：再转一次，或换一个插件、换一组参数转；`job` 是 `play`、`asr`、`keyframes`、`ocr`、`frames`。做好了也再做一次，新的和旧的并排，`redoOf` 指现在最新的那一次。这一样正在转回 409 `conflict`；没有这种 `job`、`plugin` 做不了它、没装能做它的插件回 400 `invalid-args`；只留文字以后回 422 `unsupported-input`；条目不在回 404。
 
-`GET /items/{id}` 的 `facets` 一层可以有几份，每份带 `key`（在一条里唯一）；`asr`、`ocr`、`frames` 三层每份带 `source`（`by: platform` 是平台字幕，`by: machine` 带 `tool`、`runId`、`at`；有语言时 `lang`），段带 `position`。口播是每份平台字幕和每次 `asr` 转录，平台的在前，机器的新的在前；`ocr` 是每次图里的字的转录，`frames` 是每次关键帧上的字的转录，连着几帧一样的一行合成一段；`video` 的 `frames` 是最新一次 `keyframes` 的帧。`remark` 只写量出来的事：「没有声音轨」「没听到人说话」「画面几乎不动」「没认出字」「有几张图是同一张」。`pending` 是还没转出来的那几面，一面一句：`layer` 是 `asr`、`ocr`、`frames`、`video`（`play`、`keyframes` 都算画面），`state` 是 `now`（在转）、`needs-model`（带 `model: {plugin, name, size, license}`）、`failed`（带 `hint`，例如「这台电脑上还没有能转口播的插件」）、`on-power`（在电池上，接上电源时转）、`later`（排着），同一面有几行时取前面那个。没有计数。`GET /search` 命中 `asr`、`ocr`、`frames` 时带 `position`：口播和画面上的字是 `{kind: "time", sec, endSec?, snapshotId, xywh?}`，图里的字是 `{kind: "image", imageKey, xywh}`。
+`GET /items/{id}` 的 `facets` 一层可以有几份，每份带 `key`（在一条里唯一）；`asr`、`ocr`、`frames` 三层每份带 `source`（`by: platform` 是平台字幕，`by: machine` 带 `tool`、`plugin`（做这一份的转换插件 id，即 `run.json` 的 `by`；宿主自己判的没有）、`runId`、`at`；有语言时 `lang`），段带 `position`。口播是每份平台字幕和每次 `asr` 转录，平台的在前，机器的新的在前；`ocr` 是每次图里的字的转录，`frames` 是每次关键帧上的字的转录，连着几帧一样的一行合成一段；`video` 的 `frames` 是最新一次 `keyframes` 的帧。`remark` 只写量出来的事：「没有声音轨」「没听到人说话」「画面几乎不动」「没认出字」「有几张图是同一张」。`pending` 是还没转出来的那几面，一面一句：`layer` 是 `asr`、`ocr`、`frames`、`video`（`play`、`keyframes` 都算画面），`state` 是 `now`（在转）、`needs-model`（带 `model: {plugin, name, size, license}`）、`failed`（带 `hint`，例如「这台电脑上还没有能转口播的插件」）、`on-power`（在电池上，接上电源时转）、`later`（排着），同一面有几行时取前面那个。没有计数。`GET /search` 命中 `asr`、`ocr`、`frames` 时带 `position`：口播和画面上的字是 `{kind: "time", sec, endSec?, snapshotId, xywh?}`，图里的字是 `{kind: "image", imageKey, xywh}`。
 
 **设置**：
 - `GET /settings` 回 `{library, trashDays, trashHeld?, network: {mode, proxy?, fakeIp}, transforms: {auto}, logs}`。`trashDays` 是资料库的（[§1.1](library.md#11-目录树)），`null` 是一直；`trashHeld: {count, since}` 只在时钟守卫现在拦着到期的项时有，`since` 是记下的最晚时间；`network.mode` 是 `system`、`direct`、`custom`，`custom` 的 `proxy` 不带密码；`fakeIp` 是这台电脑开着假 IP 模式的代理；`logs` 是按机器目录的 `logs/daemon.log`。
@@ -95,19 +98,24 @@
 
 守护进程另有四条，不在 `endpoints.ts` 的 `paths` 里：`POST /handshake`（上面）；`POST /reindex`，命令行用，回 `{items, unreadable}`；`GET /media/<itemId>/<层>`，地址由 `ItemView` 给；`GET /events` 在 `paths` 里，但不走 30 秒的时限。
 
+**链接从哪来**：你给的链接都可以是 App 的整段分享文字。整段就是一条 http(s) 链接就用它；不然取文字里第一段 `http://`、`https://` 开头的（不分大小写），到第一个空白、控制字符、非 ASCII 字符、引号或尖括号为止，末尾的 `.,;:!?)]}` 去掉；之后照常核 http(s)、主机、用户名密码、长度。没有链接的回错，带一句中文 `hint`；有几条时只看第一条，第一条没收下时 `hint` 里说「只看第一条链接」。`POST /items` 的 `input`、`POST /v1/deliver` 的 `url` 和 `text`、`POST /v1/batches` 每条的 `url`、列来源的 `link`、收件文件夹的 `.txt` 都照它（`usuyo-core` 的 `link_in`），插件拿到的总是一条干净的链接。
+
 **投递**（[协议 §5.1](../protocol/delivery.md#51-本机-http-接口)）：
 - `POST /v1/deliver`，`{url?, text?}`，给一个（两个都给取 `url`）。`text` 是手机分享出来的整段文字，从里面找第一个链接。只收链接，已经取到的内容（multipart）还不收。回 202 `{id, state: "accepted", duplicate}`，`duplicate` 为真是以前收下过。条目的入口取令牌的 `kind`，取内容照常排任务。遇到私密条目不收、不加来源，现在的回答和「收下过」一样（`duplicate: true`），没有单独的 `skipped`。
+- `POST /v1/file-imports?reader=&name=`：浏览器脚本交它在页面里读到的内容，装在一个文件里，请求体就是文件。只认 `extension` 类投递令牌和主令牌，`mobile`、`api` 类回 403 `forbidden`。照 `POST /file-imports` 落成一次 `file` 类导入（`client` 是令牌名），回 202 `{id}`，只有 id：投递令牌读不了导入，你在导入页上看、确认。读不了的文件回 400 `invalid-args` 带 `hint`。
 - `POST /v1/batches`，`{name?, action?, links: [{url, title?, actedAt?}]}`，进导入的预览，你确认了才按节奏去收。`links` 1 到 5000 条；`action` 取 `favorite`、`like`、`share`、`view`、`unknown`；每条 `url` 要是带主机的 http(s)、不带用户名密码，`actedAt` 要是 RFC 3339，`title` 超过 500 字截掉；`name` 不给写「交进来的一批」，最多 200 字。不合的回 400 `invalid-args`，说是第几条。回 202 `{id}`，是新建的导入的 id（`kind: delivered`，`client` 是令牌名）。每条的身份由宿主重新算，不信交来的；认不出的这一条去掉，记日志；清单里身份相同的合成一条。
 
 **获取插件**（`GET /plugins` 的 `plugins[]`，[协议 §2.3.1](../protocol/manifest.md#231-方法-methods)）：`{id, name, description?, version, platforms, access, login, canList, sources, sites, visitors, settings, pacing, pauses, methods}`。`access`、`login` 是做了的方法里最高的；`canList` 是有做了的方法能列；`sources` 是清单里写死的来源，每项带 `method`；`sites` 是做了的方法用到的登录站点；`pauses` 是所有方法的暂停，每项 `{method, scope, byYou, until?, code?, hint?}`，你点的「先别试」`method`、`scope` 都是 `*`。`methods` 是清单里每一种方法，照清单的顺序，没做的也在：
-- `{id, name, access, login, account: {kind, sites?, where?}, interaction, gets: {fetch?, list?, link?, delivers?}, built, enabled, usable, blockers, lastCall?, pauses, riskNote?}`。
-- `account.kind` 是清单的 `account`（`none`、`visitor`、`own-browser`、`own-phone`、`own-app`、`in-usuyo`、`developer`）；`sites` 是 `in-usuyo` 的登录站点或 `visitor` 的访客身份站点，`where` 是它们的名字（取自清单）。
-- `gets.fetch` 是输出的词表（`text`、`images`、`media:video`…），`gets.list` 是清单里写死的来源名，`gets.link` 是来源从链接开始时链接框上的那句，`gets.delivers` 是 `links`。
-- `usable` 是这台机器上现在用得上；`blockers` 是用不上的原因，每项 `{code, hint}`，`code` 取 `not-built`、`off`、`login-missing`、`login-expired`、`visitor-missing`、`visitor-expired`、`check-failed`（插件的本机检查没过）、`health-failed`（插件没能自查），`hint` 是一句中文，名字取自清单。
+- `{id, name, access, login, account: {kind, sites?, where?}, interaction, drives?, perPlatform?, gets: {fetch?, list?, link?, delivers?}, built, enabled, usable, blockers, lastCall?, pauses, riskNote?}`。
+- `account.kind` 是清单的 `account`（`none`、`visitor`、`own-browser`、`own-phone`、`own-app`、`in-usuyo`、`developer`）；`sites` 是 `in-usuyo` 的登录站点或 `visitor` 的访客身份站点；`where` 是账号所在的地方给人看的名字：`visitor` 是访客身份的名字，`in-usuyo`、`own-browser`、`own-phone`、`own-app`（做没做都算）是方法列的站点的名字，没列站点时是插件的名字；`none`、`developer` 没有。
+- `drives` 是清单的 `drives`：`iphone`、`android`、`desktop-app`，手机页照它说要哪种手机。
+- `perPlatform` 是层级和方法本身不同的平台（清单的 `perPlatform`），每项 `{platform, access, login, enabled}`；`enabled` 是这种方法在那个平台上开没开：没拨过开关时照那一层的默认（[协议 §2.3.1](../protocol/manifest.md#231-方法-methods)），拨过就和方法的 `enabled` 一样。方法的 `enabled` 照方法本身那一层。没有这样的平台时不给。
+- `gets.fetch` 是输出的词表（`text`、`images`、`media:video`…），`gets.list` 是清单里写死的来源名，`gets.link` 是来源从链接开始时链接框上的那句，`gets.delivers` 是 `links`。没做的方法清单里写了能力的也给。
+- `usable` 是这台机器上现在用得上；`blockers` 是用不上的原因，每项 `{code, hint}`，`code` 取 `not-built`、`off`、`login-missing`、`login-expired`、`visitor-missing`、`visitor-expired`、`check-failed`（插件的本机检查没过）、`health-failed`（插件没能自查）、`paused`（停着：被限流、被拦，`hint` 写到几点，例如「平台限流了，11 月 12 日 15:30以前不用它」；或你点的「先别试」，写到你点「现在再试」为止；通用网页一类按网站停的不算），`hint` 是一句中文，名字取自清单。
 - `lastCall` 是上一次调用 `{at, ok, code?, hint?}`，没调过就没有；`pauses` 是这种方法的暂停加上「先别试」；`riskNote` 是清单的 `risk`。
 
 **导入**：一次导入的状态不单独存，由几项现算：`listing`（还在列）、`ready`（列完了，等你看一眼）、`taking`（确认了，还有排着的任务）、`done`（确认了，没有排着的了），`held` 盖过其余，是你点了「先停下」。走向：
-1. 开始（`POST /imports` 或 `POST /v1/batches`）：`source` 类要这个插件的这种方法能列、开着、这台机器上用得上（不然回 422 `unsupported-input`，原因写明缺什么），来源非空、最多 512 字节，平台没声明 `batch: false`（声明了回 422）。`source` 类按平台的节奏一页页调插件的 `list`，`delivered` 类每轮认 50 条的身份。每条按身份分成 `new`、`stored`（库里已经有）、`trashed`（在回收站里）；认不出来的是 `unresolved`。这一步不建任何条目。
+1. 开始（`POST /imports`、`POST /v1/batches`、`POST /file-imports` 或 `POST /v1/file-imports`）：`file` 类和 `source` 类一样一页页调插件的 `list`，只是读本机的副本，不守节奏，第一页在交的时候就列（见上）。`source` 类要这个插件的这种方法能列、开着、这台机器上用得上（不然回 422 `unsupported-input`，原因写明缺什么），来源非空、最多 512 字节，平台没声明 `batch: false`（声明了回 422）。`source` 类按平台的节奏一页页调插件的 `list`，`delivered` 类每轮认 50 条的身份。每条按身份分成 `new`、`stored`（库里已经有）、`trashed`（在回收站里）；认不出来的是 `unresolved`。这一步不建任何条目。
 2. 列完是 `ready`。`POST /imports/{id}/confirm`，请求体 `{new, trashed, except?}`（不认识的字段回 400）：`new` 是「新的」整组收不收；`trashed` 是「回收站里的」整组收不收，收下就是拿回来；`except` 是 `seq` 的数组，这些条目和自己那组选得反着来（整组收的，它不收；整组不收的，它收）。只交例外：预览按页看，没翻到的条目跟着整组走。`stored` 和 `unresolved` 的不收，也不能出现在 `except` 里，出现了回 400。还在列的、或已经确认过的再确认，回 400。
 3. 确认后，挑中的每条排一个取内容的任务，优先级低于你手动收下的；按平台的节奏一条条来。轮到时先收下（入口 `import`，`takenBy: user`，同一批共用 `importBatch`，带 `action`、`actedAt`），再取内容。这一条已经有任务（你刚手动收过）的不动。轮到时发现已经进了回收站、而你没挑回收站那一组的，不收，`skipped` 加一；私密条目批量导入照收（[§1.7](library.md#17-删掉) 的表）。`taken` 是收下的条数，`notStored` 是收下了但内容取不到的。
 4. `POST /imports/{id}/hold` 随时可以，不再列、不再收，已经收下的不动；`resume` 从停的地方接着，停在要你处理的原因上（例如重新登录以后）也从这里再试。导入页只说事实（列了几页、各几条、收下几条、为什么在等和什么时候），不给还剩多少。

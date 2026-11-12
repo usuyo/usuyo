@@ -55,6 +55,17 @@ pub(crate) fn combine(plugins: &[FetchPlugin]) -> BTreeMap<String, Pacing> {
 }
 
 /// 本地日期，`daily` 按它数。
+/// 给人看的本地时间，例如「11 月 12 日 15:30」。
+pub(crate) fn local_time(ms: i64) -> String {
+    jiff::Timestamp::from_millisecond(ms)
+        .map(|t| {
+            t.to_zoned(jiff::tz::TimeZone::system())
+                .strftime("%-m 月 %-d 日 %H:%M")
+                .to_string()
+        })
+        .unwrap_or_default()
+}
+
 pub(crate) fn today() -> String {
     jiff::Zoned::now().date().to_string()
 }

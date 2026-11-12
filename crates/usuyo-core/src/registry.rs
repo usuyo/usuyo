@@ -2,7 +2,7 @@
 //! 访客身份（不是账号）和它们有没有存着。
 //! 「现在再试」「先别试」、存下和忘掉登录和访客身份、填密钥设置也在这里。
 
-use usuyo_plugin::protocol::{Account, StorageState};
+use usuyo_plugin::protocol::{Account, Method, StorageState};
 use usuyo_plugin::{DeclaredSite, DeclaredVisitor, FetchPlugin};
 
 use crate::engine::Engine;
@@ -10,8 +10,8 @@ use crate::fetch::now_ms;
 use crate::jobs::PauseRow;
 use crate::methods::blockers;
 use crate::view::{
-    AccountView, Event, GetsView, LastCall, MethodView, NotLoaded, PacingView, PauseView,
-    PluginView, PluginsView, SettingView, SiteView, SourceView, VisitorView,
+    AccountView, Blocker, Event, GetsView, LastCall, MethodView, NotLoaded, PacingView, PauseView,
+    PlatformTierView, PluginView, PluginsView, SettingView, SiteView, SourceView, VisitorView,
 };
 use crate::{Error, Result};
 
@@ -58,6 +58,51 @@ fn pause_view(x: PauseRow) -> PauseView {
         }),
         code: x.code,
         hint: x.hint,
+    }
+}
+
+/// 停着的一句话：为什么、到什么时候。
+fn pause_blocker(x: &PauseRow) -> Blocker {
+    let hint = match x.until {
+        _ if x.held => "你让这个插件先别试了，到你点「现在再试」为止".to_owned(),
+        Some(until) => {
+            let why = match x.code.as_deref() {
+                Some("rate-limited") => "平台限流了",
+                Some("blocked") => "平台拦下了请求",
+                _ => "上次出了错",
+            };
+            format!("{why}，{}以前不用它", crate::pace::local_time(until))
+        }
+        None => "停着，等你点「现在再试」".to_owned(),
+    };
+    Blocker {
+        code: "paused".into(),
+        hint,
+    }
+}
+
+/// 账号在哪里，给人看的名字：登录站点、访客身份照它们在清单里的名字；账号在你自己的浏览器、手机、
+/// 电脑客户端里的，有 `credential: app` 的站点就照它，没有就是插件的名字（一个平台一个插件）。
+/// 不用账号的和开发者凭据没有。
+fn where_of(p: &FetchPlugin, m: &Method) -> Option<String> {
+    let site_name = || {
+        m.sites
+            .iter()
+            .filter_map(|s| p.spec.sites.iter().find(|x| &x.site == s))
+            .map(|s| s.name.clone())
+            .next()
+    };
+    match m.account {
+        Account::None | Account::Developer => None,
+        Account::Visitor => m
+            .visitors
+            .iter()
+            .filter_map(|s| p.spec.visitors.iter().find(|x| &x.site == s))
+            .map(|v| v.name.clone())
+            .next(),
+        Account::InUsuyo | Account::OwnBrowser | Account::OwnPhone | Account::OwnApp => {
+            Some(site_name().unwrap_or_else(|| p.header.name.clone()))
+        }
     }
 }
 
@@ -125,26 +170,35 @@ impl Engine {
             .iter()
             .map(|m| {
                 let enabled = self.inner.methods.enabled(p, m);
-                let blockers = blockers(m, enabled, health.as_ref(), &sites, &visitors);
-                let where_ = match m.account {
-                    Account::InUsuyo => m
-                        .sites
-                        .iter()
-                        .filter_map(|s| p.spec.sites.iter().find(|x| &x.site == s))
-                        .map(|s| s.name.clone())
-                        .next(),
-                    Account::Visitor => m
-                        .visitors
-                        .iter()
-                        .filter_map(|s| p.spec.visitors.iter().find(|x| &x.site == s))
-                        .map(|v| v.name.clone())
-                        .next(),
-                    _ => None,
-                };
+                let own: Vec<&PauseRow> = pauses
+                    .iter()
+                    .filter(|x| x.method == m.id || x.method == "*")
+                    .collect();
+                let mut blockers = blockers(m, enabled, health.as_ref(), &sites, &visitors);
+                // 停着也算用不上；通用网页插件按网站停，一个站停着不挡这种方法，只算整个平台上的
+                if m.built
+                    && let Some(x) = own.iter().find(|x| {
+                        x.scope == "*" || p.spec.platforms.iter().any(|pl| pl.as_str() == x.scope)
+                    })
+                {
+                    blockers.push(pause_blocker(x));
+                }
+                let where_ = where_of(p, m);
                 let account_sites = match m.account {
                     Account::Visitor => m.visitors.clone(),
                     _ => m.sites.clone(),
                 };
+                let per_platform = m
+                    .per_platform
+                    .iter()
+                    .filter(|(_, u)| u.access != m.access || u.login != m.login)
+                    .map(|(pl, u)| PlatformTierView {
+                        platform: pl.as_str().to_owned(),
+                        access: u.access,
+                        login: u.login,
+                        enabled: self.inner.methods.enabled_on(p, m, pl.as_str()),
+                    })
+                    .collect();
                 MethodView {
                     id: m.id.clone(),
                     name: m.name.clone(),
@@ -156,6 +210,8 @@ impl Engine {
                         where_,
                     },
                     interaction: m.interaction,
+                    drives: m.drives,
+                    per_platform,
                     gets: GetsView {
                         fetch: m
                             .capabilities
@@ -182,12 +238,7 @@ impl Engine {
                         code: c.code.clone(),
                         hint: c.hint.clone(),
                     }),
-                    pauses: pauses
-                        .iter()
-                        .filter(|x| x.method == m.id || x.method == "*")
-                        .cloned()
-                        .map(pause_view)
-                        .collect(),
+                    pauses: own.into_iter().cloned().map(pause_view).collect(),
                     risk_note: m.risk.clone(),
                 }
             })

@@ -17,6 +17,7 @@ methods:
       list:
         order: unordered
         files: ["takeout-*.zip"]
+        reads: Google Takeout 导出的 zip（选「YouTube 和 YouTube Music」）
       fetch:
         input: [ref]
         outputs: [text, meta]

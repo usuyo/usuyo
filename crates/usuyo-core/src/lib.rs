@@ -7,6 +7,7 @@ mod engine;
 mod error;
 mod facets;
 mod fetch;
+mod file_imports;
 mod imports;
 mod inbox;
 mod index_doc;
@@ -18,6 +19,7 @@ mod owner_only;
 mod pace;
 mod registry;
 mod settings;
+mod share_text;
 mod transcripts;
 mod transform;
 mod trash;
@@ -26,6 +28,7 @@ pub mod view;
 
 pub use engine::{Engine, EngineConfig, Links, RetryPolicy, Via};
 pub use error::{Error, Result};
+pub use file_imports::{FILE_IMPORT_MAX, FileUpload, HANDOVER_MAX};
 pub use imports::{BATCH_MAX, DeliveredLink, ImportChoice};
 pub use inbox::InboxReport;
 pub use jobs::{TransformJob, TransformJobKind, TransformState};
@@ -36,6 +39,7 @@ pub use settings::{
     NetworkMode, NetworkPatch, SettingsPatch, TransformsPatch, proxy_setting, remember_library,
     transforms_auto,
 };
+pub use share_text::{link_count, link_in};
 pub use transform::{Power, PowerSource, SystemPower};
 pub use trash::{ClockGuard, Expiry};
 pub use usuyo_plugin::{CallLimits, ProxySetting, TransformLimits, Vault};

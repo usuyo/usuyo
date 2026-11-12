@@ -424,11 +424,35 @@ impl Library {
 
     /// 收下（SPEC §1.2、§1.7 的「再遇到同一身份」）。记 `add-item`，从回收站拿回来的另记 `restore`。
     pub fn add_item(&mut self, batch: &Batch, capture: Capture) -> Result<AddOutcome> {
-        self.writable()?;
         let id = match capture.identity.as_ref().filter(|i| i.platform != "file") {
             Some(identity) => ItemId::from_identity(identity)?,
             None => ItemId::random_file()?,
         };
+        self.add_item_with(batch, id, capture)
+    }
+
+    /// 同 [`Self::add_item`]，没有身份的条目用调用方事先取好的 `file-` id（从文件导入：清单里先记下 id，
+    /// 轮到时照它建）。有身份的照身份算，`file_id` 不用。
+    pub fn add_file_item(
+        &mut self,
+        batch: &Batch,
+        file_id: ItemId,
+        capture: Capture,
+    ) -> Result<AddOutcome> {
+        let id = match capture.identity.as_ref().filter(|i| i.platform != "file") {
+            Some(identity) => ItemId::from_identity(identity)?,
+            None if file_id.platform() == "file" => file_id,
+            None => {
+                return Err(Error::InvalidArgs(format!(
+                    "`{file_id}` is not a file item id"
+                )));
+            }
+        };
+        self.add_item_with(batch, id, capture)
+    }
+
+    fn add_item_with(&mut self, batch: &Batch, id: ItemId, capture: Capture) -> Result<AddOutcome> {
+        self.writable()?;
         let id = self.resolve_alias(&id)?.unwrap_or(id);
         let mut restored = false;
         if !self.item_dir(&id).exists()

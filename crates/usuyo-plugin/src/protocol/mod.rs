@@ -25,7 +25,7 @@ pub use fetch::{
 pub use identity::Identity;
 pub use manifest::{
     Access, Account, Asset, Capabilities, CapabilityUse, Consume, ConsumeKind, Credential,
-    Delivers, Device, ExportSpec, ExportWrites, FetchCapability, FetchInputKind, FetchSpec,
+    Delivers, Device, Drives, ExportSpec, ExportWrites, FetchCapability, FetchInputKind, FetchSpec,
     FsPermissions, Inject, Install, Interaction, Limits, ListCapability, ListOrder, Login,
     MANIFEST_FILE, MatchPattern, Method, ModelFormat, ModelSpec, NetworkMode, NetworkPermissions,
     Pacing, Permissions, PlatformUse, PluginHeader, PluginKind, PluginKindTag, PluginManifest,

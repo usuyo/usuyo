@@ -108,6 +108,7 @@ fn transcript_facet(id: &str, t: &Transcript, links: &Links) -> Facet {
         Some(m) => FacetSource {
             by: SourceBy::Machine,
             tool: m.tool.clone(),
+            plugin: m.plugin.clone(),
             run_id: Some(m.run_id.clone()),
             at: Some(m.at.clone()),
             lang: t.lang.clone(),
@@ -115,6 +116,7 @@ fn transcript_facet(id: &str, t: &Transcript, links: &Links) -> Facet {
         None => FacetSource {
             by: SourceBy::Platform,
             tool: None,
+            plugin: None,
             run_id: None,
             at: None,
             lang: t.lang.clone(),

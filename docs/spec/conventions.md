@@ -50,7 +50,7 @@ semver：patch 改错；minor 加可选字段、枚举值、错误码、接口�
 | 面 | 写法 |
 |---|---|
 | 插件 | 照协议的信封；JSON-RPC 插件用 `-32000`，`data` 是错误对象 |
-| HTTP | RFC 9457：加 `type`（`urn:usuyo:problem:<code>`，客户端认 `code`）、`title`（固定英文）、`status`、`detail`（`hint`，没有就 `message`）、`instance`（`urn:uuid:<callId>`）；带 `Retry-After` |
+| HTTP | RFC 9457：加 `type`（`urn:usuyo:problem:<code>`，客户端认 `code`）、`title`（固定英文）、`status`、`detail`（插件报的错是它的 `hint`，没有就 `message`；宿主自己报的是英文的 `message`，给日志）、`hint`（给人看的一句中文，界面照它显示；插件给了 `hint` 也放这里，宿主自己报的错只在界面要显示的那几处有：列来源、导入、从文件导入、交内容）、`instance`（`urn:uuid:<callId>`）；带 `Retry-After` |
 | MCP | `isError: true`，文字是 `detail`，`structuredContent` 是错误对象（和输出 schema 怎么配，第 2 层核实） |
 | 命令行 | 退出码 `0` 成功、`1` 失败、`2` 用法错（和插件一致）、`130` 被取消；`--json` 时 stdout 是 `{"ok": false, "error": {…}}` |
 

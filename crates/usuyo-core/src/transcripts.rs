@@ -62,6 +62,8 @@ pub(crate) struct Machine {
     pub at: String,
     /// 显示的工具名：用了模型时是模型名，不然是插件报的程序名；宿主自己判的没有。
     pub tool: Option<String>,
+    /// 做这次转录的转换插件（`run.json` 的 `by`）；宿主自己判的没有。
+    pub plugin: Option<String>,
 }
 
 /// 一份转出来的文字：一份平台字幕，或一次转录。
@@ -209,6 +211,7 @@ fn transcript(
                 .as_ref()
                 .map(|m| m.name.clone())
                 .or_else(|| r.tool.as_ref().map(|t| t.name.clone())),
+            plugin: (r.by != "host").then(|| r.by.clone()),
         }),
         lang,
         pieces,

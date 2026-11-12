@@ -23,7 +23,8 @@ use crate::handshake;
 use crate::problem::Problem;
 
 /// 投递令牌能进的路径，只有这几条。
-pub(crate) const DELIVER_PATHS: [&str; 3] = ["/v1/ping", "/v1/deliver", "/v1/batches"];
+pub(crate) const DELIVER_PATHS: [&str; 4] =
+    ["/v1/ping", "/v1/deliver", "/v1/batches", "/v1/file-imports"];
 
 /// 浏览器扩展的来源（协议 §5.1）：只有它们能带 `Origin` 访问 `/v1/`。
 const EXTENSION_SCHEMES: [&str; 3] = [

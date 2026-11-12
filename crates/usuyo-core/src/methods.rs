@@ -74,16 +74,27 @@ impl Methods {
         })
     }
 
-    /// 开着没有。没做的总是关着。
+    /// 你拨过的开关；没拨过是 `None`。
+    fn switch(&self, plugin: &FetchPlugin, m: &Method) -> Option<bool> {
+        self.switches
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(&(plugin.id().to_string(), m.id.clone()))
+            .copied()
+    }
+
+    /// 开关的样子：拨过的照你拨的，没拨过照方法本身的那一层。没做的总是关着。
     pub(crate) fn enabled(&self, plugin: &FetchPlugin, m: &Method) -> bool {
+        m.built && self.switch(plugin, m).unwrap_or_else(|| m.on_by_default())
+    }
+
+    /// 在这个平台上开着没有：拨过的开关一种方法一个，各平台都照它；没拨过照这个平台上的那一层
+    /// （`perPlatform` 抬到 `private-api` 的平台默认关着）。
+    pub(crate) fn enabled_on(&self, plugin: &FetchPlugin, m: &Method, platform: &str) -> bool {
         m.built
             && self
-                .switches
-                .read()
-                .unwrap_or_else(PoisonError::into_inner)
-                .get(&(plugin.id().to_string(), m.id.clone()))
-                .copied()
-                .unwrap_or_else(|| m.on_by_default())
+                .switch(plugin, m)
+                .unwrap_or_else(|| m.on_by_default_on(platform, &plugin.spec.platforms))
     }
 
     pub(crate) fn health_seen(&self, plugin: &str) -> Option<HealthSeen> {
@@ -262,9 +273,11 @@ impl Engine {
     /// 取这条链接的方法，照 §2.3.1 排好：平台插件的在前、通用网页的在后；各自里先层级低的，同一层先不带账号的，
     /// 再照插件和清单的顺序。只留做了、开着、这台机器上用得上、有能接链接的 `fetch` 的。
     /// 一种都用不上时回第二项：排在最前的那种为什么用不上，拿来告诉你。
+    /// `platform` 是这条链接的平台（条目 id 前面那段），`perPlatform` 照它取层级和默认的开关。
     pub(crate) async fn fetch_candidates(
         &self,
         url: &url::Url,
+        platform: &str,
     ) -> Result<(Vec<Candidate>, Option<CallFailure>)> {
         let host = &self.inner.host;
         let sites = host.sites()?;
@@ -278,7 +291,14 @@ impl Engine {
                         .as_ref()
                         .is_some_and(|f| f.input.contains(&FetchInputKind::Url));
                 if takes_url {
-                    ranked.push((plugin.spec.is_web(), m.rank(), pi, mi, plugin, m));
+                    ranked.push((
+                        plugin.spec.is_web(),
+                        m.rank_on(platform, &plugin.spec.platforms),
+                        pi,
+                        mi,
+                        plugin,
+                        m,
+                    ));
                 }
             }
         }
@@ -286,7 +306,7 @@ impl Engine {
         let mut out = Vec::new();
         let mut why: Option<CallFailure> = None;
         for (_, _, _, _, plugin, m) in ranked {
-            let enabled = self.inner.methods.enabled(plugin, m);
+            let enabled = self.inner.methods.enabled_on(plugin, m, platform);
             let health = if enabled {
                 Some(self.fetch_health(plugin).await)
             } else {

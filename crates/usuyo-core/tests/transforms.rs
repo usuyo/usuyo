@@ -657,6 +657,7 @@ async fn the_item_page_shows_every_copy_with_its_source_and_what_is_still_coming
     let machine = &facets[3];
     assert_eq!(machine["source"]["by"], "machine");
     assert_eq!(machine["source"]["tool"], "fake-voice");
+    assert_eq!(machine["source"]["plugin"], "fake/asr", "哪个转换插件转的");
     assert_eq!(machine["source"]["lang"], "zh");
     assert!(
         machine["segments"][0]["text"]
@@ -718,6 +719,10 @@ async fn image_text_and_marks_show_on_their_facets() {
     assert_eq!(asr["remark"], "没有声音轨");
     assert_eq!(asr["segments"], json!([]));
     assert!(asr["source"].get("tool").is_none(), "宿主自己判的没有工具");
+    assert!(
+        asr["source"].get("plugin").is_none(),
+        "宿主自己判的没有插件"
+    );
 }
 
 #[tokio::test]

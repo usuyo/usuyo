@@ -479,6 +479,8 @@ struct WireCapability {
     #[serde(default)]
     files: Option<Vec<String>>,
     #[serde(default)]
+    reads: Option<String>,
+    #[serde(default)]
     link: Option<String>,
     // 旧形状
     #[serde(default)]
@@ -533,6 +535,15 @@ pub enum Account {
     Developer,
 }
 
+/// 视觉层的方法驱动哪一样（§2.3.1）：经 iPhone 镜像的 iPhone、经 adb 的安卓手机、这台电脑上一个客户端的窗口。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum Drives {
+    Iphone,
+    Android,
+    DesktopApp,
+}
+
 /// 不在插件进程里跑的方法交什么给本机接口（§5）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
@@ -573,6 +584,8 @@ struct WireMethod {
     per_platform: BTreeMap<PlatformId, WirePlatformUse>,
     #[serde(default)]
     interaction: Interaction,
+    #[serde(default)]
+    drives: Option<Drives>,
     #[serde(default)]
     delivers: Option<Delivers>,
     #[serde(default)]
@@ -761,6 +774,8 @@ pub struct Method {
     pub visitors: Vec<String>,
     pub per_platform: BTreeMap<PlatformId, PlatformUse>,
     pub interaction: Interaction,
+    /// 驱动哪一样：账号在手机里的写 `iphone`、`android`，在电脑客户端里的写 `desktop-app`。
+    pub drives: Option<Drives>,
     /// 不在插件进程里跑：由浏览器脚本一类把链接交给本机接口。这时没有能力。
     pub delivers: Option<Delivers>,
     pub capabilities: Capabilities,
@@ -771,6 +786,35 @@ impl Method {
     /// 没写开关时开不开（§2.3.1）：`private-api`、`client-hook` 两层关着，其余开着。
     pub fn on_by_default(&self) -> bool {
         self.access < Access::PrivateApi
+    }
+
+    /// 这种方法在这个平台上用的那一层：`perPlatform` 写了就照它；`declared`（插件的 `platforms`）里的别的平台
+    /// 照方法本身的；不在 `declared` 里的（认不出平台、落成 `web` 的链接）照它所有层里最高的那一层。
+    pub fn access_on(&self, platform: &str, declared: &[PlatformId]) -> Access {
+        if let Some((_, u)) = self
+            .per_platform
+            .iter()
+            .find(|(p, _)| p.as_str() == platform)
+        {
+            return u.access;
+        }
+        if declared.iter().any(|p| p.as_str() == platform) {
+            return self.access;
+        }
+        self.per_platform
+            .values()
+            .map(|u| u.access)
+            .fold(self.access, Access::max)
+    }
+
+    /// 同 [`Self::on_by_default`]，照这个平台上的那一层（[`Self::access_on`]）。
+    pub fn on_by_default_on(&self, platform: &str, declared: &[PlatformId]) -> bool {
+        self.access_on(platform, declared) < Access::PrivateApi
+    }
+
+    /// 同 [`Self::rank`]，照这个平台上的那一层（[`Self::access_on`]）。
+    pub fn rank_on(&self, platform: &str, declared: &[PlatformId]) -> (Access, Account) {
+        (self.access_on(platform, declared), self.account)
     }
 
     /// 宿主会不会调它：做了、在插件进程里跑。
@@ -820,6 +864,8 @@ pub struct ListCapability {
     pub sources: Vec<SourceInfo>,
     /// 导入插件能读的导出文件名 glob（§3.9）。
     pub files: Vec<String>,
+    /// 有 `files` 时必写：给人看的一句，读哪个工具的哪种导出（导入页「从文件导入」上显示）。
+    pub reads: Option<String>,
     /// 来源从你给的一条链接开始（§2.3.1）：导入页给一个链接框，框上写这句；
     /// `sources` 带 `--link` 时插件把链接换成来源。
     pub link: Option<String>,
@@ -1505,6 +1551,17 @@ fn method(m: &WireMethod, path: &str, ctx: &CapabilityContext<'_>) -> Check<Meth
         )?;
         per_platform.insert(platform.clone(), pu);
     }
+    let fits = match m.drives {
+        None => true,
+        Some(Drives::Iphone | Drives::Android) => m.account == Account::OwnPhone,
+        Some(Drives::DesktopApp) => m.account == Account::OwnApp,
+    };
+    if !fits {
+        return Err(invalid(
+            f("drives"),
+            "`iphone` and `android` go with `account: own-phone`, `desktop-app` with `account: own-app`",
+        ));
+    }
     if let Some(r) = &m.risk {
         non_empty(&f("risk.text"), &r.text)?;
         non_empty(&f("risk.source.label"), &r.source.label)?;
@@ -1524,7 +1581,7 @@ fn method(m: &WireMethod, path: &str, ctx: &CapabilityContext<'_>) -> Check<Meth
             ));
         }
         (None, _, _) => Capabilities::default(),
-        (Some(caps), None, _) => capabilities(caps, &f("capabilities"))?,
+        (Some(caps), None, built) => capabilities(caps, &f("capabilities"), built)?,
     };
     if m.built
         && m.delivers.is_none()
@@ -1547,13 +1604,15 @@ fn method(m: &WireMethod, path: &str, ctx: &CapabilityContext<'_>) -> Check<Meth
         visitors: m.visitors.clone(),
         per_platform,
         interaction: m.interaction,
+        drives: m.drives,
         delivers: m.delivers,
         capabilities,
         risk: m.risk.clone(),
     })
 }
 
-fn capabilities(caps: &WireCapabilities, path: &str) -> Check<Capabilities> {
+/// `built: false` 的方法写的能力只拿来说它会取得什么（宿主不调），`list.order` 可以不写。
+fn capabilities(caps: &WireCapabilities, path: &str, built: bool) -> Check<Capabilities> {
     let fetch = caps
         .fetch
         .as_ref()
@@ -1562,7 +1621,7 @@ fn capabilities(caps: &WireCapabilities, path: &str) -> Check<Capabilities> {
     let list = caps
         .list
         .as_ref()
-        .map(|c| list_capability(c, &format!("{path}.list")))
+        .map(|c| list_capability(c, &format!("{path}.list"), built))
         .transpose()?;
     let unfavorite = caps
         .unfavorite
@@ -1700,6 +1759,7 @@ fn only_fields(c: &WireCapability, path: &str, allowed: &[&str]) -> Check<()> {
         ("order", c.order.is_some()),
         ("sources", c.sources.is_some()),
         ("files", c.files.is_some()),
+        ("reads", c.reads.is_some()),
         ("link", c.link.is_some()),
     ];
     for (name, set) in present {
@@ -1810,12 +1870,29 @@ fn fetch_capability(c: &WireCapability, path: &str) -> Check<FetchCapability> {
     })
 }
 
-fn list_capability(c: &WireCapability, path: &str) -> Check<ListCapability> {
-    only_fields(c, path, &["order", "sources", "files", "link"])?;
+fn list_capability(c: &WireCapability, path: &str, built: bool) -> Check<ListCapability> {
+    only_fields(c, path, &["order", "sources", "files", "link", "reads"])?;
     let uses = capability_use(c);
-    let order = c
-        .order
-        .ok_or_else(|| invalid(format!("{path}.order"), "is required"))?;
+    let order = match (c.order, built) {
+        (Some(o), _) => o,
+        // 没做的不调，翻页怎么停用不上
+        (None, false) => ListOrder::Unordered,
+        (None, true) => return Err(invalid(format!("{path}.order"), "is required")),
+    };
+    let files = c.files.clone().unwrap_or_default();
+    match (&c.reads, files.is_empty()) {
+        (Some(r), false) => non_empty(&format!("{path}.reads"), r)?,
+        (None, false) => {
+            return Err(invalid(
+                format!("{path}.reads"),
+                "is required with `files`: say which export of which tool it reads",
+            ));
+        }
+        (Some(_), true) => {
+            return Err(invalid(format!("{path}.reads"), "goes with `files`"));
+        }
+        (None, true) => {}
+    }
     if let Some(label) = &c.link {
         non_empty(&format!("{path}.link"), label)?;
     }
@@ -1823,7 +1900,8 @@ fn list_capability(c: &WireCapability, path: &str) -> Check<ListCapability> {
         uses,
         order,
         sources: c.sources.clone().unwrap_or_default(),
-        files: c.files.clone().unwrap_or_default(),
+        files,
+        reads: c.reads.clone(),
         link: c.link.clone(),
     })
 }

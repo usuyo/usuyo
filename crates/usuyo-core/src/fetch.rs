@@ -36,21 +36,6 @@ pub(crate) fn now_ms() -> i64 {
     jiff::Timestamp::now().as_millisecond()
 }
 
-/// 分享文字里的第一条 http(s) 链接：到空白或全角标点为止。
-pub(crate) fn first_url(input: &str) -> Option<url::Url> {
-    let lower = input.to_ascii_lowercase();
-    let start = [lower.find("https://"), lower.find("http://")]
-        .into_iter()
-        .flatten()
-        .min()?;
-    let rest = &input[start..];
-    let end = rest
-        .find(|c: char| c.is_whitespace() || (!c.is_ascii() && !c.is_alphanumeric()))
-        .unwrap_or(rest.len());
-    let u = url::Url::parse(&rest[..end]).ok()?;
-    u.host_str().is_some().then_some(u)
-}
-
 impl Engine {
     /// 收下一条链接（或带链接的分享文字）。马上回；内容在后台取。
     pub async fn take(&self, input: &str, kind: &str, via: Via) -> Result<TakeResponse> {
@@ -59,13 +44,21 @@ impl Engine {
                 "taking a `{kind}` is not supported yet"
             )));
         }
-        let url = first_url(input)
-            .ok_or_else(|| Error::UnsupportedInput("no http(s) link in the input".into()))?;
+        let url = crate::share_text::link_in(input).ok_or_else(|| {
+            Error::UnsupportedInput("no http(s) link in the input".into())
+                .hinted("这段文字里没有能收下的链接")
+        })?;
         // 带用户名、密码的链接不收：它们会原样进标题、身份和 `content.md`。
         if !url.username().is_empty() || url.password().is_some() {
+            let more = if crate::share_text::link_count(input) > 1 {
+                "（只看第一条链接）"
+            } else {
+                ""
+            };
             return Err(Error::UnsupportedInput(
                 "links with a user name or password are not taken".into(),
-            ));
+            )
+            .hinted(format!("带用户名或密码的链接不收{more}")));
         }
         let (identity, fetch_url) = self.identify(&url).await?;
         let this = self.clone();
@@ -245,6 +238,7 @@ impl Engine {
                 }
             }
             if let Some(import) = &job.import_id {
+                self.drop_copy_if_done(import)?;
                 self.emit(Event::ImportUpdated { id: import.clone() });
             }
         }
@@ -265,11 +259,15 @@ impl Engine {
         if let Some(import) = job.import_id.clone() {
             let this = self.clone();
             let j = job.clone();
-            let go = tokio::task::spawn_blocking(move || this.take_entry(&import, &j))
+            let imp = import.clone();
+            let go = tokio::task::spawn_blocking(move || this.take_entry(&imp, &j))
                 .await
                 .map_err(|e| Error::Task(e.to_string()))??;
             if !go {
                 return Ok(());
+            }
+            if let Some(by_ref) = self.ref_fetch(&import, job)? {
+                return self.run_ref_job(job, by_ref).await;
             }
         }
         let id = ItemId::parse(&job.item_id)?;
@@ -277,9 +275,14 @@ impl Engine {
             // 链接可能带分享参数，原因里不写它：这句会进日志和 `jobs.db`
             .map_err(|e| Error::InvalidArgs(format!("bad job url: {e}")))?;
         let batch = job.import_id.is_some();
-        let (candidates, unusable) = self.fetch_candidates(&url).await?;
+        let (candidates, unusable) = self.fetch_candidates(&url, platform).await?;
 
-        let mut last: Option<CallFailure> = None;
+        // 都没取到时条目上写谁的原因：为这条链接写的平台方法里第一个失败的；通用网页的失败只进失败日志，
+        // 平台方法一种都没调成（都用不上）时才轮到它。
+        let mut first_platform: Option<CallFailure> = None;
+        let mut first_web: Option<CallFailure> = None;
+        // 停着、这一轮没调的平台方法：调过的都没失败时才拿它当原因
+        let mut paused_note: Option<CallFailure> = None;
         let mut retryable = false;
         let mut paused_any = false;
         let mut called = false;
@@ -306,8 +309,13 @@ impl Engine {
             let scope = pause_scope(plugin, &url, platform);
             if let Some(p) = self.inner.jobs.paused(&pid, &method.id, scope, now_ms())? {
                 paused_any = true;
+                let note = if plugin.spec.is_web() {
+                    &mut first_web
+                } else {
+                    &mut paused_note
+                };
                 if missing.is_none() {
-                    last.get_or_insert_with(|| {
+                    note.get_or_insert_with(|| {
                         let mut f = CallFailure::new(
                             ErrorCode::RateLimited,
                             format!("{pid} {} is paused here", method.id),
@@ -320,6 +328,11 @@ impl Engine {
                 }
                 continue;
             }
+            let first = if plugin.spec.is_web() {
+                &mut first_web
+            } else {
+                &mut first_platform
+            };
             if called && !self.pace_between_calls(platform, batch).await? {
                 break;
             }
@@ -383,7 +396,7 @@ impl Engine {
                     );
                     if missing.is_none() {
                         retryable |= failure.code.retryable();
-                        last = Some(*failure);
+                        first.get_or_insert(*failure);
                     }
                     if waits {
                         break;
@@ -391,7 +404,9 @@ impl Engine {
                 }
                 Err(e @ PluginError::Unsupported { .. }) => {
                     if missing.is_none() {
-                        last = Some(CallFailure::new(ErrorCode::UnsupportedInput, e.to_string()));
+                        first.get_or_insert_with(|| {
+                            CallFailure::new(ErrorCode::UnsupportedInput, e.to_string())
+                        });
                     }
                 }
                 Err(e) => return Err(e.into()),
@@ -403,12 +418,16 @@ impl Engine {
             self.emit(Event::ItemUpdated { id: id.to_string() });
             return Ok(());
         }
-        let failure = last.or(unusable).unwrap_or_else(|| {
-            CallFailure::new(
-                ErrorCode::UnsupportedInput,
-                "no installed plugin can fetch this link",
-            )
-        });
+        let failure = first_platform
+            .or(paused_note)
+            .or(unusable)
+            .or(first_web)
+            .unwrap_or_else(|| {
+                CallFailure::new(
+                    ErrorCode::UnsupportedInput,
+                    "no installed plugin can fetch this link",
+                )
+            });
         let hint = failure
             .hint
             .clone()
@@ -455,6 +474,116 @@ impl Engine {
         Ok(())
     }
 
+    /// 这一条要不要回到读文件的那个插件 `fetch <ref>`（协议 §3.9）：清单里记了 `ref`、导入的方法接 `ref`。
+    pub(crate) fn ref_fetch(&self, import: &str, job: &FetchJob) -> Result<Option<RefFetch>> {
+        let jobs = &self.inner.jobs;
+        let (Some(imp), Some(entry)) =
+            (jobs.import(import)?, jobs.entry_for(import, &job.item_id)?)
+        else {
+            return Ok(None);
+        };
+        let Some(reference) = entry.reference else {
+            return Ok(None);
+        };
+        let plugin = imp
+            .plugin
+            .as_deref()
+            .and_then(|p| self.inner.host.plugin(p))
+            .cloned();
+        Ok(Some(RefFetch {
+            plugin,
+            plugin_id: imp.plugin.clone().unwrap_or_default(),
+            method: imp.method.clone().unwrap_or_default(),
+            reference,
+            input: self.import_copy(&imp),
+            file_name: imp.file_name.clone().unwrap_or_default(),
+        }))
+    }
+
+    /// 回到读文件的插件取一条（`fetch <ref>`，`USUYO_INPUT` 指着那份副本）。读的是本机的文件，不碰平台，
+    /// 不守节奏；不换别的方法，也不补缺。
+    async fn run_ref_job(&self, job: &FetchJob, by: RefFetch) -> Result<()> {
+        let id = ItemId::parse(&job.item_id)?;
+        let fail = |code: ErrorCode, message: String, hint: String| {
+            let mut f = CallFailure::new(code, message);
+            f.hint = Some(hint);
+            f
+        };
+        let outcome = match (&by.plugin, &by.input) {
+            (None, _) => Err(fail(
+                ErrorCode::UnsupportedInput,
+                format!("plugin {} is not installed", by.plugin_id),
+                "读这个文件的插件不在了".into(),
+            )),
+            (_, Some(input)) if !input.is_file() => Err(fail(
+                ErrorCode::DependencyMissing,
+                format!("the copy of file:{} is gone", by.file_name),
+                format!("交进来的文件 {} 不在了", by.file_name),
+            )),
+            (Some(plugin), input) => {
+                let request = FetchRequest {
+                    method: by.method.clone(),
+                    input: FetchInput::Ref(by.reference.clone()),
+                    want: None,
+                    input_file: input.clone(),
+                };
+                let result = self
+                    .inner
+                    .host
+                    .fetch(plugin, request, &CallOptions::default())
+                    .await;
+                match result {
+                    Ok(snap) => {
+                        self.record_method_call(plugin, &by.method, None, Ok(()))?;
+                        self.store_snapshot(&id, plugin, job, snap).await?;
+                        Ok(())
+                    }
+                    Err(PluginError::Call { failure, .. }) => {
+                        self.record_method_call(plugin, &by.method, None, Err(&failure))?;
+                        Err(*failure)
+                    }
+                    Err(e @ PluginError::Unsupported { .. }) => {
+                        Err(CallFailure::new(ErrorCode::UnsupportedInput, e.to_string()))
+                    }
+                    Err(e) => return Err(e.into()),
+                }
+            }
+        };
+        let failure = match outcome {
+            Ok(()) => {
+                self.inner.jobs.finish(id.as_str())?;
+                self.emit(Event::ItemUpdated { id: id.to_string() });
+                return Ok(());
+            }
+            Err(f) => f,
+        };
+        let hint = failure
+            .hint
+            .clone()
+            .or_else(|| Some(failure.message.clone()));
+        let code = failure.code.as_str();
+        let can_retry = failure.code.retryable();
+        if can_retry && job.attempts + 1 < self.inner.retry.max_attempts {
+            let backoff =
+                i64::try_from(self.inner.retry.delay(job.attempts).as_millis()).unwrap_or(i64::MAX);
+            self.inner.jobs.retry(
+                id.as_str(),
+                now_ms().saturating_add(backoff),
+                code,
+                hint.as_deref(),
+            )?;
+        } else {
+            self.inner.jobs.fail(id.as_str(), code, hint.as_deref())?;
+        }
+        self.emit(Event::ItemFetchFailed {
+            id: id.to_string(),
+            code: code.into(),
+            hint,
+            retry: can_retry,
+        });
+        Ok(())
+    }
+
     /// 同一条里接着调下一种方法之前照节奏等：要等的超过 [`PACE_BETWEEN_MAX`] 就不等了，回 `false`。
     async fn pace_between_calls(&self, platform: &str, batch: bool) -> Result<bool> {
         let pacing = self.inner.pacing.get(platform);
@@ -483,7 +612,8 @@ impl Engine {
             .map_err(|e| Error::Task(e.to_string()))??;
         let this = self.clone();
         let plugin = plugin.clone();
-        let input_url = job.url.clone();
+        // 只有 `ref` 的（从文件导入）没有原链接
+        let input_url = (!job.url.is_empty()).then(|| job.url.clone());
         let item = id.clone();
         let imported = job.import_id.is_some();
         tokio::task::spawn_blocking(move || {
@@ -506,12 +636,12 @@ impl Engine {
         if entry.added {
             return Ok(true);
         }
-        let identity: usuyo_contract::Identity = serde_json::from_str(
-            entry
-                .identity
-                .as_deref()
-                .ok_or_else(|| Error::InvalidArgs("import entry has no identity".into()))?,
-        )?;
+        // 从文件导入的、没有身份的（聊天记录一类）照清单里记下的 `file-` id 建
+        let identity: Option<usuyo_contract::Identity> = entry
+            .identity
+            .as_deref()
+            .map(serde_json::from_str)
+            .transpose()?;
         let id = ItemId::parse(&job.item_id)?;
         let (acted_at, acted_at_original) = match entry.acted_at.as_deref() {
             Some(raw) => {
@@ -533,10 +663,11 @@ impl Engine {
             jobs.import_skipped(import)?;
             return Ok(false);
         }
-        let outcome = lib.add_item(
+        let outcome = lib.add_file_item(
             &Via::Import.batch()?,
+            id.clone(),
             Capture {
-                identity: Some(identity),
+                identity,
                 title_hint: entry.title.clone(),
                 origin: NewOrigin {
                     entry: Via::Import.entry().into(),
@@ -584,7 +715,7 @@ impl Engine {
         &self,
         id: &ItemId,
         plugin: &FetchPlugin,
-        input_url: String,
+        input_url: Option<String>,
         snap: FetchedSnapshot,
         files: Vec<usuyo_contract::FileHash>,
         imported: bool,
@@ -605,7 +736,7 @@ impl Engine {
         let new = NewSnapshot {
             plugin: plugin.id().to_string(),
             plugin_version: Some(plugin.header.version.to_string()),
-            input_url: Some(input_url),
+            input_url,
             resolved_url: None,
             access,
             site: out.evidence.site.clone(),
@@ -629,6 +760,17 @@ impl Engine {
         drop(snap);
         Ok(())
     }
+}
+
+/// 回到读文件的插件取的一条：插件、方法、`ref`、副本在哪。
+pub(crate) struct RefFetch {
+    /// 插件不在了是 `None`。
+    pub plugin: Option<FetchPlugin>,
+    plugin_id: String,
+    pub method: String,
+    reference: String,
+    input: Option<std::path::PathBuf>,
+    file_name: String,
 }
 
 /// fetch 输出 → `usuyo.fetch.json`：去掉 `credentialsUpdate`；`publishedAt` 换成 UTC 毫秒，
@@ -667,21 +809,4 @@ pub(crate) fn platform_of(item_id: &str) -> &str {
 
 fn until(at: i64, now: i64) -> Duration {
     Duration::from_millis(u64::try_from(at.saturating_sub(now)).unwrap_or(0))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn finds_the_link_in_share_text() {
-        let u = first_url("【三段式注水】 https://example.com/a?b=1，复制打开").unwrap();
-        assert_eq!(u.as_str(), "https://example.com/a?b=1");
-        assert_eq!(
-            first_url("看这个HTTP://Example.com/x y").unwrap().as_str(),
-            "http://example.com/x"
-        );
-        assert!(first_url("没有链接").is_none());
-        assert!(first_url("https://").is_none());
-    }
 }

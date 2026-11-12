@@ -1,18 +1,18 @@
 <a id="5-投递接口"></a>
 ## 5. 投递接口
 
-很多现成工具不是宿主能启动的进程：浏览器扩展、油猴脚本、iOS 快捷指令、Android 分享、Agent Skill。它们走投递接口，把链接或已经取到的内容交给宿主。内容的形状就是 [§3.7](fetch.md#37-fetch-输出) 的 fetch 输出；来源由宿主按令牌标明，投递方自己不能改。不带令牌的入口（`usuyo://` 链接一类）都要用户在窗口里确认一次才进队列。
+很多现成工具不是宿主能启动的进程：浏览器扩展、油猴脚本、iOS 快捷指令、Android 分享、Agent Skill。它们走投递接口，把链接或已经取到的内容交给宿主。已经取到的内容装在一个文件里交，由清单里一种读文件的方法读（[§3.9](fetch.md#39-从文件导入)）；来源由宿主按令牌标明，投递方自己不能改。不带令牌的入口（`usuyo://` 链接一类）都要用户在窗口里确认一次才进队列。
 
 <a id="51-本机-http-接口"></a>
 ### 5.1 本机 HTTP 接口
 
-对应 PRD 的浏览器扩展、本地 HTTP API，约定照 [03 §6.3](../research/03-agent-protocols.md#63-对歇存的意义)。做了的：`/v1/ping`、`/v1/deliver`（只收链接）、`/v1/batches` 和按投递端发的令牌，和窗口用的路由在同一个监听口上，规则见 [SPEC 本机接口](../spec/local-api.md#本机接口第-2-层11-11-照代码)；下面没做的部分标了「还没做」。
+对应 PRD 的浏览器扩展、本地 HTTP API，约定照 [03 §6.3](../research/03-agent-protocols.md#63-对歇存的意义)。做了的：`/v1/ping`、`/v1/deliver`（只收链接）、`/v1/batches`、`/v1/file-imports`（交一个装着已取到内容的文件）和按投递端发的令牌，和窗口用的路由在同一个监听口上，规则见 [SPEC 本机接口](../spec/local-api.md#本机接口第-2-层11-11-照代码)；下面没做的部分标了「还没做」。
 
 - 只绑 `127.0.0.1`，端口 `47615`，和给窗口用的路由是同一个监听口，不另开端口。
-- 每个请求带 `Authorization: Bearer <令牌>`。令牌按投递端分别生成：名字（例如「xhs-vault 脚本」）、入口类型（`extension`、`mobile`、`api`），可单独撤销。在应用的导入页里发（`POST /deliver-tokens`，主令牌调），格式 `<id>.<秘密>`，整个令牌只在发的那一次回给调用方；存在按机器目录的 `deliver-tokens.json`，不放进资料库。投递令牌只能进 `/v1/ping`、`/v1/deliver`、`/v1/batches`。
+- 每个请求带 `Authorization: Bearer <令牌>`。令牌按投递端分别生成：名字（例如「xhs-vault 脚本」）、入口类型（`extension`、`mobile`、`api`），可单独撤销。在应用的导入页里发（`POST /deliver-tokens`，主令牌调），格式 `<id>.<秘密>`，整个令牌只在发的那一次回给调用方；存在按机器目录的 `deliver-tokens.json`，不放进资料库。投递令牌只能进 `/v1/ping`、`/v1/deliver`、`/v1/batches`、`/v1/file-imports`，交得进、读不了：导入、条目、插件一样都读不到。
 - 除 `chrome-extension://`、`moz-extension://`、`safari-web-extension://` 以外，带任何 `Origin` 头的请求都拒绝，包括 `Origin: null`（沙箱 iframe、`file://` 页面会带它），也不回 CORS 头：普通网页发不进来，也读不到响应。没有 `Origin` 的请求放行。宿主另外核对 `Host` 头是 `127.0.0.1:<端口>`、`localhost:<端口>` 或 `[::1]:<端口>`。各油猴脚本管理器的 `GM_xmlhttpRequest` 实际带什么 `Origin` 待核实。投递令牌发出去以前先握手：`POST /handshake`，请求 `{nonce, client}`，`client` 是令牌 `.` 前面的 id，内核用整个令牌当密钥回 HMAC 证明，令牌本身不上线路（[SPEC 本机接口](../spec/local-api.md#本机接口第-2-层11-11-照代码)）。`/v1/…` 不回 CORS 头，也不答 CORS 预检（Safari 的 Userscripts 没有网站访问权限时会先发预检，还没做，[总纲](../BUILD.md#5-功能线)）。
-- 条目在 `origins[]` 里那一项的 `entry` 取令牌的入口类型。`extension` 令牌交来已取到的内容时，快照的 `plugin` 记 `deliver:<令牌名>`；只交链接的，快照记去取它的那个插件。投递来的内容同样按不可信输入处理。
-- **令牌能交什么。** `api` 和 `mobile` 类令牌只接受链接（`url`、`text` 和 `/v1/batches`），不接受已取到的内容；已取到的内容只接受 `extension` 类令牌和收件文件夹（[§5.2](#52-监听文件夹)）（还没做：`/v1/deliver` 现在只收链接，没有 multipart，任何令牌都不能交已取到的内容）。Agent 用 `api` 令牌交已取好的内容，等于没经过改动提议就改了已有条目，和「Agent 写入先提议后生效」的原则冲突。
+- 交链接的，条目在 `origins[]` 里那一项的 `entry` 取令牌的入口类型，快照记去取它的那个插件。交已取到内容的（`/v1/file-imports`）是一次导入：`entry` 记 `import`，同一次共用 `importBatch`，快照记读它的那个插件，导入的 `client` 是令牌名。投递来的内容同样按不可信输入处理。
+- **令牌能交什么。** `api` 和 `mobile` 类令牌只接受链接（`url`、`text` 和 `/v1/batches`），交 `/v1/file-imports` 回 403 `forbidden`；已取到的内容只接受 `extension` 类令牌（和主令牌）和收件文件夹（[§5.2](#52-监听文件夹)）。Agent 用 `api` 令牌交已取好的内容，等于没经过改动提议就改了已有条目，和「Agent 写入先提议后生效」的原则冲突。
 - **身份由宿主重新算。** 宿主不采用投递方给的 `identity`，而是用 `identity.url`（没有就用 `url`）重新调 `canonicalize` 得出身份；拿不到身份的（没有网址的；http(s) 链接马上就有身份，最差是这条链接的 `web:` 身份，离线时的短链也一样，之后可能并进平台 id，见 [§3.1](fetch.md#31-运行器与节奏)），按无平台 ID 的条目处理（[SPEC §0.4](../spec/conventions.md#04-id)）。不然一个持有令牌的脚本报出某个已有条目的身份、再带上 `completeness: full`，就能覆盖那个条目。
 
 | 方法与路径 | 用途 | 返回 |
@@ -20,6 +20,7 @@
 | `GET /v1/ping` | 检查令牌和连通 | `{"name":"usuyo","version":"…","protocol":1,"client":"xhs-vault 脚本"}` |
 | `POST /v1/deliver` | 收下一条：只有链接或分享文字，或已取到的内容（已取到的内容还没做；请求体只认 `url`、`text`，别的字段包括 `action` 都被忽略） | `202`，身份一算出就回条目 id（一般 3 秒内）；`canonicalize` 因网络失败或超时（例如离线时的短链）时，回这条链接的 `web-` id，联网后可能并进平台 id，旧 id 留作别名（[SPEC §0.4](../spec/conventions.md#04-id)） |
 | `POST /v1/batches` | 交一批链接，进导入预览 | `202`，批次 id；新增、已有的数目在导入预览里随身份算出逐步出现 |
+| `POST /v1/file-imports?reader=<插件 id>#<方法 id>&name=<文件名>` | 交一个装着已取到内容的文件（例如浏览器脚本在登录后的页面里读到的几页），请求体就是文件本身，最多 256 MiB；落成一次 `file` 类导入，进导入预览，你确认了才收 | `202`，`{id}`（导入的 id）；读不了的文件回 400 `invalid-args` 带 `hint` |
 
 只有链接时，宿主照 [§3.1](fetch.md#31-运行器与节奏) 去取内容；`text` 是手机分享出来的整段文字，宿主从里面找出第一个链接：
 
@@ -37,13 +38,12 @@
 {"id": "douyin-4plrcxk343onmyxibmrr672kga", "state": "accepted", "duplicate": false}
 ```
 
-已经取到内容的（例如在页面里拿到了正文和图片），用 `multipart/form-data`（还没做，下面是设计）：`item` 部分是 fetch 输出 JSON；每个文件部分的**字段名**就是 JSON 里引用的相对路径，宿主按字段名找文件，`filename` 只作参考。原因：有的 multipart 库取文件名时只留最后一段（Go 的 `Part.FileName()` 会先过一遍 `filepath.Base`，用 Go 1.26 的 `go doc` 核对过），`images/001.jpg` 会变成 `001.jpg`；各家浏览器扩展对带斜杠的 `filename` 处理也不一致（推断）。字段名照 [§3.6](fetch.md#36-fetch-与输出目录) 的输出目录规则校验，一次投递默认最多 1 GiB。`item` 按 fetch 输出的 schema 校验，只有 `evidence.access` 可以省略，宿主在快照里记成 `deliver`。
+已经取到内容的（例如脚本在只有登录才看得到的页面里读到了正文和图片），装进一个文件（形状由读它的插件定，例如一个 JSON），经 `POST /v1/file-imports` 交，查询参数 `reader` 是读它的方法（`GET /file-readers` 里的 `id`，`#` 写成 `%23`），`name` 是文件名（只当显示的字）。握手、令牌、`Origin` 的规矩和交链接一样；`/v1/deliver` 不收内容。宿主照 [§3.9](fetch.md#39-从文件导入) 存副本、交给那个插件 `list`，列出的条目在导入页上和别的导入一样等你确认，确认了才 `fetch <ref>` 取出内容；导入记着是哪个投递端交的（`client`）。所以交进来的内容不会不经你看一眼就进资料库，也改不了已有条目：读它的插件给的身份（插件声明的平台以内）照它算条目 id，已经存着的落进「库里已经有」那一组，确认时不收、不碰；没有身份的另建 `file-` 条目。这和下面「身份由宿主重新算」不同：那一条管的是投递方自己报的身份，这里的身份出自装着的插件。
 
 ```
-curl -X POST http://127.0.0.1:47615/v1/deliver \
+curl -X POST "http://127.0.0.1:47615/v1/file-imports?reader=usuyo-fetch%2Fx%23pages&name=pages.json" \
   -H "Authorization: Bearer $USUYO_TOKEN" \
-  -F 'item=@item.json;type=application/json' \
-  -F 'images/001.jpg=@images/001.jpg'
+  --data-binary @pages.json
 ```
 
 一批链接（例如油猴脚本导出的小红书收藏夹清单）进导入预览，用户确认后按节奏去取：
@@ -80,8 +80,8 @@ curl -X POST http://127.0.0.1:47615/v1/deliver \
 
 | 入口 | 走哪条 | `origins[].entry` |
 |---|---|---|
-| usuyo 自己的浏览器扩展「保存当前页」 | `POST /v1/deliver`，带正文和文件 | `extension` |
-| 别人的扩展和油猴脚本（xhs-vault、Weibo-archiver 一类） | `POST /v1/batches` 交清单；或导出 JSON 文件，再用导入插件读（[§3.9](fetch.md#39-从文件导入)） | `extension` 或 `import` |
+| usuyo 自己的浏览器扩展「保存当前页」 | `POST /v1/file-imports`，正文和文件装在一个文件里，由读它的方法读 | `import` |
+| 别人的扩展和油猴脚本（xhs-vault、Weibo-archiver 一类） | `POST /v1/batches` 交清单；拿着内容的交 `POST /v1/file-imports`；或导出 JSON 文件，在导入页交给读它的方法（[§3.9](fetch.md#39-从文件导入)） | `extension` 或 `import` |
 | iOS 快捷指令 | 写进监听文件夹；或开了局域网直传时 `POST` 到电脑 | `mobile` |
 | Android 分享（HTTP Shortcuts 一类） | 局域网直传 | `mobile` |
 | Agent Skill（用户自己的 Agent 操作完把链接交过来） | `usuyo add <url>`，或用自己的 `api` 令牌 `POST /v1/deliver`；只交链接，内容由宿主照 [§3.1](fetch.md#31-运行器与节奏) 去取 | `cli` 或 `api` |

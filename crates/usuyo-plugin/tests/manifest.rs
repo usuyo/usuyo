@@ -597,3 +597,88 @@ fn transform_models_are_checked() {
         "models[1].name",
     );
 }
+
+#[test]
+fn per_platform_tier_sets_the_default_switch_and_rank_on_that_platform() {
+    let yaml = replace(&web(), "platforms: [web]", "platforms: [web, youtube]");
+    let yaml = replace(
+        &yaml,
+        "    account: none\n",
+        "    account: none\n    perPlatform:\n      youtube: {access: private-api}\n",
+    );
+    let m = parse(&yaml).unwrap();
+    let spec = m.fetch().unwrap();
+    let method = &spec.methods[0];
+    let declared = &spec.platforms;
+    assert!(method.on_by_default());
+    assert!(method.on_by_default_on("web", declared));
+    assert!(
+        !method.on_by_default_on("youtube", declared),
+        "这一层抬高了的平台默认关着"
+    );
+    assert_eq!(method.access_on("youtube", declared), Access::PrivateApi);
+    assert_eq!(method.rank_on("youtube", declared).0, Access::PrivateApi);
+    assert_eq!(method.rank_on("web", declared).0, Access::PublicWeb);
+    // 不在 `platforms` 里的平台（认不出、落成别的平台的链接）照最高的那一层
+    assert_eq!(method.access_on("other", declared), Access::PrivateApi);
+}
+
+#[test]
+fn unbuilt_methods_declare_what_they_would_get() {
+    // 没做的写 `list` 可以不写 `order`：宿主不调它，只拿来说会取得什么
+    let m = parse(&replace(
+        &douyin(),
+        "    account: own-phone\n    interaction: foreground\n",
+        "    account: own-phone\n    interaction: foreground\n    drives: iphone\n    capabilities:\n      list:\n        sources:\n          - {source: \"douyin:likes\", title: 喜欢, action: like}\n",
+    ))
+    .unwrap();
+    let spec = m.fetch().unwrap();
+    let iphone = spec.method("iphone").unwrap();
+    assert!(!iphone.callable());
+    assert_eq!(iphone.drives, Some(usuyo_plugin::protocol::Drives::Iphone));
+    let list = iphone.capabilities.list.as_ref().unwrap();
+    assert_eq!(list.sources[0].title, "喜欢");
+    // 做了的照旧要写
+    rejects(
+        &replace(
+            &web(),
+            "      fetch:\n        outputs: [text, html, images, meta]",
+            "      list:\n        sources: []",
+        ),
+        "methods[0].capabilities.list.order",
+    );
+}
+
+#[test]
+fn drives_goes_with_where_the_account_is() {
+    let base = replace(
+        &douyin(),
+        "    account: own-phone\n    interaction: foreground\n",
+        "    account: own-phone\n    interaction: foreground\n    drives: desktop-app\n",
+    );
+    rejects(&base, "methods[3].drives");
+    let ok = replace(
+        &douyin(),
+        "    account: own-phone\n    interaction: foreground\n",
+        "    account: own-app\n    interaction: foreground\n    drives: desktop-app\n",
+    );
+    parse(&ok).unwrap();
+}
+
+#[test]
+fn file_readers_say_what_they_read() {
+    let text = testdata("manifest.import.yaml");
+    let m = parse(&text).unwrap();
+    let list = m.fetch().unwrap().methods[0]
+        .capabilities
+        .list
+        .clone()
+        .unwrap();
+    assert!(list.reads.unwrap().contains("Takeout"));
+    let without = text
+        .lines()
+        .filter(|l| !l.trim_start().starts_with("reads:"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    rejects(&without, "methods[0].capabilities.list.reads");
+}

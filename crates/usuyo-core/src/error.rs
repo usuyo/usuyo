@@ -36,12 +36,16 @@ pub enum Error {
     /// 后台线程没跑完（panic 或被取消）。
     #[error("background task failed: {0}")]
     Task(String),
+    /// 带一句给人看的中文：界面照 `hint` 显示，`source` 的英文进日志。
+    #[error("{source}")]
+    Hinted { source: Box<Error>, hint: String },
 }
 
 impl Error {
     /// SPEC §0.3 的错误码。
     pub fn code(&self) -> &'static str {
         match self {
+            Error::Hinted { source, .. } => source.code(),
             Error::Library(e) => e.code(),
             Error::Index(e) => match e {
                 usuyo_index::Error::EmptyQuery | usuyo_index::Error::QueryTooLong { .. } => {
@@ -67,6 +71,7 @@ impl Error {
     /// 插件报的错：哪个插件。边界据此回 502 并带上 `plugin`。
     pub fn plugin(&self) -> Option<&str> {
         match self {
+            Error::Hinted { source, .. } => source.plugin(),
             Error::Plugin(PluginError::Call { plugin, .. }) => Some(plugin.as_str()),
             _ => None,
         }
@@ -75,8 +80,17 @@ impl Error {
     /// 给人看的一句话：插件给了 `hint` 就用它。
     pub fn hint(&self) -> Option<&str> {
         match self {
+            Error::Hinted { hint, .. } => Some(hint),
             Error::Plugin(PluginError::Call { failure, .. }) => failure.hint.as_deref(),
             _ => None,
+        }
+    }
+
+    /// 配上一句给人看的中文。
+    pub fn hinted(self, hint: impl Into<String>) -> Error {
+        Error::Hinted {
+            source: Box::new(self),
+            hint: hint.into(),
         }
     }
 

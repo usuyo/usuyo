@@ -11,6 +11,8 @@ pub struct Problem {
     pub status: u16,
     pub detail: String,
     pub plugin: Option<String>,
+    /// 给人看的一句中文，界面照它显示；`detail` 是给日志的原因。
+    pub hint: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -26,6 +28,8 @@ struct Wire<'a> {
     retryable: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     plugin: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    hint: Option<&'a str>,
 }
 
 impl Problem {
@@ -35,7 +39,14 @@ impl Problem {
             status: status_of(code).as_u16(),
             detail: detail.into(),
             plugin: None,
+            hint: None,
         }
+    }
+
+    /// 配上一句给人看的中文。
+    pub fn with_hint(mut self, hint: impl Into<String>) -> Problem {
+        self.hint = Some(hint.into());
+        self
     }
 
     fn retryable(&self) -> bool {
@@ -57,8 +68,13 @@ impl From<usuyo_core::Error> for Problem {
         if code == "internal" {
             tracing::error!(error = %e, "request failed");
         }
-        let detail = e.hint().map_or_else(|| e.to_string(), str::to_owned);
+        // 插件报的错照旧把它的一句话放进 `detail`；内核自己配的中文只进 `hint`，`detail` 留英文给日志。
+        let detail = match &e {
+            usuyo_core::Error::Hinted { .. } => e.to_string(),
+            _ => e.hint().map_or_else(|| e.to_string(), str::to_owned),
+        };
         let mut p = Problem::new(code, detail);
+        p.hint = e.hint().map(str::to_owned);
         // 插件报的错一律 502、带插件 id，免得平台的 login-required 像令牌不对。
         if let Some(plugin) = e.plugin() {
             p.status = 502;
@@ -81,6 +97,7 @@ impl IntoResponse for Problem {
             code: self.code,
             retryable,
             plugin: self.plugin.as_deref(),
+            hint: self.hint.as_deref(),
         };
         let body = serde_json::to_vec(&wire).unwrap_or_default();
         let mut res = (status, body).into_response();

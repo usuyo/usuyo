@@ -53,6 +53,9 @@ pub struct FacetSource {
     /// 机器的：工具或模型的名字。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool: Option<String>,
+    /// 机器的：做这一份的转换插件 id（`run.json` 的 `by`），两个插件各转一份时靠它分开。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plugin: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub run_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -387,6 +390,37 @@ pub enum ImportKind {
     Source,
     /// 交进来的一批链接（`/v1/batches`）。
     Delivered,
+    /// 导入插件读交进来的一个文件（`POST /file-imports`，或浏览器脚本经 `/v1/file-imports` 交的）。
+    File,
+}
+
+/// `file` 类导入：交进来的文件名和读它的插件的名字。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ImportFileView {
+    pub name: String,
+    pub reader: String,
+}
+
+/// 一种能读别的工具导出的文件的方法（`GET /file-readers`）：做了的、`list` 写了 `files` 的。
+/// 名字、读什么、文件长什么样都取自清单。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileReaderView {
+    /// `<插件 id>#<方法 id>`，交文件时原样给回。
+    pub id: String,
+    /// 方法的名字。
+    pub name: String,
+    /// 插件的名字。
+    pub plugin: String,
+    /// 清单 `list.reads`。
+    pub reads: String,
+    /// 清单 `list.files`。
+    pub patterns: Vec<String>,
+    /// 清单 `list.sources` 的名字。
+    pub lists: Vec<String>,
+    /// 方法的 `risk.text`。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
 }
 
 /// 预览里各几条：新的、库里已经有的、在回收站里的。
@@ -416,6 +450,8 @@ pub struct ImportView {
     pub id: String,
     pub kind: ImportKind,
     pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<ImportFileView>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plugin_id: Option<String>,
     /// 来源属于插件的哪种方法。
@@ -448,7 +484,9 @@ pub struct ImportView {
 #[serde(rename_all = "camelCase")]
 pub struct ImportEntryView {
     pub seq: i64,
-    pub url: String,
+    /// 从文件导入时只有插件的 `ref`、没有链接的那几条没有。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -511,10 +549,17 @@ pub struct MethodView {
     pub login: usuyo_plugin::protocol::Login,
     pub account: AccountView,
     pub interaction: usuyo_plugin::protocol::Interaction,
+    /// 驱动哪一样：`iphone`、`android`、`desktop-app`；不驱动设备的没有。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub drives: Option<usuyo_plugin::protocol::Drives>,
+    /// 层级和方法本身不同的平台（清单的 `perPlatform`），各自的层级和在这个平台上开没开。
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub per_platform: Vec<PlatformTierView>,
     pub gets: GetsView,
     pub built: bool,
+    /// 开关：你拨过的照你拨的，没拨过照方法本身的那一层。
     pub enabled: bool,
-    /// 这台机器上现在用得上：做了、开着、要的登录和访客身份都在、本机检查没挡它。
+    /// 这台机器上现在用得上：做了、开着、要的登录和访客身份都在、本机检查没挡它、没停着。
     pub usable: bool,
     /// 为什么用不上，一项一句。
     pub blockers: Vec<Blocker>,
@@ -527,7 +572,18 @@ pub struct MethodView {
     pub risk_note: Option<usuyo_plugin::protocol::Risk>,
 }
 
-/// 账号用在哪；`sites` 是登录站点（`in-usuyo`）或访客身份的站点（`visitor`），`where` 是它们的名字。
+/// 一种方法在某个平台上的层级（清单的 `perPlatform`）。`enabled`：没拨过开关时照这一层的默认
+/// （`private-api`、`client-hook` 关着），拨过就和方法的开关一样。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlatformTierView {
+    pub platform: String,
+    pub access: usuyo_plugin::protocol::Access,
+    pub login: usuyo_plugin::protocol::Login,
+    pub enabled: bool,
+}
+
+/// 账号用在哪；`sites` 是登录站点（`in-usuyo`）或访客身份的站点（`visitor`），`where` 是账号所在的地方给人看的名字。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AccountView {
@@ -554,7 +610,8 @@ pub struct GetsView {
 }
 
 /// 用不上的一个原因：`code` 是 `not-built`、`off`、`login-missing`、`login-expired`、`visitor-missing`、
-/// `visitor-expired`、`check-failed`（插件的本机检查没过）、`health-failed`（插件没能自查）。
+/// `visitor-expired`、`check-failed`（插件的本机检查没过）、`health-failed`（插件没能自查）、
+/// `paused`（被限流、被拦或你点了「先别试」，`hint` 写到什么时候）。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Blocker {
     pub code: String,
@@ -836,6 +893,7 @@ mod tests {
             source: FacetSource {
                 by: SourceBy::Machine,
                 tool: Some("Vision".into()),
+                plugin: Some("usuyo/ocr-vision".into()),
                 run_id: Some("r".into()),
                 at: None,
                 lang: None,
@@ -855,7 +913,7 @@ mod tests {
         assert_eq!(
             serde_json::to_value(&a).unwrap(),
             json!({"layer": "frames", "key": "frames:r",
-                   "source": {"by": "machine", "tool": "Vision", "runId": "r"},
+                   "source": {"by": "machine", "tool": "Vision", "plugin": "usuyo/ocr-vision", "runId": "r"},
                    "segments": [{"text": "x", "position": {"kind": "time", "sec": 1.5, "endSec": 4.0,
                                  "snapshotId": "s", "xywh": [0.1, 0.2, 0.3, 0.4]}}]})
         );

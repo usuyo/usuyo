@@ -203,6 +203,8 @@ pub(crate) struct Inner {
     pub settings_lock: Mutex<()>,
     /// 获取插件里各方法的开关和本机检查（协议 §2.3.1）。
     pub methods: crate::methods::Methods,
+    /// 按机器的 `libraries/<libraryId>/imports/`：从文件导入时交进来的文件的副本，一次导入一个文件夹。
+    pub import_copies: PathBuf,
 }
 
 #[derive(Clone)]
@@ -320,11 +322,13 @@ impl Engine {
                 machine_root: config.machine_root,
                 settings_lock: Mutex::new(()),
                 methods,
+                import_copies: machine_dir.join("imports"),
             }),
         };
         if engine.inner.index.needs_rebuild() {
             engine.reindex()?;
         }
+        engine.sweep_import_copies()?;
         Ok(engine)
     }
 

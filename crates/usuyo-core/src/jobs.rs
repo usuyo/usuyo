@@ -135,6 +135,14 @@ CREATE TABLE method_calls (
 PRAGMA user_version = 3;
 ";
 
+/// 版本 4：从文件导入（协议 §3.9）。导入记交进来的文件名（副本在按机器目录的 `imports/<导入 id>/` 下）；
+/// 清单里的一条可以只有插件的 `ref`、没有链接（`url` 记空串），宿主回到那个插件 `fetch <ref>`。
+const SCHEMA_V4: &str = "
+ALTER TABLE imports ADD COLUMN file_name TEXT;
+ALTER TABLE import_entries ADD COLUMN ref TEXT;
+PRAGMA user_version = 4;
+";
+
 /// 手动收下的排在导入前面（协议 §3.1 的队列顺序）。
 pub(crate) const PRIORITY_MANUAL: i64 = 0;
 pub(crate) const PRIORITY_IMPORT: i64 = 2;
@@ -212,7 +220,7 @@ pub struct PaceRow {
     pub batch_calls: u32,
 }
 
-/// 一次导入。`kind`：`source`（插件的 `list`）或 `delivered`（交进来的一批链接）。
+/// 一次导入。`kind`：`source`（插件的 `list`）、`delivered`（交进来的一批链接）或 `file`（插件读交进来的文件）。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImportRow {
     pub id: String,
@@ -237,6 +245,8 @@ pub struct ImportRow {
     pub also_trashed: bool,
     /// 轮到它时已经进了回收站（又没让拿回来）、或者私密的，没收。
     pub skipped: u32,
+    /// `file` 类：交进来的文件名，只当显示的字（副本叫 `input` 加允许的扩展名，见 `file_imports`）。
+    pub file_name: Option<String>,
 }
 
 /// 导入里的一条。`standing`：`unresolved`（还没认出身份）、`new`、`stored`、`trashed`。
@@ -251,6 +261,8 @@ pub struct EntryRow {
     pub item_id: Option<String>,
     pub standing: String,
     pub added: bool,
+    /// 插件给的 `ref`（从文件导入）：轮到时回到这个插件 `fetch <ref>`。只有它、没有链接时 `url` 是空串。
+    pub reference: Option<String>,
 }
 
 pub(crate) struct Jobs {
@@ -265,8 +277,9 @@ const JOB_COLUMNS: &str =
     "item_id, url, state, attempts, due_at, error_code, error_hint, priority, import_id";
 const IMPORT_COLUMNS: &str = "id, kind, plugin, source, client, title, action, created_at, cursor,
     listed, pages, attempts, wait_until, stop_code, stop_hint, held, confirmed_at, also_trashed, skipped,
-    method";
-const ENTRY_COLUMNS: &str = "seq, url, title, action, acted_at, identity, item_id, standing, added";
+    method, file_name";
+const ENTRY_COLUMNS: &str =
+    "seq, url, title, action, acted_at, identity, item_id, standing, added, ref";
 
 impl Jobs {
     /// 打开（没有就建、旧的升上来），把上次没做完的 `running` 放回队列。
@@ -293,6 +306,9 @@ impl Jobs {
         }
         if version < 3 {
             conn.execute_batch(&format!("BEGIN; {SCHEMA_V3} COMMIT;"))?;
+        }
+        if version < 4 {
+            conn.execute_batch(&format!("BEGIN; {SCHEMA_V4} COMMIT;"))?;
         }
         conn.execute(
             "UPDATE fetch_jobs SET state = 'queued' WHERE state = 'running'",
@@ -587,8 +603,9 @@ impl Jobs {
 
     pub fn insert_import(&self, i: &ImportRow) -> Result<()> {
         self.conn().execute(
-            "INSERT INTO imports (id, kind, plugin, method, source, client, title, action, created_at, listed)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            "INSERT INTO imports (id, kind, plugin, method, source, client, title, action, created_at, listed,
+                file_name)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 i.id,
                 i.kind,
@@ -599,7 +616,8 @@ impl Jobs {
                 i.title,
                 i.action,
                 i.created_at,
-                i.listed
+                i.listed,
+                i.file_name
             ],
         )?;
         Ok(())
@@ -736,11 +754,19 @@ impl Jobs {
     pub fn add_entry(&self, import_id: &str, e: &EntryRow) -> Result<()> {
         self.conn().execute(
             "INSERT INTO import_entries
-                (import_id, seq, url, title, action, acted_at, identity, item_id, standing, added)
+                (import_id, seq, url, title, action, acted_at, identity, item_id, standing, added, ref)
              VALUES (?1, (SELECT COALESCE(MAX(seq), 0) + 1 FROM import_entries WHERE import_id = ?1),
-                ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0)",
+                ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0, ?9)",
             params![
-                import_id, e.url, e.title, e.action, e.acted_at, e.identity, e.item_id, e.standing
+                import_id,
+                e.url,
+                e.title,
+                e.action,
+                e.acted_at,
+                e.identity,
+                e.item_id,
+                e.standing,
+                e.reference
             ],
         )?;
         Ok(())
@@ -794,6 +820,19 @@ impl Jobs {
             params![item_id, now],
         )?;
         Ok(())
+    }
+
+    /// 清单里有没有带这个 `ref` 的了（没有身份的那几条按它去重）。
+    pub fn has_entry_with_ref(&self, import_id: &str, reference: &str) -> Result<bool> {
+        Ok(self
+            .conn()
+            .query_row(
+                "SELECT 1 FROM import_entries WHERE import_id = ?1 AND ref = ?2",
+                params![import_id, reference],
+                |_| Ok(()),
+            )
+            .optional()?
+            .is_some())
     }
 
     /// 清单里有没有这一条了（去重）。
@@ -1354,6 +1393,7 @@ fn row_to_import(r: &rusqlite::Row<'_>) -> rusqlite::Result<ImportRow> {
         also_trashed: r.get(17)?,
         skipped: r.get(18)?,
         method: r.get(19)?,
+        file_name: r.get(20)?,
     })
 }
 
@@ -1368,6 +1408,7 @@ fn row_to_entry(r: &rusqlite::Row<'_>) -> rusqlite::Result<EntryRow> {
         item_id: r.get(6)?,
         standing: r.get(7)?,
         added: r.get(8)?,
+        reference: r.get(9)?,
     })
 }
 

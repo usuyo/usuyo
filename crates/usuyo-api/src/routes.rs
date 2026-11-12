@@ -22,8 +22,8 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::services::ServeFile;
 use tower_http::set_header::SetResponseHeaderLayer;
 use usuyo_core::view::{
-    ImportEntryView, ImportView, ItemView, MapView, PluginView, PluginsView, SearchHit,
-    SettingsView, SiteView, SourceView, TakeResponse, Topic, TransformsView, TrashView,
+    FileReaderView, ImportEntryView, ImportView, ItemView, MapView, PluginView, PluginsView,
+    SearchHit, SettingsView, SiteView, SourceView, TakeResponse, Topic, TransformsView, TrashView,
     VisitorView,
 };
 use usuyo_core::{DeliveredLink, Engine, ImportChoice, Links, SettingsPatch, Via};
@@ -49,6 +49,8 @@ const LOGIN_BODY_LIMIT: usize = 256 << 10;
 const BATCH_BODY_LIMIT: usize = 4 << 20;
 /// 列来源要按节奏等上一次调用，再等插件跑完。
 const SOURCES_TIMEOUT: Duration = Duration::from_secs(120);
+/// 交一个文件：传完、再等插件读完第一页。
+const UPLOAD_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
 #[derive(Clone)]
 struct AppState {
@@ -138,6 +140,7 @@ pub(crate) fn build(engine: Engine, gate: Arc<Gate>, origins: &[String]) -> Rout
         .route("/deliver-tokens", get(clients).post(create_client))
         .route("/deliver-tokens/{id}", delete(revoke_client))
         .route("/inbox", get(inbox))
+        .route("/file-readers", get(file_readers))
         .route("/v1/ping", get(ping))
         .route("/v1/deliver", post(deliver))
         .route(
@@ -148,6 +151,12 @@ pub(crate) fn build(engine: Engine, gate: Arc<Gate>, origins: &[String]) -> Rout
     let slow = Router::new()
         .route("/plugins/{owner}/{repo}/sources", get(plugin_sources))
         .layer(middleware::from_fn(slow_deadline));
+    // 交文件：请求体自己数着写进副本，不经 64 KiB 的上限，时限另算
+    let uploads = Router::new()
+        .route("/file-imports", post(file_import))
+        .route("/v1/file-imports", post(hand_over))
+        .layer(DefaultBodyLimit::disable())
+        .layer(middleware::from_fn(upload_deadline));
     let origins: Vec<HeaderValue> = origins
         .iter()
         .filter_map(|o| HeaderValue::from_str(o).ok())
@@ -168,6 +177,7 @@ pub(crate) fn build(engine: Engine, gate: Arc<Gate>, origins: &[String]) -> Rout
             header::RETRY_AFTER,
         ]);
     api.merge(slow)
+        .merge(uploads)
         .merge(Router::new().route("/events", get(events)))
         .fallback(|| async { Problem::new("not-found", "no such route") })
         .method_not_allowed_fallback(|| async {
@@ -192,6 +202,15 @@ async fn deadline(req: Request, next: middleware::Next) -> Response {
     match tokio::time::timeout(REQUEST_TIMEOUT, next.run(req)).await {
         Ok(res) => res,
         Err(_) => Problem::new("timeout", "request took too long").into_response(),
+    }
+}
+
+async fn upload_deadline(req: Request, next: middleware::Next) -> Response {
+    match tokio::time::timeout(UPLOAD_TIMEOUT, next.run(req)).await {
+        Ok(res) => res,
+        Err(_) => Problem::new("timeout", "upload took too long")
+            .with_hint("交文件用的时间太长了，没交成")
+            .into_response(),
     }
 }
 
@@ -542,7 +561,8 @@ async fn plugin_sources(
     Path((owner, repo)): Path<(String, String)>,
     q: Result<Query<SourcesQuery>, QueryRejection>,
 ) -> ApiResult<Vec<SourceView>> {
-    let Query(q) = q.map_err(|e| Problem::new("invalid-args", e.body_text()))?;
+    let Query(q) =
+        q.map_err(|e| Problem::new("invalid-args", e.body_text()).with_hint("要说明是哪一种方法"))?;
     let link = q.link.as_deref().map(parse_link).transpose()?;
     Ok(Json(
         s.engine
@@ -551,15 +571,22 @@ async fn plugin_sources(
     ))
 }
 
-/// 你给的一条链接：带主机的 http(s)，不带用户名密码，至多 4096 字节。原因里不写链接本身。
+/// 你给的一条链接（或带链接的分享文字，取第一条，[`usuyo_core::link_in`]）：带主机的 http(s)，
+/// 不带用户名密码，至多 4096 字节。原因里不写链接本身。
 fn parse_link(text: &str) -> Result<url::Url, Problem> {
-    let bad = |why: &str| Problem::new("invalid-args", format!("link: {why}"));
-    if text.len() > 4096 || text.chars().any(char::is_control) {
-        return Err(bad("too long or has control characters"));
-    }
-    let u = url::Url::parse(text.trim()).map_err(|_| bad("not a link"))?;
-    if !matches!(u.scheme(), "http" | "https") || u.host_str().is_none() {
-        return Err(bad("not an http(s) link with a host"));
+    let more = if usuyo_core::link_count(text) > 1 {
+        "（只看第一条链接）"
+    } else {
+        ""
+    };
+    let bad = |why: &str| {
+        Problem::new("invalid-args", format!("link: {why}")).with_hint(format!(
+            "这不是一条能用的链接：要 http 或 https 开头、有网站、不带用户名和密码{more}"
+        ))
+    };
+    let u = usuyo_core::link_in(text).ok_or_else(|| bad("no http(s) link with a host"))?;
+    if u.as_str().len() > 4096 {
+        return Err(bad("too long"));
     }
     if !u.username().is_empty() || u.password().is_some() {
         return Err(bad("links with a user name or password are not taken"));
@@ -727,7 +754,7 @@ async fn start_import(
     State(s): State<AppState>,
     req: Result<Json<StartImportRequest>, JsonRejection>,
 ) -> ApiResult<ImportView> {
-    let req = body(req)?;
+    let req = body(req).map_err(|p| p.with_hint("开始导入的请求不对：要插件、方法和来源"))?;
     Ok(Json(
         blocking(move || {
             s.engine
@@ -762,7 +789,8 @@ async fn import_entries(
     Path(id): Path<String>,
     q: Result<Query<EntriesQuery>, QueryRejection>,
 ) -> ApiResult<Vec<ImportEntryView>> {
-    let Query(q) = q.map_err(|e| Problem::new("invalid-args", e.body_text()))?;
+    let Query(q) =
+        q.map_err(|e| Problem::new("invalid-args", e.body_text()).with_hint("翻预览的参数不对"))?;
     Ok(Json(
         blocking(move || {
             s.engine
@@ -778,7 +806,8 @@ async fn confirm_import(
     Path(id): Path<String>,
     req: Result<Json<ImportChoice>, JsonRejection>,
 ) -> ApiResult<ImportView> {
-    let choice = body(req)?;
+    let choice =
+        body(req).map_err(|p| p.with_hint("确认的请求不对：要说新的和回收站里的各收不收"))?;
     Ok(Json(
         blocking(move || s.engine.confirm_import(&id, &choice)).await?,
     ))
@@ -846,6 +875,110 @@ async fn revoke_client(
 
 async fn inbox(State(s): State<AppState>) -> Json<serde_json::Value> {
     Json(json!({ "path": s.engine.inbox_dir() }))
+}
+
+// —— 从文件导入（协议 §3.9）——
+
+async fn file_readers(State(s): State<AppState>) -> Json<Vec<FileReaderView>> {
+    Json(s.engine.file_readers())
+}
+
+#[derive(Deserialize)]
+struct FileImportQuery {
+    /// `<插件 id>#<方法 id>`（`FileReader.id`）。
+    reader: String,
+    /// 交来的文件名，内核洗过才用。
+    name: String,
+}
+
+/// 窗口交一个文件：`?reader=&name=`，请求体是文件本身。
+async fn file_import(
+    State(s): State<AppState>,
+    q: Result<Query<FileImportQuery>, QueryRejection>,
+    body: axum::body::Body,
+) -> ApiResult<ImportView> {
+    let Query(q) = file_query(q)?;
+    Ok(Json(
+        receive_file(&s.engine, q, body, usuyo_core::FILE_IMPORT_MAX, None).await?,
+    ))
+}
+
+/// 浏览器脚本交一个装着已取到内容的文件（协议 §5.1）：只认 `extension` 类投递令牌（和主令牌），
+/// 落成一次 `file` 类导入，等你在导入页确认。只回导入的 id：投递令牌读不了导入。
+async fn hand_over(
+    State(s): State<AppState>,
+    Extension(caller): Extension<Caller>,
+    q: Result<Query<FileImportQuery>, QueryRejection>,
+    body: axum::body::Body,
+) -> Result<(StatusCode, Json<serde_json::Value>), Problem> {
+    let client = match &caller {
+        Caller::Deliver(c) if c.kind == ClientKind::Extension => Some(c.name.clone()),
+        Caller::Deliver(_) => {
+            return Err(
+                Problem::new("forbidden", "only extension tokens hand over content")
+                    .with_hint("只有浏览器扩展和脚本的令牌能交已取到的内容"),
+            );
+        }
+        _ => None,
+    };
+    let Query(q) = file_query(q)?;
+    let view = receive_file(
+        &s.engine,
+        q,
+        body,
+        usuyo_core::HANDOVER_MAX,
+        client.as_deref(),
+    )
+    .await?;
+    Ok((StatusCode::ACCEPTED, Json(json!({ "id": view.id }))))
+}
+
+fn file_query(
+    q: Result<Query<FileImportQuery>, QueryRejection>,
+) -> Result<Query<FileImportQuery>, Problem> {
+    q.map_err(|e| {
+        Problem::new("invalid-args", e.body_text()).with_hint("要说明用哪种方法读、文件叫什么")
+    })
+}
+
+/// 把请求体一块块写进副本，数着大小；超了、断了都回错，副本随 `FileUpload` 去掉。写完交给插件读第一页。
+async fn receive_file(
+    engine: &Engine,
+    q: FileImportQuery,
+    body: axum::body::Body,
+    max: u64,
+    client: Option<&str>,
+) -> Result<ImportView, Problem> {
+    use tokio::io::AsyncWriteExt;
+    let e = engine.clone();
+    let upload = blocking(move || e.prepare_file_import(&q.reader, &q.name)).await?;
+    let internal = |e: std::io::Error| Problem::new("internal", format!("upload copy: {e}"));
+    let mut file = tokio::fs::OpenOptions::new()
+        .write(true)
+        .open(upload.path())
+        .await
+        .map_err(internal)?;
+    let mut stream = body.into_data_stream();
+    let mut total: u64 = 0;
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| {
+            Problem::new("invalid-args", format!("reading the body: {e}")).with_hint("文件没交完整")
+        })?;
+        total = total.saturating_add(chunk.len() as u64);
+        if total > max {
+            return Err(
+                Problem::new("too-large", format!("the file is larger than {max} bytes"))
+                    .with_hint(format!("文件太大了，最多 {} MiB", max >> 20)),
+            );
+        }
+        file.write_all(&chunk).await.map_err(internal)?;
+    }
+    if total == 0 {
+        return Err(Problem::new("invalid-args", "the file is empty").with_hint("文件是空的"));
+    }
+    file.sync_all().await.map_err(internal)?;
+    drop(file);
+    Ok(engine.finish_file_import(upload, client).await?)
 }
 
 // —— 投递接口（协议 §5.1）：投递令牌只能进这几条 ——
@@ -934,11 +1067,11 @@ async fn batch(
     }
     let mut links = Vec::with_capacity(req.links.len());
     for (i, l) in req.links.into_iter().enumerate() {
-        let bad = |why: &str| Problem::new("invalid-args", format!("links[{i}]: {why}"));
-        let url = url::Url::parse(&l.url).map_err(|_| bad("not a link"))?;
-        if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() {
-            return Err(bad("not an http(s) link"));
-        }
+        let bad = |why: &str| {
+            Problem::new("invalid-args", format!("links[{i}]: {why}"))
+                .with_hint(format!("第 {} 条不是能用的链接", i + 1))
+        };
+        let url = usuyo_core::link_in(&l.url).ok_or_else(|| bad("not an http(s) link"))?;
         if !url.username().is_empty() || url.password().is_some() {
             return Err(bad("links with a user name or password are not taken"));
         }

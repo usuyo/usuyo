@@ -24,7 +24,8 @@ use crate::jobs::{EntryRow, ImportRow};
 use crate::methods::blockers;
 use crate::pace;
 use crate::view::{
-    Event, ImportEntryView, ImportKind, ImportState, ImportView, PreviewCounts, SourceView, Waiting,
+    Event, ImportEntryView, ImportFileView, ImportKind, ImportState, ImportView, PreviewCounts,
+    SourceView, Waiting,
 };
 use crate::{Error, Result};
 
@@ -88,7 +89,8 @@ impl Engine {
         let plugin = self.fetch_plugin(plugin_id)?;
         self.list_method(&plugin, method)?;
         if source.trim().is_empty() || source.len() > 512 {
-            return Err(Error::InvalidArgs("source is empty or too long".into()));
+            return Err(Error::InvalidArgs("source is empty or too long".into())
+                .hinted("来源是空的，或者太长了"));
         }
         self.batch_allowed(&plugin)?;
         let title = match title.trim() {
@@ -116,6 +118,7 @@ impl Engine {
             confirmed_at: None,
             also_trashed: false,
             skipped: 0,
+            file_name: None,
         };
         self.inner.jobs.insert_import(&row)?;
         self.inner.imports_wake.notify_one();
@@ -159,6 +162,7 @@ impl Engine {
             confirmed_at: None,
             also_trashed: false,
             skipped: 0,
+            file_name: None,
         };
         self.inner.jobs.insert_import(&row)?;
         let entries: Vec<EntryRow> = links
@@ -173,6 +177,7 @@ impl Engine {
                 item_id: None,
                 standing: "unresolved".into(),
                 added: false,
+                reference: None,
             })
             .collect();
         self.inner.jobs.add_entries(&row.id, &entries)?;
@@ -206,7 +211,7 @@ impl Engine {
         if let Some(s) = standing
             && !matches!(s, "new" | "stored" | "trashed" | "unresolved")
         {
-            return Err(Error::InvalidArgs(format!("no standing `{s}`")));
+            return Err(Error::InvalidArgs(format!("no standing `{s}`")).hinted("预览里没有这一组"));
         }
         Ok(self
             .inner
@@ -215,7 +220,7 @@ impl Engine {
             .into_iter()
             .map(|e| ImportEntryView {
                 seq: e.seq,
-                url: e.url,
+                url: (!e.url.is_empty()).then_some(e.url),
                 title: e.title,
                 action: e.action,
                 acted_at: e.acted_at,
@@ -231,12 +236,14 @@ impl Engine {
     pub fn confirm_import(&self, id: &str, choice: &ImportChoice) -> Result<ImportView> {
         let row = self.import_row(id)?;
         if !row.listed {
-            return Err(Error::InvalidArgs("this import is still listing".into()));
+            return Err(Error::InvalidArgs("this import is still listing".into())
+                .hinted("还在列，列完才能确认"));
         }
         if row.confirmed_at.is_some() {
-            return Err(Error::InvalidArgs(
-                "this import is already confirmed".into(),
-            ));
+            return Err(
+                Error::InvalidArgs("this import is already confirmed".into())
+                    .hinted("这次导入已经确认过了"),
+            );
         }
         let now = now_ms();
         let mut offset = 0;
@@ -264,7 +271,8 @@ impl Engine {
         if except_seen != choice.except.len() {
             return Err(Error::InvalidArgs(
                 "`except` names entries that are neither new nor in the trash".into(),
-            ));
+            )
+            .hinted("挑出来的条目里有既不是新的、也不在回收站里的"));
         }
         // 挑了回收站里的，轮到时就拿回来；一条都没挑，轮到时已经进了回收站的照旧不收。
         let also_trashed = wanted.iter().any(|e| e.standing == "trashed");
@@ -277,6 +285,7 @@ impl Engine {
         if row.held {
             self.inner.jobs.set_import_held(id, true)?;
         }
+        self.drop_copy_if_done(id)?;
         self.inner.wake.notify_one();
         self.emit(Event::ImportUpdated { id: id.to_owned() });
         self.import(id)
@@ -304,6 +313,7 @@ impl Engine {
     pub fn delete_import(&self, id: &str) -> Result<()> {
         self.import_row(id)?;
         self.inner.jobs.delete_import(id)?;
+        self.drop_import_copy(id)?;
         self.emit(Event::ImportUpdated { id: id.to_owned() });
         Ok(())
     }
@@ -326,7 +336,8 @@ impl Engine {
         {
             return Err(Error::UnsupportedInput(format!(
                 "{plugin_id} {method} does not start from a link"
-            )));
+            ))
+            .hinted(format!("{}不从链接开始列", m.name)));
         }
         let platform = pace_scope(&plugin);
         let host = &self.inner.host;
@@ -344,6 +355,10 @@ impl Engine {
                 return Err(Error::UnsupportedInput(format!(
                     "this platform is pacing calls; try again after {}",
                     ts(at)
+                ))
+                .hinted(format!(
+                    "这个平台要隔一会儿再调，{}以后再试",
+                    pace::local_time(at)
                 )));
             }
         };
@@ -359,7 +374,7 @@ impl Engine {
     }
 
     /// 这种方法能列：做了、在插件进程里跑、有 `list`、开着、这台机器上用得上。
-    fn list_method(&self, plugin: &FetchPlugin, method: &str) -> Result<Method> {
+    pub(crate) fn list_method(&self, plugin: &FetchPlugin, method: &str) -> Result<Method> {
         let m = plugin
             .spec
             .method(method)
@@ -369,8 +384,12 @@ impl Engine {
                     "{} has no method `{method}` that lists what you saved",
                     plugin.id()
                 ))
+                .hinted(format!("{}没有能列出你存过的这种方法", plugin.header.name))
             })?;
-        let enabled = self.inner.methods.enabled(plugin, m);
+        let enabled = self
+            .inner
+            .methods
+            .enabled_on(plugin, m, &pace_scope(plugin));
         let health = self.inner.methods.health_seen(plugin.id().as_str());
         let host = &self.inner.host;
         if let Some(b) = blockers(
@@ -383,7 +402,10 @@ impl Engine {
         .into_iter()
         .next()
         {
-            return Err(Error::UnsupportedInput(format!("{}：{}", m.name, b.hint)));
+            return Err(
+                Error::UnsupportedInput(format!("{} {method}: {}", plugin.id(), b.code))
+                    .hinted(format!("{}：{}", m.name, b.hint)),
+            );
         }
         Ok(m.clone())
     }
@@ -468,7 +490,7 @@ impl Engine {
             .ok_or_else(|| Error::NotFound(format!("plugin {id}")))
     }
 
-    fn import_row(&self, id: &str) -> Result<ImportRow> {
+    pub(crate) fn import_row(&self, id: &str) -> Result<ImportRow> {
         self.inner
             .jobs
             .import(id)?
@@ -484,7 +506,8 @@ impl Engine {
         if off {
             return Err(Error::UnsupportedInput(
                 "this platform takes items one at a time (pacing.batch: false)".into(),
-            ));
+            )
+            .hinted("这个平台只能一条条收下，不做导入"));
         }
         Ok(())
     }
@@ -543,11 +566,20 @@ impl Engine {
         }
         Ok(ImportView {
             id: r.id,
-            kind: if r.kind == "source" {
-                ImportKind::Source
-            } else {
-                ImportKind::Delivered
+            kind: match r.kind.as_str() {
+                "source" => ImportKind::Source,
+                "file" => ImportKind::File,
+                _ => ImportKind::Delivered,
             },
+            file: r.file_name.map(|name| ImportFileView {
+                name,
+                reader: r
+                    .plugin
+                    .as_deref()
+                    .and_then(|p| self.inner.host.plugin(p))
+                    .map(|p| p.header.name.clone())
+                    .unwrap_or_default(),
+            }),
             title: r.title,
             plugin_id: r.plugin,
             method: r.method,
@@ -589,6 +621,9 @@ impl Engine {
             .paused(plugin.id().as_str(), method, &scope, now)?
         {
             return Ok(Some(pause_wait(&p)));
+        }
+        if r.kind == "file" {
+            return Ok(None);
         }
         let pacing = self.inner.pacing.get(scope.as_str());
         match pace::ready_at(pacing, &self.inner.jobs, &scope, true, now)? {
@@ -634,7 +669,7 @@ impl Engine {
             }
             // 来源型导入每走一步之前都再看一次它的方法：关了、登录没了、自检没过，就停在这里；
             // 在等的也一样，不等到点再去调插件
-            if r.kind == "source" && self.stop_if_unlistable(&r)? {
+            if r.kind != "delivered" && self.stop_if_unlistable(&r)? {
                 self.emit(Event::ImportUpdated { id: r.id.clone() });
                 continue;
             }
@@ -643,7 +678,7 @@ impl Engine {
                 note(at);
                 continue;
             }
-            let step = if r.kind == "source" {
+            let step = if r.kind != "delivered" {
                 self.list_page(&r).await
             } else {
                 self.resolve_some(&r).await
@@ -654,9 +689,8 @@ impl Engine {
                 Ok(next) => next,
                 Err(e) => {
                     tracing::warn!(import = %r.id, error = %e, "import stopped");
-                    self.inner
-                        .jobs
-                        .import_stop(&r.id, e.code(), Some(&e.to_string()))?;
+                    let hint = e.hint().map_or_else(|| e.to_string(), str::to_owned);
+                    self.inner.jobs.import_stop(&r.id, e.code(), Some(&hint))?;
                     None
                 }
             };
@@ -683,16 +717,13 @@ impl Engine {
         let Err(e) = self.list_method(&plugin, method) else {
             return Ok(false);
         };
-        let hint = match &e {
-            Error::UnsupportedInput(why) => why.clone(),
-            other => other.to_string(),
-        };
+        let hint = e.hint().map_or_else(|| e.to_string(), str::to_owned);
         self.inner.jobs.import_stop(&r.id, e.code(), Some(&hint))?;
         Ok(true)
     }
 
-    /// 列一页。回下一步最早什么时候能做（还有页要列时）。
-    async fn list_page(&self, r: &ImportRow) -> Result<Option<i64>> {
+    /// 列一页。回下一步最早什么时候能做（还有页要列时）。`file` 类读本机的副本，不碰平台，不守节奏。
+    pub(crate) async fn list_page(&self, r: &ImportRow) -> Result<Option<i64>> {
         let jobs = &self.inner.jobs;
         let Some(plugin) = r
             .plugin
@@ -710,23 +741,29 @@ impl Engine {
             // 停着的方法不列；到点（或你点了「现在再试」）再来
             return Ok(p.until);
         }
+        let input_file = self.import_copy(r);
+        if let Some(copy) = &input_file
+            && !copy.is_file()
+        {
+            jobs.import_stop(&r.id, "dependency-missing", Some("交进来的文件不在了"))?;
+            return Ok(None);
+        }
         let request = ListRequest {
             method: method.clone(),
             source: r.source.clone().unwrap_or_default(),
             cursor: r.cursor.clone(),
             since: None,
-            input_file: None,
+            input_file: input_file.clone(),
         };
         let host = &self.inner.host;
-        let result = match self
-            .paced(
-                &scope,
-                true,
-                PACE_WAIT_MAX,
-                host.list(&plugin, request, &CallOptions::default()),
-            )
-            .await?
-        {
+        let opts = CallOptions::default();
+        let call = host.list(&plugin, request, &opts);
+        let paced = if input_file.is_some() {
+            Ok(call.await)
+        } else {
+            self.paced(&scope, true, PACE_WAIT_MAX, call).await?
+        };
+        let result = match paced {
             Ok(result) => result,
             Err(at) => {
                 jobs.import_wait(
@@ -767,10 +804,15 @@ impl Engine {
                     )?;
                     return Ok(Some(at));
                 }
+                // 读文件的没给中文的一句时说读不了这个文件；别的照旧回插件的原话
+                let fallback = match input_file {
+                    Some(_) => format!("{}读不了这个文件", plugin.header.name),
+                    None => failure.message.clone(),
+                };
                 jobs.import_stop(
                     &r.id,
                     failure.code.as_str(),
-                    Some(failure.hint.as_deref().unwrap_or(&failure.message)),
+                    Some(failure.hint.as_deref().unwrap_or(&fallback)),
                 )?;
                 return Ok(None);
             }
@@ -779,59 +821,103 @@ impl Engine {
                 return Ok(None);
             }
         };
-        self.add_listed(&r.id, &plugin, page.items).await?;
+        self.add_listed(&r.id, &plugin, &method, page.items).await?;
         let next = page.next_cursor.filter(|c| !c.is_empty());
         let last = next.is_none();
         jobs.listed_page(&r.id, next.as_deref())?;
         if last {
             return Ok(None);
         }
+        if input_file.is_some() {
+            return Ok(Some(now_ms()));
+        }
         let pacing = self.inner.pacing.get(scope.as_str());
         Ok(pace::ready_at(pacing, jobs, &scope, true, now_ms())?.or(Some(now_ms())))
     }
 
     /// 一页列出来的：认身份（插件给了就用，没给就 canonicalize），分好放进清单。
+    /// 带 `ref` 的条目，这种方法的 `fetch` 接 `ref` 时记下它，轮到时回到这个插件取；只有 `ref`、
+    /// 没有链接的，这种方法就得接 `ref`。没有身份的（聊天记录一类）先记一个 `file-` id，按 `ref` 去重。
     async fn add_listed(
         &self,
         import: &str,
         plugin: &FetchPlugin,
+        method: &str,
         items: Vec<ListItem>,
     ) -> Result<()> {
+        let takes_refs = plugin
+            .spec
+            .method(method)
+            .is_some_and(crate::file_imports::fetches_refs);
         let mut ready = Vec::new();
         for item in items {
-            let Some(raw) = item.url.as_deref() else {
-                // 只有 `ref` 的条目（导入插件）还不支持
-                tracing::warn!(plugin = %plugin.id(), "list item without url skipped");
-                continue;
+            let reference = item.reference.clone().filter(|_| takes_refs);
+            let given = item
+                .identity
+                .as_ref()
+                .filter(|i| !matches!(i, usuyo_plugin::protocol::Identity::File))
+                .map(|i| {
+                    serde_json::from_value::<usuyo_contract::Identity>(serde_json::to_value(i)?)
+                })
+                .transpose()?;
+            let entry = EntryRow {
+                seq: 0,
+                url: String::new(),
+                title: item.title,
+                action: item
+                    .action
+                    .map(serde_json::to_value)
+                    .transpose()?
+                    .and_then(|v| v.as_str().map(str::to_owned)),
+                acted_at: item.acted_at.map(|t| t.as_str().to_owned()),
+                identity: None,
+                item_id: None,
+                standing: String::new(),
+                added: false,
+                reference: reference.clone(),
             };
-            let url = url::Url::parse(raw)
-                .map_err(|e| Error::InvalidArgs(format!("list item url: {e}")))?;
-            let (identity, fetch_url) = match &item.identity {
-                Some(i) if !matches!(i, usuyo_plugin::protocol::Identity::File) => {
-                    let identity: usuyo_contract::Identity =
-                        serde_json::from_value(serde_json::to_value(i)?)?;
-                    (identity, url.to_string())
+            match (item.url.as_deref(), given) {
+                (Some(raw), given) => {
+                    let url = url::Url::parse(raw)
+                        .map_err(|e| Error::InvalidArgs(format!("list item url: {e}")))?;
+                    let (identity, fetch_url) = match given {
+                        Some(i) => (i, url.to_string()),
+                        None => self.identify(&url).await?,
+                    };
+                    ready.push((
+                        identity,
+                        EntryRow {
+                            url: fetch_url,
+                            ..entry
+                        },
+                    ));
                 }
-                _ => self.identify(&url).await?,
-            };
-            ready.push((
-                identity,
-                EntryRow {
-                    seq: 0,
-                    url: fetch_url,
-                    title: item.title,
-                    action: item
-                        .action
-                        .map(serde_json::to_value)
-                        .transpose()?
-                        .and_then(|v| v.as_str().map(str::to_owned)),
-                    acted_at: item.acted_at.map(|t| t.as_str().to_owned()),
-                    identity: None,
-                    item_id: None,
-                    standing: String::new(),
-                    added: false,
-                },
-            ));
+                (None, _) if reference.is_none() => {
+                    return Err(Error::InvalidArgs(format!(
+                        "{} {method} listed an entry with only a `ref`, but its `fetch` does not take `ref`",
+                        plugin.id()
+                    ))
+                    .hinted(format!(
+                        "{}列出的条目里有只能回到它取、它又取不了的，插件要改",
+                        plugin.header.name
+                    )));
+                }
+                (None, Some(identity)) => ready.push((identity, entry)),
+                (None, None) => {
+                    let r = reference.as_deref().unwrap_or_default();
+                    if self.inner.jobs.has_entry_with_ref(import, r)? {
+                        continue;
+                    }
+                    self.inner.jobs.add_entry(
+                        import,
+                        &EntryRow {
+                            item_id: Some(ItemId::random_file()?.to_string()),
+                            standing: "new".into(),
+                            ..entry
+                        },
+                    )?;
+                }
+            }
         }
         self.classify_and_store(import, ready).await
     }
@@ -916,7 +1002,7 @@ impl Engine {
 }
 
 /// 节奏按插件的第一个平台算（一个获取插件的 `list` 只列一个平台的）。
-fn pace_scope(plugin: &FetchPlugin) -> String {
+pub(crate) fn pace_scope(plugin: &FetchPlugin) -> String {
     plugin
         .spec
         .platforms
@@ -958,6 +1044,31 @@ impl Engine {
     /// 一个任务现在为什么不能做。节奏人人守（手动收下的只守间隔）；
     /// 导入的任务另外等插件的暂停，不白白耗掉重试次数。
     pub(crate) fn wait_for(&self, job: &crate::jobs::FetchJob, now: i64) -> Result<Option<Wait>> {
+        // 回到读文件的插件取的（`fetch <ref>`）读本机的副本，不碰平台：不守节奏，只等这种方法自己——
+        // 停着（限流、「先别试」）、关了、这台机器上用不上，就等着，到点或你处理了再取
+        if let Some(import) = &job.import_id
+            && let Some(by) = self.ref_fetch(import, job)?
+        {
+            let Some(plugin) = &by.plugin else {
+                return Ok(None);
+            };
+            if let Some(p) = self.inner.jobs.paused(
+                plugin.id().as_str(),
+                &by.method,
+                &pace_scope(plugin),
+                now,
+            )? {
+                return Ok(Some(pause_wait(&p)));
+            }
+            return Ok(match self.list_method(plugin, &by.method) {
+                Ok(_) => None,
+                Err(e) => Some(Wait {
+                    until: None,
+                    code: e.code().into(),
+                    hint: e.hint().map(str::to_owned),
+                }),
+            });
+        }
         let platform = platform_of(&job.item_id);
         let batch = job.import_id.is_some();
         let pacing = self.inner.pacing.get(platform);
@@ -993,7 +1104,7 @@ impl Engine {
                     .methods
                     .iter()
                     .filter(|m| m.callable() && m.capabilities.fetch.is_some())
-                    .filter(|m| self.inner.methods.enabled(plugin, m))
+                    .filter(|m| self.inner.methods.enabled_on(plugin, m, platform))
                     .map(move |m| (plugin, m))
             });
         for (plugin, method) in fetching {

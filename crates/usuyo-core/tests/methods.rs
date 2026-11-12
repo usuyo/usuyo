@@ -503,3 +503,244 @@ async fn switching_a_method_off_stops_its_import_before_the_next_page() {
     engine.advance_imports().await.unwrap();
     assert_eq!(f.calls().len(), 2);
 }
+
+/// 通用网页一类的假插件：什么都认，取的时候总回自己的一句错。
+const WEB_MANIFEST: &str = r#"protocol: 1
+id: fake/web
+kind: fetch
+name: 网页
+version: 1.0.0
+license: MIT
+maintainers: [someone]
+platforms: [web]
+match: ["*"]
+methods:
+  - id: page
+    name: 公开网页
+    access: public-web
+    login: none
+    account: none
+    capabilities:
+      fetch: {outputs: [text]}
+permissions:
+  fs: {write: ["${OUT}"]}
+run:
+  command: ["${PLUGIN_DIR}/plugin.sh"]
+"#;
+
+const WEB_SCRIPT: &str = r#"#!/bin/sh
+case "$1" in
+  canonicalize) echo '{"ok": true, "match": false}' ;;
+  health) echo '{"ok": true, "ready": true, "protocol": 1, "version": "1.0.0"}' ;;
+  *) echo '{"ok": false, "error": {"code": "upstream-changed", "message": "web page", "hint": "网页插件的话"}}'; exit 1 ;;
+esac
+"#;
+
+#[tokio::test]
+async fn the_item_shows_the_platform_methods_reason_not_the_web_fallbacks() {
+    let f = Fixture::new();
+    let dir = f.machine().join("plugins/fake/web/1.0.0");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("usuyo-plugin.yaml"), WEB_MANIFEST).unwrap();
+    std::fs::write(dir.join("plugin.sh"), WEB_SCRIPT).unwrap();
+    std::fs::set_permissions(
+        dir.join("plugin.sh"),
+        std::fs::Permissions::from_mode(0o755),
+    )
+    .unwrap();
+    f.answer(
+        "guest",
+        r#"echo '{"ok": false, "error": {"code": "upstream-changed", "message": "page changed", "hint": "公开接口改版了"}}'; exit 1"#,
+    );
+    let engine = f.engine();
+    let t = engine
+        .take("https://example.test/1", "link", Via::Cli)
+        .await
+        .unwrap();
+    engine.run_due().await.unwrap();
+    // 公开接口、包的工具、通用网页都试过了
+    assert_eq!(f.calls(), ["guest all", "tool all"]);
+    let methods: Vec<String> = f
+        .failure_log()
+        .iter()
+        .map(|l| l["plugin"].as_str().unwrap().to_owned())
+        .collect();
+    assert!(methods.contains(&"fake/web".to_owned()), "{methods:?}");
+    let v = serde_json::to_value(engine.item(&t.id, &Links::default()).unwrap()).unwrap();
+    assert_eq!(v["missing"], "取不到内容：公开接口改版了", "{v}");
+}
+
+#[tokio::test]
+async fn the_methods_view_says_where_what_device_and_when_a_pause_ends() {
+    let f = Fixture::new();
+    f.answer("guest", RATE_LIMITED);
+    let engine = f.engine();
+    engine
+        .take("https://example.test/1", "link", Via::Cli)
+        .await
+        .unwrap();
+    engine.run_due().await.unwrap();
+    let p = &engine.plugins().await.unwrap().plugins[0];
+    let m = |id: &str| p.methods.iter().find(|m| m.id == id).unwrap();
+    let guest = m("guest");
+    assert!(!guest.usable, "停着的用不上");
+    let b = guest.blockers.iter().find(|b| b.code == "paused").unwrap();
+    assert!(
+        b.hint.contains("限流") && b.hint.contains("以前不用它"),
+        "{}",
+        b.hint
+    );
+    assert_eq!(m("session").account.where_.as_deref(), Some("例子"));
+    assert!(m("guest").account.where_.is_none(), "不用账号的没有");
+
+    engine.hold_plugin("fake/multi").unwrap();
+    let p = &engine.plugins().await.unwrap().plugins[0];
+    let tool = p.methods.iter().find(|m| m.id == "tool").unwrap();
+    assert!(
+        tool.blockers
+            .iter()
+            .any(|b| b.code == "paused" && b.hint.contains("现在再试"))
+    );
+}
+
+const TIERED_MANIFEST: &str = r#"protocol: 1
+id: fake/tiered
+kind: fetch
+name: 包的工具
+version: 1.0.0
+license: MIT
+maintainers: [someone]
+platforms: [example, other]
+match: ["example.test/*", "other.test/*", "unknown.test/*"]
+methods:
+  - id: tool
+    name: 包的工具
+    access: public-web
+    login: none
+    account: none
+    perPlatform:
+      other: {access: private-api}
+    capabilities:
+      fetch: {outputs: [text]}
+  - id: phone
+    name: iPhone 镜像
+    built: false
+    access: vision-ui
+    login: required
+    account: own-phone
+    drives: iphone
+    capabilities:
+      list:
+        sources:
+          - {source: "example:liked", title: 喜欢}
+permissions:
+  fs: {write: ["${OUT}"]}
+run:
+  command: ["${PLUGIN_DIR}/plugin.sh"]
+"#;
+
+const TIERED_SCRIPT: &str = r#"#!/bin/sh
+case "$1" in
+  canonicalize)
+    host=${2#https://}; host=${host%%.test/*}; id=${2##*/}
+    printf '{"ok": true, "match": true, "identity": {"platform": "%s", "contentId": "%s", "url": "%s"}}' "$host" "$id" "$2"
+    ;;
+  health) echo '{"ok": true, "ready": true, "protocol": 1, "version": "1.0.0"}' ;;
+  fetch)
+    echo "$2" >> "$USUYO_CACHE_DIR/calls"
+    echo '{"ok": true, "kind": "article", "title": "t", "text": "x", "images": [], "media": [], "platformTags": [], "completeness": "full", "missing": [], "evidence": {"fetchedAt": "2026-11-01T03:00:01Z", "access": "public-web"}}'
+    ;;
+esac
+"#;
+
+#[tokio::test]
+async fn a_higher_tier_on_one_platform_is_off_there_by_default() {
+    let tmp = tempfile::tempdir().unwrap();
+    let machine = tmp.path().join("machine");
+    let library = Engine::init_library(&tmp.path().join("lib"), &machine).unwrap();
+    let dir = machine.join("plugins/fake/tiered/1.0.0");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("usuyo-plugin.yaml"), TIERED_MANIFEST).unwrap();
+    std::fs::write(dir.join("plugin.sh"), TIERED_SCRIPT).unwrap();
+    std::fs::set_permissions(
+        dir.join("plugin.sh"),
+        std::fs::Permissions::from_mode(0o755),
+    )
+    .unwrap();
+    let engine = Engine::open(EngineConfig::new(&library, &machine)).unwrap();
+    let calls = || {
+        std::fs::read_to_string(machine.join("cache/plugins/fake/tiered/calls")).unwrap_or_default()
+    };
+    engine
+        .take("https://example.test/1", "link", Via::Cli)
+        .await
+        .unwrap();
+    let other = engine
+        .take("https://other.test/2", "link", Via::Cli)
+        .await
+        .unwrap();
+    // 认不出平台的链接（插件说的平台不是它声明的，落成 web）照这种方法最高的那一层：默认也不调
+    let unknown = engine
+        .take("https://unknown.test/3", "link", Via::Cli)
+        .await
+        .unwrap();
+    assert!(unknown.id.starts_with("web-"), "{}", unknown.id);
+    engine.run_due().await.unwrap();
+    assert_eq!(
+        calls().trim(),
+        "https://example.test/1",
+        "抬到 private-api 的平台默认不调"
+    );
+
+    let p = &engine.plugins().await.unwrap().plugins[0];
+    let tool = &p.methods[0];
+    assert!(tool.enabled, "方法的开关照它本身那一层");
+    let v = serde_json::to_value(&tool.per_platform).unwrap();
+    assert_eq!(
+        v,
+        serde_json::json!([{"platform": "other", "access": "private-api", "login": "none", "enabled": false}])
+    );
+    let phone = serde_json::to_value(&p.methods[1]).unwrap();
+    assert_eq!(phone["drives"], "iphone");
+    assert_eq!(
+        phone["gets"]["list"],
+        serde_json::json!(["喜欢"]),
+        "没做的也说会取得什么"
+    );
+    assert_eq!(phone["account"]["where"], "包的工具");
+
+    // 拨过开关以后各平台都照它
+    engine.set_method("fake/tiered", "tool", true).unwrap();
+    engine.refetch(&other.id, &Links::default()).unwrap();
+    engine.run_due().await.unwrap();
+    assert!(calls().contains("https://other.test/2"), "{}", calls());
+}
+
+#[tokio::test]
+async fn a_paused_method_does_not_hide_the_next_ones_failure() {
+    let f = Fixture::new();
+    f.answer("guest", RATE_LIMITED);
+    f.answer(
+        "tool",
+        r#"echo '{"ok": false, "error": {"code": "upstream-changed", "message": "tool changed", "hint": "包的工具改版了"}}'; exit 1"#,
+    );
+    let engine = f.engine_retrying_after(Duration::from_millis(300));
+    let t = engine
+        .take("https://example.test/1", "link", Via::Cli)
+        .await
+        .unwrap();
+    engine.run_due().await.unwrap();
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    let mut events = engine.subscribe();
+    engine.run_due().await.unwrap();
+    assert_eq!(f.calls(), ["guest all", "tool all"]);
+    let mut hint = None;
+    while let Ok(e) = events.try_recv() {
+        if let usuyo_core::view::Event::ItemFetchFailed { id, hint: h, .. } = e
+            && id == t.id
+        {
+            hint = h;
+        }
+    }
+    assert_eq!(hint.as_deref(), Some("包的工具改版了"));
+}

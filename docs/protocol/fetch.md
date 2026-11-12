@@ -340,6 +340,7 @@ methods:
       list:
         order: unordered
         files: ["twitter-*.zip"]
+        reads: X 设置里「下载你的数据归档」给的 zip
       fetch:
         input: [ref]
         outputs: [text, images, media:video, meta]
@@ -360,10 +361,12 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip" --method
 ], "nextCursor": "500", "evidence": {"fetchedAt": "2026-11-01T03:00:01Z", "access": "official-export"}}
 ```
 
-- 用户拖进一个文件或点「导入」时，宿主按 `files` 找能读它的插件；都对不上时让用户手选，插件不认识就回 `unsupported-input`。
-- 调 `list` 之前，宿主把导入文件复制到按机器目录（[SPEC §1.1](../spec/library.md#11-目录树)）下的 `libraries/<libraryId>/imports/<importBatch>/`（能用 clonefile、reflink 或硬链接就不真的复制），`${INPUT}` 和 `USUYO_INPUT` 指向这份副本；来源写 `file:<原文件名>`。导入要先进预览，用户可能几天后才确认，原文件这期间被移走也不影响；副本在这批导入结束或取消后清掉。用户下载目录的绝对路径不进 `ref`，也不随快照写进资料库。
-- `ref` 由插件自己定，对宿主不透明，不含绝对路径。宿主记住每个 `ref` 来自哪个来源，`fetch <ref>` 时放行同一个 `${INPUT}`。副本已经不在时，宿主不调用插件，条目记 `dependency-missing`，`needs` 写 `file:<原文件名>`。
-- 导出包里有内容的（X 归档、flomo、BiliNote 的 `note_results`），条目带 `ref`，宿主再调 `fetch <ref>` 取出内容和文件；只有链接的（Takeout 的稍后观看、书签），条目只带 `url`，内容交给平台插件去取，取不到就停在 `link`。
+- 导入页列出能读文件的方法（做了的、`list` 写了 `files` 的，`GET /file-readers`），用户挑一种、交一个文件（`POST /file-imports`，[本机接口](../spec/local-api.md#本机接口第-2-层11-11-照代码)）；浏览器脚本经投递接口交（[§5.1](delivery.md#51-本机-http-接口)）。`files` 只拿来提示和挑文件，宿主不按文件名拒；插件不认识就回 `unsupported-input`。
+- 交来的字节写进按机器目录（[SPEC §1.1](../spec/library.md#11-目录树)）下的 `libraries/<libraryId>/imports/<导入 id>/`，一次导入一个文件夹，导入 id 由宿主生成；文件名固定是 `input`，交来的名字的扩展名是 `zip`、`json`、`html`、`csv`、`txt` 之一时带上它。交来的文件名从不进路径，只当显示的字（只留最后一段、去掉控制字符和开头的点、至多 200 字节，空的写「未命名的文件」），来源写 `file:<显示名>`，插件要原来的名字就看来源。副本只有自己能读写，从不执行。`${INPUT}` 和 `USUYO_INPUT` 指向这份副本。导入要先进预览，用户可能几天后才确认，原文件这期间被移走也不影响；副本在导入删掉、或确认以后排的任务都做完时去掉；打开库时没有对应导入的文件夹（交到一半崩了）去掉。用户下载目录的绝对路径不进 `ref`，也不随快照写进资料库。
+- 交的那一次就列第一页：插件读不了这个文件，回 `invalid-args`，带插件的那句话，导入和副本都去掉；其余的页在后台接着列。读本机的副本不碰平台，列和 `fetch <ref>` 都不守平台的节奏、不计入 `daily`；条目只有链接、要去平台取的照常守。
+- `ref` 由插件自己定，对宿主不透明，不含绝对路径。宿主记住每个 `ref` 来自哪次导入，`fetch <ref>` 回到读文件的那种方法，放行同一个 `${INPUT}`；不换别的方法，也不补缺。副本已经不在时，宿主不调用插件，条目记 `dependency-missing`。
+- 导出包里有内容的（X 归档、flomo、BiliNote 的 `note_results`、浏览器脚本交来的页面），条目带 `ref`，这种方法的 `fetch` 接 `ref` 时宿主再调 `fetch <ref>` 取出内容和文件；`fetch` 不接 `ref` 时 `ref` 不用，条目要有 `url`，只有 `ref` 的算插件的错，导入停下。只有链接的（Takeout 的稍后观看、书签、今天的 X 归档），条目只带 `url`，内容交给平台插件去取，取不到就停在 `link`。
+- 只有 `ref`、没有身份的条目（聊天记录、转发的图片）照新的算，列的时候先记一个 `file-` id，轮到时照它建；同一次导入里按 `ref` 去重。预览里这几条没有 `url`。
 - 大文件可以在 `${CACHE}` 里留解压结果，或用常驻模式只打开一次。
 - 条目在 `origins[]` 里那一项记 `entry: import`，同一批共用一个 `importBatch`。
 

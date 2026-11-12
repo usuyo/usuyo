@@ -58,9 +58,10 @@ upstream:
 | `timeout` | 全部 | 否 | 覆盖 [§3.4](fetch.md#34-超时与取消) 的默认总时长；获取插件只用这一处，不用 `permissions.limits.timeout` | `2h` |
 | `outputs` | `fetch` | 是 | 能取到哪些东西，固定词表：`text`、`html`、`images`、`media:video`、`media:audio`、`subtitle`、`meta`、`comments` | `[text, images, media:video]` |
 | `input` | `fetch` | 否 | 接什么：`[url]`（默认）、`[ref]`（只接 `list` 返回的 `ref`，导入插件这样写）或 `[url, ref]` | `[ref]` |
-| `order` | `list` | 是 | `newest-first`（按加入时间从新到旧）或 `unordered`，决定跟着收怎么停（[§3.8](fetch.md#38-list-与跟着收)） | `newest-first` |
+| `order` | `list` | 做了的方法必填 | `newest-first`（按加入时间从新到旧）或 `unordered`，决定跟着收怎么停（[§3.8](fetch.md#38-list-与跟着收)）；没做的方法宿主不调，可以不写 | `newest-first` |
 | `sources` | `list` | 否 | 固定的来源，界面在登录前就能显示；运行时以 `sources` 子命令为准 | `[{source: "douyin:favorites", title: 我的收藏夹, action: favorite}]` |
-| `files` | `list` | 导入插件必填 | 能读的导出文件名 glob（[§3.9](fetch.md#39-从文件导入)） | `["twitter-*.zip"]` |
+| `files` | `list` | 导入插件必填 | 能读的导出文件名 glob（[§3.9](fetch.md#39-从文件导入)），只拿来提示和挑文件，宿主不按它拒 | `["twitter-*.zip"]` |
+| `reads` | `list` | 有 `files` 时必填 | 给人看的一句：读哪个工具的哪种导出，导入页「从文件导入」上显示；没有 `files` 时不能写 | `X 设置里「下载你的数据归档」给的 zip` |
 | `link` | `list` | 否 | 来源从你给的一条链接开始（[§2.3.1](#231-方法-methods)）：写导入页链接框上的那句。有它时 `sources` 带 `--link` 调用 | `收藏夹或个人空间的链接` |
 | `provider` | 全部 | 否，默认 `none` | 这个能力要不要模型：`none`、`optional`、`required`，含义同 [§2.9](#29-转换插件的字段)；不是 `none` 时经宿主代发（[§4.3](transform-export.md#43-模型与密钥由宿主代发)） | `optional` |
 
@@ -151,15 +152,19 @@ run:
 | `sites` | `account: in-usuyo` 又做了时必填 | 用到顶层 `sites` 里的哪几个。宿主只把这几个站点的凭据交给这种方法。只有 `account: in-usuyo` 的方法写得了登录站点；`own-phone`、`own-app` 的只能写 `credential: app` 的站点（宿主什么都不交，插件在 `health` 里报登录）；`login: none` 的不写；一种方法最多一个 `browser-profile` 站点 | `[www.bilibili.com]` |
 | `visitors` | `account: visitor` 又做了时必填 | 用到顶层 `visitors` 里的哪几个；和 `login` 无关 | `[www.xiaohongshu.com]` |
 | `perPlatform` | 否 | 多平台插件里某个平台走的路不同时，按平台覆盖这种方法的 `access`、`login`、`sites` | `{bilibili: {access: private-api, login: optional}}` |
+| `drives` | 否 | 驱动哪一样：`iphone`（经 iPhone 镜像）、`android`（经 adb）配 `account: own-phone`，`desktop-app`（这台电脑上一个客户端的窗口）配 `account: own-app`；别的配法不合格。手机页照它说要哪种手机 | `iphone` |
 | `interaction` | 否，默认 `background` | 这次调用用户看不看得见：`background` 只读，不弹菜单、不改剪贴板、不抢焦点、不动指针、不占手机屏幕；`foreground` 是上面任何一样会发生。宿主只拿它排程和加锁（[§3.1](fetch.md#31-运行器与节奏)），不拦、不弹确认 | `foreground` |
 | `delivers` | 否 | `links`：这种方法不在插件进程里跑（浏览器脚本、扩展），由它把链接交给本机接口（[§5](delivery.md#5-投递接口)）。这时不能写 `capabilities` | `links` |
-| `capabilities` | 做了、又没写 `delivers` 时必填 | 能力名到能力声明：`fetch`、`list`、`unfavorite`，字段见 [§2.3](#23-获取插件的字段) 的能力表；做了的至少有 `fetch` 或 `list`。没做的可以写，写了也照样检查 | |
+| `capabilities` | 做了、又没写 `delivers` 时必填 | 能力名到能力声明：`fetch`、`list`、`unfavorite`，字段见 [§2.3](#23-获取插件的字段) 的能力表；做了的至少有 `fetch` 或 `list`。没做的可以写，用来说它做好以后会取得什么（宿主从不调它，`GET /plugins` 照它给 `gets`）；写了也照样检查，只是 `list.order` 可以不写 | |
 | `risk` | 否 | 记录到的一句情况和出处，`{text, source: {label, url}}`，`url` 是 http(s)。只是信息，宿主不拿它拦 | |
 
 **开和关。** 每种做了的方法在获取插件页上有自己的开关，记在按机器的 `settings.json`（`plugins.<插件 id>.methods.<方法 id>.enabled`，[机器目录](../spec/machine.md#按机器的目录)）。没写时：`private-api`、`client-hook` 两层关着，其余开着；要登录的方法开着，但要等登录以后才用得上。`built: false` 的没有开关。`delivers: links` 的方法宿主不调，开关只记你的选择，关着时页上写它用不上。
 
+**按平台的层级。** `perPlatform` 给某几个平台抬了层级的方法，取一条链接时照这条链接所属平台（条目 id 前面那段）的那一层算：没拨过开关时，那个平台上的一层是 `private-api`、`client-hook` 就默认关着，`platforms` 里别的平台照方法本身的一层，不在 `platforms` 里的（认不出平台、落成 `web` 的链接）照这种方法所有层里最高的那一层；挑方法的先后也照那一层排。开关仍是一种方法一个：拨过以后各平台都照你拨的（开了就是这种方法在所有平台上都开着，包括抬了层级的）。列来源、导入照插件的第一个平台算。`GET /plugins` 在方法上列出层级和方法本身不同的平台，各带那一层和在那里开没开（[本机接口](../spec/local-api.md#本机接口第-2-层11-11-照代码)）。
+
 **宿主怎么选。** 取一条链接时，候选是 `match` 对得上的插件里做了的、开着的、这台机器上现在用得上的、`fetch` 接链接的方法：平台插件的在前，`platforms` 含 `web` 的在后；各自里先层级低的，同一层先不带账号的（`account` 照上表的顺序），再照插件的顺序和清单里写的顺序。调第一个，不给 `--want`。
 
+- **谁的原因。** 都没取到时，条目上写为这条链接准备的平台方法里第一个失败的那种的错误码和一句话；平台方法一种都调不成（都用不上）时写排在最前的那种为什么用不上；通用网页一类的失败只在这两样都没有时才写，别的时候只进失败日志。`detail` 照旧只进失败日志。
 - **换下一种。** 前一种回 `rate-limited`、`network` 时照节奏等，这一轮不换；回 `cancelled` 停下；别的错（`not-found`、`login-required`、`visitor-required`、`unsupported-input`、`upstream-changed`、`blocked`、`dependency-missing`、`invalid-args`、`internal`，宿主记的 `timeout`、`crashed`、`invalid-output`、`profile-busy`）换下一种。停着的方法（限流、被拦、你点的「先别试」）不当候选：限流以后过了退避就试下一种，不等它的暂停到点。
 - **补缺。** 一种方法的回答 `missing` 里还有东西时，往后找 `outputs` 里声明了那几样的方法，只要那几样（`--want`）再调，直到不缺或没有方法了；通用网页一类不拿来补缺。没给 `--want` 时，`missing` 可以写这种方法的 `outputs` 以外的几样：这一条有、这种方法取不到（例如要另一种方法登录才取得到的视频），宿主据此去找（[§3.7](fetch.md#37-fetch-输出)）。补缺的那次失败了不算这一条失败，这一条照前面取到的存，缺的照写。
 - **快照。** 每次调用是一份快照。条目的图、画面、音轨、评论各从有它的最新一份快照来，转换（合起来能播、口播、画面上的字）也照它；原文和 `content.md` 跟着主快照（输出最多的那份，一样多取新的，[SPEC §1.2.1](../spec/library.md#121-manifestjson-v1)）。主快照说缺的、后来别的快照取到了，条目页就不再说缺。
@@ -168,7 +173,7 @@ run:
 
 **来源从链接开始。** 有的 `list` 方法不靠账号列你自己的，而是列一条链接指着的东西，例如一个公开的收藏夹或一个人的个人空间。这种方法的 `list` 写 `link`（导入页链接框上的那句）。导入页给一个链接框，宿主调 `sources --method <id> --link <链接>`（常驻模式是 `sources` 的 `link` 参数，[§3.12](fetch.md#312-常驻模式-serve)），插件把链接换成来源（一个收藏夹就是它自己，一个人就是他公开的几个收藏夹），你选一个照常开始导入。来源字符串要能不经这次调用就写出来（例如 `bilibili:fav-public:<收藏夹 id>`），`list` 只认它。链接认不出时回 `unsupported-input` 加一句 `hint`。链接不进 `match`：它不是一条内容。
 
-**这台机器上用不用得上。** 一种方法用得上，是做了、开着、`login: required` 时要的登录站点都存着且没过期、列了的访客身份都存着且没过期、[`health`](fetch.md#310-health) 里没有落在它身上的没过的检查。`health` 的 `checks[]` 每一项可以带 `methods`（方法 id 的数组），没过时只挡这几种方法；不带就是挡整个插件；`health` 本身调不成（崩了、超时、回答不合格）也挡整个插件。检查只看本机：系统版本、要的程序和版本、设备连没连上、系统授权给没给、要的本机服务在不在。宿主把 `health` 的结果留 10 分钟，「现在再试」时清掉。一种方法都用不上时，条目记排在最前那种的原因（你关掉的不算原因）：要登录的照 `login-required`，要访客身份的照 `visitor-required`，别的照 `unsupported-input`，一句话写明是哪种方法、缺什么。获取插件页上每种方法一行，写明用得上，或者缺什么（一句话），和上一次调用的结果（[本机接口](../spec/local-api.md#本机接口第-2-层11-11-照代码)）。
+**这台机器上用不用得上。** 一种方法用得上，是做了、开着、`login: required` 时要的登录站点都存着且没过期、列了的访客身份都存着且没过期、[`health`](fetch.md#310-health) 里没有落在它身上的没过的检查；获取插件页上另把停着（被限流、被拦、你点的「先别试」）也算用不上，写明到什么时候（取一条时停着的照 [§3.1](fetch.md#31-运行器与节奏) 等着，不当原因）。`health` 的 `checks[]` 每一项可以带 `methods`（方法 id 的数组），没过时只挡这几种方法；不带就是挡整个插件；`health` 本身调不成（崩了、超时、回答不合格）也挡整个插件。检查只看本机：系统版本、要的程序和版本、设备连没连上、系统授权给没给、要的本机服务在不在。宿主把 `health` 的结果留 10 分钟，「现在再试」时清掉。一种方法都用不上时，条目记排在最前那种的原因（你关掉的不算原因）：要登录的照 `login-required`，要访客身份的照 `visitor-required`，别的照 `unsupported-input`，一句话写明是哪种方法、缺什么。获取插件页上每种方法一行，写明用得上，或者缺什么（一句话），和上一次调用的结果（[本机接口](../spec/local-api.md#本机接口第-2-层11-11-照代码)）。
 
 **试跑和失败。** 插件的错误回答可以带 `detail`：平台原样回答的开头，至多 4 KB（[§3.3](fetch.md#33-信封与错误码)）。宿主照别的字段一样洗掉交出去的凭据，截到 4 KB，多行照留；它只进失败日志，不进 `jobs.db`、事件和本机接口。宿主把每次失败（取内容、列一页、列来源）记进按机器目录的 `logs/fetch-failures.jsonl`，一次一行：`at`、`plugin`、`method`、`host`（链接的主机，没有链接时不写）、`code`、`message`、`hint`、`detail`；文件 0600，过 1 MiB 时改名成 `fetch-failures.1.jsonl`（盖掉更早的那份）重新开始。每种方法上一次调用的时间、成没成、错误码和一句话记在 `jobs.db`，获取插件页上看得到。
 
