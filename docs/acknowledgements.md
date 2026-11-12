@@ -20,7 +20,7 @@ usuyo 从下面这些项目学到了做法，或者计划包装、适配它们�
 
 - [06 调研](research/06-platform-access-and-account-risk.md#调研-06--平台内容获取的开源生态与账号风险)里标「（致谢）」的 260 条，按类别放进下面各节，出处链到 06 的同名小节；用户点名的项目链到 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)。
 - 用户点名、06 没标致谢的 7 条。用户说过，点名的项目都是以后的致谢候选，所以照收，按 06 里的类别和关系放进各节，限制写在各自那一行：
-  - NanmiCoder/MediaCrawler：自定义的非商业学习许可，条款里没有分发授权，只借做法，不 fork、不分发、不包装。
+  - NanmiCoder/MediaCrawler：自定义的非商业学习许可，条款里没有分发授权：不 fork、不分发、不抄代码。用户 11-12 要照它做：做成调用户自己装的那一份的方法（[取法清单](platforms/routes.md)），不随插件带。
   - ahang008/ah-skills：Skill 索引仓库，本身不从平台取内容，许可为非商业源码可见；同作者的 ah-douyin-clean-downloader 在 06 标了致谢，已收。
   - open-wxa/wxa-runner：在浏览器里运行自己的小程序、做本地调试和测试的工具，不取平台内容；内置的基础库是腾讯代码，不能分发。
   - pabatiba89-sys/kali-publish：social-auto-upload 派生的商业产品发布模块，视频号流程写死了推广话题和商品逻辑，只借登录经验；上游 social-auto-upload 已收。
