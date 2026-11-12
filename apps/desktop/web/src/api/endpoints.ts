@@ -457,10 +457,11 @@ export interface FetchPlugin {
 /**
  * 账号用在哪：`none` 不用；`visitor` 用访客身份（不是账号，`sites` 是 `paths.visitors` 的站点）；
  * `own-browser` 账号留在你自己的浏览器里，由脚本把链接交进来；`own-phone` 账号留在手机的 App 里；
- * `in-usuyo` 你在 usuyo 的窗口里登录（`sites` 是 `paths.sites` 的站点）。`where` 是给人看的账号名，例如「X」。
+ * `in-usuyo` 你在 usuyo 的窗口里登录（`sites` 是 `paths.sites` 的站点）；`developer` 用你自己申请的开发者凭据（平台的官方 API）。
+ * `where` 是给人看的账号名，例如「X」。
  */
 export interface MethodAccount {
-  kind: "none" | "visitor" | "own-browser" | "own-phone" | "in-usuyo";
+  kind: "none" | "visitor" | "own-browser" | "own-phone" | "in-usuyo" | "developer";
   sites?: string[];
   where?: string;
 }

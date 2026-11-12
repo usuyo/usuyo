@@ -79,6 +79,8 @@ export function accountText(account: MethodAccount, names: string[]): string {
       return `账号留在你自己的浏览器里：脚本在登录着的${who}网页里读，把链接交给 usuyo`;
     case "own-phone":
       return `账号留在你手机的${who} App 里`;
+    case "developer":
+      return `用你自己申请的${who}开发者凭据，不用你的账号登录`;
     default:
       return `要在 usuyo 里登录你的${who}账号`;
   }
