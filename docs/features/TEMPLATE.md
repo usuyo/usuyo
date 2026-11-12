@@ -2,7 +2,7 @@
 # NNN — <功能名>
 
 状态：in-progress | done
-关联：PRD 的哪一节 · SPEC 的哪一节 · ADR-nnn
+关联：PRD 的哪一节 · SPEC（`docs/spec/`）的哪一节 · 插件协议（`docs/protocol/`）的哪一节 · ADR-nnn
 
 <a id="目标"></a>
 ## 目标

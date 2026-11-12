@@ -506,8 +506,8 @@ export interface Pending {
 | # | 做什么 | 碰哪里 | 难度 | 挡住 |
 |---|---|---|---|---|
 | WP0 | 量过了：速度、内存、字错率在 [§3.1](#31-说的转成文字)，原型和脚本在 `plugins/asr-sherpa/`，改成插件时要知道的写在它的 README 里。还没量：真人口播、Vision 认 20 张图 | `plugins/asr-sherpa/` | 低 | — |
-| WP1 | **做了。** `run.json` 类型、schema、样例；把 [§8.2](#82-要写回-spec--协议的) 的 SPEC 各条写回 | `crates/usuyo-contract`、`docs/SPEC.md` | 低 | WP5 |
-| WP2 | **做了。** 转换的协议类型、清单词表、`models[]` 新字段；plugin-kit 的 JSON-RPC 循环；把 [§8.2](#82-要写回-spec--协议的) 的协议各条写回 | `crates/usuyo-plugin/src/protocol`、`crates/usuyo-plugin-kit`、`docs/plugin-protocol.md` | 中 | WP3、WP9、WP10 |
+| WP1 | **做了。** `run.json` 类型、schema、样例；把 [§8.2](#82-要写回-spec--协议的) 的 SPEC 各条写回 | `crates/usuyo-contract`、`docs/spec/` | 低 | WP5 |
+| WP2 | **做了。** 转换的协议类型、清单词表、`models[]` 新字段；plugin-kit 的 JSON-RPC 循环；把 [§8.2](#82-要写回-spec--协议的) 的协议各条写回 | `crates/usuyo-plugin/src/protocol`、`crates/usuyo-plugin-kit`、`docs/protocol/` | 中 | WP3、WP9、WP10 |
 | WP3 | **做了。** 常驻转换进程：启动、核对、`run`、取消、卡住、闲了关、暂存目录、优先级 | `crates/usuyo-plugin/src/host/transform.rs` | 高 | WP6 |
 | WP4 | 模型下载：续传、镜像、校验、解包、`model.json`、状态 | `crates/usuyo-core/src/models.rs` | 中 | WP6 |
 | WP5 | **做了。** 转录写入（暂存后改名）、列出、按层找（`resolve_layer` 认转录、`video` 先给 `play.mp4`、`frame/<runId>/<ms>`）、只留文字移走二进制 | `crates/usuyo-library` | 中 | WP6、WP7 |
