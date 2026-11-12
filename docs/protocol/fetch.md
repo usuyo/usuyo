@@ -28,7 +28,7 @@
 |---|---|
 | 插件回 `ok: true`、`completeness: partial` | 记下这个快照，每个成功的快照都保留。顺序里后面的插件 `outputs` 能补上 `missing` 的，宿主可以带 `--want=<missing>` 去试它，后面的插件只取缺的部分。默认自动接着试，见本节末尾。插件拿到一部分就回 `partial`，不要回错误 |
 | 插件回 `ok: true`、`completeness: link` | 按 `unsupported-input` 处理，换下一个 |
-| 插件自报的 `completeness` 和实际输出对不上 | 宿主按 `text`、`html`、`images`、`media[].kind` 实际出现了哪些，对照 `--want` 重算，以宿主算的为准，并记日志 |
+| 插件自报的 `completeness`、`missing` 和实际输出对不上 | 宿主照 [§3.7](#37-fetch-输出) 的规则重算，以宿主算的为准，并记日志 |
 | 退出码 `2` 且没有信封 | 记 `invalid-args`，当 bug 记下，换下一个 |
 | 没有插件的 `match` 命中，或 `canonicalize` 全部回 `match: false` | 交给 `platforms` 含 `web` 的插件（如果装了）；没装就由宿主照 [SPEC §0.4](../spec/conventions.md#04-id) 自己算出 `web:` 身份建条目，停在 `link` |
 | `match` 命中的插件都没回 `match: true`，且有一个 `canonicalize` 因 `network` 或 `timeout` 失败（例如离线时收下的短链） | 不交给 `web` 插件。宿主拿这条链接本身算 `web:` 身份，马上建只有链接的条目（`completeness: link`，还没有快照；之后的快照照记 `inputUrl`），重试记进本机 `jobs.db`（[SPEC §1.1](../spec/library.md#11-目录树)）；之后再调 `canonicalize`，拿到平台身份就照 [SPEC §0.4](../spec/conventions.md#04-id) 并过去，`web-` id 留作别名；跟着收的不建，这一次不算跑完，联网后整次重跑 |
@@ -279,7 +279,7 @@
 | `evidence.status` | 只在 HTTP 类请求时填 |
 | 其余字段 | `kind`、`title`、`author`、`publishedAt`、`text`、`html`、`images`、`platformTags`、`completeness`、`missing`、`evidence.fetchedAt`；时间一律 RFC 3339 带偏移，宿主把 `publishedAt` 换成 UTC 存，偏移不是 `Z` 的另存 `publishedAtOriginal` |
 
-- `completeness`：`full` 是 `--want` 里的都拿到了；`partial` 是缺了一部分，缺什么写进 `missing`；`link` 是只认出了身份。宿主会按实际输出重算，比较完整度时比的是实际拿到的输出集合（[§3.1](#31-运行器与节奏)）。
+- `completeness` 和 `missing`：`missing` 只写这一条有、这次想要（`--want`）却没交来的；这一条本来就没有的那一样（只有字的帖子没有图和视频）不是缺，不写。`full` 是没有缺的，`partial` 是有缺的，`link` 是只认出了身份。哪一样这一条本来就没有，只有插件知道，宿主不照「想要的 − 交来的」猜；宿主按 `text`、`html`、`images`、`media[].kind` 实际交来了哪些核一遍：`missing` 里其实交来了的、不在 `--want` 里的去掉，再照剩下的定 `completeness`，想要的一样都没交来算 `link`。比较完整度时比的是实际拿到的输出集合（[§3.1](#31-运行器与节奏)）。
 - `text` 是平台原文的文字，宿主据此生成 `content.md`：只读副本，总照主快照重写；原样在 `raw/`（[SPEC §1.2.3](../spec/library.md#123-contentmd-和各栏)）。
 - 数组字段总是出现，可以为空。
 
@@ -449,7 +449,8 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip"
 - **`USUYO_NETWORK`**：宿主查 `example.com`、`example.org` 两个名字（两秒内），两个都有回答、回答全在 `198.18.0.0/15` 里时设成 `fake-ip`，结果缓存一分钟；查不到、超时都算不是。不看要取的那个域名自己的回答。
 - **节奏做了一部分**：[§3.1](#31-运行器与节奏) 的 `interval`、`daily`、`batch: false`、每平台一个调用的锁有了（取最严的一组，记账在 `jobs.db`，重启后照旧）；整机锁和设备锁还没做；任务一次只跑一个。「现在再试」「先别试」有了（`POST /plugins/{owner}/{repo}/try-now`、`…/hold`），用户改节奏的设置还没做。
 - **凭据和密钥**：`credential: cookies` 的站点经 `USUYO_CREDENTIALS`、`USUYO_COOKIES_TXT`，密钥设置经 `USUYO_SECRETS`，访客身份经 `USUYO_VISITOR`（[§2.5.1](manifest.md#251-访客身份-visitors)）。值在系统钥匙串里（没有钥匙串的系统上是按机器目录的 0600 文件），按机器目录的 `logins.json` 只记名字、域名和过期时间；文件放在按机器目录 `run/` 下这次调用自己的 0700 目录里，0600，进程结束就删；交出去的值从 stderr、插件的错误和宿主拼的错误里洗掉（包括 JSON、Debug 转义过的写法）。plugin-kit 的 `http::Cookie::visitor` 把访客身份读成只发给给定主机、只走 https 的 Cookie。
-- **还没传的**：`USUYO_BROWSER_PROFILE`、`USUYO_PROVIDER`、`ADB_SERVER_SOCKET`、`ANDROID_SERIAL`、各个代理变量。本机代理和沙箱（[§7](isolation.md#7-权限与隔离)）都还没做；插件的出站现在靠 plugin-kit 的客户端自己把关（[§10.1](plugin-kit.md#101-plugin-kit-的-http-客户端11-11)）。
+- **`USUYO_PROXY`**（11-12）：现在交的是用户的代理，本机代理做出来以后改成指向本机代理、用户的代理由它转发（上面的「网络出口」）。路线是按机器设置 `network.proxy`：`system`（没写时）、`direct`、或一个代理地址。`system` 在 macOS 上读 `scutil --proxy`（两秒内，结果留一分钟），先取 https 的，再 SOCKS，再 http 的；别的系统暂时读环境变量；读不到就直连，记一条日志。只有清单里有网络权限的插件拿到这个变量；宿主自己下模型走同一条路。
+- **还没传的**：`USUYO_BROWSER_PROFILE`、`USUYO_PROVIDER`、`ADB_SERVER_SOCKET`、`ANDROID_SERIAL`、`HTTP_PROXY` 一类的代理变量。本机代理和沙箱（[§7](isolation.md#7-权限与隔离)）都还没做；插件的出站现在靠 plugin-kit 的客户端自己把关（[§10.1](plugin-kit.md#101-plugin-kit-的-http-客户端11-11)）。
 - **调用文件夹**：资料库的 `.usuyo/tmp/usuyo-call-<UUIDv7>-<随机>/`，里面 `tmp/`、`tmp/home/`、`tmp/bin/`，`fetch` 另有 `out/`；用完整个删掉，崩溃留下的在下次打开库时清掉。
 - **时长**：`canonicalize` 10 s、`fetch` 300 s、`sources` 30 s、`list` 每页 60 s；发过 `progress` 以后 120 s 没有新的算卡住；一次调用里 `waiting` 加起来最多 600 s，等的时候另两个时钟停；能力的 `timeout` 最多按 2 小时算。超时或取消先给进程组 SIGTERM，5 秒后 SIGKILL；正常退出后也给进程组发一次 SIGKILL，留下的子进程一起结束。Windows 上只结束这一个进程（还没有 Job Object）。
 - **stdout、stderr**：stdout 最多 32 MiB，超了 `invalid-output`；stderr 留最后 200 行，每行最多 8 KiB；解析不了的 `@usuyo ` 行忽略。
