@@ -1,5 +1,5 @@
 // 内核接口的路径和类型，都在这一个文件里。接口还没定稿，改动只落在这里；Rust 那边照这里的形状做。
-// 层名和位置照 docs/SPEC.md §1.2 的引用：asr、ocr、text、image、video、comments；时间是秒，图片用 imageKey。
+// 层名和位置照 docs/spec/library.md §1.2 的引用：asr、ocr、text、image、video、comments；时间是秒，图片用 imageKey。
 
 export const DEFAULT_API_BASE = "http://127.0.0.1:47615";
 
