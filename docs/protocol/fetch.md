@@ -279,7 +279,7 @@
 | `evidence.status` | 只在 HTTP 类请求时填 |
 | 其余字段 | `kind`、`title`、`author`、`publishedAt`、`text`、`html`、`images`、`platformTags`、`completeness`、`missing`、`evidence.fetchedAt`；时间一律 RFC 3339 带偏移，宿主把 `publishedAt` 换成 UTC 存，偏移不是 `Z` 的另存 `publishedAtOriginal` |
 
-- `completeness` 和 `missing`：`missing` 只写这一条有、这次想要（`--want`）却没交来的；这一条本来就没有的那一样（只有字的帖子没有图和视频）不是缺，不写。`full` 是没有缺的，`partial` 是有缺的，`link` 是只认出了身份。哪一样这一条本来就没有，只有插件知道，宿主不照「想要的 − 交来的」猜；宿主按 `text`、`html`、`images`、`media[].kind` 实际交来了哪些核一遍：`missing` 里其实交来了的、不在 `--want` 里的去掉，再照剩下的定 `completeness`，想要的一样都没交来算 `link`。比较完整度时比的是实际拿到的输出集合（[§3.1](#31-运行器与节奏)）。
+- `completeness` 和 `missing`：`missing` 只写这一条有、这次想要（`--want`）却没交来的；这一条本来就没有的那一样（只有字的帖子没有图和视频）不是缺，不写。`full` 是没有缺的，`partial` 是有缺的，`link` 是只认出了身份。哪一样这一条本来就没有，只有插件知道，宿主不照「想要的 − 交来的」猜；一样可以交来一部分、还缺一部分（九张图下到六张），照样写进 `missing`，原因写进 `missingReason`。宿主只去掉 `missing` 里不在 `--want` 里的，再照剩下的定 `completeness`；按 `text`、`html`、`images`、`media[].kind` 实际交来了哪些看，想要的一样都没交来算 `link`。比较完整度时比的是实际拿到的输出集合（[§3.1](#31-运行器与节奏)）。
 - `text` 是平台原文的文字，宿主据此生成 `content.md`：只读副本，总照主快照重写；原样在 `raw/`（[SPEC §1.2.3](../spec/library.md#123-contentmd-和各栏)）。
 - 数组字段总是出现，可以为空。
 

@@ -133,7 +133,7 @@ JSON
 "#;
 
 #[tokio::test]
-async fn fetch_succeeds_and_completeness_is_corrected() {
+async fn fetch_succeeds_and_keeps_what_the_plugin_calls_missing() {
     let f = install(&format!(
         "printf '%s\\n' \"$@\" > \"$USUYO_CACHE_DIR/args\"\nenv > \"$USUYO_CACHE_DIR/env\"\n{OK_FETCH}"
     ));
@@ -144,9 +144,9 @@ async fn fetch_succeeds_and_completeness_is_corrected() {
         )
         .await
         .unwrap();
-    // 插件说缺图片，实际有：按实际改成 full
-    assert_eq!(snap.output.completeness, Completeness::Full);
-    assert!(snap.output.missing.is_empty());
+    // 插件说缺图片，又交来了一张：图片交来一部分、还缺一部分，照插件说的记
+    assert_eq!(snap.output.completeness, Completeness::Partial);
+    assert_eq!(snap.output.missing, [OutputKind::Images]);
     assert_eq!(
         snap.obtained,
         BTreeSet::from([
@@ -358,8 +358,8 @@ JSON"#,
 }
 
 #[tokio::test]
-async fn missing_is_what_the_plugin_says_and_did_not_deliver() {
-    // 插件说缺图片、网页原文、评论：图片其实交来了，评论不在这次想要的里头，都去掉；只剩网页原文
+async fn missing_is_what_the_plugin_says_among_what_was_asked_for() {
+    // 插件说缺图片、网页原文、评论：评论不在这次想要的里头，去掉；图片交来了一部分，照样留着
     let f = install(
         r#"mkdir -p "$out/images" && printf 'png' > "$out/images/001.png"
 cat <<'JSON'
@@ -376,7 +376,12 @@ JSON"#,
         .await
         .unwrap();
     assert_eq!(snap.output.completeness, Completeness::Partial);
-    assert_eq!(snap.output.missing, [OutputKind::Html]);
+    let missing: std::collections::BTreeSet<_> = snap.output.missing.iter().copied().collect();
+    assert_eq!(
+        missing,
+        std::collections::BTreeSet::from([OutputKind::Images, OutputKind::Html])
+    );
+    assert_eq!(snap.output.missing.len(), 2);
 }
 
 #[tokio::test]

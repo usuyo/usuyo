@@ -572,15 +572,15 @@ impl PluginHost {
             return Err(invalid(format!("`{twice}` is referenced more than once")));
         }
 
-        // 完整度（§3.7）：缺的是插件说缺、又确实没交来的（想要的 − 实际拿到的里头）。这一条本来就没有的
-        // 那一样（只有字的帖子没有图）不算缺，只有插件知道，宿主不按「没交来」猜；插件说缺、其实交来了的，
-        // 或者不在想要的里头的，去掉。一样都没拿到算只认出了链接。
+        // 完整度（§3.7）：缺的是插件说缺的、这次想要的那几样。这一条本来就没有的那一样（只有字的帖子没有图）
+        // 不算缺，一样交来了一部分还缺一部分（九张图下到六张）也算缺：这两件事只有插件知道，宿主不按
+        // 「交没交来」猜，只去掉不在想要的里头的。想要的一样都没拿到算只认出了链接。
         let obtained = output.obtained();
         let missing: Vec<OutputKind> = output
             .missing
             .iter()
             .copied()
-            .filter(|o| wanted.contains(o) && !obtained.contains(o))
+            .filter(|o| wanted.contains(o))
             .collect::<BTreeSet<_>>()
             .into_iter()
             .collect();
