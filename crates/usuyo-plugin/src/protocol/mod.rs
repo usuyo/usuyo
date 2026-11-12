@@ -1,4 +1,4 @@
-//! 插件协议 v1 的类型（`docs/plugin-protocol.md`）。MIT，插件作者可以单独依赖：
+//! 插件协议 v1 的类型（`docs/protocol/`）。MIT，插件作者可以单独依赖：
 //! 关掉默认的 `host` feature 就只剩这里。
 
 mod credentials;
