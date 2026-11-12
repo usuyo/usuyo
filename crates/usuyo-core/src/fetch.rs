@@ -286,6 +286,9 @@ impl Engine {
         let mut retryable = false;
         let mut paused_any = false;
         let mut called = false;
+        // 平台方法调过没有；有没有哪一种不是回「这种链接我不取」（被拦、要登录、要访客身份、没找到、停着……）
+        let mut platform_called = false;
+        let mut platform_refused = false;
         // 取到第一份以后还缺的；`None` 是还没取到。
         let mut missing: Option<BTreeSet<OutputKind>> = None;
         for c in &candidates {
@@ -306,9 +309,19 @@ impl Engine {
                     Some(w)
                 }
             };
+            // 平台插件认了这条链接（条目的平台不是 web）：通用网页插件只在平台方法都说「这种链接我不取」
+            // 时才上。平台方法被拦、要登录、没找到、停着的，不再用通用网页去请求同一个地址：
+            // 那只会再撞一次校验页，还把校验页存成一份快照。
+            if plugin.spec.is_web() && platform != "web" && (!platform_called || platform_refused) {
+                continue;
+            }
             let scope = pause_scope(plugin, &url, platform);
             if let Some(p) = self.inner.jobs.paused(&pid, &method.id, scope, now_ms())? {
                 paused_any = true;
+                if !plugin.spec.is_web() {
+                    platform_called = true;
+                    platform_refused = true;
+                }
                 let note = if plugin.spec.is_web() {
                     &mut first_web
                 } else {
@@ -343,6 +356,9 @@ impl Engine {
                 input_file: None,
             };
             called = true;
+            if !plugin.spec.is_web() {
+                platform_called = true;
+            }
             let result = self
                 .inner
                 .host
@@ -368,6 +384,9 @@ impl Engine {
                 Err(PluginError::Call { failure, .. }) => {
                     tracing::info!(plugin = %pid, method = %method.id, item = %id, failure = %failure, "fetch failed");
                     self.record_method_call(plugin, &method.id, url.host_str(), Err(&failure))?;
+                    if !plugin.spec.is_web() && failure.code != ErrorCode::UnsupportedInput {
+                        platform_refused = true;
+                    }
                     // 被拦也按最长的暂停记，到点自己解开；被拦的这一条不因暂停重试，只有限流的到点再试。
                     let (pause, retry_after_pause) = match failure.pause() {
                         Some(Pause::For(d)) => (Some(d), true),

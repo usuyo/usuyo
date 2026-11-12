@@ -536,9 +536,7 @@ case "$1" in
 esac
 "#;
 
-#[tokio::test]
-async fn the_item_shows_the_platform_methods_reason_not_the_web_fallbacks() {
-    let f = Fixture::new();
+fn install_web(f: &Fixture) {
     let dir = f.machine().join("plugins/fake/web/1.0.0");
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("usuyo-plugin.yaml"), WEB_MANIFEST).unwrap();
@@ -548,6 +546,19 @@ async fn the_item_shows_the_platform_methods_reason_not_the_web_fallbacks() {
         std::fs::Permissions::from_mode(0o755),
     )
     .unwrap();
+}
+
+fn failed_plugins(f: &Fixture) -> Vec<String> {
+    f.failure_log()
+        .iter()
+        .map(|l| l["plugin"].as_str().unwrap().to_owned())
+        .collect()
+}
+
+#[tokio::test]
+async fn after_a_platform_method_fails_the_web_plugin_is_not_asked() {
+    let f = Fixture::new();
+    install_web(&f);
     f.answer(
         "guest",
         r#"echo '{"ok": false, "error": {"code": "upstream-changed", "message": "page changed", "hint": "公开接口改版了"}}'; exit 1"#,
@@ -558,16 +569,30 @@ async fn the_item_shows_the_platform_methods_reason_not_the_web_fallbacks() {
         .await
         .unwrap();
     engine.run_due().await.unwrap();
-    // 公开接口、包的工具、通用网页都试过了
+    // 平台的两种方法都试过、都没取到；通用网页插件不再去请求同一个地址
     assert_eq!(f.calls(), ["guest all", "tool all"]);
-    let methods: Vec<String> = f
-        .failure_log()
-        .iter()
-        .map(|l| l["plugin"].as_str().unwrap().to_owned())
-        .collect();
-    assert!(methods.contains(&"fake/web".to_owned()), "{methods:?}");
+    let failed = failed_plugins(&f);
+    assert!(!failed.contains(&"fake/web".to_owned()), "{failed:?}");
     let v = serde_json::to_value(engine.item(&t.id, &Links::default()).unwrap()).unwrap();
     assert_eq!(v["missing"], "取不到内容：公开接口改版了", "{v}");
+}
+
+#[tokio::test]
+async fn when_platform_methods_do_not_take_the_link_the_web_plugin_is_asked() {
+    let f = Fixture::new();
+    install_web(&f);
+    let not_mine = r#"echo '{"ok": false, "error": {"code": "unsupported-input", "message": "not a post", "hint": "这种链接这个插件不取"}}'; exit 1"#;
+    f.answer("guest", not_mine);
+    f.answer("tool", not_mine);
+    let engine = f.engine();
+    engine
+        .take("https://example.test/1", "link", Via::Cli)
+        .await
+        .unwrap();
+    engine.run_due().await.unwrap();
+    assert_eq!(f.calls(), ["guest all", "tool all"]);
+    let failed = failed_plugins(&f);
+    assert!(failed.contains(&"fake/web".to_owned()), "{failed:?}");
 }
 
 #[tokio::test]
