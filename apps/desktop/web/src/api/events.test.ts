@@ -20,6 +20,14 @@ describe("daemon events", () => {
     expect(spy.mock.calls.map((c) => c[0]?.queryKey)).toEqual([queryKeys.transforms, queryKeys.settings]);
   });
 
+  it("refreshes the phone page on phone-updated, which has no id", () => {
+    expect(isDaemonEvent({ type: "phone-updated" })).toBe(true);
+    const qc = new QueryClient();
+    const spy = vi.spyOn(qc, "invalidateQueries");
+    applyEvent(qc, { type: "phone-updated" });
+    expect(spy.mock.calls.map((c) => c[0]?.queryKey)).toEqual([queryKeys.phone]);
+  });
+
   it("refreshes plugins, sites, visitors and settings, or the one import, when told", () => {
     const qc = new QueryClient();
     const spy = vi.spyOn(qc, "invalidateQueries");

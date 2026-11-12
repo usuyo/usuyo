@@ -45,6 +45,9 @@ import {
   type ChangesView,
   type ExportRun,
   type ExportView,
+  type PhoneDryRun,
+  type PhoneView,
+  type SettingsPane,
 } from "./endpoints";
 
 /** 页面要的全部读写。真的内核和开发用的样例库都实现它。 */
@@ -165,8 +168,19 @@ export interface Exports {
   exportNow(): Promise<ExportRun>;
 }
 
+/** 「手机」页的读写（docs/platforms/phone.md §4）。用到手机的取法走 `Platforms.plugins`。 */
+export interface Phone {
+  phone(): Promise<PhoneView>;
+  installDriver(): Promise<PhoneView>;
+  updateDriver(): Promise<PhoneView>;
+  removeDriver(): Promise<PhoneView>;
+  openSettings(pane: SettingsPane): Promise<void>;
+  testClipboard(): Promise<PhoneView>;
+  dryRun(): Promise<PhoneDryRun>;
+}
+
 /** 内核和样例库都实现的全部读写。 */
-export type Source = Library & Platforms & Transforms & Settings & Topics & Drafts & Follows & Changes & Exports;
+export type Source = Library & Platforms & Transforms & Settings & Topics & Drafts & Follows & Changes & Exports & Phone;
 
 /** 内核今天回的插件：还没有 `methods`。 */
 type WirePlugin = Omit<FetchPlugin, "methods"> & { methods?: FetchPlugin["methods"] };
@@ -197,6 +211,9 @@ const itemRequest = (path: string, method?: "POST") => request<Item>(path, metho
 
 /** 列来源要调插件，内核最多等一分钟多一点。 */
 const SOURCES_TIMEOUT_MS = 75_000;
+
+/** 演练要截一屏、认一遍字，比平常的请求慢。 */
+const DRY_RUN_TIMEOUT_MS = 30_000;
 
 /** 交文件是把整个文件抄给内核，大的归档要几分钟。 */
 const FILE_TIMEOUT_MS = 600_000;
@@ -284,6 +301,14 @@ const daemon: Source = {
   setExportFolder: (folder) => request<ExportView>(paths.exportTarget, { method: "PUT", body: { folder } }),
   exportNow: () => request<ExportRun>(paths.exportRuns, { method: "POST", timeoutMs: FILE_TIMEOUT_MS }),
 
+  phone: () => request<PhoneView>(paths.phone),
+  installDriver: () => request<PhoneView>(paths.phoneDriverInstall, { method: "POST" }),
+  updateDriver: () => request<PhoneView>(paths.phoneDriverUpdate, { method: "POST" }),
+  removeDriver: () => request<PhoneView>(paths.phoneDriverRemove, { method: "POST" }),
+  openSettings: (pane) => request<void>(paths.phoneOpenSettings, { method: "POST", body: { pane } }).then(() => undefined),
+  testClipboard: () => request<PhoneView>(paths.phoneClipboardTest, { method: "POST" }),
+  dryRun: () => request<PhoneDryRun>(paths.phoneDryRun, { method: "POST", timeoutMs: DRY_RUN_TIMEOUT_MS }),
+
   transforms: () => request<TransformsView>(paths.transforms),
   transform: (itemId, body) => request<void>(paths.itemTransform(itemId), { method: "POST", body }).then(() => undefined),
   downloadModel: (pluginId, name) => request<ModelDownload>(paths.modelDownload(pluginId, name), { method: "POST" }),
@@ -294,7 +319,8 @@ const daemon: Source = {
 const MOCK_FORCED = import.meta.env.VITE_USUYO_MOCK === "1";
 const MOCK_FALLBACK = import.meta.env.MODE === "development";
 
-// 地址栏带 ?mock=empty 时样例库从空的开始；?mock=fresh 是资料库空着、获取插件装好了（第一次打开）。要在路由改写地址之前读。
+// 地址栏带 ?mock=empty 时样例库从空的开始；?mock=fresh 是资料库空着、获取插件装好了（第一次打开）；
+// ?mock=phone-<样子> 是「手机」页的几种样子（mock/phone.ts），不带时那一页和内核今天一样说一句。要在路由改写地址之前读。
 const MOCK_PARAM = (MOCK_FORCED || MOCK_FALLBACK) && typeof location !== "undefined" ? new URLSearchParams(location.search).get("mock") : null;
 const MOCK_EMPTY = MOCK_PARAM === "empty" || MOCK_PARAM === "fresh";
 const MOCK_NO_PLUGINS = MOCK_PARAM === "empty";
@@ -308,9 +334,9 @@ export function usingMockLibrary(): boolean {
 }
 
 function mock(): Promise<Source> {
-  mockLibrary ??= Promise.all([import("../mock/library"), import("../mock/platforms"), import("../mock/pages"), import("../mock/follows"), import("../mock/changes"), import("../mock/exports")]).then(([l, p, w, f, c, e]) => {
+  mockLibrary ??= Promise.all([import("../mock/library"), import("../mock/platforms"), import("../mock/pages"), import("../mock/follows"), import("../mock/changes"), import("../mock/exports"), import("../mock/phone")]).then(([l, p, w, f, c, e, ph]) => {
     const library = l.createMockLibrary(MOCK_EMPTY);
-    return { ...library, ...p.createMockPlatforms(MOCK_NO_PLUGINS), ...w.createMockPages(library, MOCK_EMPTY), ...f.createMockFollows(library, MOCK_EMPTY), ...c.createMockChanges(MOCK_EMPTY), ...e.createMockExports(MOCK_EMPTY) };
+    return { ...library, ...p.createMockPlatforms(MOCK_NO_PLUGINS), ...w.createMockPages(library, MOCK_EMPTY), ...f.createMockFollows(library, MOCK_EMPTY), ...c.createMockChanges(MOCK_EMPTY), ...e.createMockExports(MOCK_EMPTY), ...ph.createMockPhone(MOCK_PARAM) };
   });
   return mockLibrary;
 }

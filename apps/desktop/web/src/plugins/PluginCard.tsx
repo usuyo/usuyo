@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { Button as AriaButton, Switch } from "react-aria-components";
 import { isNotServed } from "../api/client";
 import type { FetchMethod, FetchPlugin, SiteLogin, VisitorIdentity } from "../api/endpoints";
@@ -132,6 +133,15 @@ function MethodRow({
           )}
         </div>
         <p className="m-0 mt-0.5 text-note text-label">{accountText(method.account, names)}</p>
+        {method.account.kind === "own-phone" ? (
+          <p className="m-0 mt-0.5 text-small text-sub">
+            要一台手机：驱动、授权和连没连上在
+            <Link to="/phone" className="mx-0.5 text-label underline decoration-border2 underline-offset-4 hover:text-text">
+              手机
+            </Link>
+            那一页。
+          </p>
+        ) : null}
         <div className="mt-1 flex flex-wrap gap-x-3 text-small text-sub">
           {getsText(method.gets).map((g) => (
             <span key={g}>{g}</span>

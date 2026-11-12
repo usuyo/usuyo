@@ -15,7 +15,7 @@ afterEach(() => {
 /** 内核今天回的插件还没有 `methods`；有了就照给。 */
 type WireView = Omit<PluginsView, "plugins"> & { plugins: (Omit<FetchPlugin, "methods"> & { methods?: FetchMethod[] })[] };
 
-function serve(view: WireView, sites: SiteLogin[], visitors: VisitorIdentity[] = []) {
+function serve(view: WireView, sites: SiteLogin[], visitors: VisitorIdentity[] = [], at = "/plugins") {
   const switched: unknown[] = [];
   vi.stubGlobal("scrollTo", vi.fn());
   vi.stubGlobal(
@@ -33,7 +33,7 @@ function serve(view: WireView, sites: SiteLogin[], visitors: VisitorIdentity[] =
       return Promise.resolve(new Response("nope", { status: 404 }));
     }),
   );
-  const router = createAppRouter(createMemoryHistory({ initialEntries: ["/plugins"] }));
+  const router = createAppRouter(createMemoryHistory({ initialEntries: [at] }));
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <RouterProvider router={router} />
@@ -138,4 +138,20 @@ it("lists a plugin's methods as switches, marks the unbuilt ones, and says so wh
   fireEvent.click(within(methods).getByRole("switch", { name: "收藏夹：关着" }));
   expect(await screen.findByText(/内核还不能分开开关取法/)).toBeTruthy();
   expect(switched).toEqual(["/api/plugins/usuyo-fetch/bilibili/methods/lists"]);
+});
+
+it("opens the platform named in the address, and a method on a phone points to the phone page", async () => {
+  const phone = (id: string, name: string): Omit<FetchPlugin, "methods"> & { methods: FetchMethod[] } => ({
+    ...bili,
+    id: `usuyo-fetch/${id}`,
+    name,
+    platforms: [{ id, name }],
+    sites: [],
+    pacing: [],
+    pauses: [],
+    methods: [{ id: "iphone", name: "iPhone", access: "vision-ui", account: { kind: "own-phone", where: name }, gets: { list: ["收藏"], delivers: "links" }, built: true, enabled: true, pauses: [] }],
+  });
+  serve({ plugins: [phone("bilibili", "B站"), phone("xiaohongshu", "小红书")], notLoaded: [] }, [], [], "/plugins?platform=xiaohongshu");
+  const section = await screen.findByRole("region", { name: "小红书" });
+  expect(within(section).getByRole("link", { name: "手机" }).getAttribute("href")).toBe("/phone");
 });

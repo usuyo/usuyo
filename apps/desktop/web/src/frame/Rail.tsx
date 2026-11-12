@@ -1,12 +1,12 @@
 import { Link } from "@tanstack/react-router";
-import { FileText, FolderInput, FolderOutput, History, Monitor, Moon, Plug, Rss, Settings, Sun, Trash2 } from "lucide-react";
+import { FileText, FolderInput, FolderOutput, History, Monitor, Moon, Plug, Rss, Settings, Smartphone, Sun, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useUiStore, type ThemePreference } from "../store/ui";
 import { Button } from "../ui/Button";
 import { TakeField } from "./TakeField";
 
 /** 底下去别的页。 */
-const PAGES: { label: string; icon: ReactNode; to: "/drafts" | "/follow" | "/changes" | "/export" | "/import" | "/plugins" | "/trash" | "/settings" }[] = [
+const PAGES: { label: string; icon: ReactNode; to: "/drafts" | "/follow" | "/changes" | "/export" | "/import" | "/plugins" | "/phone" | "/trash" | "/settings" }[] = [
   { to: "/drafts", label: "成稿", icon: <FileText size={16} aria-hidden="true" /> },
   { to: "/follow", label: "跟着收", icon: <Rss size={16} aria-hidden="true" /> },
   { to: "/import", label: "导入", icon: <FolderInput size={16} aria-hidden="true" /> },
@@ -14,12 +14,13 @@ const PAGES: { label: string; icon: ReactNode; to: "/drafts" | "/follow" | "/cha
   { to: "/changes", label: "改动记录", icon: <History size={16} aria-hidden="true" /> },
   { to: "/trash", label: "回收站", icon: <Trash2 size={16} aria-hidden="true" /> },
   { to: "/plugins", label: "获取插件", icon: <Plug size={16} aria-hidden="true" /> },
+  { to: "/phone", label: "手机", icon: <Smartphone size={16} aria-hidden="true" /> },
   { to: "/settings", label: "设置", icon: <Settings size={16} aria-hidden="true" /> },
 ];
 
 // 路由给当前页的链接标 `data-status="active"`。
 const PAGE_LINK =
-  "press flex h-ctl-sm items-center gap-2.5 rounded-btn px-2.5 text-note text-sub no-underline hover:bg-chip/60 hover:text-label data-[status=active]:bg-chip data-[status=active]:font-semibold data-[status=active]:text-text";
+  "press flex h-ctl-sm shrink-0 items-center gap-2.5 rounded-btn px-2.5 text-note text-sub no-underline hover:bg-chip/60 hover:text-label data-[status=active]:bg-chip data-[status=active]:font-semibold data-[status=active]:text-text";
 
 const NEXT_THEME: Record<ThemePreference, ThemePreference> = { system: "dark", dark: "light", light: "system" };
 const THEME_LABEL: Record<ThemePreference, string> = { system: "外观跟系统", dark: "深色", light: "浅色" };
@@ -46,7 +47,8 @@ export function Rail({ label, children }: { label: string; children?: ReactNode 
   return (
     <nav
       aria-label={label}
-      className="absolute top-0 left-0 z-20 flex h-full w-rail flex-col border-r border-border bg-rail px-4 pt-5 pb-4"
+      // 矮的窗口里放不下时整栏能上下滚，底下几页不被挤没。
+      className="absolute top-0 left-0 z-20 flex h-full w-rail flex-col overflow-y-auto border-r border-border bg-rail px-4 pt-5 pb-4"
     >
       <div className="flex h-7 items-center justify-between px-1">
         <span className="text-name font-semibold tracking-[0.005em] text-text">usuyo</span>

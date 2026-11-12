@@ -65,14 +65,15 @@ export function PluginsPage() {
   const visitors = useVisitors();
   const all = plugins.data ? groups(plugins.data, sites.data ?? [], visitors.data ?? []) : [];
   const [picked, setPicked] = useState<string | null>(null);
-  // 「变成文字」那一栏放在地址里：设置页能直接链过来。
-  const text = route.useSearch().show === "text";
+  // 「变成文字」那一栏和开着的平台放在地址里：设置页、「手机」页能直接链过来。
+  const search = route.useSearch();
+  const text = search.show === "text";
   const navigate = route.useNavigate();
   const pick = (key: string | null) => {
     setPicked(key);
     void navigate({ search: key === null ? { show: "text" } : {} });
   };
-  const current = text ? undefined : (all.find((g) => g.key === picked) ?? all[0]);
+  const current = text ? undefined : (all.find((g) => g.key === (picked ?? search.platform)) ?? all[0]);
   const notLoaded = plugins.data?.notLoaded ?? [];
 
   return (

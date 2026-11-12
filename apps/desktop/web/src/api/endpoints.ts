@@ -130,6 +130,22 @@ export const paths = {
   /** POST：删掉这个模型；之后要它的转换等着模型。 */
   modelRemove: (pluginId: string, name: string) => `/transforms/${pluginPath(pluginId)}/models/${encodeURIComponent(name)}/remove`,
 
+  // —— 手机（「手机」页，docs/platforms/phone.md §4）。内核今天（11-12）还没有这几条。——
+  /** GET `PhoneView`：这台电脑上 iPhone 镜像那条路和安卓 adb 那条路各自怎样。用到手机的取法不在这里，在 `paths.plugins`。 */
+  phone: "/phone",
+  /** POST：装 mirroir（官方 release 的 `darwin-arm64` 包，钉版本、对 `SHA256SUMS`，放按机器目录，再跑 `install-agent`），马上回 `PhoneView`（`installing`）；装好或没装上发 `phone-updated`。 */
+  phoneDriverInstall: "/phone/ios/driver/install",
+  /** POST：换成 `PhoneDriver.available` 那一版，同上。 */
+  phoneDriverUpdate: "/phone/ios/driver/update",
+  /** POST：停掉「mirroir serve」、卸掉 mirroir 和它的常驻项，回 `PhoneView`。系统设置里给它的授权由系统留着。 */
+  phoneDriverRemove: "/phone/ios/driver/remove",
+  /** POST `{pane: SettingsPane}`：打开系统设置的那一栏（或 iPhone 镜像这个 App），204。 */
+  phoneOpenSettings: "/phone/open-settings",
+  /** POST：看 Mac 剪贴板的 `changeCount` 变不变（`PhoneClipboardTest.waitSec` 秒），马上回 `PhoneView`（`waiting`）；有结果发 `phone-updated`。不读、不存剪贴板里的字。 */
+  phoneClipboardTest: "/phone/ios/clipboard-test",
+  /** POST：演练模式读一次镜像的这一屏，回 `PhoneDryRun`。什么都不点；读到的字和截图不存、不进日志。 */
+  phoneDryRun: "/phone/ios/dry-run",
+
   /** GET：装着的插件会用到的访客身份（不是账号）和有没有存着。访客窗口照它开；不出现在 `paths.sites` 里。 */
   visitors: "/visitors",
   /** PUT `StorageState`：壳的访客窗口读出 cookie 以后交到这里（存进钥匙串，和同一主机的账号分开）；DELETE 去掉。 */
@@ -210,7 +226,9 @@ export type PlatformEvent =
   /** 插件的暂停、站点的登录、访客身份、密钥设置、设置里的 `network` 变了。重新拉 `paths.plugins`、`paths.sites`、`paths.visitors`、`paths.settings`。 */
   | { type: "plugins-updated" }
   /** 模型开始下、下好了、没下成、删掉了，或设置里的 `transforms.auto` 变了。重新拉 `paths.transforms`、`paths.settings`。 */
-  | { type: "transforms-updated" };
+  | { type: "transforms-updated" }
+  /** 手机那一页的事变了：mirroir 装好、没装上、卸掉，授权、镜像连上断开，剪贴板试出了结果，adb 的设备来去。重新拉 `paths.phone`。 */
+  | { type: "phone-updated" };
 
 /** 平台的显示名由获取插件给，内核不认识具体平台。 */
 export interface Platform {
@@ -1091,6 +1109,81 @@ export interface TransformsView {
   plugins: TransformPlugin[];
   /** `transforms.auto`：收下以后自己排上转换（只在接着电源时跑）。 */
   auto: boolean;
+}
+
+// —— 手机 ——
+
+/** 系统给没给：`unknown` 是读不出来（例如「mirroir serve」还没跑过一次）。 */
+export type GrantState = "given" | "missing" | "unknown";
+
+/** `phoneOpenSettings` 能打开的：系统设置里两项授权那一栏，和 iPhone 镜像这个 App（不是设置）。 */
+export type SettingsPane = "screen-recording" | "accessibility" | "iphone-mirroring";
+
+/** 手机的驱动 mirroir（mirroir-mcp，Apache-2.0）在这台电脑上的样子。 */
+export interface PhoneDriver {
+  state: "absent" | "installing" | "present" | "failed";
+  /** 装着的版本，例如 `0.47.0`。 */
+  version?: string;
+  /** usuyo 钉的那一版：没装时是要装的，装着的旧了是能换的；装着的就是它时省略。`size` 是字节，`source` 是官方 release 的地址。 */
+  available?: { version: string; size: number; source: string };
+  /** 没装上的原因，一句话（`failed`）。 */
+  hint?: string;
+}
+
+/** 试一下通用剪贴板：在等、到了、`waitSec` 秒里没变。拷的字从不回出来。 */
+export interface PhoneClipboardTest {
+  state: "waiting" | "arrived" | "unchanged";
+  /** 开始试的时间，RFC 3339。 */
+  at: string;
+  waitSec: number;
+}
+
+export interface PhoneIos {
+  /** macOS 的版本，例如 `15.6.1`；`mirroring` 是有没有 iPhone 镜像（要 macOS 15）。 */
+  system: { macos: string; mirroring: boolean };
+  driver: PhoneDriver;
+  /** 授权给的是 `to`（「mirroir serve」），不是 usuyo。驱动没装时两项都是 `unknown`。 */
+  grants: { to: string; screen: GrantState; accessibility: GrantState };
+  /** iPhone 镜像：没设置过、手机不在（解锁着或不在旁边）、连着。 */
+  mirroring: "not-set-up" | "away" | "connected";
+  /** 最近一次试剪贴板；没试过省略。 */
+  clipboard?: PhoneClipboardTest;
+}
+
+/** `adb devices` 的一台：要在手机上点允许 USB 调试、连好了、连着但不回话。 */
+export interface AndroidDevice {
+  serial: string;
+  /** 型号，例如 `Pixel 8`；没授权前读不到。 */
+  model?: string;
+  state: "unauthorized" | "device" | "offline";
+}
+
+export interface PhoneAndroid {
+  /** 找到的 adb；没找到是 null。 */
+  adb: { path: string; version: string } | null;
+  devices: AndroidDevice[];
+}
+
+export interface PhoneView {
+  ios: PhoneIos;
+  android: PhoneAndroid;
+}
+
+/**
+ * 演练一次：读这一屏，说它像哪个流程的第几步，什么都没点。`read` 是读到几段字；认不出时没有 `match`。
+ * `expect` 是这一步该有的字对上了几段，`targets` 是这一步要点的每个字找没找到，`cards` 是列表里读到几张卡片。
+ */
+export interface PhoneDryRun {
+  read: number;
+  match?: {
+    /** 给人看的流程名，例如「小红书 · 收藏」。 */
+    flow: string;
+    /** 第几步，从 1 数。 */
+    step: number;
+    expect: { matched: number; total: number };
+    targets: { label: string; found: boolean }[];
+    cards?: number;
+  };
 }
 
 // —— 设置 ——

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ChangesView, FollowPatch, FollowTrialRequest, NewFollowRequest, Draft, DraftPatch, NewDraftRequest, CiteRequest, PagePatch, TopicMatch, TopicPage, SettingsPatch, TransformRequest, ConfirmImportRequest, CreateDeliverTokenRequest, ImportEntry, ImportView, Item, StartImportRequest, TakeRequest } from "./endpoints";
+import type { PhoneView, SettingsPane, ChangesView, FollowPatch, FollowTrialRequest, NewFollowRequest, Draft, DraftPatch, NewDraftRequest, CiteRequest, PagePatch, TopicMatch, TopicPage, SettingsPatch, TransformRequest, ConfirmImportRequest, CreateDeliverTokenRequest, ImportEntry, ImportView, Item, StartImportRequest, TakeRequest } from "./endpoints";
 import { ApiError, DaemonUnreachableError, isNotServed } from "./client";
 import { call } from "./source";
 
@@ -28,6 +28,7 @@ export const queryKeys = {
   changes: ["changes"] as const,
   exportView: ["export"] as const,
   drafts: ["drafts"] as const,
+  phone: ["phone"] as const,
   draft: (id: string) => ["drafts", id] as const,
 };
 
@@ -611,4 +612,48 @@ export function useReleaseHeld() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.map });
     },
   });
+}
+
+// —— 手机 ——
+
+export function usePhone() {
+  return useQuery({
+    queryKey: queryKeys.phone,
+    queryFn: () => call((s) => s.phone()),
+    retry: retryUnlessMissing,
+    // 在装、在等剪贴板时隔一会儿重拉：事件流断了（或样例库没有事件流）也看得到结果。
+    refetchInterval: (q) => (q.state.data?.ios.driver.state === "installing" || q.state.data?.ios.clipboard?.state === "waiting" ? 1500 : false),
+  });
+}
+
+type PhoneAction = { kind: "install" | "update" | "remove" | "clipboard" } | { kind: "open"; pane: SettingsPane };
+
+/** 装、换新、卸掉 mirroir，试剪贴板：回来的整页放进缓存。打开系统设置不改什么，之后授权变了由 `phone-updated` 重拉。 */
+export function usePhoneAction() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (a: PhoneAction) =>
+      call<PhoneView | void>((s) => {
+        switch (a.kind) {
+          case "install":
+            return s.installDriver();
+          case "update":
+            return s.updateDriver();
+          case "remove":
+            return s.removeDriver();
+          case "clipboard":
+            return s.testClipboard();
+          default:
+            return s.openSettings(a.pane);
+        }
+      }),
+    onSuccess: (view) => {
+      if (view) queryClient.setQueryData(queryKeys.phone, view);
+    },
+  });
+}
+
+/** 演练一次：结果只在这一次的回答里，不进缓存。 */
+export function useDryRun() {
+  return useMutation({ mutationFn: () => call((s) => s.dryRun()) });
 }
