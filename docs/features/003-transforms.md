@@ -127,7 +127,7 @@ ffmpeg 自带的 `scdet` 按镜头变化打分（调研 04 [§4.3](../research/0
 |---|---|---|---|---|---|
 | `builtin/media` | `plugins/media` | Rust | `play`（合起来能播的）、`audio:pcm16k`（给转写用的中间音频，不存进资料库）、`keyframes`；另报画面停住多久、有没有音轨 | `media:video`、`media:audio` | 无；资产里带 `ffmpeg`、`ffprobe` |
 | `builtin/asr-sherpa` | `plugins/asr-sherpa` | Rust（`sherpa-onnx` 2.0.1） | `asr` | `audio:pcm16k` | SenseVoice（第一次用到时下）；silero VAD v5（2.3 MB，打进资产） |
-| `builtin/ocr-vision` | `plugins/ocr-vision` | Swift 6.2（Swift Package） | `ocr` | `image`、`derived:keyframes` | 无 |
+| `builtin/ocr-vision` | `plugins/ocr-vision` | Swift 6.2（Swift Package），要 macOS 15 以上 | `ocr` | `image`、`derived:keyframes` | 无 |
 | `builtin/ocr-ppocr`（后做） | `plugins/ocr-ppocr` | Rust（`oar-ocr`） | `ocr` | 同上 | PP-OCRv6 small |
 
 `ocr-vision` 用 Swift：Vision 在 Rust 里只能经 `objc2`，要写 `unsafe`，仓库不许（[CLAUDE.md](../../CLAUDE.md) 代码约定）。插件是独立进程，语言不影响宿主。它自己带一个一百来行的 JSON-RPC 循环。
@@ -152,7 +152,8 @@ raw 里的图、封面 ──ocr──▶ 图里的字
 - `crates/usuyo-plugin` 能解析转换插件的清单（`consumes`、`produces`、`provider`、`models`，[§3.13](../plugin-protocol.md#313-宿主和-plugin-kit-现在做到的11-11)），`discover` 把它们放进 `Discovery.other`，没人调。
 - 一次一进程的调用器（`host/process.rs`）：自己的进程组、三种计时、先 SIGTERM 再 SIGKILL；输出目录检查（`host/outdir.rs`）；运行时只按 `PATH` 加几个 Homebrew 目录找（`find_runtime`）。
 - `jobs.db` 只有取内容的任务，按 `item_id` 一条，一次跑一个（`crates/usuyo-core/src/jobs.rs`）。
-- `resolve_layer` 已经认 `asr`（`derived/asr.vtt`）、`ocr/<imageKey>`（`derived/ocr/<imageKey>.json`）、`video`、`audio`（`raw/` 里的媒体）（`crates/usuyo-library/src/item.rs`）。
+- 转录的写入、列出、按层找（`crates/usuyo-library/src/runs.rs`）：`asr`、`ocr`、`frames` 各层和 `frame/<runId>/<毫秒>` 只从 `derived/runs/` 读，`video` 先给最新一次 `play` 的产物（[SPEC §1.2.2](../SPEC.md#122-raw-和-derived)）；只留文字也移走转录里的 `play` 产物和 `keyframes/`。
+- 常驻的转换进程（`crates/usuyo-plugin/src/host/transform.rs`，[协议 §4.1](../plugin-protocol.md#41-分帧与生命周期)）。
 - 索引只建了 `text`、`comments`、`takeaway`、`notes` 四层（`crates/usuyo-core/src/index_doc.rs`）；搜索把认不出的层都当 `text`。
 - 前端的 `Facet` 已有 `asr`（带 `by: machine | platform`）、`ocr`、`video.frames`、`remark`，但按 `layer` 当 key，同一层出两份会撞（`FacetColumn.tsx`）。
 
@@ -176,8 +177,9 @@ raw 里的图、封面 ──ocr──▶ 图里的字
 
 **ffmpeg** 随 `builtin/media` 的资产走，不另下载、不从 `PATH` 找（[协议 §2.8](../plugin-protocol.md#28-安装与启动) 说插件自带的第三方程序放进自己的资产、锁版本）。
 
-- 插件仓库 CI 从 ffmpeg.org 的 9.0.2 源码包编（锁源码包的 sha256），`--disable-gpl --disable-nonfree --disable-everything`，只打开要的：mov/mp4/matroska/webm/flv/mpegts/aac/mp3/wav 的拆封装；mp4、wav、image2、`null` 封装；h264、hevc、vp9、av1（libdav1d，BSD）、aac、mp3、opus、flac 的解码器和对应的 parser；`aac_adtstoasc`、`extract_extradata` 这类拷流要的 bsf；mjpeg、pcm_s16le 编码；`scdet`、`freezedetect`、`scale`、`aresample`、`fps`、`format`、`null`、`anull` 滤镜；`file`、`pipe` 协议；静态链接，每个平台一份。编译脚本和 LGPL 声明放 `plugins/media/ffmpeg/`，和资产一起发。体积未实测。
+- 插件仓库 CI 从 ffmpeg.org 的 9.0.2 源码包编（锁源码包的 sha256），`--disable-gpl --disable-nonfree --disable-everything`，只打开要的：mov/mp4/matroska/webm/flv/mpegts/aac/mp3/wav 的拆封装；mp4、wav、image2、`null` 封装；h264、hevc、vp9、av1（libdav1d，BSD）、aac、mp3、opus、flac 的解码器和对应的 parser；`aac_adtstoasc`、`extract_extradata` 这类拷流要的 bsf；mjpeg、pcm_s16le 编码；`scdet`、`freezedetect`、`scale`、`aresample`、`fps`、`format`、`trim`、`null`、`anull` 滤镜（`trim` 是输入前的 `-ss` 让 ffmpeg 自己加的，`aresample` 是转音频时自己加的）；`file`、`pipe` 协议；静态链接，每个平台一份。编译脚本和 LGPL 声明放 `plugins/media/ffmpeg/`，和资产一起发。体积未实测。
 - ADR-003 [§8](../decisions/ADR-003-plugins.md#8-gpl-工具) 写的是「第三方二进制只从上游官方 release 下载」。ffmpeg 官方不发二进制，所以从官方源码编是最接近的做法，要你确认（[§13](#13-风险和待定)）。现成的备选：martin-riedl.de 有签名的 macOS arm64 9.0.2 构建，带 sha256，但许可没写（多半带 x264，是 GPL）。
+- 插件给每个输入加 `-protocol_whitelist file` 和 `-format_whitelist`，名单就是上面这几种拆封装器：别的封装（avi、ogg 等）和 `ffconcat` 清单一律不读（[plugins/media/README.md](../../plugins/media/README.md)）。
 - 开发时 `just dev-plugins` 把 `plugins/media` 编好，资产里的 `ffmpeg` 换成指向 Homebrew 那份的链接；只在开发机上。
 
 **模型**第一次用到时问一句再下（[T2](../PRD.md#74-变成文字) 的建议 B）：
@@ -504,17 +506,17 @@ export interface Pending {
 | # | 做什么 | 碰哪里 | 难度 | 挡住 |
 |---|---|---|---|---|
 | WP0 | 量过了：速度、内存、字错率在 [§3.1](#31-说的转成文字)，原型和脚本在 `plugins/asr-sherpa/`，改成插件时要知道的写在它的 README 里。还没量：真人口播、Vision 认 20 张图 | `plugins/asr-sherpa/` | 低 | — |
-| WP1 | `run.json` 类型、schema、样例；把 [§8.2](#82-要写回-spec--协议的) 的 SPEC 各条写回 | `crates/usuyo-contract`、`docs/SPEC.md` | 低 | WP5 |
-| WP2 | 转换的协议类型、清单词表、`models[]` 新字段；plugin-kit 的 JSON-RPC 循环；把 [§8.2](#82-要写回-spec--协议的) 的协议各条写回 | `crates/usuyo-plugin/src/protocol`、`crates/usuyo-plugin-kit`、`docs/plugin-protocol.md` | 中 | WP3、WP9、WP10 |
-| WP3 | 常驻转换进程：启动、核对、`run`、取消、卡住、闲了关、暂存目录、优先级 | `crates/usuyo-plugin/src/host/transform.rs` | 高 | WP6 |
+| WP1 | **做了。** `run.json` 类型、schema、样例；把 [§8.2](#82-要写回-spec--协议的) 的 SPEC 各条写回 | `crates/usuyo-contract`、`docs/SPEC.md` | 低 | WP5 |
+| WP2 | **做了。** 转换的协议类型、清单词表、`models[]` 新字段；plugin-kit 的 JSON-RPC 循环；把 [§8.2](#82-要写回-spec--协议的) 的协议各条写回 | `crates/usuyo-plugin/src/protocol`、`crates/usuyo-plugin-kit`、`docs/plugin-protocol.md` | 中 | WP3、WP9、WP10 |
+| WP3 | **做了。** 常驻转换进程：启动、核对、`run`、取消、卡住、闲了关、暂存目录、优先级 | `crates/usuyo-plugin/src/host/transform.rs` | 高 | WP6 |
 | WP4 | 模型下载：续传、镜像、校验、解包、`model.json`、状态 | `crates/usuyo-core/src/models.rs` | 中 | WP6 |
-| WP5 | 转录写入（暂存后改名）、列出、按层找（`resolve_layer` 认转录、`video` 先给 `play.mp4`、`frame/<runId>/<ms>`）、只留文字移走二进制 | `crates/usuyo-library` | 中 | WP6、WP7 |
+| WP5 | **做了。** 转录写入（暂存后改名）、列出、按层找（`resolve_layer` 认转录、`video` 先给 `play.mp4`、`frame/<runId>/<ms>`）、只留文字移走二进制 | `crates/usuyo-library` | 中 | WP6、WP7 |
 | WP6 | 排任务、配对、编排链、电源和先后、`transform_jobs`、事件 | `crates/usuyo-core/src/transform.rs`、`jobs.rs`、`engine.rs` | 高 | WP7 |
 | WP7 | 条目页的 facets 和 `pending`、标记文字、索引三层和 `source`、搜索的层映射 | `crates/usuyo-core/src/content.rs`、`view.rs`、`index_doc.rs`、`crates/usuyo-index` | 中 | WP12 |
 | WP8 | [§8.1](#81-接口) 的接口 | `apps/desktop/web/src/api/endpoints.ts`、`crates/usuyo-api` | 中 | WP12 |
-| WP9 | `builtin/media`：配对时的 `ffprobe`、`play`、`audio:pcm16k`、`keyframes`；精简 LGPL ffmpeg 的编译脚本和 CI；`just dev-plugins` 装上它（开发机链到 Homebrew 的 ffmpeg） | `plugins/media`、`justfile` | 中 | 验收 |
-| WP10 | `builtin/asr-sherpa`：VAD 切段、SenseVoice、cue 切分、去标签、`no-speech` | `plugins/asr-sherpa` | 中 | 验收 |
-| WP11 | `builtin/ocr-vision`：Swift Package、JSON-RPC 循环、Vision 调用、坐标换算、`no-text` | `plugins/ocr-vision` | 中 | 验收 |
+| WP9 | **做了。** `builtin/media`：配对时的 `ffprobe`、`play`、`audio:pcm16k`、`keyframes`；精简 LGPL ffmpeg 的编译脚本和 CI；`just dev-plugins` 装上它（开发机链到 Homebrew 的 ffmpeg） | `plugins/media`、`justfile` | 中 | 验收 |
+| WP10 | **做了。** `builtin/asr-sherpa`：VAD 切段、SenseVoice、cue 切分、去标签、`no-speech` | `plugins/asr-sherpa` | 中 | 验收 |
+| WP11 | **做了。** `builtin/ocr-vision`：Swift Package、JSON-RPC 循环、Vision 调用、坐标换算、`no-text` | `plugins/ocr-vision` | 中 | 验收 |
 | WP12 | 前端接上新数据：按 `key` 摆多份、来源标签、`pending` 那一句、「再转一次」「换一个转」、模型下载按钮；样子等画布那边 | `apps/desktop/web/src/item`、`src/plugins` | 中 | 验收 6 |
 | WP13 | 测试用的获取插件和样例文件（[§12](#12-测试方案)）；`just dev-fixture-plugin` | `crates/usuyo-core/testdata/transform/`、`justfile` | 低 | 验收 |
 | WP14（后做） | `builtin/ocr-ppocr`：Windows、Linux 的默认 | `plugins/ocr-ppocr` | 中 | 等 `ort` 那条（[§13](#13-风险和待定)） |
