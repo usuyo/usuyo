@@ -148,7 +148,7 @@
 
 | 取法 | 拿到什么 | 账号 | 层级 | 做成什么样 | 你要装或给的 | 已有 | 记录到的情况 | 不用账号能试 |
 |---|---|---|---|---|---|---|---|---|
-| `status` | 单条图文、视频 | 访客身份 | `public-web` | 自己写：访客身份由 usuyo 开窗口取（[协议 §2.5.1](../protocol/manifest.md#251-访客身份-visitors)），调不签名的 `ajax/statuses/show`；对照 yt-dlp `weibo.py`、ParseHub `weibo.py` | 在 usuyo 里取一次访客身份 | 没有 | 访客路径只见到 IP 层的限制（[06 §1.3](../research/06-platform-access-and-account-risk.md#13-混合路径视觉层拿链接公开页面取内容)）；微博协议 4.5.1 按频率判 | 能 |
+| `status` | 单条图文、视频 | 访客身份 | `public-web` | 自己写：访客身份由 usuyo 开窗口取（[协议 §2.5.1](../protocol/manifest.md#251-访客身份-visitors)），调不签名的 `ajax/statuses/show`；对照 yt-dlp `weibo.py`、ParseHub `weibo.py` | 在 usuyo 里取一次访客身份 | 做了（`usuyo-fetch/weibo`，11-12）；只对本机的假站点测过，回答的形状照公开资料写，没对真平台跑（要你先在应用里取一次微博的访客身份） | 访客路径只见到 IP 层的限制（[06 §1.3](../research/06-platform-access-and-account-risk.md#13-混合路径视觉层拿链接公开页面取内容)）；微博协议 4.5.1 按频率判 | 能 |
 | `userscript` | 存过的：收藏 | 账号只在你自己的浏览器里 | `browser-session` | 改写 [Weibo-archiver](https://github.com/Chilfish/Weibo-archiver) 的油猴版（Apache-2.0，v0.6.2 release 的 `weibo-archiver.user.js`）：留翻收藏的那一段，去掉下载和导出，微博 id 交 `/v1/batches` | 脚本 | 做了脚本（0.1.0，11-12，`usuyo-fetch/weibo/userscript/`）；页面路径和回答的形状照公开资料写，没实测，没在真浏览器里跑过；插件本体还没有 | 脚本在页面里翻页；调研里没有处罚记录 | 不能 |
 | `favorites` | 存过的：收藏，能跟着收 | 要在 usuyo 里登录 | `session-api` | 自己写，带 cookie 调收藏接口 | 登录微博 | 没有 | 调研里没有处罚记录 | 不能 |
 
