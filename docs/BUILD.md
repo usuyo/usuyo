@@ -188,7 +188,7 @@ flowchart LR
 还没做的：
 
 - 私密条目回 `skipped`：本机接口的 `POST /items` 现在一律记成窗口里收的（`via: app`），私密的照收；命令行也从不跳过。投递接口里扩展、手机、`api` 令牌的已经会跳过（[SPEC 本机接口](SPEC.md#本机接口第-2-层11-11-照代码)）。
-- 写 MCP 之前先写内核服务契约：一份描述（[OpenAPI 3.2](https://github.com/OAI/OpenAPI-Specification/releases)）派生本机 HTTP 和 MCP，生成客户端和文档；含搜索语法（自己的小语法：`字段:值`、引号、`-`、`after:`，不把索引实现绑进接口）、事件、端口。界面用的那一半已经照代码写进 [SPEC 本机接口](SPEC.md#本机接口第-2-层11-11-照代码)，契约文件是 `apps/desktop/web/src/api/endpoints.ts`。一起定：Agent 连接名从哪来、MCP 收下工具的 `pickedBy`、撤销工具（能撤哪些已定，[SPEC §1.10 第 18 条](SPEC.md#110-要你看一眼)）、错误和输出 schema 怎么配、游标有效期、各处的间隔、上限和文案。写好以后替换 [SPEC §2](BUILD.md#006-agent) 留着的 v0。
+- 写 MCP 之前先写内核服务契约：一份描述（[OpenAPI 3.2](https://github.com/OAI/OpenAPI-Specification/releases)）派生本机 HTTP 和 MCP，生成客户端和文档；含搜索语法（自己的小语法：`字段:值`、引号、`-`、`after:`，不把索引实现绑进接口）、事件、端口。界面用的那一半已经照代码写进 [SPEC 本机接口](SPEC.md#本机接口第-2-层11-11-照代码)，契约文件是 `apps/desktop/web/src/api/endpoints.ts`。一起定：Agent 连接名从哪来、MCP 收下工具的 `pickedBy`、撤销工具（能撤哪些已定，[SPEC §1.10 第 18 条](SPEC.md#110-要你看一眼)）、错误和输出 schema 怎么配、游标有效期、各处的间隔、上限和文案。原先留在 SPEC 里的 v0 草案（仓库布局、标签、去重、命令行、MCP 工具、索引）在 `e654e08` 删掉了，`git show e654e08^:docs/SPEC.md` 的第 2 节还看得到，写契约时拿来对照。
 
 ACP 会话在窗口里只显示它交来的改动提议和权限请求，不显示对话本身。
 
