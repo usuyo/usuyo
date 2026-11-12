@@ -91,6 +91,7 @@
 | 取法 | 拿到什么 | 账号 | 层级 | 做成什么样 | 你要装或给的 | 已有 | 记录到的情况 | 不用账号能试 |
 |---|---|---|---|---|---|---|---|---|
 | `view` | 单条：标题、简介、封面、分 P、低清音视频 | 不要 | `public-web` | 自己写（[bilibili.md §4.4](bilibili.md#44-插件做成的样子)） | — | 做了 | 2026-06 起缺指纹参数的部分接口回 412（[BiliNote #397](https://github.com/JefferyHcool/BiliNote/issues/397)） | 能 |
+| `favorites-public` | 存过的：公开的收藏夹（给收藏夹或个人空间的链接） | 不要 | `public-web` | 自己写：和 `favorites` 同两个接口，不带 cookie。2026-11-12 不带账号实测：`x/v3/fav/folder/created/list-all?up_mid=` 列出这个人公开的收藏夹，`x/v3/fav/resource/list?media_id=` 分页回每条的 `bvid` 和收藏时间；内容由 `view` 取 | — | 没有；等清单里的 `methods`（[BUILD 011](../BUILD.md#011-更多平台)） | 只有公开的收藏夹列得到；设成私密的和稍后再看要 `favorites` 或 `userscript` | 能 |
 | `favorites` | 存过的：收藏夹、稍后再看 | 要在 usuyo 里登录 | `session-api` | 自己写，不签名的接口 | 扫码登录 B站 | 做了 | 一例大会员被冻结，因果不明（[yutto #452](https://github.com/yutto-dev/yutto/issues/452)） | 不能 |
 | `userscript` | 存过的：收藏夹、稍后再看 | 账号只在你自己的浏览器里 | `browser-session` | 自己写，照 [bilibili-favorites-exporter](https://github.com/ayasa520/bilibili-favorites-exporter)（MIT，2025-09-09 后没推送）只读页面自己拿回的数据，交 `/v1/batches` | 脚本 | 没有 | 同类脚本（X）调研里没有处罚记录 | 不能 |
 | `yutto` | 单条：高清音视频、字幕 | 要在 usuyo 里登录 | `session-api` | 包 [yutto](https://github.com/yutto-dev/yutto)（GPL-3.0，v2.3.1，2026-08-28；`uv tool install yutto`）：`yutto <链接> --subtitle-only --no-danmaku --auth-file <0600 的临时文件>`，画面、声音分两次 `--video-only`、`--audio-only`；输出目录参数和下完是否调 ffmpeg，命令待核 | 安装 yutto | 没有 | B站 2026 年给接口文档、SDK、下载器的维护者发律师函，点名登录态、签名鉴权的适配（[06 §16.3](../research/06-platform-access-and-account-risk.md#163-下架停更与法律风险)） | 不能 |
