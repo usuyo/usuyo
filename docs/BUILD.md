@@ -47,8 +47,8 @@
 | 内核 | 收下、取内容的任务和退避、按平台的节奏和暂停、导入（列出、预览、挑、收）、交进来的清单、收件夹、回收站到期 | `crates/usuyo-core` |
 | 本机接口 | 一个口 127.0.0.1:47615；令牌、握手、只能交的令牌；事件流；列出回收站 | `crates/usuyo-api`、契约在 `apps/desktop/web/src/api/endpoints.ts` |
 | 桌面壳 | 起内核、登录窗口、访客身份窗口 | `apps/desktop/src-tauri` |
-| 平台插件 | 小红书（按链接取，清单由浏览器脚本交）、微信视频号（按分享链接取）、B 站（登录、列收藏夹、取） | 仓库旁边的 `usuyo-fetch/`，各是一个仓库 |
-| 变成文字 | 设计定了；格式、协议、给插件作者的那套循环做了；转换进程、排任务、三个转换插件、界面还没做 | [feature 003](features/003-transforms.md) |
+| 平台插件 | 小红书（按链接取，清单由浏览器脚本交）、微信视频号（按分享链接取）、B 站（登录、列收藏夹、取）、X（按链接取，书签和喜欢由浏览器脚本交或读官方归档）；`just dev-plugins` 装这四个 | 仓库旁边的 `usuyo-fetch/`，各是一个仓库；[platforms](platforms/README.md) |
+| 变成文字 | 格式、协议、plugin-kit 的循环、常驻转换进程、转录的写入和按层找、三个转换插件（`media`、`asr-sherpa`、`ocr-vision`）做了；模型下载、排任务、条目页和索引、接口、界面还没做 | [feature 003](features/003-transforms.md) |
 
 ```mermaid
 flowchart LR
@@ -82,14 +82,14 @@ flowchart LR
 
 | 接口 | 状态 | 缺什么 |
 |---|---|---|
-| [插件协议](protocol/README.md#01-读者与状态) | v1 草案；宿主和 plugin-kit 有了第一版（[§3.13](protocol/fetch.md#313-宿主和-plugin-kit-现在做到的11-11)、[§10.1](protocol/plugin-kit.md#101-plugin-kit-的-http-客户端11-11)） | [待定](protocol/open.md#13-待定)里还有没答的；沙箱、本机代理、`serve`、schema 文件 |
+| [插件协议](protocol/README.md#01-读者与状态) | v1 草案；宿主和 plugin-kit 有了第一版（[§3.13](protocol/fetch.md#313-宿主和-plugin-kit-现在做到的11-11)、[§10.1](protocol/plugin-kit.md#101-plugin-kit-的-http-客户端11-11)） | [待定](protocol/open.md#13-待定)里还有没答的；沙箱、本机代理、`serve`、`usuyo plugin check` |
 | 资料库格式（[SPEC §1](spec/library.md#1-资料库-v1第-1-层)） | v1 草案，`crates/usuyo-contract`、`crates/usuyo-library` 照它实现 | 联网后并身份；同步（[008](#008-文字同步)） |
 | 改动提议、改动记录（[SPEC §1.5](spec/library.md#15-改动提议)、[§1.6](spec/library.md#16-改动记录)） | v1 草案，资料库层能写能撤 | 接受提议的流程、界面（[006](#006-agent)） |
 | 宿主 ↔ 界面（[SPEC 本机接口](spec/local-api.md#本机接口第-2-层11-11-照代码)） | 照代码写了；契约文件是 `apps/desktop/web/src/api/endpoints.ts` | 窗口用的路径还不带 `/v1/`、分页、OpenAPI 描述 |
 | 内核推的事件 | server-sent events，八种事件（同上） | 补发、信封 |
-| [MCP 工具](BUILD.md#006-agent) | v0 草案，没实现 | 全部 |
-| [命令行](BUILD.md#1-用户定下的做法) | `init`、`add`、`get`、`search`、`reindex`、`daemon` | 不再加命令 |
-| [搜索语法](BUILD.md#3-现在做到哪) | tantivy 索引能搜；语法没写 | 查询串、筛选、分页 |
+| MCP 工具 | 没写，没实现 | 内核服务契约和工具（[006](#006-agent)） |
+| 命令行 | `init`、`add`、`get`、`search`、`reindex`、`daemon` | 不再加命令（[§1](#1-用户定下的做法)） |
+| 搜索语法 | tantivy 索引能搜；语法没写 | 查询串、筛选、分页（[006](#006-agent) 的契约里定） |
 | [投递接口](protocol/delivery.md#5-投递接口) | `/v1/ping`、`/v1/deliver`（只收链接）、`/v1/batches` 和按投递端发的令牌做了，和窗口用的路由同一个监听口 | 已取到的内容（multipart）、批次查询 |
 | [导出与读回](protocol/transform-export.md#44-导出的-run-与-readback) | 草案 | 笔记库里的文件形状（[007](#007-导出读回和别的工具的导出)） |
 | 配置、版本策略（[SPEC §0.2](spec/conventions.md#02-版本与兼容)、[§1.1](spec/library.md#11-目录树)） | v1 草案 | 设置的完整清单（[010](#010-设置第一次打开收下浮层)） |
@@ -99,10 +99,10 @@ flowchart LR
 
 - 壳起的内核，在壳没了（被信号杀掉、崩溃）以后该自己退出；现在留着接着跑，下次启动的壳找到它接着用（[apps/desktop/README.md](../apps/desktop/README.md#打开以后)）。
 - Safari 的 Userscripts 没有网站访问权限时先发 CORS 预检，投递接口（`/v1/…`）现在不答，请求就失败；这几条路径要答预检，只放扩展的来源。
-- SPEC 和插件协议里标「11-11 还没做」的：联网后并进平台身份、`inputUrl` 记原链接、列表分页、`blocked` 现在只暂停一小时、沙箱（[012](#012-插件的安装和分发)）。回收站到期移除、凭据、节奏、「现在再试」已经做了，那几处正文还要照代码改。
+- SPEC 里标「11-11 还没做」、插件协议里写「还没做」的：联网后并进平台身份、`inputUrl` 记原链接、列表分页、`blocked` 现在只暂停一小时、沙箱（[012](#012-插件的安装和分发)）。回收站到期移除、凭据、节奏、「现在再试」已经做了，那几处正文还要照代码改。
 - 和代码对不上的说明：`crates/usuyo-plugin-kit/README.md` 说 `Client::new` 不认环境变量，测试例子少两个字段；`crates/usuyo-plugin-kit/src/http/address.rs` 开头的注释说只用 `Policy::strict`，`crates/usuyo-api/src/lib.rs` 开头的说事件能用 `EventSource` 读。
 
-至今没人验过的：打包后的窗口本身、登录窗口、三个平台的真实请求。只有用户能试。
+至今没人验过的：打包后的窗口本身、登录窗口、四个平台的真实请求。只有用户能试。
 
 <a id="4-界面清单"></a>
 ## 4. 界面清单
@@ -135,7 +135,7 @@ flowchart LR
 <a id="003-变成文字"></a>
 ### 003 变成文字
 
-设计、决定、工作包、验收都在 [feature 003](features/003-transforms.md)。做完的：格式和协议（WP1、WP2）、在这台量速度（WP0）、测试用的样例文件；口播转文字的原型在 `plugins/asr-sherpa/`。剩下的工作包照那份的[工作包](features/003-transforms.md#10-工作包)一节，条目页和获取插件页上的那些按钮一起做完。
+设计、决定、工作包、验收都在 [feature 003](features/003-transforms.md)。做完的：在这台量速度（WP0）、格式和协议（WP1、WP2）、常驻转换进程（WP3）、转录的写入、列出和按层找（WP5）、三个转换插件 `builtin/media`（WP9）、`builtin/asr-sherpa`（WP10）、`builtin/ocr-vision`（WP11），都在 `plugins/` 下、测试全离线。剩下的：模型下载（WP4）、排任务和编排（WP6）、条目页的数据和索引（WP7）、接口（WP8）、界面（WP12）、测试用的获取插件（WP13），以及让 `just dev-plugins` 把三个转换插件也装上；照那份的[工作包](features/003-transforms.md#10-工作包)一节，条目页和获取插件页上的那些按钮一起做完。
 
 <a id="004-拼成思路"></a>
 ### 004 拼成思路
@@ -248,7 +248,7 @@ ACP 会话在窗口里只显示它交来的改动提议和权限请求，不显�
 
 每个平台一个插件仓库，放仓库旁边的 `usuyo-fetch/`。各平台的总表、要不要账号怎么分、怎么相对安全地试在 [platforms](platforms/README.md)；每个平台先写一份获取设计（怎么登录或要不要登录、怎么列出存过的、单条怎么取、存下什么、风险档位），再写插件，测试全离线。
 
-- **X（推特）**：用户点名要的，下一个做；获取设计在 [platforms/x.md](platforms/x.md)。
+- **X（推特）**：插件做了（`usuyo-fetch/x`），`just dev-plugins` 会装上；只做过离线测试，没向 X 发过请求。获取设计在 [platforms/x.md](platforms/x.md)。
 - 其余：抖音、快手、微博、贴吧、知乎、YouTube。层级判定的旧笔记在 [research/notes/](research/notes/)。
 
 应用这边不用为新平台改任何东西；要改，说明清单或协议缺了一种声明，补协议，不在应用里写平台名。
@@ -343,10 +343,10 @@ bundle id、MCP `_meta` 自定义键的前缀、schema 的 `$id` 都从用户给
 | `docs/BUILD.md` | 这份：做到哪、界面清单、每条线的决定、依赖顺序、规矩、要用户答的验的办的 | 整理完：原来的 `TODO.md`、`overview.md`、`discussion.md` 并进来了 |
 | `docs/PRD.md` | 产品：为什么做、是什么、原则、用到的词、功能、不做什么 | 整理完：原来的 `product-model.md`、`overview.md` 讲产品的部分并进来了 |
 | `docs/answers.md` | 用户逐条说过的话，一张表 | 整理完：`open-decisions.md` 拆完删掉，回答搬到这里，定了的登记项并进产品、规格、协议和这份的各条线，没定的进[只有用户能答的](#7-只有用户能答的和能验的) |
-| `docs/spec/` | 内核的规格，按约定、资料库、本机接口、按机器的目录分开 | 还没拆。`SPEC.md` 留着的 v0 各层要等 [006](#006-agent) 的内核服务契约写好再换掉；拆的时候代码注释和插件仓库按节号引用的地方跟着改 |
-| `docs/protocol/` | 插件协议，按清单、获取、转换和导出、投递、凭据、隔离、分发、包装现有工具分开 | 还没拆。`plugin-protocol.md` 要去掉采纳情况、改名对照这类历史，待定一节里已经定了的项删掉 |
-| `docs/platforms/` | 获取方案：层级怎么定、要账号和不要账号怎么分、各平台的总表、怎么相对安全地试；每个平台一份 | 总表和 X 写了；调研 15 里三个平台的设计、`research/notes/`、调研 06 里定下来的部分还要挪进来 |
+| `docs/spec/` | 内核的规格，按约定、资料库、本机接口、按机器的目录分开 | 整理完：原来的 `SPEC.md` 拆开，v0 各层删掉（旧稿见 [006](#006-agent)）；内核服务契约等 006 写 |
+| `docs/protocol/` | 插件协议，按清单、获取、转换和导出、投递、凭据、隔离、分发、包装现有工具、plugin-kit、设计取舍、待定分开 | 整理完：原来的 `plugin-protocol.md` 拆开，采纳情况、旧字段对照、带日期的说明去掉，待定里定了的项删掉，编号不动 |
+| `docs/platforms/` | 获取方案：层级怎么定、要账号和不要账号怎么分、各平台的总表、怎么相对安全地试；每个平台一份 | 小红书、视频号、B站（从调研 15 挪来）、X 各一份；`research/notes/` 和调研 06 里定下来的部分还没挪 |
 | `docs/features/` | 正在做的线的做法；做完的并进规格以后删掉 | 001、002 并完删掉了；003 正在做 |
 | `docs/decisions/` | 还有效的架构决定；被取代的删掉 | 整理完：ADR-001 删掉，ADR-003 的修订并进正文 |
-| `docs/research/` | 调研原文，只当背景；索引里写明哪份已经被哪份现行文档取代 | 索引还没写明取代关系 |
+| `docs/research/` | 调研原文，只当背景；索引里写明哪份已经被哪份现行文档取代 | 索引写了 15 挪去了哪；别的几份被哪份取代还没写 |
 
