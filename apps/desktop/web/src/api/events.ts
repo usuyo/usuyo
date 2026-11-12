@@ -19,9 +19,13 @@ export function applyEvent(queryClient: QueryClient, e: DaemonEvent): void {
       refresh(queryKeys.plugins);
       refresh(queryKeys.sites);
       refresh(queryKeys.visitors);
+      // 设置里的出口变了也发这一条。
+      refresh(queryKeys.settings);
       return;
     case "transforms-updated":
+      // 模型的状态，或设置里的 `transforms.auto`。
       refresh(queryKeys.transforms);
+      refresh(queryKeys.settings);
       return;
     case "import-updated":
       // 列了一页、收下了一条：这一次、记录栏和预览里的条目都重拉。

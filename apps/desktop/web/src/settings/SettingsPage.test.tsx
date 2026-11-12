@@ -22,7 +22,7 @@ const VIEW: SettingsView = {
   logs: "/Users/someone/Library/Application Support/usuyo/logs/daemon.log",
 };
 
-function serve(settings: SettingsView | null) {
+function serve(settings: SettingsView) {
   const sent: { path: string; method: string; body: unknown }[] = [];
   vi.stubGlobal("scrollTo", vi.fn());
   vi.stubGlobal(
@@ -31,7 +31,7 @@ function serve(settings: SettingsView | null) {
       const path = new URL(input).pathname;
       const method = init?.method ?? "GET";
       if (method !== "GET") sent.push({ path, method, body: typeof init?.body === "string" ? JSON.parse(init.body) : null });
-      if (path.endsWith("/settings") && settings) {
+      if (path.endsWith("/settings")) {
         return Promise.resolve(Response.json(method === "PATCH" ? { ...settings, trashDays: 90 } : settings));
       }
       if (path.endsWith("/release-held")) return Promise.resolve(Response.json({ removed: 3 }));
@@ -50,9 +50,14 @@ function serve(settings: SettingsView | null) {
 }
 
 describe("settings wording", () => {
-  it("only takes proxies that start with http, https or socks5 and name a host", () => {
+  it("only takes the proxies the daemon takes: http, socks5 or socks5h with a host and no path", () => {
     expect(proxyProblem("http://127.0.0.1:7890")).toBeNull();
     expect(proxyProblem("socks5://localhost:1080")).toBeNull();
+    expect(proxyProblem("socks5h://localhost:1080")).toBeNull();
+    expect(proxyProblem("http://me:secret@127.0.0.1:7890")).toBeNull();
+    expect(proxyProblem("http://me@127.0.0.1:7890")).toBeNull();
+    expect(proxyProblem("https://127.0.0.1:7890")).not.toBeNull();
+    expect(proxyProblem("http://127.0.0.1:7890/path")).not.toBeNull();
     expect(proxyProblem("127.0.0.1:7890")).not.toBeNull();
     expect(proxyProblem("")).toBe("写一个代理地址");
   });
@@ -78,12 +83,16 @@ it("changes the trash days at once and releases the held items after one confirm
   expect(screen.getByText("manifest.json 读不了")).toBeTruthy();
 });
 
-it("keeps appearance working and says one sentence per section when the daemon has no settings yet", async () => {
-  serve(null);
-  expect(await screen.findByText(/内核还不能改出口/)).toBeTruthy();
-  expect(screen.getByText(/内核还没有设置接口/)).toBeTruthy();
+it("shows the stored proxy without its password and sends the same address back without asking for it again", async () => {
+  const sent = serve({ ...VIEW, network: { mode: "custom", proxy: "http://me@127.0.0.1:7890", fakeIp: false } });
+  const field = await screen.findByRole("textbox", { name: "代理地址" });
+  expect(field instanceof HTMLInputElement && field.value).toBe("http://me@127.0.0.1:7890");
+  expect(screen.getByRole("button", { name: "在用这个" })).toBeTruthy();
+  expect(screen.getByText(/这里不显示密码/)).toBeTruthy();
+  fireEvent.change(field, { target: { value: "https://127.0.0.1:7890" } });
+  expect(screen.getByText(/也可以是 socks5:\/\/ 或 socks5h:\/\//)).toBeTruthy();
+  fireEvent.change(field, { target: { value: "socks5h://127.0.0.1:7891" } });
+  fireEvent.click(screen.getByRole("button", { name: "用这个" }));
+  await waitFor(() => expect(sent).toContainEqual({ path: "/api/settings", method: "PATCH", body: { network: { mode: "custom", proxy: "socks5h://127.0.0.1:7891" } } }));
   expect(screen.getByRole("radio", { name: "深色" })).toBeTruthy();
-  // 诊断里读不了的条目来自地图，今天的内核就给。
-  expect(await screen.findByText("manifest.json 读不了")).toBeTruthy();
-  expect(screen.getByText(/内核还不说日志在哪/)).toBeTruthy();
 });

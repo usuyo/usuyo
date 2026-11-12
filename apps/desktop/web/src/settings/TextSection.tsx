@@ -40,16 +40,17 @@ export function TextSection({ view }: { view: SettingsView }) {
           <ul className="m-0 flex list-none flex-col gap-1 p-0">
             {models.map((m) => (
               <li key={m.name} className="flex flex-wrap items-baseline gap-x-2.5 py-1 text-note">
-                <span className="text-text">{m.label}</span>
+                <span className="break-all text-text">{m.name}</span>
                 <span className="mono text-tag text-faint">{sizeText(m.size)}</span>
                 <span className="text-small text-sub">{m.plugin} · {modelStateText(m)}</span>
               </li>
             ))}
           </ul>
         ) : (
-          <p className="m-0 pt-2 text-note text-sub">{transforms.data ? "装着的转换插件都不用下载模型。" : "转换插件还没接上。"}</p>
+          <p className="m-0 pt-2 text-note text-sub">{transforms.data ? "装着的转换插件都不用下载模型。" : ""}</p>
         )}
       </Row>
+      {transforms.error ? <ErrorLine error={transforms.error} /> : null}
       {change.error ? <ErrorLine error={change.error} /> : null}
     </div>
   );

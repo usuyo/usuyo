@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Segment } from "../api/endpoints";
-import { alignRows, currentRow, pendingText, sizeText, sourceText } from "./faces";
-import { keepText } from "./format";
+import { alignRows, copyLabel, currentRow, pendingText, sizeText, sourceText, type CopyFacet } from "./faces";
+import { imageName, keepText } from "./format";
 
 const at = (sec: number, text: string): Segment => ({ text, position: { kind: "time", sec, snapshotId: "s" } });
 
@@ -12,14 +12,32 @@ describe("faces wording", () => {
     expect(sourceText("frames", { by: "machine", tool: "Vision" })).toBe("机器认的 · Vision");
   });
 
+  it("tells two copies by the same tool apart, down to the minute on the same day", () => {
+    const copy = (runId: string, when: string): CopyFacet => ({ layer: "ocr", key: `ocr:${runId}`, source: { by: "machine", tool: "Vision", runId, at: when }, segments: [] });
+    const a = copy("a", new Date(2026, 10, 12, 9, 5).toISOString());
+    const b = copy("b", new Date(2026, 10, 12, 10, 30).toISOString());
+    const c = copy("c", new Date(2026, 10, 10, 8, 0).toISOString());
+    expect(copyLabel(a, [a, b])).toBe("Vision · 11 月 12 日 09:05");
+    expect(copyLabel(b, [a, b])).toBe("Vision · 11 月 12 日 10:30");
+    expect(copyLabel(c, [a, c])).toBe("Vision · 11 月 10 日");
+    expect(copyLabel(a, [a])).toBe("Vision");
+  });
+
+  it("names the daemon's hash-keyed images by their place in the item", () => {
+    expect(imageName("b8ee896171b6e386", ["b8ee896171b6e386", "c0ffee"])).toBe("图 1");
+    expect(imageName("c0ffee", ["b8ee896171b6e386", "c0ffee"])).toBe("图 2");
+    expect(imageName("cover")).toBe("封面");
+    expect(imageName("p3")).toBe("图 3");
+  });
+
   it("writes one plain sentence per pending state, never a percentage", () => {
-    expect(pendingText({ layer: "asr", state: "later" }, "")).toBe("口播还没转出来，会慢慢转。");
-    expect(pendingText({ layer: "ocr", state: "on-power" }, "")).toBe("图里的字还没转出来，接上电源时会转。");
-    expect(pendingText({ layer: "frames", state: "now" }, "")).toBe("在转画面上的字。");
-    const model = { plugin: "builtin/asr-sherpa", name: "sv", size: 163_002_883, license: "x" };
-    expect(pendingText({ layer: "asr", state: "needs-model", model }, "SenseVoice")).toBe("转口播要先下载 SenseVoice 模型，约 163 MB，只下一次。");
-    expect(pendingText({ layer: "asr", state: "needs-model", model }, "SenseVoice", true)).toBe("在下载 SenseVoice 模型，约 163 MB。下好了这一条会接着转。");
-    expect(pendingText({ layer: "asr", state: "failed", hint: "音轨读不出来" }, "")).toBe("口播没转出来：音轨读不出来");
+    expect(pendingText({ layer: "asr", state: "later" })).toBe("口播还没转出来，会慢慢转。");
+    expect(pendingText({ layer: "ocr", state: "on-power" })).toBe("图里的字还没转出来，接上电源时会转。");
+    expect(pendingText({ layer: "frames", state: "now" })).toBe("在转画面上的字。");
+    const model = { plugin: "builtin/asr-sherpa", name: "sense-voice-int8", size: 163_002_883, license: "x" };
+    expect(pendingText({ layer: "asr", state: "needs-model", model })).toBe("转口播要先下载 sense-voice-int8 模型，约 163 MB，只下一次。");
+    expect(pendingText({ layer: "asr", state: "needs-model", model }, true)).toBe("在下载 sense-voice-int8 模型，约 163 MB。下好了这一条会接着转。");
+    expect(pendingText({ layer: "asr", state: "failed", hint: "音轨读不出来" })).toBe("口播没转出来：音轨读不出来");
   });
 
   it("writes sizes and how long the trash keeps things", () => {

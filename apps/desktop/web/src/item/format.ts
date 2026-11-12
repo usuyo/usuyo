@@ -20,8 +20,11 @@ export function clock(sec: number): string {
 }
 
 /** 图片 key 给人看的名字：p2 是「图 2」，cover 是「封面」。 */
-export function imageName(key: string): string {
+export function imageName(key: string, keys: string[] = []): string {
   if (key === "cover") return "封面";
+  // 内核的图片 key 是内容的哈希，给人看时按它在这一条里的先后叫「图 N」。
+  const at = keys.indexOf(key);
+  if (at >= 0) return `图 ${at + 1}`;
   const n = /^p(\d+)$/.exec(key)?.[1];
   return n ? `图 ${n}` : key;
 }
@@ -68,9 +71,7 @@ export function savedText(item: Item, keep: MediaKeep): string {
   const parts: string[] = [];
   for (const f of item.facets) {
     if (f.layer === "video") {
-      if (item.stored !== "text-only") parts.push(`视频${f.quality ? ` ${f.quality}` : ""}`);
-      if (f.cover && item.stored !== "text-only") parts.push("封面");
-      if (item.stored === "text-only") parts.push("画面缩略图");
+      parts.push(item.stored === "text-only" ? "画面缩略图" : "视频");
     } else if (f.layer === "image") parts.push(`${f.images.length} 张图`);
     else if (f.layer === "asr") {
       // 空的一份（没听到人说话）不算存下了口播。

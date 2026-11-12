@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
-import { isNotServed } from "../api/client";
 import { useSettings } from "../api/hooks";
-import { ErrorLine, NotServedLine } from "../components/ErrorLine";
+import { ErrorLine } from "../components/ErrorLine";
 import { Rail } from "../frame/Rail";
 import { Appearance } from "./Appearance";
 import { Diagnostics } from "./Diagnostics";
@@ -21,13 +20,12 @@ const SECTIONS = [
 
 /**
  * 设置：一页从上到下，左边是目录。改了马上生效，没有「保存」。
- * 外观只在这台电脑的窗口里；别的经内核，内核还没有设置接口时那一节说一句。
+ * 外观只在这台电脑的窗口里；别的经内核。
  */
 export function SettingsPage() {
   const settings = useSettings();
-  const missing = isNotServed(settings.error);
-  const gate = (node: (v: NonNullable<typeof settings.data>) => ReactNode, later: string) =>
-    settings.data ? node(settings.data) : missing ? <NotServedLine>{later}</NotServedLine> : settings.error ? <ErrorLine error={settings.error} /> : null;
+  const gate = (node: (v: NonNullable<typeof settings.data>) => ReactNode) =>
+    settings.data ? node(settings.data) : settings.error ? <ErrorLine error={settings.error} /> : null;
 
   return (
     <div className="relative h-full overflow-hidden bg-bg">
@@ -52,13 +50,16 @@ export function SettingsPage() {
               <Appearance />
             </Section>
             <Section id="network" name="网络" sub="获取插件去平台取东西时，从哪个出口出去。">
-              {gate((v) => <Network view={v} />, "这台电脑上的 usuyo 内核还不能改出口；现在插件跟着系统代理走。")}
+              {gate((v) => (
+                // 内核那边的出口变了（别处改的、事件来的）就照新的重新摆。
+                <Network key={`${v.network.mode} ${v.network.proxy ?? ""}`} view={v} />
+              ))}
             </Section>
             <Section id="storage" name="存储与回收站" sub="资料库就是一个普通文件夹，不开 usuyo 也能读。">
-              {gate((v) => <Storage view={v} />, "这台电脑上的 usuyo 内核还没有设置接口；资料库的位置和回收站留几天，接上以后在这里看和改。")}
+              {gate((v) => <Storage view={v} />)}
             </Section>
             <Section id="text" name="变成文字" sub="把口播、图里的字、画面上的字转出来，都在这台电脑上做。">
-              {gate((v) => <TextSection view={v} />, "这台电脑上的 usuyo 内核还没接上转换；接上以后在这里开关自动转换、看模型。")}
+              {gate((v) => <TextSection view={v} />)}
             </Section>
             <Section id="diagnostics" name="诊断" sub="出了问题时来这里看。">
               <Diagnostics logs={settings.data?.logs} />

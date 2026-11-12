@@ -29,6 +29,7 @@ function player(): Player {
     seek: vi.fn(),
     showImage: () => undefined,
     onTime: () => undefined,
+    onEnd: () => undefined,
   };
 }
 
@@ -92,4 +93,19 @@ it("says the one true sentence for a speech that waits for its model, with the m
   expect(screen.getByText("转口播要先下载 sense-voice-int8-2024-07-17 模型，约 163 MB，只下一次。")).toBeTruthy();
   expect(screen.getByRole("button", { name: "下载" })).toBeTruthy();
   expect(screen.getByText("许可：FunASR Model Open Source License")).toBeTruthy();
+});
+
+it("puts the machine transcript that is still to come beside the platform subtitle", async () => {
+  const base = await createMockLibrary(false).item("c1");
+  const model = { plugin: "builtin/asr-sherpa", name: "sense-voice-int8-2024-07-17", size: 163_002_883, license: "FunASR" };
+  const item: Item = {
+    ...base,
+    facets: base.facets.filter((f) => !(f.layer === "asr" && f.source.by === "machine")),
+    pending: [{ layer: "asr", state: "needs-model", model }],
+  };
+  show(item, player());
+  const heads = screen.getAllByRole("columnheader");
+  const machine = heads.find((h) => h.textContent?.includes("机器转的"));
+  expect(machine?.textContent).toContain("转口播要先下载 sense-voice-int8-2024-07-17 模型");
+  expect(heads.some((h) => h !== machine && h.textContent?.includes("平台给的字幕"))).toBe(true);
 });

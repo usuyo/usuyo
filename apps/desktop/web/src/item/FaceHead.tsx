@@ -6,18 +6,20 @@ import {
   MenuItem,
   MenuTrigger,
   Popover,
+  Text,
   ToggleButton,
   ToggleButtonGroup,
   Button as AriaButton,
   type Key,
 } from "react-aria-components";
-import type { Pending, TransformLayer } from "../api/endpoints";
+import type { Pending, TransformJob, TransformLayer, TransformPlugin, TransformsView } from "../api/endpoints";
 import { queryKeys, useModelChange, useTransform, useTransforms } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
 import { Button } from "../ui/Button";
 import { MonoLabel } from "../ui/Chip";
 import { FlashLine, useFlash } from "../ui/Flash";
-import { copyLabel, FACE_NAME, modelLabel, pendingText, sourceText, type CopyFacet } from "./faces";
+import { JOB_TEXT } from "../plugins/words";
+import { copyLabel, FACE_NAME, pendingText, sourceText, type CopyFacet } from "./faces";
 
 /**
  * 一面的头：名字、这一份从哪来；有几份时一排切换（不藏进设置里）；量出来的明显的事；「再转一次」「换一个转」。
@@ -47,7 +49,7 @@ export function FaceHead({
         <h3 className="m-0 text-note font-semibold text-text">{FACE_NAME[layer]}</h3>
         {shown ? <MonoLabel>{shown.segments.length} 段</MonoLabel> : null}
         <span className="flex-1" />
-        <RedoMenu layer={layer} itemId={itemId} busy={busy} current={shown?.source.tool} />
+        <RedoMenu jobs={[layer]} itemId={itemId} busy={busy} label={FACE_NAME[layer]} />
       </div>
       {copies.length > 1 ? (
         <div className="flex flex-wrap items-center gap-1">
@@ -85,49 +87,69 @@ export function FaceHead({
   );
 }
 
-/** 再转一次、换一个插件转。内核还没有转换接口时不出现。 */
-function RedoMenu({ layer, itemId, busy, current }: { layer: TransformLayer; itemId: string; busy: boolean; current?: string }) {
+/** 一样转换能用哪些插件：`jobs` 里有它的，照 `/transforms` 的顺序；第一个是内核不点名时用的那个。 */
+function ableFor(job: TransformJob, transforms: TransformsView | undefined): TransformPlugin[] {
+  return transforms?.plugins.filter((p) => p.jobs.includes(job)) ?? [];
+}
+
+/** 只差模型没下的插件也能点：内核把这一面挂到「要先下载模型」上，那一句旁边有「下载」。 */
+const usable = (p: TransformPlugin) => p.health === "ok" || p.models.some((m) => m.state !== "present");
+
+/**
+ * 「再转」：再做一次（不点名插件，内核用它默认的那个），有别的插件能做时「换一个转」。
+ * 转出文字的三层做好了多一份、原来的留着；画面的两样换成新做的那份。没装能做它的插件时不出现。
+ */
+export function RedoMenu({ jobs, itemId, busy, label }: { jobs: TransformJob[]; itemId: string; busy: boolean; label: string }) {
   const transforms = useTransforms();
   const redo = useTransform(itemId);
   const flash = useFlash(2400);
-  const able = transforms.data?.plugins.filter((p) => p.jobs.includes(layer)) ?? [];
-  if (able.length === 0) return null;
-  // 先放转出这一份的那个工具（再转一次），再放别的（换一个转）。
-  const sorted = [...able].sort((a, b) => Number(b.tool === current) - Number(a.tool === current));
+  const choices = jobs.flatMap((job) =>
+    ableFor(job, transforms.data).map((p, i) => ({ id: `${job} ${p.id}`, job, plugin: p, again: i === 0 })),
+  );
+  if (choices.length === 0) return null;
+  const text = (c: (typeof choices)[number]) => {
+    const name = `「${c.plugin.name}」`;
+    if (c.job === "play" || c.job === "keyframes") return c.again ? `重新${JOB_TEXT[c.job]}` : `换成${name}${JOB_TEXT[c.job]}`;
+    return c.again ? "再转一次" : `换成${name}转一份`;
+  };
   return (
     <span className="flex items-center gap-2">
       <FlashLine flash={flash} className="text-small whitespace-nowrap text-sub" />
       <MenuTrigger>
         <AriaButton
           isDisabled={busy || redo.isPending}
-          aria-label={`再转一次${FACE_NAME[layer]}，或换一个转`}
+          aria-label={`再转一次${label}，或换一个转`}
           className="press flex h-ctl-xs cursor-pointer items-center gap-1.5 rounded-sm border-0 bg-transparent px-2 font-sans text-small text-sub outline-none data-[disabled]:cursor-default data-[disabled]:opacity-50 data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent data-[hovered]:bg-chip data-[hovered]:text-text"
         >
           <RefreshCw size={12} aria-hidden="true" />
           <span>再转</span>
         </AriaButton>
-        <Popover placement="bottom end" offset={6} className="min-w-[240px] animate-rise rounded-card border border-border2 bg-card p-1.5 shadow-panel">
+        <Popover placement="bottom end" offset={6} className="max-w-[min(320px,calc(100vw-32px))] min-w-[240px] animate-rise rounded-card border border-border2 bg-card p-1.5 shadow-panel">
           <Menu
-            aria-label={`用哪个转${FACE_NAME[layer]}`}
+            aria-label={`用哪个转${label}`}
             className="outline-none"
-            disabledKeys={sorted.filter((p) => p.health !== "ok").map((p) => p.id)}
+            disabledKeys={choices.filter((c) => !usable(c.plugin)).map((c) => c.id)}
             onAction={(key) => {
-              const plugin = sorted.find((p) => p.id === key);
-              if (!plugin) return;
-              redo.mutate({ job: layer, plugin: plugin.id }, { onSuccess: () => flash.show("排上了；转好了多一份，原来的留着") });
+              const c = choices.find((x) => x.id === key);
+              if (!c) return;
+              const kept = c.job === "play" || c.job === "keyframes" ? "排上了；做好了换成新的" : "排上了；转好了多一份，原来的留着";
+              redo.mutate(c.again ? { job: c.job } : { job: c.job, plugin: c.plugin.id }, { onSuccess: () => flash.show(kept) });
             }}
           >
-            {sorted.map((p, i) => (
+            {choices.map((c) => (
               <MenuItem
-                key={p.id}
-                id={p.id}
-                textValue={p.tool}
+                key={c.id}
+                id={c.id}
+                textValue={text(c)}
                 className="flex cursor-pointer flex-col rounded-btn px-3 py-2 outline-none data-[disabled]:cursor-default data-[focused]:bg-chip"
               >
-                <span className={`text-note ${p.health === "ok" ? "text-text" : "text-sub"}`}>
-                  {p.tool === current || (current === undefined && i === 0) ? `用 ${p.tool} 再转一次` : `换成 ${p.tool} 转一份`}
-                </span>
-                <span className="text-small text-faint">{p.health === "ok" ? p.name : (p.hint ?? "这个插件现在用不了")}</span>
+                <Text slot="label" className={`text-note ${usable(c.plugin) ? "text-text" : "text-sub"}`}>
+                  {text(c)}
+                </Text>
+                <Text slot="description" className="text-small text-faint">
+                  {c.again ? `用「${c.plugin.name}」` : JOB_TEXT[c.job]}
+                  {c.plugin.health === "ok" ? "" : `　·　${c.plugin.hint ?? "这个插件现在用不了"}`}
+                </Text>
               </MenuItem>
             ))}
           </Menu>
@@ -138,14 +160,12 @@ function RedoMenu({ layer, itemId, busy, current }: { layer: TransformLayer; ite
   );
 }
 
-/** 还没转出来的那一面：一句实话；等模型的旁边是「下载」，没转出来的是「再试」。 */
+/** 还没转出来的那一面：一句实话；等模型的旁边是「下载」和许可，没转出来的是「再试」（这一条没做好的都挪到最前）。 */
 export function PendingLine({ pending, itemId }: { pending: Pending; itemId: string }) {
   const transforms = useTransforms();
   const models = useModelChange();
   const retry = useTransform(itemId);
   const m = pending.model;
-  const job = pending.layer === "video" ? null : pending.layer;
-  const label = m ? modelLabel(m.name, transforms.data) : "";
   const downloading =
     m !== undefined && transforms.data?.plugins.find((p) => p.id === m.plugin)?.models.find((x) => x.name === m.name)?.state === "downloading";
   // 模型下好了，这一条接着转：重拉一次，看到「在转」。
@@ -157,7 +177,7 @@ export function PendingLine({ pending, itemId }: { pending: Pending; itemId: str
   }, [downloading, itemId, queryClient]);
   return (
     <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2">
-      <span className={`text-note ${pending.state === "failed" ? "text-warn" : "text-label"}`}>{pendingText(pending, label, downloading)}</span>
+      <span className={`text-note ${pending.state === "failed" ? "text-warn" : "text-label"}`}>{pendingText(pending, downloading)}</span>
       {m && pending.state === "needs-model" && !downloading ? (
         <Button
           variant="soft"
@@ -169,8 +189,8 @@ export function PendingLine({ pending, itemId }: { pending: Pending; itemId: str
         </Button>
       ) : null}
       {m && pending.state === "needs-model" ? <span className="text-small text-faint">许可：{m.license}</span> : null}
-      {pending.state === "failed" && job ? (
-        <Button variant="outline" size="xs" isDisabled={retry.isPending} onPress={() => retry.mutate({ job })}>
+      {pending.state === "failed" ? (
+        <Button variant="outline" size="xs" isDisabled={retry.isPending} onPress={() => retry.mutate({ jobs: "pending" })}>
           再试
         </Button>
       ) : null}

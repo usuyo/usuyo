@@ -1,15 +1,18 @@
 import { FileText, Images, RotateCcw } from "lucide-react";
 import { useState } from "react";
 import type { TrashEntry } from "../api/endpoints";
-import { useItemChange, usePurge, useTrash } from "../api/hooks";
+import { useItemChange, usePurge, useSettings, useTrash } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
 import { Rail } from "../frame/Rail";
 import { Button } from "../ui/Button";
+import { HeldNotice } from "./HeldNotice";
 import { askText, clearsText, doneText, introText, trashedText, whatText } from "./words";
 
 /** 回收站：删掉的整条和只留文字移出来的媒体，各自拿回来或立即清除。 */
 export function TrashPage() {
   const trash = useTrash();
+  // 到期检查被时钟守卫拦下时，设置里有 `trashHeld`；这一页也放那一块。
+  const settings = useSettings();
   const [said, setSaid] = useState({ text: "", token: 0 });
   const say = (text: string) => setSaid((s) => ({ text, token: s.token + 1 }));
   const entries = trash.data?.entries ?? [];
@@ -25,6 +28,11 @@ export function TrashPage() {
             <p className="m-0 mt-0.5 text-small text-faint">再收下同一条链接，它会从这里回到地图上。</p>
           </header>
           {trash.error ? <ErrorLine error={trash.error} className="mt-4" /> : null}
+          {settings.data ? (
+            <div className="mt-4 max-w-[760px] empty:hidden">
+              <HeldNotice view={settings.data} />
+            </div>
+          ) : null}
           <div role="status" className="mt-4 flex min-h-5 items-center text-note font-medium text-text">
             {said.text ? (
               <span key={said.token} className="animate-rise">

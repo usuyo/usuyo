@@ -13,10 +13,9 @@ import {
   type PluginsView,
   type SiteLogin,
   type StartImportRequest,
-  type Facet,
   type Health,
   type Item,
-  type Pending,
+  type ModelDownload,
   type SettingsPatch,
   type SettingsView,
   type TransformRequest,
@@ -108,7 +107,7 @@ export interface Platforms {
 export interface Transforms {
   transforms(): Promise<TransformsView>;
   transform(itemId: string, body: TransformRequest): Promise<void>;
-  downloadModel(pluginId: string, name: string): Promise<void>;
+  downloadModel(pluginId: string, name: string): Promise<ModelDownload>;
   removeModel(pluginId: string, name: string): Promise<void>;
 }
 
@@ -169,19 +168,6 @@ export interface Exports {
 /** 内核和样例库都实现的全部读写。 */
 export type Source = Library & Platforms & Transforms & Settings & Topics & Drafts & Follows & Changes & Exports;
 
-/** 内核今天回的一条：还没有 `pending`，每面还没有 `key`（feature 003 的 WP7、WP8 还没接上）。 */
-type KeylessFacet<F> = F extends Facet ? Omit<F, "key"> & { key?: string } : never;
-type WireItem = Omit<Item, "pending" | "facets"> & { pending?: Pending[]; facets: KeylessFacet<Facet>[] };
-
-/** 在边界上补齐成 endpoints.ts 的形状：没有 `key` 的按层起一个，没有 `pending` 的当没有在等的。 */
-function itemOf(wire: WireItem): Item {
-  return {
-    ...wire,
-    pending: wire.pending ?? [],
-    facets: wire.facets.map((f) => ({ ...f, key: f.key ?? (f.layer === "video" ? `video:${f.snapshotId}` : f.layer) })),
-  };
-}
-
 /** 内核今天回的插件：还没有 `methods`。 */
 type WirePlugin = Omit<FetchPlugin, "methods"> & { methods?: FetchPlugin["methods"] };
 
@@ -207,7 +193,7 @@ function pluginOf(wire: WirePlugin): FetchPlugin {
   };
 }
 
-const itemRequest = (path: string, method?: "POST") => request<WireItem>(path, method ? { method } : {}).then(itemOf);
+const itemRequest = (path: string, method?: "POST") => request<Item>(path, method ? { method } : {});
 
 /** 列来源要调插件，内核最多等一分钟多一点。 */
 const SOURCES_TIMEOUT_MS = 75_000;
@@ -224,9 +210,8 @@ const daemon: Source = {
   item: (id) => itemRequest(paths.item(id)),
   search: (q) => request<SearchHit[]>(paths.search, { query: { q } }),
   take: (body) => request<TakeResponse>(paths.take, { method: "POST", body }),
-  setNote: (id, text) => request<WireItem>(paths.itemNote(id), { method: "POST", body: { text } }).then(itemOf),
-  setTopic: (id, topicId, member) =>
-    request<WireItem>(paths.itemTopics(id), { method: "POST", body: { topicId, member } }).then(itemOf),
+  setNote: (id, text) => request<Item>(paths.itemNote(id), { method: "POST", body: { text } }),
+  setTopic: (id, topicId, member) => request<Item>(paths.itemTopics(id), { method: "POST", body: { topicId, member } }),
   trash: (id) => itemRequest(paths.itemTrash(id), "POST"),
   restore: (id) => itemRequest(paths.itemRestore(id), "POST"),
   restoreMedia: (id) => itemRequest(paths.itemRestoreMedia(id), "POST"),
@@ -301,7 +286,7 @@ const daemon: Source = {
 
   transforms: () => request<TransformsView>(paths.transforms),
   transform: (itemId, body) => request<void>(paths.itemTransform(itemId), { method: "POST", body }).then(() => undefined),
-  downloadModel: (pluginId, name) => request<void>(paths.modelDownload(pluginId, name), { method: "POST" }).then(() => undefined),
+  downloadModel: (pluginId, name) => request<ModelDownload>(paths.modelDownload(pluginId, name), { method: "POST" }),
   removeModel: (pluginId, name) => request<void>(paths.modelRemove(pluginId, name), { method: "POST" }).then(() => undefined),
 };
 

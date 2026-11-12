@@ -3,7 +3,7 @@ import { ToggleButton } from "react-aria-components";
 import type { Facet, Item, Pending, TransformLayer } from "../api/endpoints";
 import { MonoLabel } from "../ui/Chip";
 import { sourceText, type CopyFacet } from "./faces";
-import { FaceHead, PendingLine } from "./FaceHead";
+import { FaceHead, PendingLine, RedoMenu } from "./FaceHead";
 import type { MediaKeep } from "./format";
 import { ImageText } from "./ImageText";
 import { TimeFaces, type Lane } from "./TimeFaces";
@@ -32,25 +32,40 @@ export function FacetColumn({ item, player, keep }: { item: Item; player: Player
   const frames = copiesOf(item, "frames");
   const ocr = copiesOf(item, "ocr");
   const pendingOf = (layer: Pending["layer"]) => item.pending.find((p) => p.layer === layer);
-  const busy = (layer: TransformLayer) => pendingOf(layer)?.state === "now";
+  const busy = (layer: Pending["layer"]) => pendingOf(layer)?.state === "now";
   const shownAsr = pick(asr, chosen.asr);
   const shownFrames = pick(frames, chosen.frames);
   const shownOcr = pick(ocr, chosen.ocr);
   const choose = (layer: TransformLayer) => (key: string) => setChosen((c) => ({ ...c, [layer]: key }));
-  const isVideo = item.facets.some((f) => f.layer === "video");
+  const video = item.facets.find((f): f is Extract<Facet, { layer: "video" }> => f.layer === "video");
+  const isVideo = video !== undefined;
 
   // 对照里的几栏：口播（并排时两份）、画面上的字；还没转出来的那一面也占一栏，写一句。
+  // 只有平台字幕、机器的那份还没转出来时，机器那份单占一栏，摆在平台字幕旁边。
   const lanes: Lane[] = [];
   const asrPending = pendingOf("asr");
+  const machineAsr = asr.some((c) => c.source.by === "machine");
   if (together && asr.length > 1) for (const c of asr.slice(0, 2)) lanes.push({ id: c.key, layer: "asr", copy: c });
-  else if (shownAsr) lanes.push({ id: shownAsr.key, layer: "asr", copy: shownAsr, ...(asrPending ? { pending: asrPending } : {}) });
+  else if (shownAsr && asrPending && !machineAsr) {
+    lanes.push({ id: shownAsr.key, layer: "asr", copy: shownAsr });
+    lanes.push({ id: MACHINE_ASR, layer: "asr", pending: asrPending });
+  } else if (shownAsr) lanes.push({ id: shownAsr.key, layer: "asr", copy: shownAsr, ...(asrPending ? { pending: asrPending } : {}) });
   else if (asrPending) lanes.push({ id: "asr", layer: "asr", pending: asrPending });
   const framesPending = pendingOf("frames");
   if (shownFrames) lanes.push({ id: shownFrames.key, layer: "frames", copy: shownFrames, ...(framesPending ? { pending: framesPending } : {}) });
   else if (framesPending) lanes.push({ id: "frames", layer: "frames", pending: framesPending });
 
-  // 对照每一栏的头。口播两份并排时，第一栏放切换，第二栏只写来源。
+  // 对照每一栏的头。口播两份并排时，第一栏放切换，第二栏只写来源；还没转出来的那一栏，头下面写那一句。
   const headFor = (l: Lane, i: number): ReactNode => {
+    if (l.copy || !l.pending) return copyHead(l, i);
+    return (
+      <div>
+        {l.id === MACHINE_ASR ? <p className="m-0 flex min-h-ctl-xs items-center text-small text-faint">机器转的</p> : copyHead(l, i)}
+        <PendingLine pending={l.pending} itemId={item.id} />
+      </div>
+    );
+  };
+  const copyHead = (l: Lane, i: number): ReactNode => {
     if (l.layer === "frames") {
       return <FaceHead layer="frames" copies={frames} shown={shownFrames} onShow={choose("frames")} itemId={item.id} busy={busy("frames")} />;
     }
@@ -85,7 +100,7 @@ export function FacetColumn({ item, player, keep }: { item: Item; player: Player
   const comments = item.facets.find((f): f is Extract<Facet, { layer: "comments" }> => f.layer === "comments");
   const ocrPending = pendingOf("ocr");
   const videoPending = pendingOf("video");
-  const empty = lanes.length === 0 && ocr.length === 0 && !ocrPending && !text && !comments && !videoPending;
+  const empty = lanes.length === 0 && ocr.length === 0 && !ocrPending && !text && !comments && !videoPending && !isVideo;
 
   if (empty) {
     return (
@@ -97,7 +112,17 @@ export function FacetColumn({ item, player, keep }: { item: Item; player: Player
 
   return (
     <div className="flex min-h-0 flex-col gap-5">
-      {videoPending ? <PendingLine pending={videoPending} itemId={item.id} /> : null}
+      {isVideo || videoPending ? (
+        <Block label="画面">
+          <div className="flex min-h-ctl-xs flex-wrap items-center gap-x-2 gap-y-1">
+            <h3 className="m-0 text-note font-semibold text-text">画面</h3>
+            {video ? <MonoLabel>{video.frames.length} 帧</MonoLabel> : null}
+            <span className="flex-1" />
+            <RedoMenu jobs={["play", "keyframes"]} itemId={item.id} busy={busy("video")} label="画面" />
+          </div>
+          {videoPending ? <PendingLine pending={videoPending} itemId={item.id} /> : null}
+        </Block>
+      ) : null}
       {lanes.length > 0 ? (
         <Block label="说的和画面上的" grow>
           <TimeFaces lanes={lanes} heads={lanes.map((l, i) => headFor(l, i))} player={player} itemId={item.id} />
@@ -114,7 +139,7 @@ export function FacetColumn({ item, player, keep }: { item: Item; player: Player
               <div className="mb-2">
                 <FaceHead layer="ocr" copies={ocr} shown={shownOcr} onShow={choose("ocr")} itemId={item.id} busy={busy("ocr")} />
               </div>
-              <ImageText copy={shownOcr} player={player} />
+              <ImageText copy={shownOcr} player={player} keys={item.facets.flatMap((f) => (f.layer === "image" ? f.images.map((im) => im.key) : []))} />
             </>
           ) : (
             <h3 className="m-0 text-note font-semibold text-text">图里的字</h3>
@@ -157,6 +182,9 @@ export function FacetColumn({ item, player, keep }: { item: Item; player: Player
     </div>
   );
 }
+
+/** 平台字幕旁边，还没转出来的机器那份口播占的那一栏。 */
+const MACHINE_ASR = "asr:machine";
 
 function Block({ label, grow, children }: { label: string; grow?: boolean; children: ReactNode }) {
   return (

@@ -23,7 +23,7 @@ export function FacetPreview({ item }: { item: Item }) {
             <h3 className="m-0 text-note font-semibold text-text">{LAYER_NAME[f.layer]}</h3>
             <MonoLabel>{countText(f)}</MonoLabel>
             {"source" in f ? <span className="text-small text-faint">{sourceText(f.layer, f.source)}</span> : null}
-            {f.remark ? <span className="text-small text-sub">{f.remark}</span> : null}
+            {"remark" in f && f.remark ? <span className="text-small text-sub">{f.remark}</span> : null}
           </header>
           <FacetBody facet={f} item={item} />
         </section>

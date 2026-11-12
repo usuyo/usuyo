@@ -1,5 +1,14 @@
 // 获取插件的标签和停着的原因，换成平常的话。只是给你挑的信息，不拦什么。
-import type { Access, FetchMethod, LoginNeed, MethodAccount, PluginPause, SiteLogin, VisitorIdentity } from "../api/endpoints";
+import type { Access, FetchMethod, LoginNeed, MethodAccount, PluginPause, SiteLogin, TransformJob, VisitorIdentity } from "../api/endpoints";
+
+/** 转换插件做的几样，写在插件卡片上，条目页的「再转」里也用。 */
+export const JOB_TEXT: Record<TransformJob, string> = {
+  play: "合成能播的视频",
+  keyframes: "取关键帧",
+  asr: "口播转成文字",
+  ocr: "认图里的字",
+  frames: "认画面上的字",
+};
 
 export const ACCESS_TEXT: Record<Access, string> = {
   "official-export": "读平台给你的官方导出",

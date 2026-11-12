@@ -13,7 +13,7 @@ describe("mock library", () => {
 
   it("keeps every facet an item has", async () => {
     const item = await createMockLibrary(false).item("c1");
-    expect(item.facets.map((f) => f.layer)).toEqual(["video", "asr", "asr", "ocr", "frames", "text", "comments"]);
+    expect(item.facets.map((f) => f.layer)).toEqual(["video", "image", "asr", "asr", "ocr", "frames", "text", "comments"]);
     expect(new Set(item.facets.map((f) => f.key)).size).toBe(item.facets.length);
   });
 

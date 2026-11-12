@@ -8,15 +8,18 @@ export const NETWORK_TEXT: Record<NetworkSetting["mode"], { name: string; sub: s
     sub: "插件出门和你的浏览器走同一个出口。平台看到的还是你平常上网的样子，不会突然换一个地方来访问，这样最安静。",
   },
   direct: { name: "直连", sub: "不走代理，直接连。系统开着代理时，插件和浏览器就走两条路了。" },
-  custom: { name: "自己填一个代理", sub: "只给插件用，不改系统的设置。写 http://、https:// 或 socks5:// 开头的地址。" },
+  custom: { name: "自己填一个代理", sub: "只给插件用，不改系统的设置。写 http://、socks5:// 或 socks5h:// 开头的地址。" },
 };
 
-/** 填的代理地址像不像样：只认这三种开头，后面要有主机。 */
+const PROXY_SCHEMES = ["http:", "socks5:", "socks5h:"];
+
+/** 填的代理地址像不像样：照内核，只认这三种开头，要有主机，不带路径和查询串；可以带用户名和密码。 */
 export function proxyProblem(proxy: string): string | null {
   const p = proxy.trim();
   if (p === "") return "写一个代理地址";
-  if (!/^(https?|socks5):\/\/[^\s/:]+(:\d{1,5})?\/?$/.test(p)) return "要写成 http://主机:端口 这样，也可以是 https:// 或 socks5://";
-  return null;
+  const u = URL.canParse(p) ? new URL(p) : null;
+  const fits = u !== null && PROXY_SCHEMES.includes(u.protocol) && u.hostname !== "" && (u.pathname === "" || u.pathname === "/") && u.search === "" && u.hash === "";
+  return fits ? null : "要写成 http://主机:端口 这样，也可以是 socks5:// 或 socks5h://";
 }
 
 export const TRASH_CHOICES: { id: "30" | "90" | "forever"; text: string; days: number | null }[] = [

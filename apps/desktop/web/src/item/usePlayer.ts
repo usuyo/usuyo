@@ -9,7 +9,7 @@ export interface Player {
   /** 现在在第几秒。 */
   t: number;
   playing: boolean;
-  /** 画面里现在显示哪张图：图文的图片 key，或视频的 `cover`；视频播放时为 null。 */
+  /** 画面里现在显示哪张图（图片 key）；视频没点图、在播时为 null。 */
   image: string | null;
   /** 点了画面上的一行字：停在那一帧（认出这行字的关键帧），播放时为 null。 */
   still: string | null;
@@ -29,6 +29,8 @@ export interface Player {
   seek: (sec: number) => void;
   showImage: (key: string) => void;
   onTime: (sec: number) => void;
+  /** <video> 播到头了。 */
+  onEnd: () => void;
 }
 
 /**
@@ -147,5 +149,6 @@ export function usePlayer(video: VideoFacet | undefined, firstImage: string | nu
       setImage(key);
     },
     onTime: setT,
+    onEnd: () => setPlaying(false),
   };
 }

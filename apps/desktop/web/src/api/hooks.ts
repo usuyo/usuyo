@@ -570,7 +570,10 @@ export function useModelChange() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (v: { kind: "download" | "remove"; pluginId: string; name: string }) =>
-      call((s) => (v.kind === "download" ? s.downloadModel(v.pluginId, v.name) : s.removeModel(v.pluginId, v.name))),
+      call(async (s) => {
+        if (v.kind === "download") await s.downloadModel(v.pluginId, v.name);
+        else await s.removeModel(v.pluginId, v.name);
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.transforms });
       void queryClient.invalidateQueries({ queryKey: ["items"] });

@@ -12,21 +12,21 @@ describe("daemon events", () => {
     expect(isDaemonEvent({ type: "something-else", id: "a" })).toBe(false);
   });
 
-  it("refreshes the transform plugins and models on transforms-updated, which has no id", () => {
+  it("refreshes the transform plugins, models and settings on transforms-updated, which has no id", () => {
     expect(isDaemonEvent({ type: "transforms-updated" })).toBe(true);
     const qc = new QueryClient();
     const spy = vi.spyOn(qc, "invalidateQueries");
     applyEvent(qc, { type: "transforms-updated" });
-    expect(spy.mock.calls.map((c) => c[0]?.queryKey)).toEqual([queryKeys.transforms]);
+    expect(spy.mock.calls.map((c) => c[0]?.queryKey)).toEqual([queryKeys.transforms, queryKeys.settings]);
   });
 
-  it("refreshes plugins, sites and visitors, or the one import, when told", () => {
+  it("refreshes plugins, sites, visitors and settings, or the one import, when told", () => {
     const qc = new QueryClient();
     const spy = vi.spyOn(qc, "invalidateQueries");
     applyEvent(qc, { type: "plugins-updated" });
     applyEvent(qc, { type: "import-updated", id: "x" });
     const keys = spy.mock.calls.map((c) => c[0]?.queryKey);
-    expect(keys).toEqual([queryKeys.plugins, queryKeys.sites, queryKeys.visitors, queryKeys.imports, queryKeys.import("x"), queryKeys.importEntries("x")]);
+    expect(keys).toEqual([queryKeys.plugins, queryKeys.sites, queryKeys.visitors, queryKeys.settings, queryKeys.imports, queryKeys.import("x"), queryKeys.importEntries("x")]);
   });
 
   it("follows an item removed from the trash: the map, search results, that item and the trash page refresh", () => {

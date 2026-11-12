@@ -90,7 +90,7 @@ export const paths = {
   /** 事件流（SSE）：`event:` 是 `LibraryEvent["type"]` 或 `PlatformEvent["type"]`，`data:` 是事件的 JSON。要带令牌，用 fetch 读。 */
   events: "/events",
 
-  // —— 设置（「设置」页）。内核今天（11-12）还没有这几条。——
+  // —— 设置（「设置」页）——
   /** GET `SettingsView`；PATCH `SettingsPatch` 改其中几项，回改好的整份。改了马上生效。 */
   settings: "/settings",
   /**
@@ -116,16 +116,16 @@ export const paths = {
   sites: "/sites",
   /** PUT `StorageState`：壳的登录窗口读出 cookie 以后交到这里（存进钥匙串）；DELETE 忘掉这个站点的登录。 */
   siteLogin: (site: string) => `/sites/${encodeURIComponent(site)}/login`,
-  // —— 转换插件和模型（feature 003 §8.1）。内核今天（11-12）都还没有这几条。——
+  // —— 转换插件和模型（feature 003 §8.1）——
   /**
-   * POST `TransformRequest`：`{jobs: "pending"}` 把这条还没转的挪到最前（打开条目页时调）；
-   * `{job, plugin?, options?}` 再转一次或换一个插件转，回 202 `{queued: true}`，原来那份留着。
-   * 这一层正在转回 `conflict`；插件做不了这一层回 `invalid-args`。
+   * POST `TransformRequest`，回 202 `{queued: true}`。`{jobs: "pending"}`：这一条还没做好的转换（没转出来的也算）都挪到最前，
+   * 在电池上、`transforms.auto` 关着时也转；打开条目页时调一次，「再试」也是它。`{job, plugin?, options?}`：再转一次或换一个插件转，
+   * 原来那份留着。这一样正在转回 `conflict`；插件做不了它回 `invalid-args`；只留文字以后回 `unsupported-input`。
    */
   itemTransform: (id: string) => `/items/${encodeURIComponent(id)}/transform`,
   /** GET `TransformsView`：装了哪些转换插件、各做哪几层、模型和状态。 */
   transforms: "/transforms",
-  /** POST：下这个模型（按机器目录，不进资料库）；已经有了回 200。状态变了发 `transforms-updated`。 */
+  /** POST：下这个模型（按机器目录，不进资料库），回 `ModelDownload`：已经有了 200 `present`，开始下或在下 202 `downloading`。状态变了发 `transforms-updated`。 */
   modelDownload: (pluginId: string, name: string) => `/transforms/${pluginPath(pluginId)}/models/${encodeURIComponent(name)}/download`,
   /** POST：删掉这个模型；之后要它的转换等着模型。 */
   modelRemove: (pluginId: string, name: string) => `/transforms/${pluginPath(pluginId)}/models/${encodeURIComponent(name)}/remove`,
@@ -207,9 +207,9 @@ export type LibraryEvent =
 export type PlatformEvent =
   /** 一次导入变了：列了一页、收下了一条、停下了。重新拉 `paths.import(id)`。 */
   | { type: "import-updated"; id: string }
-  /** 插件的暂停、站点的登录、访客身份变了。重新拉 `paths.plugins`、`paths.sites`、`paths.visitors`。 */
+  /** 插件的暂停、站点的登录、访客身份、密钥设置、设置里的 `network` 变了。重新拉 `paths.plugins`、`paths.sites`、`paths.visitors`、`paths.settings`。 */
   | { type: "plugins-updated" }
-  /** 转换插件或模型的状态变了（下好了、删掉了、下载没成）。重新拉 `paths.transforms`。内核今天还不发。 */
+  /** 模型开始下、下好了、没下成、删掉了，或设置里的 `transforms.auto` 变了。重新拉 `paths.transforms`、`paths.settings`。 */
   | { type: "transforms-updated" };
 
 /** 平台的显示名由获取插件给，内核不认识具体平台。 */
@@ -270,40 +270,40 @@ export interface Comment {
  * 一条收下的东西有几个侧面，有哪个给哪个，前端都摆出来，不挑哪个要紧（feature 003 §7.1）。
  * 同一层可以有几份（平台的字幕和机器转的，或两次机器转的），都给：平台的在前，机器的按 `source.at` 新的在前。
  * `key` 在一条里唯一：`asr:platform:<snapshotId>:<lang>`、`asr:<runId>`、`ocr:<runId>`、`frames:<runId>`、`video:<snapshotId>`。
- * `remark` 只写量得出来的明显的事（003 §6），例如「没听到人说话」。
- * 内核今天（11-12）还没给 `key`、`source`，也还没有 `asr`、`ocr`、`frames` 三层；`source.ts` 在边界上补 `key`。
+ * `remark` 只写量得出来的明显的事（003 §6），例如「没听到人说话」；作者写的字和评论没有。
  */
 export type Facet =
   | { layer: "asr"; key: string; source: FacetSource; segments: Segment[]; remark?: string }
   | { layer: "ocr"; key: string; source: FacetSource; segments: Segment[]; remark?: string }
   /** 画面上的字：关键帧上认出的字，连着几帧一样的一行合成一段，`endSec` 写到最后出现的那一帧。 */
   | { layer: "frames"; key: string; source: FacetSource; segments: Segment[]; remark?: string }
-  | { layer: "text"; key: string; segments: Segment[]; remark?: string }
+  | { layer: "text"; key: string; segments: Segment[] }
   | { layer: "image"; key: string; images: ImageRef[]; remark?: string }
   | {
       layer: "video";
       key: string;
       snapshotId: string;
       durationSec: number;
-      /** 有合起来的 `play.mp4` 时指它，没有指原样的画面；没存下视频文件时省略，只剩关键帧。 */
+      /** 有合起来的 `play.mp4` 时指它（带 `v=<那次 play 的 runId>`），没有指原样的画面；没存下视频文件时省略，只剩关键帧。 */
       url?: string;
       /** 最新一次 `keyframes` 的帧，地址是 `/media/<itemId>/frame/<runId>/<毫秒>`。 */
       frames: Frame[];
-      cover?: ImageRef;
-      quality?: string;
       remark?: string;
     }
-  | { layer: "comments"; key: string; comments: Comment[]; remark?: string };
+  | { layer: "comments"; key: string; comments: Comment[] };
 
 export type FacetLayer = Facet["layer"];
 
-/** 能再转一次的三层，和转换任务同名。 */
+/** 转出文字的三层，和转换任务同名。 */
 export type TransformLayer = "asr" | "ocr" | "frames";
+
+/** 转换任务：三层文字，加画面的两样（`play` 合成能播的一份，`keyframes` 取关键帧）。 */
+export type TransformJob = TransformLayer | "play" | "keyframes";
 
 /**
  * 还没转出来的面，只在条目页那一面写一句（003 §4.4）：排着接着电（`later`）、排着在电池上（`on-power`）、
  * 在转（`now`）、等模型（`needs-model`，带要下的模型）、没转出来（`failed`，带原因）。没有计数、没有百分比。
- * 内核今天（11-12）还不给 `pending`；`source.ts` 在边界上补成空的。
+ * `video` 是画面的 `play`、`keyframes`。同一面有几样在等时只给一行。
  */
 export interface Pending {
   layer: "asr" | "ocr" | "frames" | "video";
@@ -1055,13 +1055,16 @@ export interface BatchRequest {
 
 // —— 转换插件和模型（feature 003 §4、§8.1）——
 
-export type TransformRequest = { jobs: "pending" } | { job: TransformLayer; plugin?: string; options?: Record<string, unknown> };
+export type TransformRequest = { jobs: "pending" } | { job: TransformJob; plugin?: string; options?: Record<string, unknown> };
+
+/** `POST paths.modelDownload` 的回答。 */
+export interface ModelDownload {
+  state: "present" | "downloading";
+}
 
 /** 一个模型：`size` 是字节；`state` 照内核 `ModelState`，`failed` 带一句原因。 */
 export interface TransformModel {
   name: string;
-  /** 给人看的名字，例如「SenseVoice」。 */
-  label: string;
   size: number;
   license: string;
   state: "absent" | "downloading" | "present" | "failed";
@@ -1069,18 +1072,14 @@ export interface TransformModel {
 }
 
 /**
- * 一个转换插件：做哪几层（`jobs` 里还可以有 `play`、`keyframes` 这类不出文字的），用哪个工具，模型，能不能跑。
- * `health` 是插件自己报的：`ok`，或 `unavailable`（例如系统版本不够）带 `hint`。
+ * 一个转换插件：做哪几样，自带的程序，模型，能不能跑。
+ * `health` 是插件自己报的：`ok`，或 `unavailable` 带 `hint`（没过的检查；声明的模型还没下时只写「要先下载模型」）。
  */
 export interface TransformPlugin {
   id: string;
   name: string;
   version: string;
-  /** 转成文字时写在那一面头上的工具名，例如「SenseVoice」「Vision」。 */
-  tool: string;
-  /** 吃什么、出什么，给人看的一句，例如「声音 → 口播文字」。 */
-  turns: string;
-  jobs: string[];
+  jobs: TransformJob[];
   /** 自带的第三方程序和它的许可，例如 ffmpeg（LGPL）。 */
   bundled?: { name: string; license: string }[];
   models: TransformModel[];
@@ -1098,7 +1097,8 @@ export interface TransformsView {
 
 /**
  * 插件出门走哪条路（宿主的本机代理替插件连出去，协议 §7）：`system` 跟系统代理，和浏览器同一个出口；
- * `direct` 直连；`custom` 用 `proxy` 里填的（`http://`、`https://` 或 `socks5://`）。
+ * `direct` 直连；`custom` 用 `proxy` 里填的（`http://`、`socks5://` 或 `socks5h://`，有主机、没有路径）。
+ * 读回来的 `proxy` 不带密码；交回同一个不带密码的地址时，内核留着存着的密码。
  */
 export interface NetworkSetting {
   mode: "system" | "direct" | "custom";

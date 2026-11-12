@@ -1,6 +1,6 @@
 // 样例库的转换插件和模型：和内核同一套接口（feature 003 §8.1），转换在内存里「跑」一两秒就出结果。
 // 两个是 usuyo 自带的（builtin/），两个是装上的别人的插件，好在条目页上「换一个转」。
-import type { Facet, Item, Pending, Segment, TransformLayer, TransformPlugin, TransformRequest, TransformsView } from "../api/endpoints";
+import type { Facet, Item, ModelDownload, Pending, Segment, TransformJob, TransformPlugin, TransformRequest, TransformsView } from "../api/endpoints";
 import type { Transforms } from "../api/source";
 
 const MB = 1_000_000;
@@ -9,10 +9,8 @@ function basePlugins(): TransformPlugin[] {
   return [
     {
       id: "builtin/media",
-      name: "视频和声音",
+      name: "音视频",
       version: "0.1.0",
-      tool: "ffmpeg",
-      turns: "视频 → 能播的视频、关键帧；声音 → 给转口播用的音频",
       jobs: ["play", "keyframes"],
       bundled: [{ name: "ffmpeg 9.0.2", license: "LGPL-2.1" }],
       models: [],
@@ -22,13 +20,10 @@ function basePlugins(): TransformPlugin[] {
       id: "builtin/asr-sherpa",
       name: "口播转文字",
       version: "0.1.0",
-      tool: "SenseVoice",
-      turns: "声音 → 口播文字，带每一句的时间",
       jobs: ["asr"],
       models: [
         {
           name: "sense-voice-int8-2024-07-17",
-          label: "SenseVoice",
           size: 163_002_883,
           license: "FunASR Model Open Source License（可商用，署名并写明模型名）",
           state: "absent",
@@ -38,41 +33,51 @@ function basePlugins(): TransformPlugin[] {
     },
     {
       id: "builtin/ocr-vision",
-      name: "认图里的字",
+      name: "图里的字",
       version: "0.1.0",
-      tool: "Vision",
-      turns: "图、封面、关键帧 → 图里的字，带每一行在图上的位置",
       jobs: ["ocr", "frames"],
       models: [],
       health: "ok",
-      hint: "用 macOS 自带的文字识别，不用下载模型",
     },
     {
       id: "lin/asr-firered",
       name: "FireRedASR2 转口播",
       version: "0.3.1",
-      tool: "FireRedASR2",
-      turns: "声音 → 口播文字，带每一句的时间",
       jobs: ["asr"],
-      models: [{ name: "firered-asr2-aed-l", label: "FireRedASR2-AED-L", size: 912 * MB, license: "Apache-2.0", state: "present" }],
+      models: [{ name: "firered-asr2-aed-l", size: 912 * MB, license: "Apache-2.0", state: "present" }],
       health: "ok",
     },
     {
       id: "lin/ocr-ppocr",
       name: "PP-OCR 认字",
       version: "0.2.0",
-      tool: "PP-OCRv6",
-      turns: "图、封面、关键帧 → 图里的字，带每一行在图上的位置",
       jobs: ["ocr", "frames"],
-      models: [{ name: "pp-ocrv6-small", label: "PP-OCRv6 small", size: 16 * MB, license: "Apache-2.0", state: "absent" }],
+      models: [{ name: "pp-ocrv6-small", size: 16 * MB, license: "Apache-2.0", state: "absent" }],
       health: "unavailable",
       hint: "这台电脑上缺 onnxruntime，插件没能启动",
     },
   ];
 }
 
-/** 每一层默认用哪个插件。 */
-const DEFAULT_PLUGIN: Record<TransformLayer, string> = { asr: "builtin/asr-sherpa", ocr: "builtin/ocr-vision", frames: "builtin/ocr-vision" };
+/** 每一样默认用哪个插件。 */
+const DEFAULT_PLUGIN: Record<TransformJob, string> = {
+  play: "builtin/media",
+  keyframes: "builtin/media",
+  asr: "builtin/asr-sherpa",
+  ocr: "builtin/ocr-vision",
+  frames: "builtin/ocr-vision",
+};
+
+/** 机器转的那一份头上写的工具名：内核写模型名，没有模型的写插件报的程序名。 */
+const TOOL: Record<string, string> = {
+  "builtin/asr-sherpa": "SenseVoice",
+  "builtin/ocr-vision": "Vision",
+  "lin/asr-firered": "FireRedASR2",
+  "lin/ocr-ppocr": "PP-OCRv6",
+};
+
+/** 一样转换落在条目页的哪一面。 */
+const layerOf = (job: TransformJob): Pending["layer"] => (job === "play" || job === "keyframes" ? "video" : job);
 
 /** 样例库的条目：读、写一条，和还收着没放出来的几面。 */
 export interface MockItems {
@@ -117,7 +122,7 @@ export function createMockTransforms(items: MockItems, empty: boolean): Transfor
       const base = item.facets.find((f) => f.layer === layer);
       if (base && "source" in base) {
         const runId = `0193f2b2-0000-7000-8000-${String(++seq).padStart(12, "0")}`;
-        const copy = { ...base, key: `${layer}:${runId}`, source: { by: "machine" as const, tool: plugin.tool, runId, at: new Date().toISOString(), ...(layer === "asr" ? { lang: "zh" } : {}) } };
+        const copy = { ...base, key: `${layer}:${runId}`, source: { by: "machine" as const, tool: TOOL[plugin.id] ?? plugin.name, runId, at: new Date().toISOString(), ...(layer === "asr" ? { lang: "zh" } : {}) } };
         added = [{ ...copy, segments: layer === "asr" ? reheard(base.segments) : base.segments }];
       }
     }
@@ -137,36 +142,43 @@ export function createMockTransforms(items: MockItems, empty: boolean): Transfor
   return {
     async transforms(): Promise<TransformsView> {
       await wait(40);
-      return { plugins: plugins.map((p) => ({ ...p, models: p.models.map((m) => ({ ...m })) })), auto: true };
+      // 和内核一样：声明的模型还没下时插件报 `unavailable`，只写「要先下载模型」。
+      const view = (p: TransformPlugin): TransformPlugin => {
+        const copy = { ...p, models: p.models.map((m) => ({ ...m })) };
+        return p.health === "ok" && p.models.some((m) => m.state !== "present") ? { ...copy, health: "unavailable", hint: "要先下载模型" } : copy;
+      };
+      return { plugins: plugins.map(view), auto: true };
     },
     async transform(id, body: TransformRequest) {
       await wait(60);
       const item = items.get(id);
       if ("jobs" in body) {
-        // 打开了这一条：排着的挪到最前，在电池上也转；等模型的接着等。
+        // 打开了这一条、点了「再试」：排着的和没转出来的挪到最前，在电池上也转；等模型的接着等。
         for (const p of item.pending) {
-          if (p.state === "later" || p.state === "on-power") runLater(id, p.layer, p.layer === "video" ? "builtin/media" : DEFAULT_PLUGIN[p.layer]);
+          if (p.state === "later" || p.state === "on-power" || p.state === "failed") runLater(id, p.layer, p.layer === "video" ? "builtin/media" : DEFAULT_PLUGIN[p.layer]);
         }
         return;
       }
+      const layer = layerOf(body.job);
       const pluginId = body.plugin ?? DEFAULT_PLUGIN[body.job];
       const plugin = plugins.find((p) => p.id === pluginId);
       if (!plugin?.jobs.includes(body.job)) throw new Error(`invalid-args: ${pluginId} 不做 ${body.job}`);
-      if (item.pending.some((p) => p.layer === body.job && p.state === "now")) throw new Error("conflict: 这一层正在转");
+      if (item.pending.some((p) => p.layer === layer && p.state === "now")) throw new Error("conflict: 这一层正在转");
       const missing = plugin.models.find((m) => m.state !== "present");
       if (missing) {
         setPending(id, (ps) => [
-          ...ps.filter((p) => p.layer !== body.job),
-          { layer: body.job, state: "needs-model", model: { plugin: plugin.id, name: missing.name, size: missing.size, license: missing.license } },
+          ...ps.filter((p) => p.layer !== layer),
+          { layer, state: "needs-model", model: { plugin: plugin.id, name: missing.name, size: missing.size, license: missing.license } },
         ]);
         return;
       }
-      runLater(id, body.job, pluginId);
+      runLater(id, layer, pluginId);
     },
-    async downloadModel(pluginId, name) {
+    async downloadModel(pluginId, name): Promise<ModelDownload> {
       await wait(60);
       const m = model(pluginId, name);
-      if (m.state === "present") return;
+      if (m.state === "present") return { state: "present" };
+      if (m.state === "downloading") return { state: "downloading" };
       m.state = "downloading";
       void wait(DOWNLOAD_MS).then(() => {
         m.state = "present";
@@ -176,6 +188,7 @@ export function createMockTransforms(items: MockItems, empty: boolean): Transfor
           if (p) runLater(id, p.layer, pluginId);
         }
       });
+      return { state: "downloading" };
     },
     async removeModel(pluginId, name) {
       await wait(60);

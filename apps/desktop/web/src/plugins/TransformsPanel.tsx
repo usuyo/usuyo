@@ -1,13 +1,13 @@
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { isNotServed } from "../api/client";
 import type { TransformModel, TransformPlugin } from "../api/endpoints";
 import { useModelChange, useTransforms } from "../api/hooks";
-import { ErrorLine, NotServedLine } from "../components/ErrorLine";
+import { ErrorLine } from "../components/ErrorLine";
 import { sizeText } from "../item/faces";
 import { Button } from "../ui/Button";
+import { JOB_TEXT } from "./words";
 
-/** 「变成文字」那一栏：装着的转换插件，各把什么转成什么；模型的大小、许可，下载和删掉。 */
+/** 「变成文字」那一栏：装着的转换插件，各做哪几样；模型的大小、许可，下载和删掉。 */
 export function TransformsPanel() {
   const transforms = useTransforms();
   return (
@@ -16,11 +16,7 @@ export function TransformsPanel() {
       <p className="m-0 mt-1.5 max-w-[640px] text-note text-sub">
         把口播、图里的字、画面上的字转出来的插件。都在这台电脑上跑，不把内容发出去。模型只在你点了「下载」以后才下，放在这台电脑自己的目录里，不进资料库。
       </p>
-      {isNotServed(transforms.error) ? (
-        <NotServedLine className="mt-5">这台电脑上的 usuyo 内核还没接上转换插件；接上以后，这里列出它们和要下载的模型。</NotServedLine>
-      ) : transforms.error ? (
-        <ErrorLine error={transforms.error} className="mt-5" />
-      ) : null}
+      {transforms.error ? <ErrorLine error={transforms.error} className="mt-5" /> : null}
       {transforms.data ? (
         <>
           <p className="m-0 mt-3 text-small text-faint">
@@ -41,17 +37,16 @@ export function TransformsPanel() {
 }
 
 function TransformCard({ plugin }: { plugin: TransformPlugin }) {
+  // 只差模型没下：照实说一句，不当成出了问题；下载在下面那一行。
+  const waitsForModel = plugin.models.some((m) => m.state !== "present");
   return (
     <article aria-label={plugin.name} className="flex min-w-0 flex-col rounded-card border border-border bg-card px-4 py-3.5">
-      <div className="flex flex-wrap items-baseline gap-x-2">
-        <h3 className="m-0 text-section font-semibold text-text">{plugin.name}</h3>
-        <span className="text-note text-sub">{plugin.tool}</span>
-      </div>
-      <p className="m-0 mt-1 text-note text-label">{plugin.turns}</p>
+      <h3 className="m-0 text-section font-semibold text-text">{plugin.name}</h3>
+      <p className="m-0 mt-1 text-note text-label">{plugin.jobs.map((j) => JOB_TEXT[j]).join("、")}</p>
       {plugin.health === "ok" ? (
         plugin.hint ? <p className="m-0 mt-1.5 text-small text-sub">{plugin.hint}</p> : null
       ) : (
-        <p className="m-0 mt-1.5 text-small text-warn">{plugin.hint ?? "这个插件现在用不了"}</p>
+        <p className={`m-0 mt-1.5 text-small ${waitsForModel ? "text-sub" : "text-warn"}`}>{plugin.hint ?? "这个插件现在用不了"}</p>
       )}
       {plugin.bundled?.map((b) => (
         <p key={b.name} className="m-0 mt-1.5 text-small text-sub">
@@ -95,7 +90,7 @@ function ModelRow({ pluginId, model }: { pluginId: string; model: TransformModel
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <div className="min-w-0 flex-[1_1_160px]">
           <div className="text-note font-medium text-text">
-            {model.label} <span className="mono text-tag font-normal text-faint">{sizeText(model.size)}</span>
+            <span className="break-all">{model.name}</span> <span className="mono text-tag font-normal text-faint">{sizeText(model.size)}</span>
           </div>
           <div className={`text-small ${model.state === "failed" ? "text-warn" : "text-sub"}`}>{modelStateText(model)}</div>
         </div>
@@ -129,7 +124,7 @@ function ModelRow({ pluginId, model }: { pluginId: string; model: TransformModel
       </div>
       {asking ? <p className="m-0 mt-1.5 text-small text-sub">删掉以后，已经转出来的文字都留着；之后要它转的，等你再下载。</p> : null}
       <p className="m-0 mt-1.5 text-small text-faint">
-        许可：{model.license}　<span className="mono">{model.name}</span>
+        许可：{model.license}
       </p>
       {change.error ? <ErrorLine error={change.error} className="mt-1" /> : null}
     </li>

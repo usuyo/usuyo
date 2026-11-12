@@ -37,17 +37,25 @@ export function Viewer({
   const reduced = useReducedMotion();
   const { video, attachVideo } = player;
 
+  // 视频的封面：这一条的第一张图，没有图就不放。
+  const poster = video ? images?.images[0] : undefined;
+  const keys = images?.images.map((x) => x.key) ?? [];
+  const picked = video && player.image !== null ? images?.images.find((x) => x.key === player.image) : undefined;
   let src: string | undefined;
   let alt = "";
   let size: { width: number; height: number } | undefined;
   if (video && player.still) {
     src = player.still;
     alt = `${clock(player.t)} 的画面`;
+  } else if (picked) {
+    src = picked.url;
+    alt = imageName(picked.key, keys);
+    size = picked;
   } else if (video) {
-    size = video.cover;
-    if (player.image === "cover" || (!player.playing && player.t === 0 && video.cover)) {
-      src = video.cover?.url;
+    if (poster && !player.playing && player.t === 0) {
+      src = poster.url;
       alt = "封面";
+      size = poster;
     } else {
       const frame = [...video.frames].reverse().find((f) => f.sec <= player.t + 0.01) ?? video.frames[0];
       src = frame?.url;
@@ -56,11 +64,11 @@ export function Viewer({
   } else if (images) {
     const im = images.images.find((x) => x.key === player.image) ?? images.images[0];
     src = im?.url;
-    alt = im ? imageName(im.key) : "";
+    alt = im ? imageName(im.key, keys) : "";
     size = im;
   }
   // 框：点过的那一行，或指着的那一行（只在它就在这张图、这一帧上时）。
-  const shownKey = video ? (player.image === "cover" ? "cover" : null) : (player.image ?? images?.images[0]?.key ?? null);
+  const shownKey = video ? player.image : (player.image ?? images?.images[0]?.key ?? null);
   const peek = player.peek && (player.peek.imageKey === null ? player.still !== null : player.peek.imageKey === shownKey) ? player.peek.xywh : null;
   const box = peek ?? player.region;
   const textOnly = item.stored === "text-only";
@@ -72,13 +80,14 @@ export function Viewer({
         aria-label="画面"
         className="relative aspect-video w-full overflow-hidden rounded-card border border-border bg-card2 [container-type:size]"
       >
-        {video?.url && player.canPlay && !player.still ? (
+        {video?.url && player.canPlay && !player.still && !picked ? (
           <video
             ref={attachVideo}
             src={video.url}
-            poster={video.cover?.url}
+            poster={poster?.url}
             className="size-full object-contain"
             onTimeUpdate={(e) => player.onTime(e.currentTarget.currentTime)}
+            onEnded={player.onEnd}
           />
         ) : src ? (
           <Picture src={src} alt={alt} size={size} box={box} dim={textOnly} />
@@ -252,7 +261,7 @@ function Strip({ images, player }: { images: ImageFacet; player: Player }) {
         {list.map((im, i) => (
           <AriaButton
             key={im.key}
-            aria-label={imageName(im.key)}
+            aria-label={imageName(im.key, list.map((x) => x.key))}
             aria-current={i === index}
             onPress={() => player.showImage(im.key)}
             className={`press h-ctl w-[64px] shrink-0 cursor-pointer overflow-hidden rounded-sm border bg-card2 p-0 outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent ${i === index ? "border-label" : "border-border"}`}

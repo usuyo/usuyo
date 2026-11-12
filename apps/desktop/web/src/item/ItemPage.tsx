@@ -100,15 +100,21 @@ function ItemBody({ item, topics, jump }: { item: Item; topics: Topic[]; jump: I
     else if (jump.img !== undefined) go({ kind: "image", imageKey: jump.img });
   }, [jump, go]);
 
-  // 打开这一条时，它还没转出来的几面挪到最前（在电池上也转）。没有在等的就不问内核。
-  const waits = item.pending.some((p) => p.state === "later" || p.state === "on-power");
+  // 打开这一条时问一次内核：它还没做好的转换（没转出来的也算）挪到最前，在电池上也转。在回收站里的不问。
   const { mutate: hurry } = transform;
+  const hurried = useRef(false);
   useEffect(() => {
-    if (waits) hurry({ jobs: "pending" });
-  }, [waits, hurry]);
+    if (hurried.current || trashed) return;
+    hurried.current = true;
+    hurry({ jobs: "pending" });
+  }, [trashed, hurry]);
 
-  const times = (layer: "asr" | "frames") =>
-    item.facets.find((f): f is Extract<Facet, { layer: "asr" | "frames" }> => f.layer === layer)?.segments.flatMap((s) => (s.position?.kind === "time" ? [s.position.sec] : [])) ?? [];
+  // 时间轴上的记号：一秒一个，同一帧上认出的几行只记一次。
+  const times = (layer: "asr" | "frames") => [
+    ...new Set(
+      item.facets.find((f): f is Extract<Facet, { layer: "asr" | "frames" }> => f.layer === layer)?.segments.flatMap((s) => (s.position?.kind === "time" ? [s.position.sec] : [])) ?? [],
+    ),
+  ];
 
   return (
     <>

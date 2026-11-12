@@ -17,6 +17,8 @@ export function Network({ view }: { view: SettingsView }) {
   const [proxy, setProxy] = useState(view.network.proxy ?? "");
   const problem = mode === "custom" ? proxyProblem(proxy) : null;
   const saved = view.network.mode === "custom" && (view.network.proxy ?? "") === proxy.trim();
+  // 读回来的地址不带密码；原样交回去，内核留着存着的那个，所以不用再填。
+  const withUser = saved && URL.canParse(proxy.trim()) && new URL(proxy.trim()).username !== "";
   return (
     <div className="flex flex-col gap-4">
       <Row label="插件出门" sub={NETWORK_TEXT[mode].sub}>
@@ -50,6 +52,7 @@ export function Network({ view }: { view: SettingsView }) {
             </Button>
           </div>
           {problem && proxy !== "" ? <p className="m-0 mt-1.5 text-small text-sub">{problem}</p> : null}
+          {withUser ? <p className="m-0 mt-1.5 text-small text-sub">这里不显示密码。地址不动，存着的密码一直用着；改了地址，连密码一起写上。</p> : null}
         </Row>
       ) : null}
       {view.network.fakeIp ? (

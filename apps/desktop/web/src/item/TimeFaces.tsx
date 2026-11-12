@@ -10,7 +10,7 @@ import type { Player } from "./usePlayer";
 /** 宽的时候几面各占一栏；最多三栏（两份口播加画面上的字）。 */
 const LANE_COLS: Record<number, string> = { 1: "@md:grid-cols-1", 2: "@md:grid-cols-2", 3: "@md:grid-cols-3" };
 
-/** 对照里的一栏：一份口播或画面上的字；还没有的那一面只写一句。 */
+/** 对照里的一栏：一份口播或画面上的字；还没有的那一面只写一句（在栏头里，由 `heads` 给）。 */
 export interface Lane {
   id: string;
   layer: "asr" | "frames";
@@ -54,8 +54,9 @@ export function TimeFaces({ lanes, heads, player, itemId }: { lanes: Lane[]; hea
             ))}
           </div>
         </div>
+        {/* 还没有那一份的栏，那一句写在栏头里；已经有一份、又在转的，写在这里。 */}
         {lanes.map((l) =>
-          l.pending || (l.copy && l.copy.segments.length === 0 && !l.copy.remark) ? (
+          (l.copy && l.pending) || (l.copy && l.copy.segments.length === 0 && !l.copy.remark) ? (
             <div key={l.id} className="border-b border-border px-1">
               {l.pending ? (
                 <PendingLine pending={l.pending} itemId={itemId} />

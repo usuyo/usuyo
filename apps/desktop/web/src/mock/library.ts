@@ -100,10 +100,10 @@ function buildFacets(raw: RawItem): Facet[] {
       snapshotId,
       durationSec: dur,
       frames,
-      quality: "1080p",
-      cover: { key: "cover", url: pic("cover"), ...PICTURE_SIZE },
       ...(raw.same ? { remark: "画面几乎不动" } : {}),
     });
+    // 封面和内核一样放在图那一面里，画面拿第一张当封面。
+    facets.push({ layer: "image", key: "image", images: [{ key: "cover", url: pic("cover"), ...PICTURE_SIZE }] });
   } else if (raw.images) {
     const images = Array.from({ length: raw.images }, (_, i) => ({
       key: `p${i + 1}`,
@@ -195,7 +195,6 @@ function pictured(item: Item): Item {
         return {
           ...f,
           frames: f.frames.map((fr) => ({ ...fr, url: draw(fr.url) })),
-          ...(f.cover ? { cover: { ...f.cover, url: draw(f.cover.url) } } : {}),
         };
       }
       if (f.layer === "image") return { ...f, images: f.images.map((im) => ({ ...im, url: draw(im.url) })) };

@@ -2,7 +2,7 @@ import { useMap } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
 import { Row } from "./Row";
 
-/** 诊断：读不了、被跳过的条目（内核今天就在地图里给）；日志在哪（要设置接口）。 */
+/** 诊断：读不了、被跳过的条目（地图里给）；日志在哪（设置里给）。 */
 export function Diagnostics({ logs }: { logs: string | undefined }) {
   const map = useMap();
   const skipped = map.data?.unreadable ?? [];
@@ -31,9 +31,7 @@ export function Diagnostics({ logs }: { logs: string | undefined }) {
           <code className="mono block truncate rounded-sm bg-chip px-3 py-2 text-tag text-text select-text" title={logs}>
             {logs}
           </code>
-        ) : (
-          <p className="m-0 pt-2 text-note text-sub">内核还不说日志在哪；一般在这台电脑的应用数据目录里的 usuyo/logs。</p>
-        )}
+        ) : null}
       </Row>
     </div>
   );

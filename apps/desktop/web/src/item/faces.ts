@@ -1,5 +1,5 @@
 // 条目页上几面的话和摆法：每一份从哪来、还没转出来的那一句、按时间对齐几面。
-import type { Facet, FacetSource, Pending, Segment, TransformLayer, TransformsView } from "../api/endpoints";
+import type { Facet, FacetSource, Pending, Segment, TransformLayer } from "../api/endpoints";
 import { dayText } from "./format";
 
 export type CopyFacet = Extract<Facet, { layer: TransformLayer }>;
@@ -14,12 +14,22 @@ export function sourceText(layer: TransformLayer, source: FacetSource): string {
   return [verb, source.tool, source.at ? dayText(source.at) : ""].filter(Boolean).join(" · ");
 }
 
-/** 切换几份时按钮上的短名：平台的写「平台字幕」，机器的写工具名；同一个工具转过两次的带上日子。 */
+/** 切换几份时按钮上的短名：平台的写「平台字幕」，机器的写工具名；同一个工具转过两次的带上日子，同一天的再带上几点几分。 */
 export function copyLabel(copy: CopyFacet, all: CopyFacet[]): string {
   if (copy.source.by === "platform") return copy.layer === "asr" ? "平台字幕" : "平台给的";
   const tool = copy.source.tool ?? "机器";
-  const twins = all.filter((c) => c.source.by === "machine" && c.source.tool === copy.source.tool).length;
-  return twins > 1 && copy.source.at ? `${tool} · ${dayText(copy.source.at)}` : tool;
+  const at = copy.source.at;
+  const twins = all.filter((c) => c.source.by === "machine" && c.source.tool === copy.source.tool);
+  if (twins.length < 2 || !at) return tool;
+  const day = dayText(at);
+  const sameDay = twins.some((c) => c !== copy && c.source.at !== undefined && dayText(c.source.at) === day);
+  return sameDay ? `${tool} · ${day} ${clockOf(at)}` : `${tool} · ${day}`;
+}
+
+/** 本地时间的「14:05」。 */
+function clockOf(iso: string): string {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
 /** 字节写成「163 MB」「0.9 GB」。 */
@@ -29,20 +39,11 @@ export function sizeText(bytes: number): string {
   return `${Math.max(1, Math.round(bytes / 1e3))} KB`;
 }
 
-/** 模型给人看的名字：`/transforms` 里有就用那里的，没有就用文件名。 */
-export function modelLabel(name: string, transforms: TransformsView | undefined): string {
-  for (const p of transforms?.plugins ?? []) {
-    const m = p.models.find((x) => x.name === name);
-    if (m) return m.label;
-  }
-  return name;
-}
-
 /**
  * 还没转出来的那一面只写一句实话（feature 003 §4.4 的表）：不写百分比，不写「未转」「待处理」。
- * `downloading` 是那个模型正在下。
+ * 模型照它的 `name` 写；`downloading` 是那个模型正在下。
  */
-export function pendingText(p: Pending, label: string, downloading = false): string {
+export function pendingText(p: Pending, downloading = false): string {
   const face = FACE_NAME[p.layer];
   switch (p.state) {
     case "later":
@@ -52,8 +53,9 @@ export function pendingText(p: Pending, label: string, downloading = false): str
     case "now":
       return `在转${face}。`;
     case "needs-model": {
+      const name = p.model ? ` ${p.model.name} ` : "";
       const size = p.model ? `，约 ${sizeText(p.model.size)}` : "";
-      return downloading ? `在下载 ${label} 模型${size}。下好了这一条会接着转。` : `转${face}要先下载 ${label} 模型${size}，只下一次。`;
+      return downloading ? `在下载${name}模型${size}。下好了这一条会接着转。` : `转${face}要先下载${name}模型${size}，只下一次。`;
     }
     default:
       return `${face}没转出来：${p.hint ?? "原因没写"}`;
