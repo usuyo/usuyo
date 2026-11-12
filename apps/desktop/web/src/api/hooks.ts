@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ConfirmImportRequest, CreateDeliverTokenRequest, ImportEntry, ImportView, Item, StartImportRequest, TakeRequest } from "./endpoints";
-import { ApiError, DaemonUnreachableError } from "./client";
+import type { SettingsPatch, TransformRequest, ConfirmImportRequest, CreateDeliverTokenRequest, ImportEntry, ImportView, Item, StartImportRequest, TakeRequest } from "./endpoints";
+import { ApiError, DaemonUnreachableError, isNotServed } from "./client";
 import { call } from "./source";
 
 export const queryKeys = {
@@ -18,6 +18,8 @@ export const queryKeys = {
   import: (id: string) => ["imports", id] as const,
   importEntries: (id: string, standing?: ImportEntry["standing"]) =>
     standing === undefined ? (["import-entries", id] as const) : (["import-entries", id, standing] as const),
+  transforms: ["transforms"] as const,
+  settings: ["settings"] as const,
   deliverTokens: ["deliver-tokens"] as const,
   inbox: ["inbox"] as const,
 };
@@ -43,14 +45,16 @@ export function useItem(id: string | null) {
     queryKey: queryKeys.item(id ?? ""),
     queryFn: () => call((l) => l.item(id ?? "")),
     enabled: id !== null,
+    // 有一面在转时隔一会儿重拉：事件流断了（或样例库没有事件流）也看得到转好的那一面。
+    refetchInterval: (q) => (q.state.data?.pending.some((p) => p.state === "now") ? 1500 : false),
     // 404 是这一条已经不在了（例如从回收站清掉了），再试也不会有。
     retry: (count, error) => !(error instanceof DaemonUnreachableError) && !isGone(error) && count < 2,
   });
 }
 
-/** 这一条已经不在资料库里了：内核回 404。 */
+/** 这一条已经不在资料库里了：内核回 404（不是兜底路由的那种）。 */
 export function isGone(error: Error | null): boolean {
-  return error instanceof ApiError && error.status === 404;
+  return error instanceof ApiError && error.status === 404 && !isNotServed(error);
 }
 
 export function useSearch(q: string) {
@@ -188,6 +192,15 @@ export function usePluginChange(pluginId: string) {
   });
 }
 
+/** 开或关一种取法。 */
+export function useSwitchMethod(pluginId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { methodId: string; enabled: boolean }) => call((s) => s.switchMethod(pluginId, v.methodId, v.enabled)),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.plugins }),
+  });
+}
+
 export function useForgetLogin() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -317,5 +330,74 @@ export function useRevokeDeliverToken() {
   return useMutation({
     mutationFn: (id: string) => call((s) => s.revokeDeliverToken(id)),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.deliverTokens }),
+  });
+}
+
+// —— 转换插件和模型 ——
+
+/** 内核没有这条接口（`isNotServed`）时不重试：页面照它说一句。 */
+const retryUnlessMissing = (count: number, error: Error) => !(error instanceof DaemonUnreachableError) && !isNotServed(error) && count < 2;
+
+export function useTransforms() {
+  return useQuery({
+    queryKey: queryKeys.transforms,
+    queryFn: () => call((s) => s.transforms()),
+    retry: retryUnlessMissing,
+    // 有模型在下载时隔一会儿重拉，下好了按钮跟着变。
+    refetchInterval: (q) => (q.state.data?.plugins.some((p) => p.models.some((m) => m.state === "downloading")) ? 1500 : false),
+  });
+}
+
+/** 再转一次、换一个转，或把还没转的挪到最前。转出来以后 `item-updated` 让这一条自己刷新；样例库没有事件流，这里也重拉一次。 */
+export function useTransform(itemId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: TransformRequest) => call((s) => s.transform(itemId, body)),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.item(itemId) }),
+  });
+}
+
+/** 下载或删掉一个模型。等着它的条目跟着变，所以条目也重拉。 */
+export function useModelChange() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { kind: "download" | "remove"; pluginId: string; name: string }) =>
+      call((s) => (v.kind === "download" ? s.downloadModel(v.pluginId, v.name) : s.removeModel(v.pluginId, v.name))),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.transforms });
+      void queryClient.invalidateQueries({ queryKey: ["items"] });
+    },
+  });
+}
+
+// —— 设置 ——
+
+export function useSettings() {
+  return useQuery({ queryKey: queryKeys.settings, queryFn: () => call((s) => s.settings()), retry: retryUnlessMissing });
+}
+
+/** 改几项设置。回收站的天数变了，回收站页和条目页上的「几天内能恢复」也跟着变。 */
+export function useChangeSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: SettingsPatch) => call((s) => s.changeSettings(patch)),
+    onSuccess: (view, patch) => {
+      queryClient.setQueryData(queryKeys.settings, view);
+      if ("trashDays" in patch) void queryClient.invalidateQueries({ queryKey: queryKeys.trash });
+      if (patch.transforms) void queryClient.invalidateQueries({ queryKey: queryKeys.transforms });
+    },
+  });
+}
+
+/** 时钟跳了以后拦下的那几项，照时间移除。 */
+export function useReleaseHeld() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => call((s) => s.releaseHeld()),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.settings });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.trash });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.map });
+    },
   });
 }

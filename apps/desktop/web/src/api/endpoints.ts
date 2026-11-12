@@ -34,6 +34,15 @@ export const paths = {
   /** 事件流（SSE）：`event:` 是 `LibraryEvent["type"]` 或 `PlatformEvent["type"]`，`data:` 是事件的 JSON。要带令牌，用 fetch 读。 */
   events: "/events",
 
+  // —— 设置（「设置」页）。内核今天（11-12）还没有这几条。——
+  /** GET `SettingsView`；PATCH `SettingsPatch` 改其中几项，回改好的整份。改了马上生效。 */
+  settings: "/settings",
+  /**
+   * POST：时钟守卫拦下的那几项照时间移除（SPEC §1.7「照时间移除」）。回 `{removed}`，之后 `trashHeld` 没了。
+   * 只在 `SettingsView.trashHeld` 有的时候给点。
+   */
+  trashReleaseHeld: "/trash/release-held",
+
   // —— 获取插件（「获取插件」页）——
   /** GET：装着的获取插件、各自的标签和节奏、停着没有；还有没加载的和原因。 */
   plugins: "/plugins",
@@ -41,6 +50,8 @@ export const paths = {
   pluginSources: (id: string) => `/plugins/${pluginPath(id)}/sources`,
   /** POST：「现在再试」，去掉这个插件的暂停。 */
   pluginTryNow: (id: string) => `/plugins/${pluginPath(id)}/try-now`,
+  /** PUT `MethodSwitchRequest`：开或关插件的一种取法，回整个插件。内核今天（11-12）还没有这条。 */
+  pluginMethod: (id: string, method: string) => `/plugins/${pluginPath(id)}/methods/${encodeURIComponent(method)}`,
   /** POST：「先别试」，到你点「现在再试」为止哪儿都不调它。 */
   pluginHold: (id: string) => `/plugins/${pluginPath(id)}/hold`,
   /** PUT `{value}` 填一个密钥设置（协议 §2.11），DELETE 去掉。值从不回出来。 */
@@ -49,6 +60,20 @@ export const paths = {
   sites: "/sites",
   /** PUT `StorageState`：壳的登录窗口读出 cookie 以后交到这里（存进钥匙串）；DELETE 忘掉这个站点的登录。 */
   siteLogin: (site: string) => `/sites/${encodeURIComponent(site)}/login`,
+  // —— 转换插件和模型（feature 003 §8.1）。内核今天（11-12）都还没有这几条。——
+  /**
+   * POST `TransformRequest`：`{jobs: "pending"}` 把这条还没转的挪到最前（打开条目页时调）；
+   * `{job, plugin?, options?}` 再转一次或换一个插件转，回 202 `{queued: true}`，原来那份留着。
+   * 这一层正在转回 `conflict`；插件做不了这一层回 `invalid-args`。
+   */
+  itemTransform: (id: string) => `/items/${encodeURIComponent(id)}/transform`,
+  /** GET `TransformsView`：装了哪些转换插件、各做哪几层、模型和状态。 */
+  transforms: "/transforms",
+  /** POST：下这个模型（按机器目录，不进资料库）；已经有了回 200。状态变了发 `transforms-updated`。 */
+  modelDownload: (pluginId: string, name: string) => `/transforms/${pluginPath(pluginId)}/models/${encodeURIComponent(name)}/download`,
+  /** POST：删掉这个模型；之后要它的转换等着模型。 */
+  modelRemove: (pluginId: string, name: string) => `/transforms/${pluginPath(pluginId)}/models/${encodeURIComponent(name)}/remove`,
+
   /** GET：装着的插件会用到的访客身份（不是账号）和有没有存着。访客窗口照它开；不出现在 `paths.sites` 里。 */
   visitors: "/visitors",
   /** PUT `StorageState`：壳的访客窗口读出 cookie 以后交到这里（存进钥匙串，和同一主机的账号分开）；DELETE 去掉。 */
@@ -117,7 +142,9 @@ export type PlatformEvent =
   /** 一次导入变了：列了一页、收下了一条、停下了。重新拉 `paths.import(id)`。 */
   | { type: "import-updated"; id: string }
   /** 插件的暂停、站点的登录、访客身份变了。重新拉 `paths.plugins`、`paths.sites`、`paths.visitors`。 */
-  | { type: "plugins-updated" };
+  | { type: "plugins-updated" }
+  /** 转换插件或模型的状态变了（下好了、删掉了、下载没成）。重新拉 `paths.transforms`。内核今天还不发。 */
+  | { type: "transforms-updated" };
 
 /** 平台的显示名由获取插件给，内核不认识具体平台。 */
 export interface Platform {
@@ -127,15 +154,30 @@ export interface Platform {
   name: string;
 }
 
-/** 媒体里的一处：一个时间点（秒，可带结束）或一张图。 */
+/**
+ * 媒体里的一处：一个时间点（秒，可带结束），或一张图。`xywh` 是图上（或那一帧上）的框，0–1，按宽高算，原点在左上角；
+ * 画面上的字带 `frameUrl`，是认出这一行的那一帧（feature 003 §5.3、§7.1）。
+ */
 export type Position =
-  | { kind: "time"; sec: number; endSec?: number; snapshotId: string }
-  | { kind: "image"; imageKey: string };
+  | { kind: "time"; sec: number; endSec?: number; snapshotId: string; xywh?: [number, number, number, number]; frameUrl?: string }
+  | { kind: "image"; imageKey: string; xywh?: [number, number, number, number] };
 
 /** 一层文字里的一段，带它在原样里的位置。 */
 export interface Segment {
   text: string;
   position?: Position;
+}
+
+/** 一份是从哪来的。 */
+export interface FacetSource {
+  by: "platform" | "machine";
+  /** 机器的：工具和模型的显示名，例如「SenseVoice」「Vision」。 */
+  tool?: string;
+  runId?: string;
+  /** RFC 3339。 */
+  at?: string;
+  /** 平台字幕、转写的语言。 */
+  lang?: string;
 }
 
 export interface ImageRef {
@@ -159,28 +201,51 @@ export interface Comment {
 }
 
 /**
- * 一条收下的东西有几个侧面，有哪个给哪个，前端都摆出来，不挑哪个要紧。
- * `remark` 只写显而易见的事，例如「画面一直是同一张图」。
+ * 一条收下的东西有几个侧面，有哪个给哪个，前端都摆出来，不挑哪个要紧（feature 003 §7.1）。
+ * 同一层可以有几份（平台的字幕和机器转的，或两次机器转的），都给：平台的在前，机器的按 `source.at` 新的在前。
+ * `key` 在一条里唯一：`asr:platform:<snapshotId>:<lang>`、`asr:<runId>`、`ocr:<runId>`、`frames:<runId>`、`video:<snapshotId>`。
+ * `remark` 只写量得出来的明显的事（003 §6），例如「没听到人说话」。
+ * 内核今天（11-12）还没给 `key`、`source`，也还没有 `asr`、`ocr`、`frames` 三层；`source.ts` 在边界上补 `key`。
  */
 export type Facet =
-  | { layer: "asr"; by: "machine" | "platform"; segments: Segment[]; remark?: string }
-  | { layer: "ocr"; segments: Segment[]; remark?: string }
-  | { layer: "text"; segments: Segment[]; remark?: string }
-  | { layer: "image"; images: ImageRef[]; remark?: string }
+  | { layer: "asr"; key: string; source: FacetSource; segments: Segment[]; remark?: string }
+  | { layer: "ocr"; key: string; source: FacetSource; segments: Segment[]; remark?: string }
+  /** 画面上的字：关键帧上认出的字，连着几帧一样的一行合成一段，`endSec` 写到最后出现的那一帧。 */
+  | { layer: "frames"; key: string; source: FacetSource; segments: Segment[]; remark?: string }
+  | { layer: "text"; key: string; segments: Segment[]; remark?: string }
+  | { layer: "image"; key: string; images: ImageRef[]; remark?: string }
   | {
       layer: "video";
+      key: string;
       snapshotId: string;
       durationSec: number;
-      /** 没存下视频文件时省略，只剩画面缩略图。 */
+      /** 有合起来的 `play.mp4` 时指它，没有指原样的画面；没存下视频文件时省略，只剩关键帧。 */
       url?: string;
+      /** 最新一次 `keyframes` 的帧，地址是 `/media/<itemId>/frame/<runId>/<毫秒>`。 */
       frames: Frame[];
       cover?: ImageRef;
       quality?: string;
       remark?: string;
     }
-  | { layer: "comments"; comments: Comment[]; remark?: string };
+  | { layer: "comments"; key: string; comments: Comment[]; remark?: string };
 
 export type FacetLayer = Facet["layer"];
+
+/** 能再转一次的三层，和转换任务同名。 */
+export type TransformLayer = "asr" | "ocr" | "frames";
+
+/**
+ * 还没转出来的面，只在条目页那一面写一句（003 §4.4）：排着接着电（`later`）、排着在电池上（`on-power`）、
+ * 在转（`now`）、等模型（`needs-model`，带要下的模型）、没转出来（`failed`，带原因）。没有计数、没有百分比。
+ * 内核今天（11-12）还不给 `pending`；`source.ts` 在边界上补成空的。
+ */
+export interface Pending {
+  layer: "asr" | "ocr" | "frames" | "video";
+  state: "later" | "on-power" | "now" | "needs-model" | "failed";
+  /** `plugin` 是转换插件的 id（`owner/repo`），`size` 是字节。 */
+  model?: { plugin: string; name: string; size: number; license: string };
+  hint?: string;
+}
 
 /** 回收站里的一项。`delete` 是你删掉的整条，`undo` 是撤销收下时移进来的整条，拿回来用 `paths.itemRestore`；
  * `keep-text` 是只留文字时移出来的图和视频，条目和文字还在，拿回来用 `paths.itemRestoreMedia`。 */
@@ -227,6 +292,8 @@ export interface Item extends ItemSummary {
   missing?: string;
   note?: string;
   facets: Facet[];
+  /** 还没转出来的面。 */
+  pending: Pending[];
   /** 在回收站里时有；RFC 3339。 */
   trashedAt?: string;
 }
@@ -260,6 +327,8 @@ export interface MapPoint {
 export interface MapView {
   regions: MapRegion[];
   points: MapPoint[];
+  /** 读不了、没摆上地图的条目（多半在 usuyo 外改坏了文件）和原因；内核今天就给，都读得了时省略。 */
+  unreadable?: { id: string; reason: string }[];
 }
 
 /** 搜到的地方：哪一层、哪一处，和命中那句话；`match` 是命中词在 `snippet` 里的 [起, 止)。 */
@@ -378,12 +447,48 @@ export interface FetchPlugin {
   settings: PluginSetting[];
   pacing: PluginPacing[];
   pauses: PluginPause[];
+  /**
+   * 一个平台一个插件，插件里有几种取法，各有自己的档位、账号用在哪、开着没有、停着没有（11-12 定）。
+   * 内核今天还不给；`source.ts` 在边界上照插件自己的 `access`、`login` 补成一种。
+   */
+  methods: FetchMethod[];
+}
+
+/**
+ * 账号用在哪：`none` 不用；`visitor` 用访客身份（不是账号，`sites` 是 `paths.visitors` 的站点）；
+ * `own-browser` 账号留在你自己的浏览器里，由脚本把链接交进来；`own-phone` 账号留在手机的 App 里；
+ * `in-usuyo` 你在 usuyo 的窗口里登录（`sites` 是 `paths.sites` 的站点）。`where` 是给人看的账号名，例如「X」。
+ */
+export interface MethodAccount {
+  kind: "none" | "visitor" | "own-browser" | "own-phone" | "in-usuyo";
+  sites?: string[];
+  where?: string;
+}
+
+/** 一种取法。`built: false` 是插件声明了、还没做好的：照样列出来，标明，开不了。 */
+export interface FetchMethod {
+  id: string;
+  /** 例如「访客接口」「浏览器脚本」「官方归档」。 */
+  name: string;
+  access: Access;
+  account: MethodAccount;
+  /** 取得到什么：`fetch` 是单条里有的（「正文」「图」「视频」），`list` 是能列的来源名，`delivers: "links"` 是由别处把链接交进来。 */
+  gets: { fetch?: string[]; list?: string[]; delivers?: "links" };
+  built: boolean;
+  enabled: boolean;
+  pauses: PluginPause[];
+  /** 记下来的一句风险，带出处。只是信息，不拦。 */
+  riskNote?: { text: string; source?: { label: string; url: string } };
 }
 
 export interface PluginsView {
   plugins: FetchPlugin[];
   /** 装了但没加载的：目录和原因（多半是清单不合规）。 */
   notLoaded: { dir: string; reason: string }[];
+}
+
+export interface MethodSwitchRequest {
+  enabled: boolean;
 }
 
 export interface SecretRequest {
@@ -559,4 +664,83 @@ export interface BatchRequest {
   action?: "favorite" | "like" | "share" | "view" | "unknown";
   /** 最多 5000 条。 */
   links: { url: string; title?: string; actedAt?: string }[];
+}
+
+// —— 转换插件和模型（feature 003 §4、§8.1）——
+
+export type TransformRequest = { jobs: "pending" } | { job: TransformLayer; plugin?: string; options?: Record<string, unknown> };
+
+/** 一个模型：`size` 是字节；`state` 照内核 `ModelState`，`failed` 带一句原因。 */
+export interface TransformModel {
+  name: string;
+  /** 给人看的名字，例如「SenseVoice」。 */
+  label: string;
+  size: number;
+  license: string;
+  state: "absent" | "downloading" | "present" | "failed";
+  hint?: string;
+}
+
+/**
+ * 一个转换插件：做哪几层（`jobs` 里还可以有 `play`、`keyframes` 这类不出文字的），用哪个工具，模型，能不能跑。
+ * `health` 是插件自己报的：`ok`，或 `unavailable`（例如系统版本不够）带 `hint`。
+ */
+export interface TransformPlugin {
+  id: string;
+  name: string;
+  version: string;
+  /** 转成文字时写在那一面头上的工具名，例如「SenseVoice」「Vision」。 */
+  tool: string;
+  /** 吃什么、出什么，给人看的一句，例如「声音 → 口播文字」。 */
+  turns: string;
+  jobs: string[];
+  /** 自带的第三方程序和它的许可，例如 ffmpeg（LGPL）。 */
+  bundled?: { name: string; license: string }[];
+  models: TransformModel[];
+  health: "ok" | "unavailable";
+  hint?: string;
+}
+
+export interface TransformsView {
+  plugins: TransformPlugin[];
+  /** `transforms.auto`：收下以后自己排上转换（只在接着电源时跑）。 */
+  auto: boolean;
+}
+
+// —— 设置 ——
+
+/**
+ * 插件出门走哪条路（宿主的本机代理替插件连出去，协议 §7）：`system` 跟系统代理，和浏览器同一个出口；
+ * `direct` 直连；`custom` 用 `proxy` 里填的（`http://`、`https://` 或 `socks5://`）。
+ */
+export interface NetworkSetting {
+  mode: "system" | "direct" | "custom";
+  proxy?: string;
+}
+
+/** 设置页要的、内核那边的设置。外观只在这台电脑的窗口里，不经内核。 */
+export interface SettingsView {
+  /** 资料库在哪个文件夹（第一次打开时建在「文稿」里的 `usuyo`）。 */
+  library: string;
+  /** 回收站放几天：30、90，`null` 是一直（资料库的 `settings.json`）。 */
+  trashDays: number | null;
+  /**
+   * 时钟跳了：这台电脑的时间比记下的最晚时间晚了超过 `trashDays`，到期检查一项也没移除。
+   * `count` 是因此留着的项数，`since` 是记下的那个最晚时间。没有拦下时省略。
+   */
+  trashHeld?: { count: number; since: string };
+  network: NetworkSetting & {
+    /** 这台电脑开着假 IP 模式的代理（Clash、Surge 一类），宿主已经按它调好了（`host/network.rs`）。 */
+    fakeIp: boolean;
+  };
+  /** `transforms.auto`：收下以后自己转，只在接着电源时跑（feature 003 §4.4）。 */
+  transforms: { auto: boolean };
+  /** 内核的日志在哪（按机器目录的 `logs/daemon.log`）。 */
+  logs: string;
+}
+
+export interface SettingsPatch {
+  trashDays?: number | null;
+  network?: NetworkSetting;
+  transforms?: { auto: boolean };
 }

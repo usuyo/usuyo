@@ -6,22 +6,45 @@ import { useReducedMotion } from "../motion/clock";
 import { Button } from "../ui/Button";
 import { MonoLabel } from "../ui/Chip";
 import { FlashLine, useFlash } from "../ui/Flash";
-import { clock, facetOf, imageName } from "./format";
+import { clock, facetOf, imageName, keepText, type MediaKeep } from "./format";
 import type { Player } from "./usePlayer";
 
 type ImageFacet = Extract<Facet, { layer: "image" }>;
 
-/** 画面：视频、封面和缩略图，或图文的几张图。它和右边几栏一样是一个侧面，有自己的位置。 */
-export function Viewer({ item, player, onRetry }: { item: Item; player: Player; onRetry: () => void }) {
+type Box = [number, number, number, number];
+
+/**
+ * 画面：视频、封面和关键帧，或图文的几张图。它和旁边几面一样是一个侧面，有自己的位置。
+ * `speech`、`screen` 是时间轴上标出的口播和画面上的字开始的那几秒。
+ */
+export function Viewer({
+  item,
+  player,
+  keep,
+  speech,
+  screen,
+  onRetry,
+}: {
+  item: Item;
+  player: Player;
+  keep: MediaKeep;
+  speech: number[];
+  screen: number[];
+  onRetry: () => void;
+}) {
   const images = facetOf(item, "image");
-  const asr = facetOf(item, "asr");
   const flash = useFlash(1400);
   const reduced = useReducedMotion();
   const { video, attachVideo } = player;
 
   let src: string | undefined;
   let alt = "";
-  if (video) {
+  let size: { width: number; height: number } | undefined;
+  if (video && player.still) {
+    src = player.still;
+    alt = `${clock(player.t)} 的画面`;
+  } else if (video) {
+    size = video.cover;
     if (player.image === "cover" || (!player.playing && player.t === 0 && video.cover)) {
       src = video.cover?.url;
       alt = "封面";
@@ -34,7 +57,12 @@ export function Viewer({ item, player, onRetry }: { item: Item; player: Player; 
     const im = images.images.find((x) => x.key === player.image) ?? images.images[0];
     src = im?.url;
     alt = im ? imageName(im.key) : "";
+    size = im;
   }
+  // 框：点过的那一行，或指着的那一行（只在它就在这张图、这一帧上时）。
+  const shownKey = video ? (player.image === "cover" ? "cover" : null) : (player.image ?? images?.images[0]?.key ?? null);
+  const peek = player.peek && (player.peek.imageKey === null ? player.still !== null : player.peek.imageKey === shownKey) ? player.peek.xywh : null;
+  const box = peek ?? player.region;
   const textOnly = item.stored === "text-only";
   const remark = video?.remark ?? images?.remark;
 
@@ -42,9 +70,9 @@ export function Viewer({ item, player, onRetry }: { item: Item; player: Player; 
     <div>
       <section
         aria-label="画面"
-        className="relative h-[348px] w-[620px] overflow-hidden rounded-card border border-border bg-card2"
+        className="relative aspect-video w-full overflow-hidden rounded-card border border-border bg-card2 [container-type:size]"
       >
-        {video?.url && player.canPlay ? (
+        {video?.url && player.canPlay && !player.still ? (
           <video
             ref={attachVideo}
             src={video.url}
@@ -53,7 +81,7 @@ export function Viewer({ item, player, onRetry }: { item: Item; player: Player; 
             onTimeUpdate={(e) => player.onTime(e.currentTarget.currentTime)}
           />
         ) : src ? (
-          <img src={src} alt={alt} className={`size-full object-contain transition-opacity duration-200 ${textOnly ? "opacity-35" : ""}`} />
+          <Picture src={src} alt={alt} size={size} box={box} dim={textOnly} />
         ) : null}
 
         {video || images ? (
@@ -78,8 +106,10 @@ export function Viewer({ item, player, onRetry }: { item: Item; player: Player; 
 
         {textOnly ? (
           <div className="absolute inset-x-0 bottom-0 animate-rise border-t border-border bg-hud px-5 py-4">
-            <div className="text-body font-medium text-text">视频和封面在回收站里</div>
-            <div className="mt-0.5 text-small text-sub">30 天内能恢复；口播文字、图里的字和画面缩略图都还在</div>
+            <div className="text-body font-medium text-text">{keep.gone ? "视频和封面已经从回收站清掉了" : "视频和封面在回收站里"}</div>
+            <div className="mt-0.5 text-small text-sub">
+              {keep.gone ? "口播文字、图里的字和画面缩略图都还在" : `${keepText(keep.days)}；口播文字、图里的字和画面缩略图都还在`}
+            </div>
           </div>
         ) : null}
 
@@ -109,20 +139,51 @@ export function Viewer({ item, player, onRetry }: { item: Item; player: Player; 
         />
       </section>
 
-      {video ? <Timeline player={player} marks={asr?.segments.flatMap((s) => (s.position?.kind === "time" ? [s.position.sec] : [])) ?? []} onJump={flash.show} /> : null}
+      {video ? <Timeline player={player} marks={speech} screen={screen} gone={keep.gone} onJump={flash.show} /> : null}
       {images ? <Strip images={images} player={player} /> : null}
     </div>
   );
 }
 
-function Timeline({ player, marks, onJump }: { player: Player; marks: number[]; onJump: (text: string) => void }) {
+/** 一张图按它自己的比例放进画面里；框照图的宽高算，所以落在字上，不落在留白上。 */
+function Picture({ src, alt, size, box, dim }: { src: string; alt: string; size?: { width: number; height: number }; box: Box | null; dim: boolean }) {
+  const ratio = size && size.width > 0 && size.height > 0 ? size.width / size.height : 16 / 9;
+  return (
+    <div className="absolute inset-0 flex items-center justify-center">
+      <div className="relative" style={{ width: `min(100cqw, calc(100cqh * ${ratio}))`, aspectRatio: `${ratio}` }}>
+        <img src={src} alt={alt} className={`size-full object-contain transition-opacity duration-200 ${dim ? "opacity-35" : ""}`} />
+        {box ? (
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute animate-fade rounded-[3px] outline-2 outline-offset-2 outline-text [box-shadow:0_0_0_100vmax_color-mix(in_srgb,var(--bg)_55%,transparent)]"
+            style={{ left: `${box[0] * 100}%`, top: `${box[1] * 100}%`, width: `${box[2] * 100}%`, height: `${box[3] * 100}%` }}
+          />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function Timeline({
+  player,
+  marks,
+  screen,
+  gone,
+  onJump,
+}: {
+  player: Player;
+  marks: number[];
+  screen: number[];
+  gone: boolean;
+  onJump: (text: string) => void;
+}) {
   const dur = player.video?.durationSec ?? 1;
   const p = Math.min(1, player.t / dur);
   const current = marks.reduce((k, sec, i) => (sec <= player.t + 0.01 ? i : k), -1);
   const started = player.playing || player.t > 0;
   const jump = (sec: number) => {
     player.seek(sec);
-    onJump(player.canPlay ? `从 ${clock(sec)} 播` : `视频在回收站里，恢复以后从 ${clock(sec)} 播`);
+    onJump(player.canPlay ? `从 ${clock(sec)} 播` : gone ? `视频已经清掉了，停在 ${clock(sec)}` : `视频在回收站里，恢复以后从 ${clock(sec)} 播`);
   };
   return (
     <div className="mt-2 flex h-ctl items-center gap-3">
@@ -150,6 +211,13 @@ function Timeline({ player, marks, onJump }: { player: Player; marks: number[]; 
       >
         <span className="absolute inset-x-0 top-4 h-1 rounded-[2px] bg-chip" />
         <span className="absolute inset-x-0 top-4 h-1 origin-left rounded-[2px] bg-sub" style={{ transform: `scaleX(${p})` }} />
+        {screen.map((sec) => (
+          <span
+            key={`s${sec}`}
+            className="pointer-events-none absolute top-[22px] -ml-[3px] size-1.5 rounded-[1px] border border-border2"
+            style={{ left: `${(sec / dur) * 100}%` }}
+          />
+        ))}
         {marks.map((sec, i) => (
           <span
             key={sec}

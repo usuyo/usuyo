@@ -1,5 +1,8 @@
 // 样例库：40 条，小红书、视频号、B站、公众号。只在开发和 VITE_USUYO_MOCK=1 时用。
 // 有的视频有口播，有的图文图里有字，有的图和字说的不是一回事（c7、k5），有一条只有链接（j5）。
+// 几面对不上的样例：c1 有平台字幕和机器转的两份口播，画面上的字和说的不一样；c2 的图里有好几行字，带位置；
+// e7 是没有人说话的录屏，只有画面上的字；w5 的口播在等模型下载；k3 的图里的字等接上电源再转。
+import type { Pending } from "../api/endpoints";
 import type { Scene } from "./pictures";
 
 export type PlatformKey = "xhs" | "sph" | "bili" | "mp";
@@ -39,8 +42,14 @@ export interface RawItem {
   asr?: [number, string][];
   /** 口播是平台给的字幕，不是机器转的。 */
   asrByPlatform?: boolean;
-  /** 图里的字：数字是视频里的秒，字符串是图片 key（p1、p2…、cover）。 */
+  /** 平台另给的字幕：和机器转的 `asr` 并排两份。 */
+  subs?: [number, string][];
+  /** 机器听过了，没听到人说话。 */
+  silent?: boolean;
+  /** 图里的字：数字是视频画面上的字（在第几秒），字符串是图片 key（p1、p2…、cover）。 */
   ocr?: [number | string, string][];
+  /** 还没转出来的面。这几层的结果先收着，样例库「转好了」时才放出来。 */
+  pending?: Pending[];
   /** 作者写的：图文的配文、公众号正文、视频简介。 */
   text?: string[];
   /** 图文、文章里的图有几张。 */
@@ -64,9 +73,19 @@ export const RAW_ITEMS: RawItem[] = [
     kind: "video",
     scene: "pourover",
     dur: 372,
-    asr: [
+    subs: [
       [0, "大家好，这里是豆研所"],
       [12, "这期复刻粕谷哲的 4:6 手冲，先说比例"],
+      [31, "粉 20 克，水 300 克，就是 1:15"],
+      [58, "磨粗一点，像粗砂糖那样的颗粒"],
+      [102, "水温控制在 92 度左右"],
+      [150, "前 40% 的水决定酸甜，后 60% 决定浓淡"],
+      [204, "后面 180 克分三次，每次 60 克"],
+      [302, "三分半左右滴完，差不多就对了"],
+    ],
+    asr: [
+      [0, "大家好，这里是豆研所"],
+      [12, "这期复刻卡斯哲的四六手冲，先说比例"],
       [31, "粉 20 克，水 300 克，就是 1 比 15"],
       [58, "磨粗一点，像粗砂糖那样的颗粒"],
       [80, "滤纸先用热水冲一遍，顺便温杯"],
@@ -83,6 +102,7 @@ export const RAW_ITEMS: RawItem[] = [
     ocr: [
       ["cover", "4:6 冲煮法复刻（一）"],
       [20, "20g 粉 · 300ml 水 · 1:15"],
+      [100, "水温 90–96°C，浅烘取高"],
       [154, "前 40% → 酸甜　后 60% → 浓淡"],
       [210, "50g · 70g · 60g · 60g · 60g"],
       [264, "间隔 45 秒"],
@@ -106,8 +126,12 @@ export const RAW_ITEMS: RawItem[] = [
     scene: "dish",
     images: 3,
     ocr: [
+      ["p1", "冰手冲 1:10"],
       ["p1", "15g 粉 / 150ml 热水 / 100g 冰"],
+      ["p1", "水温 93°C"],
       ["p2", "研磨比热冲细一档"],
+      ["p2", "冰块先放进分享壶"],
+      ["p3", "热水 150 + 冰 100 = 250ml"],
     ],
     text: ["夏天每天一杯，记一下比例。", "冰块放在分享壶里，热水直接滴在冰上，出来刚好不稀。"],
     comments: [["一勺糖", "冰块用纯净水冻的会好一点", 31]],
@@ -417,6 +441,17 @@ export const RAW_ITEMS: RawItem[] = [
       [80, "第三条地上是老的弹格路"],
       [131, "最后一条走出去就是地铁站"],
     ],
+    ocr: [
+      [6, "雨天 · 五条弄堂"],
+      [82, "弹格路"],
+    ],
+    pending: [
+      {
+        layer: "asr",
+        state: "needs-model",
+        model: { plugin: "builtin/asr-sherpa", name: "sense-voice-int8-2024-07-17", size: 163002883, license: "FunASR Model Open Source License" },
+      },
+    ],
   },
   // 做饭
   {
@@ -466,7 +501,12 @@ export const RAW_ITEMS: RawItem[] = [
     kind: "images",
     scene: "dish",
     images: 4,
-    ocr: [["p2", "浓缩 60ml · 马斯卡彭 250g"]],
+    ocr: [
+      ["p2", "浓缩 60ml"],
+      ["p2", "马斯卡彭 250g · 蛋黄 3 个"],
+      ["p4", "冷藏一夜"],
+    ],
+    pending: [{ layer: "ocr", state: "on-power" }],
     text: ["用浓缩最好，没有机器就用很浓的手冲。", "手指饼干蘸一下就拿出来，别泡软。"],
   },
   {
@@ -612,6 +652,29 @@ export const RAW_ITEMS: RawItem[] = [
       [236, "打包出来不到十兆"],
     ],
     asrByPlatform: true,
+  },
+  {
+    id: "e7",
+    title: "DevTools 里三个少有人打开的面板",
+    p: "bili",
+    author: "前端早读",
+    topics: ["fe"],
+    at: "11-10",
+    kind: "video",
+    scene: "screen",
+    dur: 148,
+    silent: true,
+    ocr: [
+      [2, "三个少有人打开的面板"],
+      [14, "Rendering → Paint flashing"],
+      [31, "哪里在重绘，一闪就知道"],
+      [52, "Layers：看合成层"],
+      [77, "will-change 不要随手加"],
+      [96, "Performance monitor"],
+      [118, "CPU、布局次数、DOM 节点，实时看"],
+      [139, "录屏无声，配乐已去掉"],
+    ],
+    text: ["录屏，没有讲解。三个面板各一分钟以内。"],
   },
   // 读书
   {

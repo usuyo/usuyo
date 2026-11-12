@@ -1,5 +1,13 @@
 import type { Facet, FacetLayer, Item, Position, SearchHit, Stored } from "../api/endpoints";
 
+/** 只留文字的条目，移出去的视频和图现在在哪：还在回收站里（留几天），还是已经清掉了。 */
+export interface MediaKeep {
+  /** 回收站放多少天，`null` 是一直；还没取到时省略。 */
+  days?: number | null;
+  /** 回收站里已经没有这一条移出去的媒体了（到期或你清掉了）。 */
+  gone: boolean;
+}
+
 /** 媒体位置向下取整：102.5 写 01:42，过一小时写 1:01:42。 */
 export function clock(sec: number): string {
   const n = Math.max(0, Math.floor(sec));
@@ -26,6 +34,7 @@ export function positionText(p: Position): string {
 export const LAYER_NAME: Record<FacetLayer | SearchHit["layer"], string> = {
   asr: "口播",
   ocr: "图里的字",
+  frames: "画面上的字",
   text: "作者写的",
   image: "画面",
   video: "画面",
@@ -34,6 +43,12 @@ export const LAYER_NAME: Record<FacetLayer | SearchHit["layer"], string> = {
   title: "标题",
   author: "作者",
 };
+
+/** 回收站留几天：「30 天内能恢复」「一直能恢复」；还没取到回收站的设置时只说能恢复。 */
+export function keepText(trashDays: number | null | undefined): string {
+  if (trashDays === undefined) return "能恢复";
+  return trashDays === null ? "一直能恢复" : `${trashDays} 天内能恢复`;
+}
 
 export function dayText(iso: string): string {
   const d = new Date(iso);
@@ -48,7 +63,7 @@ export const STORED_TEXT: Record<Stored, string> = {
 };
 
 /** 「存下了」那一行：有哪些就写哪些。 */
-export function savedText(item: Item): string {
+export function savedText(item: Item, keep: MediaKeep): string {
   if (item.stored === "link") return "只有链接。";
   const parts: string[] = [];
   for (const f of item.facets) {
@@ -57,13 +72,20 @@ export function savedText(item: Item): string {
       if (f.cover && item.stored !== "text-only") parts.push("封面");
       if (item.stored === "text-only") parts.push("画面缩略图");
     } else if (f.layer === "image") parts.push(`${f.images.length} 张图`);
-    else if (f.layer === "asr") parts.push(f.by === "platform" ? "字幕" : "口播文字");
+    else if (f.layer === "asr") {
+      // 空的一份（没听到人说话）不算存下了口播。
+      if (f.segments.length > 0) parts.push(f.source.by === "platform" ? "字幕" : "口播文字");
+    }
     else if (f.layer === "ocr") parts.push("图里的字");
+    else if (f.layer === "frames") parts.push("画面上的字");
     else if (f.layer === "text") parts.push("作者写的字");
     else parts.push(`${f.comments.length} 条评论`);
   }
-  const list = parts.join("、");
-  if (item.stored === "text-only") return `${list}。视频和封面在回收站，30 天内能恢复`;
+  // 同一层有几份（字幕和机器转的）只写一次。
+  const list = [...new Set(parts)].join("、");
+  if (item.stored === "text-only") {
+    return keep.gone ? `${list}。视频和封面已经从回收站清掉了` : `${list}。视频和封面在回收站，${keepText(keep.days)}`;
+  }
   // 缺了什么写在后面的 `missing` 里。
   if (item.stored === "partial") return `${list}。`;
   return `${list} — 都存好了`;

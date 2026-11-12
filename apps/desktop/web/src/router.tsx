@@ -44,9 +44,15 @@ const takeRoute = createRoute({
   component: lazyRouteComponent(() => import("./capture/CapturePage"), "CapturePage"),
 });
 
+export interface PluginsSearch {
+  /** `text`：开着「变成文字」那一栏；不给是第一个平台。 */
+  show?: "text";
+}
+
 const pluginsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/plugins",
+  validateSearch: (search: Record<string, unknown>): PluginsSearch => (search.show === "text" ? { show: "text" } : {}),
   component: lazyRouteComponent(() => import("./plugins/PluginsPage"), "PluginsPage"),
 });
 
@@ -69,6 +75,12 @@ const trashRoute = createRoute({
   component: lazyRouteComponent(() => import("./trash/TrashPage"), "TrashPage"),
 });
 
+const settingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings",
+  component: lazyRouteComponent(() => import("./settings/SettingsPage"), "SettingsPage"),
+});
+
 const laterRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/later/$page",
@@ -77,11 +89,12 @@ const laterRoute = createRoute({
     if (params.page === "import") throw redirect({ to: "/import" });
     if (params.page === "plugins") throw redirect({ to: "/plugins" });
     if (params.page === "trash") throw redirect({ to: "/trash" });
+    if (params.page === "settings") throw redirect({ to: "/settings" });
   },
   component: LaterPage,
 });
 
-const routeTree = rootRoute.addChildren([homeRoute, searchRoute, itemRoute, takeRoute, pluginsRoute, importRoute, trashRoute, laterRoute]);
+const routeTree = rootRoute.addChildren([homeRoute, searchRoute, itemRoute, takeRoute, pluginsRoute, importRoute, trashRoute, settingsRoute, laterRoute]);
 
 export function createAppRouter(history?: Parameters<typeof createRouter>[0]["history"]) {
   return createRouter({ routeTree, history });

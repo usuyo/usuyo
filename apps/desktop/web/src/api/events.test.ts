@@ -12,6 +12,14 @@ describe("daemon events", () => {
     expect(isDaemonEvent({ type: "something-else", id: "a" })).toBe(false);
   });
 
+  it("refreshes the transform plugins and models on transforms-updated, which has no id", () => {
+    expect(isDaemonEvent({ type: "transforms-updated" })).toBe(true);
+    const qc = new QueryClient();
+    const spy = vi.spyOn(qc, "invalidateQueries");
+    applyEvent(qc, { type: "transforms-updated" });
+    expect(spy.mock.calls.map((c) => c[0]?.queryKey)).toEqual([queryKeys.transforms]);
+  });
+
   it("refreshes plugins, sites and visitors, or the one import, when told", () => {
     const qc = new QueryClient();
     const spy = vi.spyOn(qc, "invalidateQueries");
@@ -34,6 +42,8 @@ describe("daemon events", () => {
   it("treats a 404 on an item as gone, other errors as errors", () => {
     expect(isGone(new ApiError(404, "not found"))).toBe(true);
     expect(isGone(new ApiError(500, "boom"))).toBe(false);
+    // 兜底路由的 404 是内核还没有这条接口，不是这一条不在了。
+    expect(isGone(new ApiError(404, "no such route", "not-found"))).toBe(false);
     expect(isGone(null)).toBe(false);
   });
 });

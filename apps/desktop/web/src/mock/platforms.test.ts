@@ -6,12 +6,25 @@ afterEach(() => {
 });
 
 describe("mock platforms", () => {
-  it("lists the three plugins with labels and a pause with its reason", async () => {
+  it("lists one plugin per platform with its methods, and a paused method with its reason", async () => {
     const { plugins } = await createMockPlatforms().plugins();
-    expect(plugins.map((p) => p.name)).toEqual(["小红书", "微信视频号", "B站"]);
-    const bili = plugins.find((p) => p.id === "usuyo-fetch/bilibili");
-    expect(bili?.pauses[0]).toMatchObject({ code: "rate-limited", byYou: false });
-    expect(bili?.pauses[0]?.until).toBeDefined();
+    expect(plugins.map((p) => p.name)).toEqual(["X", "小红书", "微信视频号", "B站"]);
+    const x = plugins.find((p) => p.id === "usuyo-fetch/x");
+    expect(x?.methods).toHaveLength(9);
+    expect(x?.methods.filter((m) => m.built).map((m) => m.name)).toEqual(["访客接口", "嵌入接口", "浏览器脚本", "官方归档"]);
+    // 没做好的、要用私有接口或改客户端的都关着；要在 usuyo 里登录、还没登录的也关着。
+    expect(plugins.flatMap((p) => p.methods).filter((m) => m.access === "private-api" || m.access === "client-hook").every((m) => !m.enabled)).toBe(true);
+    expect(plugins.find((p) => p.id === "usuyo-fetch/wechat-channels")?.methods.find((m) => m.id === "yuanbao")?.enabled).toBe(false);
+    const lists = plugins.find((p) => p.id === "usuyo-fetch/bilibili")?.methods.find((m) => m.id === "lists");
+    expect(lists?.pauses[0]).toMatchObject({ code: "rate-limited", byYou: false });
+    expect(lists?.pauses[0]?.until).toBeDefined();
+  });
+
+  it("switches a built method, and refuses one that is not built", async () => {
+    const m = createMockPlatforms();
+    const x = await m.switchMethod("usuyo-fetch/x", "embed", false);
+    expect(x.methods.find((y) => y.id === "embed")?.enabled).toBe(false);
+    await expect(m.switchMethod("usuyo-fetch/x", "hook", true)).rejects.toThrow();
   });
 
   it("holds and tries a plugin again", async () => {

@@ -6,7 +6,7 @@ import { useItemChange } from "../api/hooks";
 import { openExternal, webUrl } from "../shell";
 import { TopicPill } from "../ui/Chip";
 import { FlashLine, useFlash } from "../ui/Flash";
-import { dayText, savedText } from "./format";
+import { dayText, keepText, savedText, type MediaKeep } from "./format";
 
 function Row({ label, top, children }: { label: string; top?: boolean; children: ReactNode }) {
   return (
@@ -18,14 +18,14 @@ function Row({ label, top, children }: { label: string; top?: boolean; children:
 }
 
 /** 条目页左下：来自、收下、存下了、主题。 */
-export function ItemMeta({ item, topics }: { item: Item; topics: Topic[] }) {
+export function ItemMeta({ item, topics, keep }: { item: Item; topics: Topic[]; keep: MediaKeep }) {
   const src = useFlash();
   const topicFlash = useFlash();
   const change = useItemChange(item.id);
   const followed = new Set(topics.filter((t) => t.followed).map((t) => t.id));
   const names = new Map(topics.map((t) => [t.id, t.name]));
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-2.5">
+    <div className="flex min-w-0 flex-[1_1_280px] flex-col gap-2.5">
       <div className="flex min-h-7 items-center gap-3">
         <span className="w-[52px] shrink-0 text-small text-faint">来自</span>
         <span className="text-note text-label">
@@ -47,7 +47,7 @@ export function ItemMeta({ item, topics }: { item: Item; topics: Topic[] }) {
       </div>
       <Row label="收下">{dayText(item.takenAt)}</Row>
       <Row label="存下了">
-        {savedText(item)}
+        {savedText(item, keep)}
         {item.missing ? <span className="text-warn">{item.missing}</span> : null}
       </Row>
       <Row label="主题" top>
@@ -172,14 +172,14 @@ function ActionCard({
 }
 
 /** 条目页右下的三件事：只留文字、删掉、重新获取。动原样的两件要点两次。 */
-export function ItemActions({ item }: { item: Item }) {
+export function ItemActions({ item, keep }: { item: Item; keep: MediaKeep }) {
   const change = useItemChange(item.id);
   const [armed, setArmed] = useState<"text" | "del" | null>(null);
   const [msg, setMsg] = useState("");
   const saved = item.stored !== "link";
   return (
-    <div className="flex w-[264px] shrink-0 flex-col gap-2">
-      {item.stored === "text-only" ? (
+    <div className="flex min-w-0 flex-[1_1_240px] flex-col gap-2 @[840px]:max-w-[264px]">
+      {item.stored === "text-only" && keep.gone ? null : item.stored === "text-only" ? (
         <ActionCard
           icon={<RotateCcw size={14} aria-hidden="true" />}
           label="恢复视频和封面"
@@ -192,7 +192,7 @@ export function ItemActions({ item }: { item: Item }) {
         <ActionCard
           icon={<FileText size={14} aria-hidden="true" />}
           label={armed === "text" ? "再点一次，只留文字" : "只留文字"}
-          sub={saved ? "视频和图片移进回收站，30 天内能恢复，文字留着" : "只有链接，还没有视频和图片可以移走"}
+          sub={saved ? `视频和图片移进回收站，${keepText(keep.days)}，文字留着` : "只有链接，还没有视频和图片可以移走"}
           off={!saved}
           armed={armed === "text"}
           cancelText="不改了"
@@ -207,7 +207,7 @@ export function ItemActions({ item }: { item: Item }) {
       <ActionCard
         icon={<Trash2 size={14} aria-hidden="true" />}
         label={armed === "del" ? "再点一次，删掉这条" : "删掉这条"}
-        sub="整条移进回收站，30 天内能恢复"
+        sub={`整条移进回收站，${keepText(keep.days)}`}
         armed={armed === "del"}
         cancelText="不删了"
         onCancel={() => setArmed(null)}
@@ -224,7 +224,9 @@ export function ItemActions({ item }: { item: Item }) {
           label={change.isPending && change.variables.kind === "refetch" ? "正在重新获取" : "重新获取"}
           sub={
             item.stored === "text-only"
-              ? "从原帖再取一次文字；回收站里的视频和封面不动，要拿回来点上面那张"
+              ? keep.gone
+                ? "从原帖再取一次；这条还是只留文字"
+                : "从原帖再取一次文字；回收站里的视频和封面不动，要拿回来点上面那张"
               : "从原帖再取一次，存着的不动"
           }
           off={change.isPending}

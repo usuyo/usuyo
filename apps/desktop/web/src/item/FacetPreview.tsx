@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import type { Facet, Item, Segment } from "../api/endpoints";
 import { MonoLabel } from "../ui/Chip";
+import { sourceText } from "./faces";
 import { clock, LAYER_NAME, positionText } from "./format";
 
 const LINES = 3;
@@ -17,10 +18,11 @@ export function FacetPreview({ item }: { item: Item }) {
   return (
     <div className="mt-[18px] flex flex-col gap-4">
       {item.facets.map((f) => (
-        <section key={f.layer} aria-label={LAYER_NAME[f.layer]} className="border-t border-border pt-2.5">
-          <header className="flex items-baseline gap-2">
+        <section key={f.key} aria-label={LAYER_NAME[f.layer]} className="border-t border-border pt-2.5">
+          <header className="flex flex-wrap items-baseline gap-x-2">
             <h3 className="m-0 text-note font-semibold text-text">{LAYER_NAME[f.layer]}</h3>
             <MonoLabel>{countText(f)}</MonoLabel>
+            {"source" in f ? <span className="text-small text-faint">{sourceText(f.layer, f.source)}</span> : null}
             {f.remark ? <span className="text-small text-sub">{f.remark}</span> : null}
           </header>
           <FacetBody facet={f} item={item} />

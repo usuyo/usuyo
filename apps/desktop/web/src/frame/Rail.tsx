@@ -6,14 +6,14 @@ import { Button } from "../ui/Button";
 import { TakeField } from "./TakeField";
 
 /** 底下去别的页：做好了的有自己的路由，还没做的进 `/later/$page`。 */
-const PAGES: ({ label: string; icon: ReactNode } & ({ to: "/import" | "/plugins" | "/trash" } | { later: string }))[] = [
+const PAGES: ({ label: string; icon: ReactNode } & ({ to: "/import" | "/plugins" | "/trash" | "/settings" } | { later: string }))[] = [
   { later: "follow", label: "跟着收", icon: <Rss size={16} aria-hidden="true" /> },
   { to: "/import", label: "导入", icon: <FolderInput size={16} aria-hidden="true" /> },
   { later: "export", label: "导出", icon: <FolderOutput size={16} aria-hidden="true" /> },
   { later: "changes", label: "改动记录", icon: <History size={16} aria-hidden="true" /> },
   { to: "/trash", label: "回收站", icon: <Trash2 size={16} aria-hidden="true" /> },
   { to: "/plugins", label: "获取插件", icon: <Plug size={16} aria-hidden="true" /> },
-  { later: "settings", label: "设置", icon: <Settings size={16} aria-hidden="true" /> },
+  { to: "/settings", label: "设置", icon: <Settings size={16} aria-hidden="true" /> },
 ];
 
 // 路由给当前页的链接标 `data-status="active"`。

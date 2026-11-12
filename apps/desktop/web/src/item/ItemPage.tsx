@@ -1,7 +1,8 @@
 import { getRouteApi, Link } from "@tanstack/react-router";
 import { ArrowLeft, ExternalLink, Map as MapIcon } from "lucide-react";
-import type { Item, Topic } from "../api/endpoints";
-import { isGone, useItem, useItemChange, useTopics } from "../api/hooks";
+import type { Facet, Item, Topic } from "../api/endpoints";
+import { useEffect } from "react";
+import { isGone, useItem, useItemChange, useTopics, useTransform, useTrash } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
 import { Rail } from "../frame/Rail";
 import { openExternal, webUrl } from "../shell";
@@ -9,7 +10,7 @@ import { Button } from "../ui/Button";
 import { PlatformChip, SectionLabel } from "../ui/Chip";
 import { FlashLine, useFlash } from "../ui/Flash";
 import { FacetColumn } from "./FacetColumn";
-import { dayText, facetOf, GONE_TEXT, STORED_TEXT } from "./format";
+import { dayText, facetOf, GONE_TEXT, keepText, STORED_TEXT, type MediaKeep } from "./format";
 import { ItemActions, ItemMeta } from "./ItemDetails";
 import { NoteBlock } from "./NoteBlock";
 import { usePlayer } from "./usePlayer";
@@ -17,7 +18,7 @@ import { Viewer } from "./Viewer";
 
 const route = getRouteApi("/items/$id");
 
-/** 条目页：左边是画面，右边是这一条的几个侧面，各占一块。 */
+/** 条目页：画面和这一条的几面并排；窗口窄时画面在上、几面在下。 */
 export function ItemPage() {
   const { id } = route.useParams();
   const item = useItem(id);
@@ -48,7 +49,7 @@ export function ItemPage() {
           ))}
         </div>
       </Rail>
-      <main className="absolute inset-y-0 right-0 left-rail overflow-y-auto px-gutter pt-5 pb-4">
+      <main className="@container absolute inset-y-0 right-0 left-rail overflow-y-auto px-6 pt-5 pb-6 lg:px-gutter">
         <Link
           to="/"
           search={{ open: id }}
@@ -75,30 +76,57 @@ function ItemBody({ item, topics }: { item: Item; topics: Topic[] }) {
   const firstImage = facetOf(item, "image")?.images[0]?.key ?? null;
   const player = usePlayer(video, firstImage, item.stored === "complete" || item.stored === "partial");
   const change = useItemChange(item.id);
+  const transform = useTransform(item.id);
+  const trash = useTrash();
   const open = useFlash();
   const trashed = item.trashedAt !== undefined;
+  const keep: MediaKeep = {
+    ...(trash.data ? { days: trash.data.trashDays } : {}),
+    // 只留文字的条目，回收站里已经没有它的任何一项：移出去的媒体到期或被清掉了。
+    // 整条在回收站里时，移出去的媒体跟着整条，不单列。
+    gone: item.stored === "text-only" && trash.data !== undefined && !trash.data.entries.some((e) => e.itemId === item.id),
+  };
+
+  // 打开这一条时，它还没转出来的几面挪到最前（在电池上也转）。没有在等的就不问内核。
+  const waits = item.pending.some((p) => p.state === "later" || p.state === "on-power");
+  const { mutate: hurry } = transform;
+  useEffect(() => {
+    if (waits) hurry({ jobs: "pending" });
+  }, [waits, hurry]);
+
+  const times = (layer: "asr" | "frames") =>
+    item.facets.find((f): f is Extract<Facet, { layer: "asr" | "frames" }> => f.layer === layer)?.segments.flatMap((s) => (s.position?.kind === "time" ? [s.position.sec] : [])) ?? [];
 
   return (
     <>
-      <header className="relative mt-2.5 pr-[220px]">
-        <div className="flex h-6 items-center gap-2">
-          <PlatformChip>{item.platform.name}</PlatformChip>
-          <span className="text-note text-sub">{item.author}</span>
-        </div>
-        <h1 className="m-0 mt-2 text-title font-semibold text-text">{item.title}</h1>
-        {trashed ? (
-          <div role="status" className="flex h-7 animate-rise items-center gap-3 text-note text-text">
-            <span>这条移进了回收站（{dayText(item.trashedAt ?? "")}），30 天内能恢复</span>
-            <Button variant="soft" size="sm" className="-my-1" onPress={() => change.mutate({ kind: "restore" })}>
-              恢复这条
-            </Button>
+      <header className="mt-2.5 flex flex-wrap items-start gap-x-6 gap-y-3">
+        <div className="min-w-0 flex-[1_1_320px]">
+          <div className="flex h-6 items-center gap-2">
+            <PlatformChip>{item.platform.name}</PlatformChip>
+            <span className="truncate text-note text-sub">{item.author}</span>
           </div>
-        ) : (
-          <p className="m-0 mt-1 text-note text-sub">
-            {dayText(item.takenAt)}收下　·　{item.stored === "link" ? `只有链接${item.missing ? "" : "，正在取内容"}` : STORED_TEXT[item.stored]}
-          </p>
-        )}
-        <div className="absolute top-1 right-0 flex flex-col items-end gap-1.5">
+          <h1 className="m-0 mt-2 text-title font-semibold text-text">{item.title}</h1>
+          {trashed ? (
+            <div role="status" className="flex min-h-7 animate-rise flex-wrap items-center gap-3 text-note text-text">
+              <span>
+                这条移进了回收站（{dayText(item.trashedAt ?? "")}），{keepText(keep.days)}
+              </span>
+              <Button variant="soft" size="sm" className="-my-1" onPress={() => change.mutate({ kind: "restore" })}>
+                恢复这条
+              </Button>
+            </div>
+          ) : (
+            <p className="m-0 mt-1 text-note text-sub">
+              {dayText(item.takenAt)}收下　·　
+              {item.stored === "link"
+                ? `只有链接${item.missing ? "" : "，正在取内容"}`
+                : item.stored === "text-only" && keep.gone
+                  ? "只留文字，视频和封面已经清掉了"
+                  : STORED_TEXT[item.stored]}
+            </p>
+          )}
+        </div>
+        <div className="flex flex-col items-end gap-1.5">
           <Button
             variant="outline"
             size="md"
@@ -118,17 +146,19 @@ function ItemBody({ item, topics }: { item: Item; topics: Topic[] }) {
 
       <div
         inert={trashed}
-        className={`mt-6 flex gap-9 transition-opacity duration-200 ${trashed ? "pointer-events-none opacity-40" : "opacity-100"}`}
+        className={`mt-6 grid items-start gap-x-9 gap-y-8 transition-opacity duration-200 @[840px]:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] ${trashed ? "pointer-events-none opacity-40" : "opacity-100"}`}
       >
-        <div className="w-[620px] shrink-0">
-          <Viewer item={item} player={player} onRetry={() => change.mutate({ kind: "refetch" })} />
-          <div className="mt-6 flex items-start gap-6">
-            <ItemMeta item={item} topics={topics} />
-            <ItemActions item={item} />
+        <div className="flex min-w-0 flex-col gap-6 @[840px]:sticky @[840px]:top-0">
+          <div className="w-full max-w-[760px]">
+            <Viewer item={item} player={player} keep={keep} speech={times("asr")} screen={times("frames")} onRetry={() => change.mutate({ kind: "refetch" })} />
+          </div>
+          <div className="flex flex-wrap items-start gap-6">
+            <ItemMeta item={item} topics={topics} keep={keep} />
+            <ItemActions item={item} keep={keep} />
           </div>
         </div>
-        <section aria-label="这一条的文字" className="flex h-[calc(100vh-192px)] min-h-[560px] min-w-0 flex-1 flex-col">
-          <FacetColumn item={item} player={player} />
+        <section aria-label="这一条的文字" className="flex min-w-0 flex-col gap-5">
+          <FacetColumn item={item} player={player} keep={keep} />
           <NoteBlock item={item} />
         </section>
       </div>

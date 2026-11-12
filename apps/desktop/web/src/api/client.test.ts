@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, connection, DaemonUnreachableError, request } from "./client";
+import { ApiError, connection, DaemonUnreachableError, isNotServed, request } from "./client";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -15,6 +15,22 @@ describe("request", () => {
     vi.stubGlobal("fetch", vi.fn().mockImplementation(() => Promise.resolve(new Response("nope", { status: 500 }))));
     await expect(request("/items")).rejects.toMatchObject({ status: 500 });
     await expect(request("/items")).rejects.toBeInstanceOf(ApiError);
+  });
+
+  it("reads the problem's code and detail, and tells a missing route from a missing item", async () => {
+    const problem = (status: number, code: string, detail: string) =>
+      new Response(JSON.stringify({ type: `urn:usuyo:problem:${code}`, status, code, detail }), { status });
+    const fetchMock = vi.fn<typeof fetch>();
+    vi.stubGlobal("fetch", fetchMock);
+    fetchMock.mockResolvedValueOnce(problem(404, "not-found", "no such route"));
+    const route = await request("/settings").catch((e: unknown) => e);
+    expect(route).toMatchObject({ status: 404, code: "not-found", message: "no such route" });
+    expect(isNotServed(route)).toBe(true);
+
+    fetchMock.mockResolvedValueOnce(problem(404, "not-found", "no item 019a"));
+    expect(isNotServed(await request("/items/019a").catch((e: unknown) => e))).toBe(false);
+    fetchMock.mockResolvedValueOnce(problem(405, "invalid-args", "method not allowed on this route"));
+    expect(isNotServed(await request("/trash").catch((e: unknown) => e))).toBe(true);
   });
 
   it("sends the query and a JSON body, with a timeout signal", async () => {

@@ -15,14 +15,38 @@ export class DaemonUnreachableError extends Error {
   }
 }
 
-/** 内核回了非 2xx。 */
+/** 内核回了非 2xx。`code` 是 problem+json 里的 `code`（SPEC §0.3），回的不是 problem 时没有。 */
 export class ApiError extends Error {
   readonly status: number;
+  readonly code: string | undefined;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, code?: string) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.code = code;
+  }
+}
+
+/** 内核的兜底路由回的那一句：这个内核还没有这条路（`routes.rs` 的 fallback）。 */
+const NO_SUCH_ROUTE = "no such route";
+
+/** 这个内核还没有这条接口：兜底的 404，或这条路不收这个方法的 405。 */
+export function isNotServed(error: unknown): boolean {
+  return error instanceof ApiError && (error.status === 405 || (error.status === 404 && error.message === NO_SUCH_ROUTE));
+}
+
+function problemOf(text: string): { detail?: string; code?: string } {
+  try {
+    const body: unknown = JSON.parse(text);
+    if (typeof body !== "object" || body === null) return {};
+    return {
+      ...("detail" in body && typeof body.detail === "string" ? { detail: body.detail } : {}),
+      ...("code" in body && typeof body.code === "string" ? { code: body.code } : {}),
+    };
+  } catch {
+    // 不是 JSON（例如代理回的纯文字），整段当原因。
+    return {};
   }
 }
 
@@ -76,7 +100,7 @@ export function unreachable(response: Response): boolean {
 export async function request<T>(
   path: string,
   init: {
-    method?: "GET" | "POST" | "PUT" | "DELETE";
+    method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
     body?: unknown;
     query?: Record<string, string>;
     /** 调插件的慢请求（列来源）要等得久一些。 */
@@ -108,7 +132,9 @@ export async function request<T>(
   if (unreachable(response)) throw new DaemonUnreachableError(new Error("proxy could not reach the daemon"));
   if (response.status === 401) forgetConnection();
   if (!response.ok) {
-    throw new ApiError(response.status, (await response.text()) || response.statusText);
+    const text = await response.text();
+    const problem = problemOf(text);
+    throw new ApiError(response.status, problem.detail ?? (text || response.statusText), problem.code);
   }
   // 204（退出登录、撤销令牌、不要这次导入）没有内容；调用处的类型写 `void`。
   if (response.status === 204) return undefined as T;

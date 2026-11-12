@@ -1,3 +1,4 @@
+import { getRouteApi } from "@tanstack/react-router";
 import { useState } from "react";
 import { Button as AriaButton } from "react-aria-components";
 import type { FetchPlugin, PluginsView, SiteLogin, VisitorIdentity as Visitor } from "../api/endpoints";
@@ -6,6 +7,7 @@ import { ErrorLine } from "../components/ErrorLine";
 import { Rail } from "../frame/Rail";
 import { PluginCard } from "./PluginCard";
 import { SiteLoginRow } from "./SiteLoginRow";
+import { TransformsPanel } from "./TransformsPanel";
 import { VisitorIdentity } from "./VisitorIdentity";
 import { timeText } from "./words";
 
@@ -42,8 +44,9 @@ function groups(view: PluginsView, sites: SiteLogin[], visitors: Visitor[]): Pla
 
 /** 左边那一行的小字：几个插件、登录着没有、停着没有。 */
 function groupSub(g: PlatformGroup): { text: string; warn: boolean } {
-  const parts = [`${g.plugins.length} 个获取插件`];
-  const pause = g.plugins.flatMap((p) => p.pauses)[0];
+  const methods = g.plugins.flatMap((p) => p.methods);
+  const parts = [`${methods.filter((m) => m.built && m.enabled).length} 种取法开着`];
+  const pause = [...g.plugins.flatMap((p) => p.pauses), ...methods.flatMap((m) => m.pauses)][0];
   if (pause) {
     parts.push(pause.byYou ? "你让它先别试" : pause.until ? `停着，${timeText(pause.until)} 再试` : "停着");
     return { text: parts.join(" · "), warn: !pause.byYou };
@@ -51,9 +54,10 @@ function groupSub(g: PlatformGroup): { text: string; warn: boolean } {
   const states = g.sites.map((s) => s.login);
   if (states.includes("expired")) return { text: [...parts, "登录过期了"].join(" · "), warn: true };
   if (states.length > 0) parts.push(states.every((s) => s === "present") ? "登录着" : "还没登录");
-  else parts.push("不用账号");
   return { text: parts.join(" · "), warn: false };
 }
+
+const route = getRouteApi("/plugins");
 
 export function PluginsPage() {
   const plugins = usePlugins();
@@ -61,105 +65,118 @@ export function PluginsPage() {
   const visitors = useVisitors();
   const all = plugins.data ? groups(plugins.data, sites.data ?? [], visitors.data ?? []) : [];
   const [picked, setPicked] = useState<string | null>(null);
-  const current = all.find((g) => g.key === picked) ?? all[0];
+  // 「变成文字」那一栏放在地址里：设置页能直接链过来。
+  const text = route.useSearch().show === "text";
+  const navigate = route.useNavigate();
+  const pick = (key: string | null) => {
+    setPicked(key);
+    void navigate({ search: key === null ? { show: "text" } : {} });
+  };
+  const current = text ? undefined : (all.find((g) => g.key === picked) ?? all[0]);
   const notLoaded = plugins.data?.notLoaded ?? [];
 
   return (
     <div className="relative h-full overflow-hidden bg-bg">
       <Rail label="主导航" />
-      <main className="absolute inset-y-0 right-0 left-rail overflow-hidden">
-        <div className="absolute top-7 left-gutter w-[860px]">
-          <h1 className="m-0 text-title font-semibold text-text">获取插件</h1>
-          <p className="m-0 mt-1 text-note text-sub">
-            每个平台装了哪些获取插件、怎么登录、按什么节奏取。usuyo 自己不带任何平台的插件。
-          </p>
+      <main className="@container absolute inset-y-0 right-0 left-rail overflow-y-auto px-6 pt-7 pb-10 lg:px-gutter">
+        <h1 className="m-0 text-title font-semibold text-text">获取插件</h1>
+        <p className="m-0 mt-1 max-w-[720px] text-note text-sub">
+          每个平台的获取插件有哪几种取法、账号用在哪儿、按什么节奏取；还有把口播和图里的字转成文字的插件。usuyo 自己不带任何平台的插件。
+        </p>
+        {plugins.error ? <ErrorLine error={plugins.error} className="mt-4" /> : null}
+        <div className="mt-7 grid items-start gap-x-8 gap-y-6 @3xl:grid-cols-[232px_minmax(0,1fr)]">
+          <nav aria-label="平台" className="flex min-w-0 flex-col gap-0.5 @3xl:sticky @3xl:top-0">
+            <div className="px-3 pb-1.5 text-tag font-medium text-faint">获取</div>
+            {plugins.data && all.length === 0 ? <div className="px-3 py-1.5 text-small text-sub">还没有装</div> : null}
+            {all.map((g) => {
+              const sub = groupSub(g);
+              return (
+                <NavRow key={g.key} name={g.name} sub={sub.text} warn={sub.warn} current={g.key === current?.key} onPress={() => pick(g.key)} />
+              );
+            })}
+            <div className="px-3 pt-4 pb-1.5 text-tag font-medium text-faint">变成文字</div>
+            <NavRow name="口播、图里的字、画面" sub="转换插件和模型" warn={false} current={current === undefined && plugins.data !== undefined} onPress={() => pick(null)} />
+            {notLoaded.length > 0 ? <NotLoaded notLoaded={notLoaded} /> : null}
+          </nav>
+          <div className="min-w-0">
+            {current ? (
+              <PlatformDetail key={current.key} group={current} />
+            ) : plugins.data ? (
+              <>
+                {all.length === 0 && !text ? <NothingInstalled /> : null}
+                <TransformsPanel />
+              </>
+            ) : null}
+          </div>
         </div>
-        {plugins.error ? <ErrorLine error={plugins.error} className="absolute top-[104px] left-gutter" /> : null}
-        {plugins.data && all.length === 0 ? <NothingInstalled notLoaded={notLoaded} /> : null}
-        {current ? (
-          <>
-            <nav aria-label="平台" className="absolute top-[104px] bottom-6 left-gutter flex w-[272px] flex-col gap-0.5 overflow-y-auto">
-              <div className="px-3 pb-1.5 text-tag font-medium text-faint">装着的</div>
-              {all.map((g) => {
-                const sub = groupSub(g);
-                const cur = g.key === current.key;
-                return (
-                  <AriaButton
-                    key={g.key}
-                    aria-current={cur ? "true" : undefined}
-                    onPress={() => setPicked(g.key)}
-                    className={`press flex w-full cursor-pointer flex-col items-start gap-0.5 rounded-btn border-0 px-3 py-2 text-left outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent data-[hovered]:bg-chip/60 ${cur ? "bg-chip" : "bg-transparent"}`}
-                  >
-                    <span className={`text-body ${cur ? "font-semibold text-text" : "font-medium text-label"}`}>{g.name}</span>
-                    <span className={`max-w-full truncate text-small ${sub.warn ? "text-warn" : "text-sub"}`}>{sub.text}</span>
-                  </AriaButton>
-                );
-              })}
-              {notLoaded.length > 0 ? <NotLoaded notLoaded={notLoaded} /> : null}
-            </nav>
-            <PlatformDetail key={current.key} group={current} />
-          </>
-        ) : null}
       </main>
     </div>
   );
 }
 
-function PlatformDetail({ group }: { group: PlatformGroup }) {
-  const owners = [...new Set(group.plugins.map((p) => p.id.split("/")[0] ?? p.id))];
-  const pacing = group.plugins.flatMap((p) => p.pacing).find((x) => x.platform === group.key);
+function NavRow({ name, sub, warn, current, onPress }: { name: string; sub: string; warn: boolean; current: boolean; onPress: () => void }) {
   return (
-    <section
-      aria-label={group.name}
-      className="absolute top-[104px] right-0 bottom-0 left-[calc(var(--spacing-gutter)+304px)] overflow-y-auto pr-gutter pb-10"
+    <AriaButton
+      aria-current={current ? "true" : undefined}
+      onPress={onPress}
+      className={`press flex w-full min-w-0 cursor-pointer flex-col items-start gap-0.5 rounded-btn border-0 px-3 py-2 text-left outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent data-[hovered]:bg-chip/60 ${current ? "bg-chip" : "bg-transparent"}`}
     >
-      <div className="w-[808px] max-w-full animate-fade">
-        <div className="flex items-baseline gap-2.5">
-          <h2 className="m-0 text-name font-semibold text-text">{group.name}</h2>
-          <span className="text-note text-sub">
-            {group.plugins.length} 个获取插件 · 来自 {owners.join("、")}
-          </span>
-        </div>
+      <span className={`text-body ${current ? "font-semibold text-text" : "font-medium text-label"}`}>{name}</span>
+      <span className={`max-w-full truncate text-small ${warn ? "text-warn" : "text-sub"}`}>{sub}</span>
+    </AriaButton>
+  );
+}
 
-        {group.sites.length > 0 ? (
-          <>
-            <h3 className="m-0 mt-7 text-section font-semibold text-text">登录</h3>
-            <p className="m-0 mt-1.5 max-w-[700px] text-note text-sub">
-              在 usuyo 给每个站点单独开的窗口里，你自己登录（多半是扫码），和你日常用的浏览器分开。用到同一个站点的插件共用这一份，登录一次就行。
-            </p>
-            <div className="mt-3 flex flex-col gap-2">
-              {group.sites.map((s) => (
-                <SiteLoginRow key={s.site} site={s} />
-              ))}
-            </div>
-          </>
-        ) : null}
-
-        {group.visitors.map((v) => (
-          <VisitorIdentity key={v.site} visitor={v} />
+function PlatformDetail({ group }: { group: PlatformGroup }) {
+  const pacing = group.plugins.flatMap((p) => p.pacing).filter((x) => x.platform === group.key);
+  const strict = pacing.length > 0 ? { batch: pacing.every((x) => x.batch), intervalSec: Math.max(...pacing.map((x) => x.intervalSec)), daily: minDaily(pacing) } : null;
+  return (
+    <section aria-label={group.name} className="min-w-0 animate-fade">
+      <h2 className="m-0 text-name font-semibold text-text">{group.name}</h2>
+      <p className="m-0 mt-1.5 max-w-[720px] text-note text-sub">
+        一种取法一行，各自开关。不用账号能拿到的，一律不带账号去取；账号只用在非它不可的那几种上，每一种写着账号在哪儿。档位和记下的风险只是给你挑的，不拦什么。
+      </p>
+      <div className="mt-4 flex flex-col gap-3">
+        {group.plugins.map((p) => (
+          <PluginCard key={p.id} plugin={p} sites={group.sites} visitors={group.visitors} />
         ))}
-
-        <h3 className="m-0 mt-8 text-section font-semibold text-text">获取方式</h3>
-        <p className="m-0 mt-1.5 text-note text-sub">每个插件怎么取、要不要你的账号。标签只是给你挑的，不拦什么。</p>
-        <div className="mt-3 flex flex-col gap-2.5">
-          {group.plugins.map((p) => (
-            <PluginCard key={p.id} plugin={p} sites={group.sites} />
-          ))}
-        </div>
-
-        {pacing ? (
-          <>
-            <h3 className="m-0 mt-8 text-section font-semibold text-text">节奏</h3>
-            <p className="m-0 mt-1.5 max-w-[700px] text-note text-sub">
-              {pacing.batch
-                ? `两次之间至少隔 ${pacing.intervalSec} 秒${pacing.daily ? `，导入每天最多 ${pacing.daily} 次` : ""}。你手动收下的单条也照这个间隔排队，但不算进每天的次数。`
-                : `两次之间至少隔 ${pacing.intervalSec} 秒。这个平台不做批量导入，只按链接一条条取。`}
-            </p>
-          </>
-        ) : null}
       </div>
+
+      {group.sites.length > 0 ? (
+        <>
+          <h3 className="m-0 mt-8 text-section font-semibold text-text">在 usuyo 里登录的</h3>
+          <p className="m-0 mt-1.5 max-w-[720px] text-note text-sub">
+            只有写着「要在 usuyo 里登录」的取法用到。在 usuyo 给每个站点单独开的窗口里，你自己登录（多半是扫码），和你日常用的浏览器分开。
+          </p>
+          <div className="mt-3 flex flex-col gap-2">
+            {group.sites.map((s) => (
+              <SiteLoginRow key={s.site} site={s} />
+            ))}
+          </div>
+        </>
+      ) : null}
+
+      {group.visitors.map((v) => (
+        <VisitorIdentity key={v.site} visitor={v} />
+      ))}
+
+      {strict ? (
+        <>
+          <h3 className="m-0 mt-8 text-section font-semibold text-text">节奏</h3>
+          <p className="m-0 mt-1.5 max-w-[720px] text-note text-sub">
+            {strict.batch
+              ? `两次之间至少隔 ${strict.intervalSec} 秒${strict.daily ? `，导入每天最多 ${strict.daily} 次` : ""}。你手动收下的单条也照这个间隔排队，但不算进每天的次数。几种取法共用这一个节奏。`
+              : `两次之间至少隔 ${strict.intervalSec} 秒。这个平台不做批量导入，只按链接一条条取。`}
+          </p>
+        </>
+      ) : null}
     </section>
   );
+}
+
+function minDaily(pacing: { daily?: number }[]): number | undefined {
+  const d = pacing.flatMap((x) => (x.daily === undefined ? [] : [x.daily]));
+  return d.length > 0 ? Math.min(...d) : undefined;
 }
 
 function NotLoaded({ notLoaded }: { notLoaded: PluginsView["notLoaded"] }) {
@@ -178,21 +195,16 @@ function NotLoaded({ notLoaded }: { notLoaded: PluginsView["notLoaded"] }) {
   );
 }
 
-/** 一个都没装：说清楚现在插件从哪来，不假装有商店。 */
-function NothingInstalled({ notLoaded }: { notLoaded: PluginsView["notLoaded"] }) {
+/** 一个获取插件都没装：说清楚现在插件从哪来，不假装有商店。 */
+function NothingInstalled() {
   return (
-    <div className="absolute top-[104px] left-gutter w-[560px] animate-fade rounded-card border border-dashed border-border2 p-5">
+    <div className="mb-8 max-w-[560px] animate-fade rounded-card border border-dashed border-border2 p-5">
       <div className="text-body text-label">还没有装获取插件。</div>
       <p className="m-0 mt-1 text-note text-sub">
         usuyo 自己不带平台的插件。现在只能在开发时装：在 usuyo 的仓库里跑下面这条命令，它把旁边 usuyo-fetch
         里的插件编好、装到这台机器上；重启 usuyo 以后这里就有了。
       </p>
       <code className="mono mt-3 block rounded-sm bg-chip px-3 py-2 text-tag text-text select-text">just dev-plugins</code>
-      {notLoaded.length > 0 ? (
-        <div className="mt-4 flex flex-col gap-1">
-          <NotLoaded notLoaded={notLoaded} />
-        </div>
-      ) : null}
     </div>
   );
 }

@@ -2,6 +2,7 @@
 // 导入照时间往前走：新开的一次过几秒列完，确认以后隔一会儿收下一条，页面不用真的内核也能看到「来了」。
 import type {
   DeliverToken,
+  FetchMethod,
   FetchPlugin,
   ImportEntry,
   ImportView,
@@ -13,56 +14,156 @@ import type { Platforms } from "../api/source";
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const inMinutes = (m: number) => new Date(Date.now() + m * 60_000).toISOString();
 
+/** 一种取法的样例：没写的照常用默认值（做好了、开着、没停）。 */
+function method(m: Pick<FetchMethod, "id" | "name" | "access" | "account" | "gets"> & Partial<FetchMethod>): FetchMethod {
+  return { built: true, enabled: true, pauses: [], ...m };
+}
+
+const notBuilt = (m: Pick<FetchMethod, "id" | "name" | "access" | "account" | "gets"> & Partial<FetchMethod>) => method({ ...m, built: false, enabled: false });
+
+/** 样例的四个平台插件：一个平台一个插件，插件里几种取法。 */
 function basePlugins(): FetchPlugin[] {
+  const base = {
+    version: "0.1.0",
+    settings: [],
+    pauses: [],
+    sources: [],
+    sites: [],
+    visitors: [],
+  };
   return [
     {
+      ...base,
+      id: "usuyo-fetch/x",
+      name: "X",
+      description: "按链接取一条帖子的文字、图和视频；书签和点过赞的由你浏览器里的脚本交来，账号只留在你的浏览器里",
+      platforms: [{ id: "x", name: "X" }],
+      access: "public-web",
+      login: "optional",
+      canList: true,
+      pacing: [{ platform: "x", batch: true, intervalSec: 10, daily: 200 }],
+      methods: [
+        method({
+          id: "guest",
+          name: "访客接口",
+          access: "public-web",
+          account: { kind: "none" },
+          gets: { fetch: ["正文", "图", "视频"] },
+          riskNote: { text: "不带账号；风险在出口上：访客令牌可能被拒、被限流。", source: { label: "gallery-dl #9505", url: "https://github.com/mikf/gallery-dl/issues/9505" } },
+        }),
+        method({ id: "embed", name: "嵌入接口", access: "public-web", account: { kind: "none" }, gets: { fetch: ["正文", "图"] }, riskNote: { text: "访客令牌被限流时退到这里；只给截断的正文，长帖只拿到前一段。", source: { label: "vercel/react-tweet", url: "https://github.com/vercel/react-tweet" } } }),
+        method({
+          id: "userscript",
+          name: "浏览器脚本",
+          access: "browser-session",
+          account: { kind: "own-browser", where: "X" },
+          gets: { list: ["书签", "点过赞的"], delivers: "links" },
+          riskNote: { text: "只截获页面自己拿回的回答，不发额外请求，一屏屏由你自己翻；没有找到使用者被锁的报告。", source: { label: "twitter-web-exporter #120", url: "https://github.com/prinsss/twitter-web-exporter/issues/120" } },
+        }),
+        method({
+          id: "archive",
+          name: "官方归档",
+          access: "official-export",
+          account: { kind: "none" },
+          gets: { list: ["你发过的", "点过赞的"] },
+          riskNote: { text: "读你从 X 设置里申请下载的 zip，不碰账号；归档里有没有书签还要核。" },
+        }),
+        notBuilt({
+          id: "session",
+          name: "会话接口",
+          access: "session-api",
+          account: { kind: "in-usuyo", sites: ["x.com"] },
+          gets: { list: ["书签"] },
+          riskNote: { text: "要在 usuyo 里登录 X，cookie 出了浏览器、按程序的节奏翻页；只多一样跟着收。", source: { label: "fieldtheory-cli", url: "https://github.com/afar1/fieldtheory-cli" } },
+        }),
+        notBuilt({ id: "graphql", name: "网页内部接口", access: "private-api", account: { kind: "in-usuyo", sites: ["x.com"] }, gets: { list: ["书签"], fetch: ["正文", "图", "视频"] } }),
+        notBuilt({ id: "mirror", name: "手机镜像", access: "vision-ui", account: { kind: "own-phone", where: "X" }, gets: { list: ["书签"], delivers: "links" } }),
+        notBuilt({ id: "share", name: "手机分享", access: "public-web", account: { kind: "own-phone", where: "X" }, gets: { delivers: "links" } }),
+        notBuilt({ id: "hook", name: "客户端注入", access: "client-hook", account: { kind: "own-phone", where: "X" }, gets: { list: ["书签", "点过赞的"] } }),
+      ],
+    },
+    {
+      ...base,
       id: "usuyo-fetch/xiaohongshu",
       name: "小红书",
-      description: "按你存过的笔记链接取公开笔记页的正文、图片和视频，做个人备份",
-      version: "0.1.0",
+      description: "按你存过的笔记链接取公开笔记页的正文、图片和视频，做个人备份；存过的由你浏览器里的脚本把链接交进来",
       platforms: [{ id: "xiaohongshu", name: "小红书" }],
       access: "public-web",
       login: "none",
       canList: false,
-      sources: [],
-      sites: [],
       visitors: ["www.xiaohongshu.com"],
-      settings: [],
       pacing: [{ platform: "xiaohongshu", batch: true, intervalSec: 15, daily: 100 }],
-      pauses: [],
+      methods: [
+        method({
+          id: "page",
+          name: "访客页面",
+          access: "public-web",
+          account: { kind: "visitor", sites: ["www.xiaohongshu.com"] },
+          gets: { fetch: ["正文", "图", "视频"] },
+          riskNote: { text: "读公开笔记页；访客身份过一阵会失效，换一份就行。" },
+        }),
+        method({
+          id: "userscript",
+          name: "浏览器脚本",
+          access: "browser-session",
+          account: { kind: "own-browser", where: "小红书" },
+          gets: { list: ["存过的笔记", "点过赞的"], delivers: "links" },
+          riskNote: { text: "脚本只在你自己打开那一页时读链接，不替你翻页。" },
+        }),
+        notBuilt({ id: "iphone", name: "iPhone 镜像", access: "vision-ui", account: { kind: "own-phone", where: "小红书" }, gets: { list: ["存过的笔记"], delivers: "links" } }),
+      ],
     },
     {
+      ...base,
       id: "usuyo-fetch/wechat-channels",
       name: "微信视频号",
       description: "用分享链接取一条：不登录只存作者、描述和封面；登录了腾讯元宝才取视频文件",
-      version: "0.1.0",
       platforms: [{ id: "wechat-channels", name: "微信视频号" }],
       access: "session-api",
       login: "optional",
       canList: false,
-      sources: [],
       sites: ["yuanbao.tencent.com"],
-      visitors: [],
-      settings: [],
       pacing: [{ platform: "wechat-channels", batch: true, intervalSec: 30, daily: 50 }],
-      pauses: [],
+      methods: [
+        method({ id: "preview", name: "分享预览", access: "public-web", account: { kind: "none" }, gets: { fetch: ["作者", "描述", "封面"] } }),
+        // 要在 usuyo 里登录的，登录了才开：样例里还没登录，所以关着。
+        method({
+          id: "yuanbao",
+          name: "腾讯元宝",
+          access: "session-api",
+          account: { kind: "in-usuyo", sites: ["yuanbao.tencent.com"] },
+          gets: { fetch: ["视频"] },
+          enabled: false,
+          riskNote: { text: "经腾讯元宝的网页解析视频号链接，用的是你的元宝账号。" },
+        }),
+        notBuilt({ id: "iphone", name: "iPhone 镜像", access: "vision-ui", account: { kind: "own-phone", where: "微信" }, gets: { list: ["赞过的", "存过的"], delivers: "links" } }),
+      ],
     },
     {
+      ...base,
       id: "usuyo-fetch/bilibili",
       name: "B站",
-      description: "列出我的收藏夹和稍后再看，按视频链接取元数据、封面、字幕和低画质音视频",
-      version: "0.1.0",
+      description: "按视频链接取元数据、封面、字幕和低画质音视频；列出存过的和稍后再看要登录",
       platforms: [{ id: "bilibili", name: "B站" }],
       access: "session-api",
-      login: "required",
+      login: "optional",
       canList: true,
       sources: [{ source: "bilibili:toview", title: "稍后再看", action: "favorite" }],
       sites: ["www.bilibili.com"],
-      visitors: [],
-      settings: [],
       pacing: [{ platform: "bilibili", batch: true, intervalSec: 5, daily: 500 }],
-      // 样例里 B站 刚被限流：页面上写原因和什么时候再试
-      pauses: [{ scope: "bilibili", byYou: false, until: inMinutes(12), code: "rate-limited", hint: "B站说请求太频繁，过一会儿再试" }],
+      methods: [
+        method({ id: "public", name: "公开接口", access: "public-web", account: { kind: "none" }, gets: { fetch: ["标题", "封面", "字幕", "音视频"] } }),
+        method({
+          id: "lists",
+          name: "收藏夹和稍后再看",
+          access: "session-api",
+          account: { kind: "in-usuyo", sites: ["www.bilibili.com"] },
+          gets: { list: ["收藏夹", "稍后再看"] },
+          // 样例里这一种刚被限流：页面上写原因和什么时候再试
+          pauses: [{ scope: "bilibili", byYou: false, until: inMinutes(12), code: "rate-limited", hint: "B站说请求太频繁，过一会儿再试" }],
+          riskNote: { text: "用你的登录调 B站的接口列出存过的；只列，不改。" },
+        }),
+      ],
     },
   ];
 }
@@ -268,10 +369,20 @@ export function createMockPlatforms(empty = false): Platforms {
         { source: "bilibili:fav:50948571", title: "做饭", action: "favorite", count: 36 },
       ];
     },
+    async switchMethod(pluginId, methodId, enabled) {
+      await wait(60);
+      const p = plugin(pluginId);
+      const m = p.methods.find((x) => x.id === methodId);
+      if (!m) throw new Error(`样例里 ${pluginId} 没有取法 ${methodId}`);
+      if (!m.built) throw new Error("invalid-args: 这种取法还没做好");
+      m.enabled = enabled;
+      return { ...p, methods: p.methods.map((x) => ({ ...x })) };
+    },
     async tryNow(pluginId) {
       await wait(40);
       const p = plugin(pluginId);
       p.pauses = [];
+      for (const m of p.methods) m.pauses = [];
       return { ...p };
     },
     async hold(pluginId) {

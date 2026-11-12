@@ -10,13 +10,7 @@ import { Button } from "../ui/Button";
 
 /** 内核回的错误里只按 `code` 分。 */
 function problemCode(error: Error): string | null {
-  if (!(error instanceof ApiError)) return null;
-  try {
-    const body: unknown = JSON.parse(error.message);
-    return typeof body === "object" && body !== null && "code" in body && typeof body.code === "string" ? body.code : null;
-  } catch {
-    return null;
-  }
+  return error instanceof ApiError ? (error.code ?? null) : null;
 }
 
 function SourcesError({ error, plugin }: { error: Error; plugin: FetchPlugin }) {

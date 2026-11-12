@@ -1,4 +1,4 @@
-// 把地图数据换成画面上的像素位置。按主题摆的位置来自内核；按来源摆的在前端按平台算，
+// 把地图数据换成画面上的像素位置。按主题摆的位置来自内核；按来源摆的在前端按平台 id 算，
 // 每条两个位置都留着，切回来各回原位（Home.dc.html 的 placeSource）。
 import type { MapView } from "../api/endpoints";
 import { r01 } from "./noise";
@@ -35,15 +35,25 @@ export interface Frame {
   mapX: number;
 }
 
-// 来源的中心，照主页画布的页面坐标（1440×900）；视频号放在画布上抖音的位置。
-const SOURCE_CENTERS: Record<string, [number, number]> = {
-  小红书: [520, 300],
-  B站: [900, 330],
-  公众号: [720, 610],
-  视频号: [380, 560],
-  网页: [1130, 170],
-  文件: [1290, 760],
-};
+/**
+ * 按来源摆时，一个平台的中心在哪（页面坐标 1440×900）。只由平台 id 算出来：任何插件给的平台都有一个位置，
+ * 只有正好和已有的一个挤在一起时才往后让一格（按 id 排先后，谁让是定的）。地图上下左右各留一点边。
+ */
+export function sourceCenter(platformId: string, step = 0): [number, number] {
+  // id 散到 997 个格位之一，再取 Halton 序列的那一个点；`step` 是被占了时往后让的格数。
+  const slot = 1 + ((Math.floor(r01(`${platformId}:source`) * 997) + step) % 997);
+  return [330 + halton(slot, 2) * 1010, 150 + halton(slot, 3) * 620];
+}
+
+function halton(index: number, base: number): number {
+  let f = 1;
+  let r = 0;
+  for (let i = index; i > 0; i = Math.floor(i / base)) {
+    f /= base;
+    r += f * (i % base);
+  }
+  return r;
+}
 
 function toPx(f: Frame, nx: number, ny: number): [number, number] {
   return [f.mapX + nx * (f.width - f.mapX), ny * f.height];
@@ -64,19 +74,23 @@ export function buildPlaces(
     const [x, y] = toPx(f, r.x, r.y);
     return { id: r.topicId, name: topicNames.get(r.topicId) ?? "", x, y, rad: r.r * (f.width - f.mapX), count: r.count };
   });
-  const counts = new Map<string, number>();
-  for (const p of map.points) counts.set(p.platform.name, (counts.get(p.platform.name) ?? 0) + 1);
-  let spare = 0;
-  const sources: Region[] = [...counts.entries()].map(([name, n]) => {
-    const c = SOURCE_CENTERS[name] ?? [1100 + 60 * spare++, 820];
+  const counts = new Map<string, { name: string; n: number }>();
+  for (const p of map.points) counts.set(p.platform.id, { name: p.platform.name, n: (counts.get(p.platform.id)?.n ?? 0) + 1 });
+  const taken: [number, number][] = [];
+  const sources: Region[] = [...counts.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([id, { name, n }]) => {
+    let step = 0;
+    let c = sourceCenter(id);
+    // 页面坐标里离已有的不到 180 就让一格，最多让 30 格。
+    while (step < 30 && taken.some(([tx, ty]) => Math.hypot(tx - c[0], ty - c[1]) < 180)) c = sourceCenter(id, ++step);
+    taken.push(c);
     const [x, y] = pagePx(f, c[0], c[1]);
-    return { id: name, name, x, y, rad: (26 + Math.sqrt(n) * 8) * scale, count: n };
+    return { id, name, x, y, rad: (26 + Math.sqrt(n) * 8) * scale, count: n };
   });
-  const byName = new Map(sources.map((s) => [s.id, s]));
+  const byId = new Map(sources.map((s) => [s.id, s]));
   const k = new Map<string, number>();
   const places = map.points.map((p): Place => {
     const [tx, ty] = toPx(f, p.x, p.y);
-    const s = byName.get(p.platform.name);
+    const s = byId.get(p.platform.id);
     let sx = tx;
     let sy = ty;
     if (s) {

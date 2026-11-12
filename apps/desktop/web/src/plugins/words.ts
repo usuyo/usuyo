@@ -1,5 +1,5 @@
 // 获取插件的标签和停着的原因，换成平常的话。只是给你挑的信息，不拦什么。
-import type { Access, LoginNeed, PluginPause, VisitorIdentity } from "../api/endpoints";
+import type { Access, FetchMethod, LoginNeed, MethodAccount, PluginPause, SiteLogin, VisitorIdentity } from "../api/endpoints";
 
 export const ACCESS_TEXT: Record<Access, string> = {
   "official-export": "读平台给你的官方导出",
@@ -22,6 +22,13 @@ export function loginText(need: LoginNeed, siteNames: string[]): string {
     default:
       return names ? `要登录你的${names}账号` : "要登录";
   }
+}
+
+/** 用到的账号现在怎样：几个站点里有过期的先说过期。 */
+export function loginStateText(states: SiteLogin["login"][]): string {
+  if (states.includes("expired")) return "登录过期了";
+  if (states.length > 0 && states.every((s) => s === "present")) return "现在登录着";
+  return "还没登录";
 }
 
 /** 今天的只写时分，别的日子带上日期；十分钟以内的带上秒（照节奏几秒一条时有用）。 */
@@ -58,4 +65,30 @@ export function pauseText(p: PluginPause, platforms: { id: string; name: string 
   // 只有一个平台的插件不用再说是哪个。
   const where = p.scope === "*" || platforms.length <= 1 ? "" : `（${platforms.find((x) => x.id === p.scope)?.name ?? p.scope}）`;
   return p.until ? `${why}${where} · ${timeText(p.until, now)} 自己再试` : `${why}${where} · 等你动手`;
+}
+
+/** 一种取法的账号用在哪，一句话。`names` 是站点给人看的名字（`/sites`、`/visitors` 里的）。 */
+export function accountText(account: MethodAccount, names: string[]): string {
+  const who = account.where ?? names.join("、");
+  switch (account.kind) {
+    case "none":
+      return "不用账号";
+    case "visitor":
+      return `不用账号，用${names.join("、") || "站点"}给访客的身份`;
+    case "own-browser":
+      return `账号留在你自己的浏览器里：脚本在登录着的${who}网页里读，把链接交给 usuyo`;
+    case "own-phone":
+      return `账号留在你手机的${who} App 里`;
+    default:
+      return `要在 usuyo 里登录你的${who}账号`;
+  }
+}
+
+/** 取得到什么：「正文、图、视频」「列出：书签、点过赞的」「由别处把链接交进来」。 */
+export function getsText(gets: FetchMethod["gets"]): string[] {
+  return [
+    ...(gets.fetch && gets.fetch.length > 0 ? [`取一条：${gets.fetch.join("、")}`] : []),
+    ...(gets.list && gets.list.length > 0 ? [`列出：${gets.list.join("、")}`] : []),
+    ...(gets.delivers === "links" ? ["链接交进来"] : []),
+  ];
 }
