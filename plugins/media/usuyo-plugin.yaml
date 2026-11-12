@@ -1,0 +1,26 @@
+# 预装的音视频转换插件（协议 §2.9、feature 003 §4.1）：包着 ffmpeg 和 ffprobe。
+# ffmpeg、ffprobe 是插件自己的资产，在 ${PLUGIN_DIR}/ffmpeg 和 ${PLUGIN_DIR}/ffprobe，不从 PATH 找。
+# 不联网，没有模型。keyframes 的参数（scanFps、sceneThreshold、maxFrames 等）不是设置，
+# 设置的键只能是小写加 `-`，也没有小数类型，只经 run 的 options 交进来，例如「再转一次」时。
+protocol: 1
+id: builtin/media
+kind: transform
+name: 音视频
+description: 分开的画面和音轨合起来能播，抽 16 kHz 音频，取关键帧，报有没有音轨、画面停了多久
+version: 0.1.0
+license: MIT
+maintainers: [usuyo]
+upstream:
+  - name: FFmpeg
+    url: https://ffmpeg.org
+    license: LGPL-2.1-or-later
+consumes: [media:video, media:audio]
+produces: [play, audio:pcm16k, probe, keyframes]
+provider: none
+permissions:
+  fs:
+    read: ["${INPUT}"]
+    write: ["${OUT}"]
+  limits: {memory: 2GiB, timeout: 7200s}
+run:
+  command: ["${PLUGIN_DIR}/usuyo-plugin-media"]
