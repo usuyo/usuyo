@@ -14,6 +14,8 @@ pub enum Error {
     Plugin(#[from] PluginError),
     #[error("json: {0}")]
     Json(#[from] serde_json::Error),
+    #[error(transparent)]
+    Model(#[from] crate::models::ModelError),
     #[error("jobs database: {0}")]
     Jobs(#[from] rusqlite::Error),
     #[error("io error at {path}: {source}")]
@@ -28,6 +30,9 @@ pub enum Error {
     NotFound(String),
     #[error("unsupported input: {0}")]
     UnsupportedInput(String),
+    /// 正在做的事挡着（这个转换正在跑、这个模型正在下）。
+    #[error("conflict: {0}")]
+    Conflict(String),
     /// 后台线程没跑完（panic 或被取消）。
     #[error("background task failed: {0}")]
     Task(String),
@@ -51,6 +56,8 @@ impl Error {
             Error::Plugin(PluginError::Credentials { .. }) => "invalid-args",
             Error::Plugin(_) => "internal",
             Error::Jobs(_) | Error::Json(_) | Error::Io { .. } | Error::Task(_) => "internal",
+            Error::Model(crate::models::ModelError::Busy) | Error::Conflict(_) => "conflict",
+            Error::Model(_) => "internal",
             Error::InvalidArgs(_) => "invalid-args",
             Error::NotFound(_) => "not-found",
             Error::UnsupportedInput(_) => "unsupported-input",

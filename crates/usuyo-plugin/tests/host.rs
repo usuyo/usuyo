@@ -761,3 +761,69 @@ JSON"#
         );
     }
 }
+
+/// 要联网的插件拿到宿主定好的代理（`USUYO_PROXY`），不联网的拿不到；`HTTP_PROXY` 一类不给。
+#[tokio::test]
+async fn networked_plugins_get_the_proxy_and_others_do_not() {
+    let tmp = tempfile::tempdir().unwrap();
+    for (id, network) in [
+        (
+            "fake/online",
+            "\n  network: {mode: allowlist, hosts: [\"example.com\"]}",
+        ),
+        ("fake/offline", ""),
+    ] {
+        let dir = tmp.path().join("plugins").join(id).join("1.0.0");
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest = MANIFEST
+            .replace("id: fake/plugin", &format!("id: {id}"))
+            .replace(
+                "  fs: {write: [\"${OUT}\"]}",
+                &format!("  fs: {{write: [\"${{OUT}}\"]}}{network}"),
+            );
+        std::fs::write(dir.join("usuyo-plugin.yaml"), manifest).unwrap();
+        let path = dir.join("plugin.sh");
+        std::fs::write(
+            &path,
+            "#!/bin/sh\nenv > \"$USUYO_CACHE_DIR/env\"\necho '{\"ok\": true, \"match\": false}'\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let found = discover(&tmp.path().join("plugins")).unwrap();
+    assert!(found.rejected.is_empty(), "{:?}", found.rejected);
+    let host = PluginHost::new(
+        HostConfig {
+            work_dir: tmp.path().join("work"),
+            cache_dir: tmp.path().join("cache"),
+            locale: "zh-CN".into(),
+            limits: CallLimits::default(),
+        },
+        found.fetch,
+    )
+    .with_proxy(usuyo_plugin::ProxySetting::parse("socks5://127.0.0.1:7979").unwrap());
+    let link = url::Url::parse("https://example.com/post/1").unwrap();
+    for p in host.plugins() {
+        host.canonicalize(p, &link, &CallOptions::default())
+            .await
+            .unwrap();
+    }
+    let env =
+        |id: &str| std::fs::read_to_string(tmp.path().join("cache").join(id).join("env")).unwrap();
+    let online = env("fake/online");
+    assert!(
+        online
+            .lines()
+            .any(|l| l == "USUYO_PROXY=socks5://127.0.0.1:7979"),
+        "{online}"
+    );
+    assert!(!env("fake/offline").contains("USUYO_PROXY"));
+    for e in [online, env("fake/offline")] {
+        assert!(
+            !e.lines()
+                .any(|l| l.to_ascii_lowercase().starts_with("http_proxy=")
+                    || l.to_ascii_lowercase().starts_with("https_proxy=")),
+            "{e}"
+        );
+    }
+}

@@ -447,6 +447,39 @@ pub struct VisitorView {
     pub plugins: Vec<String>,
 }
 
+/// 一个装着的转换插件（`GET /transforms`，形状由 WP8 照 `endpoints.ts` 定）。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransformPluginView {
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    /// 它能做的 `job`：`play` `asr` `keyframes` `ocr` `frames`。
+    pub jobs: Vec<String>,
+    pub models: Vec<ModelView>,
+}
+
+/// 一个模型：名字、下载大小、许可、现在怎样。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelView {
+    pub name: String,
+    pub size: u64,
+    pub license: String,
+    #[serde(serialize_with = "model_state")]
+    pub state: crate::ModelState,
+}
+
+/// `absent` `downloading` `present` `failed`；没成的原因只进日志。
+fn model_state<S: serde::Serializer>(s: &crate::ModelState, ser: S) -> Result<S::Ok, S::Error> {
+    ser.serialize_str(match s {
+        crate::ModelState::Absent => "absent",
+        crate::ModelState::Downloading => "downloading",
+        crate::ModelState::Present => "present",
+        crate::ModelState::Failed(_) => "failed",
+    })
+}
+
 /// 推给前端的事件；SSE 的事件名就是 `type`。
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(
@@ -488,6 +521,8 @@ pub enum Event {
     },
     /// 插件的暂停、站点的登录变了。重新拉 `/plugins`、`/sites`。
     PluginsUpdated,
+    /// 模型在下、下好了、没下成、删掉了。重新拉 `/transforms`。
+    TransformsUpdated,
 }
 
 #[cfg(test)]

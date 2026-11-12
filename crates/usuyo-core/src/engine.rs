@@ -12,13 +12,18 @@ use tokio::sync::{Notify, broadcast};
 use usuyo_contract::{ItemState, Manifest, Op, OpTarget, SetChange, TopicMeta};
 use usuyo_index::{Filter, SearchIndex, SearchRequest, Visibility};
 use usuyo_library::{Batch, ItemId, Library};
-use usuyo_plugin::{CallLimits, HostConfig, PluginHost, Vault, discover};
+use usuyo_plugin::{
+    CallLimits, HostConfig, PluginHost, ProxySetting, TransformConfig, TransformLimits, Vault,
+    discover,
+};
 
 use crate::content::{self, Content};
 use crate::index_doc::index_doc;
 use crate::jobs::{JobState, Jobs};
 use crate::layout::{HashLayout, Layout, LayoutItem};
+use crate::models::{Models, Net};
 use crate::pace::{Pacing, PlatformLocks};
+use crate::transform::{PowerSource, SystemPower, TransformSetup, Transforms};
 use crate::view::{
     Comment, Event, Facet, HitLayer, ImageRef, ItemSummary, ItemView, MapPoint, MapView, Platform,
     Reindexed, SearchHit, Segment, Stored, Topic, Unreadable,
@@ -70,6 +75,14 @@ pub struct EngineConfig {
     pub inbox: PathBuf,
     /// 收件文件夹里的文件多久没变才处理（云盘可能还在传）。默认 10 秒。
     pub inbox_settle: Duration,
+    /// 按机器的 `settings.json` 里的 `transforms.auto`（默认开）：关掉时只在点名时转。
+    pub transforms_auto: bool,
+    /// 接没接电源；测试换成自己能拨的。
+    pub power: Arc<dyn PowerSource>,
+    /// 转换插件常驻进程的计时；测试把闲置关掉的时间调短。
+    pub transform_limits: TransformLimits,
+    /// 按机器的 `network.proxy`：要联网的插件和模型下载怎么连出去（默认跟系统代理）。
+    pub proxy: ProxySetting,
 }
 
 impl EngineConfig {
@@ -89,6 +102,10 @@ impl EngineConfig {
             retry: RetryPolicy::default(),
             locale: "zh-CN".into(),
             plugin_settings: BTreeMap::new(),
+            transforms_auto: true,
+            power: Arc::new(SystemPower),
+            transform_limits: TransformLimits::default(),
+            proxy: ProxySetting::System,
         }
     }
 }
@@ -179,6 +196,7 @@ pub(crate) struct Inner {
     pub layout: Box<dyn Layout>,
     pub inbox: PathBuf,
     pub inbox_settle: Duration,
+    pub transforms: Transforms,
 }
 
 #[derive(Clone)]
@@ -203,6 +221,7 @@ impl Engine {
         let jobs = Jobs::open(&machine_dir.join("jobs.db"), crate::fetch::now_ms())?;
 
         let mut plugins: Vec<usuyo_plugin::FetchPlugin> = Vec::new();
+        let mut transform_plugins: Vec<usuyo_plugin::TransformPlugin> = Vec::new();
         let mut rejected = Vec::new();
         for root in config.plugin_roots.iter().filter(|r| r.is_dir()) {
             let found = discover(root)?;
@@ -213,6 +232,11 @@ impl Engine {
             for p in found.fetch {
                 if !plugins.iter().any(|q| q.id() == p.id()) {
                     plugins.push(p);
+                }
+            }
+            for p in found.transform {
+                if !transform_plugins.iter().any(|q| q.id() == p.id()) {
+                    transform_plugins.push(p);
                 }
             }
         }
@@ -236,6 +260,24 @@ impl Engine {
         let pacing = crate::pace::combine(&plugins);
         // 插件的输出目录要和资料库在同一个文件系统上，移进 raw/ 才是改名。
         let work_dir = library.root().join(".usuyo/tmp");
+        let transforms = Transforms::new(TransformSetup {
+            plugins: transform_plugins,
+            config: TransformConfig {
+                work_dir: work_dir.clone(),
+                cache_dir: config.machine_root.join("cache/plugins"),
+                models_dir: config.machine_root.join("models"),
+                locale: config.locale.clone(),
+                limits: config.transform_limits,
+            },
+            models: Models::new(
+                config.machine_root.join("models"),
+                Net::system(config.proxy.clone())?,
+            ),
+            auto: config.transforms_auto,
+            power: config.power,
+            cache: config.machine_root.join("cache/transform"),
+            settings: config.plugin_settings.clone(),
+        })?;
         let host = PluginHost::new(
             HostConfig {
                 work_dir,
@@ -246,6 +288,7 @@ impl Engine {
             plugins,
         )
         .with_settings(config.plugin_settings)
+        .with_proxy(config.proxy.clone())
         .with_vault(config.vault, &config.machine_root);
         host.sweep_credentials()?;
         let (events, _) = broadcast::channel(256);
@@ -266,6 +309,7 @@ impl Engine {
                 layout: Box::new(HashLayout),
                 inbox: config.inbox,
                 inbox_settle: config.inbox_settle,
+                transforms,
             }),
         };
         if engine.inner.index.needs_rebuild() {
@@ -674,6 +718,7 @@ impl Engine {
         };
         self.apply(&mut lib, via, "item", id.as_str(), op)?;
         self.inner.jobs.finish(id.as_str())?;
+        self.stop_transforms(id.as_str())?;
         self.inner.index.delete(id.as_str())?;
         self.inner.index.commit()?;
         self.emit(Event::ItemTrashed { id: id.to_string() });
@@ -688,6 +733,7 @@ impl Engine {
             .trashed_item(&id)?
             .ok_or_else(|| Error::NotFound(format!("{id} is not in the trash")))?;
         self.apply(&mut lib, via, "trash", &entry.id, Op::Restore {})?;
+        self.schedule_after_snapshot(&lib, &id, true)?;
         self.after(&lib, &id, links)
     }
 
@@ -702,14 +748,16 @@ impl Engine {
             .find(|e| e.kind == "item" && e.target == id.as_str() && e.reason == "keep-text")
             .ok_or_else(|| Error::NotFound(format!("{id} has no media in the trash")))?;
         self.apply(&mut lib, via, "trash", &entry.id, Op::Restore {})?;
+        self.schedule_after_snapshot(&lib, &id, true)?;
         self.after(&lib, &id, links)
     }
 
-    /// 只留文字：图、视频、音频进回收站。
+    /// 只留文字：图、视频、音频进回收站，要它们的转换任务也不做了。
     pub fn text_only(&self, id: &str, via: Via, links: &Links) -> Result<ItemView> {
         let id = ItemId::parse(id)?;
         let mut lib = self.lib();
         self.apply(&mut lib, via, "item", id.as_str(), Op::KeepText {})?;
+        self.stop_transforms(id.as_str())?;
         self.after(&lib, &id, links)
     }
 

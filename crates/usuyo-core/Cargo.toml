@@ -8,19 +8,34 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+# 模型的压缩包：tar.bz2（纯 Rust 的 libbz2）、tar.gz、zip（只开 deflate）
+bzip2 = "0.6.1"
+flate2 = "1.1.11"
 imagesize = "0.15.0"
 jiff = "0.2.42"
+# 下载模型：每次读有自己的超时（断流）、每一跳只连查过的地址、Range 续传、和插件同一个代理；TLS 用 ring，同 plugin-kit
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "socks"] }
 rusqlite = { version = "0.42.0", features = ["bundled"] }
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
+sha2 = "0.11.1"
+# 读接没接电源（自动转换只在接着电时跑）
+starship-battery = "0.12.0"
+tar = { version = "0.4.46", default-features = false }
 thiserror = "2.0.21"
-tokio = { version = "1.54.1", features = ["rt", "sync", "time", "macros"] }
+tokio = { version = "1.54.1", features = ["rt", "sync", "time", "macros", "fs", "io-util"] }
+tokio-util = "0.7.20"
 tracing = "0.1.44"
 url = "2.5.8"
 usuyo-contract = { version = "0.0.0", path = "../usuyo-contract" }
 usuyo-index = { version = "0.0.0", path = "../usuyo-index" }
 usuyo-library = { version = "0.0.0", path = "../usuyo-library" }
 usuyo-plugin = { version = "0.0.0", path = "../usuyo-plugin" }
+# 下载模型时的地址检查，和插件发请求用的同一套
+usuyo-plugin-kit = { version = "0.0.0", path = "../usuyo-plugin-kit" }
+webpki-roots = "1.0.12"
+zip = { version = "9.5.1", default-features = false, features = ["deflate-flate2"] }
 
 [lints]
 workspace = true

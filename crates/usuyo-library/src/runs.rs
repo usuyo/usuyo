@@ -500,11 +500,9 @@ impl Library {
                     Err(e) => return Err(e),
                 };
                 let lang = m
-                    .extra
-                    .get("lang")
-                    .and_then(|v| v.as_str())
+                    .lang
+                    .clone()
                     .filter(|l| !l.is_empty())
-                    .map(str::to_owned)
                     .or_else(|| lang_from_name(&m.path));
                 out.push(PlatformSubtitle {
                     snapshot: s.id.clone(),

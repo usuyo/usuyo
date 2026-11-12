@@ -24,6 +24,7 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 pub use credentials::{DeclaredSite, DeclaredVisitor, LoginState, Vault};
+pub use network::{ProxySetting, behind_fake_ip_proxy, resolve_proxy};
 pub use outdir::OutFile;
 use process::{Ending, Finished, Spawn};
 pub use transform::{
@@ -33,9 +34,9 @@ pub use transform::{
 use crate::PluginError;
 use crate::protocol::{
     CallFailure, Canonicalized, CapabilityUse, Completeness, ErrorCode, FetchInputKind,
-    FetchOutput, FetchSpec, Identity, ListPage, MANIFEST_FILE, OutputKind, PLUGIN_DIR_PLACEHOLDER,
-    PluginEvent, PluginHeader, PluginId, PluginKind, PluginManifest, Rfc3339, Site, SourceInfo,
-    SourcesOutput, StorageState, TransformSpec,
+    FetchOutput, FetchSpec, Identity, ListPage, MANIFEST_FILE, NetworkMode, OutputKind,
+    PLUGIN_DIR_PLACEHOLDER, PluginEvent, PluginHeader, PluginId, PluginKind, PluginManifest,
+    Rfc3339, Site, SourceInfo, SourcesOutput, StorageState, TransformSpec,
 };
 
 /// 每次调用的上限。默认值照协议 §3.2、§3.4、§3.6；用户的「调用超时加长」「输出大小上限」改这里。
@@ -312,6 +313,8 @@ pub struct PluginHost {
     /// 插件 id → 用户给它的非密钥设置（§2.11），调用时写成 `USUYO_SETTINGS` 指的文件。
     settings: BTreeMap<String, Value>,
     logins: Arc<credentials::Logins>,
+    /// 要联网的插件走哪个代理。
+    proxy: ProxySetting,
 }
 
 impl PluginHost {
@@ -323,7 +326,15 @@ impl PluginHost {
             plugins,
             settings: BTreeMap::new(),
             logins,
+            proxy: ProxySetting::Direct,
         }
+    }
+
+    /// 要联网的插件经哪个代理出去（按机器的 `network.proxy`）。没调这个时直连。
+    /// 调用方：`usuyo-core` 的 `Engine::open`。
+    pub fn with_proxy(mut self, proxy: ProxySetting) -> Self {
+        self.proxy = proxy;
+        self
     }
 
     /// 凭据和密钥存在 `vault`（§6）。`private_dir` 是按机器的目录（不在资料库里）：
@@ -763,6 +774,20 @@ impl PluginHost {
             .unwrap_or(false)
         {
             env.push(("USUYO_NETWORK".into(), "fake-ip".into()));
+        }
+        // 要联网的插件走和浏览器一样的路：宿主定好代理，插件的 HTTP 客户端照它连（不经 `HTTP_PROXY`）。
+        if plugin.header.permissions.network.mode != NetworkMode::None {
+            let setting = self.proxy.clone();
+            if let Some(proxy) =
+                tokio::task::spawn_blocking(move || network::resolve_proxy(&setting))
+                    .await
+                    .map_err(|e| PluginError::Staging {
+                        what: "proxy".into(),
+                        source: std::io::Error::other(e),
+                    })?
+            {
+                env.push(("USUYO_PROXY".into(), proxy.into()));
+            }
         }
         let spawn = Spawn {
             program,

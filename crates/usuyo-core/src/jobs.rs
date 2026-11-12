@@ -1,4 +1,4 @@
-//! 本机任务队列 `jobs.db`（SPEC §1.1）：取内容的任务、插件的暂停、平台的节奏、导入，
+//! 本机任务队列 `jobs.db`（SPEC §1.1）：取内容的任务、插件的暂停、平台的节奏、导入、转换的任务，
 //! 和上次写的 `content.md` 的哈希。
 //! 暂停按 (插件, 范围) 记：平台插件的范围是平台，通用网页插件的是网站的主机名（列名沿用 `platform`）。
 //!
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS content_hashes (
 );
 ";
 
-/// 版本 1（feature 002）：任务的优先级和所属导入、暂停的原因和「先别试」、平台节奏、导入。
+/// 版本 1：任务的优先级和所属导入、暂停的原因和「先别试」、平台节奏、导入（SPEC §1.1、插件协议 §3.1）。
 const SCHEMA_V1: &str = "
 ALTER TABLE fetch_jobs ADD COLUMN priority INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE fetch_jobs ADD COLUMN import_id TEXT;
@@ -85,6 +85,27 @@ CREATE TABLE import_entries (
 );
 CREATE INDEX import_entries_item ON import_entries (import_id, item_id);
 PRAGMA user_version = 1;
+";
+
+/// 版本 2：转换的任务（SPEC §1.1）。一条一个 `job` 一行；`trigger`、`redo_of` 是写 `run.json` 时要的来历。
+const SCHEMA_V2: &str = "
+CREATE TABLE transform_jobs (
+    item_id    TEXT NOT NULL,
+    job        TEXT NOT NULL,
+    plugin     TEXT,
+    options    TEXT,
+    state      TEXT NOT NULL,
+    wait       TEXT,
+    priority   INTEGER NOT NULL,
+    due_at     INTEGER NOT NULL,
+    attempts   INTEGER NOT NULL DEFAULT 0,
+    error_code TEXT,
+    error_hint TEXT,
+    trigger    TEXT NOT NULL DEFAULT 'auto',
+    redo_of    TEXT,
+    PRIMARY KEY (item_id, job)
+);
+PRAGMA user_version = 2;
 ";
 
 /// 手动收下的排在导入前面（协议 §3.1 的队列顺序）。
@@ -226,8 +247,15 @@ impl Jobs {
         if version < 1 {
             conn.execute_batch(&format!("BEGIN; {SCHEMA_V1} COMMIT;"))?;
         }
+        if version < 2 {
+            conn.execute_batch(&format!("BEGIN; {SCHEMA_V2} COMMIT;"))?;
+        }
         conn.execute(
             "UPDATE fetch_jobs SET state = 'queued' WHERE state = 'running'",
+            [],
+        )?;
+        conn.execute(
+            "UPDATE transform_jobs SET state = 'queued' WHERE state = 'running'",
             [],
         )?;
         conn.execute(
@@ -799,6 +827,347 @@ impl Jobs {
         )?;
         Ok(())
     }
+
+    // —— 转换 ——
+
+    /// 排一个转换任务。已经有这一行时：先后取两者里靠前的（靠前了就换上这次的 `trigger`、到点时间不晚于这次）；
+    /// `revive` 时失败过的重新开始（快照新来了，输入可能变了）；排着、等着、在跑的状态不动。
+    pub fn schedule_transform(
+        &self,
+        item_id: &str,
+        job: TransformJobKind,
+        priority: i64,
+        trigger: &str,
+        revive: bool,
+        now: i64,
+    ) -> Result<()> {
+        self.conn().execute(
+            "INSERT INTO transform_jobs (item_id, job, state, priority, due_at, trigger)
+             VALUES (?1, ?2, 'queued', ?3, ?4, ?5)
+             ON CONFLICT (item_id, job) DO UPDATE SET
+                trigger = CASE WHEN excluded.priority < transform_jobs.priority
+                    AND transform_jobs.trigger != 'redo' THEN excluded.trigger
+                    ELSE transform_jobs.trigger END,
+                due_at = CASE
+                    WHEN transform_jobs.state = 'failed' AND ?6 THEN excluded.due_at
+                    WHEN excluded.priority < transform_jobs.priority
+                        THEN MIN(transform_jobs.due_at, excluded.due_at)
+                    ELSE transform_jobs.due_at END,
+                priority = MIN(transform_jobs.priority, excluded.priority),
+                attempts = CASE WHEN transform_jobs.state = 'failed' AND ?6 THEN 0
+                    ELSE transform_jobs.attempts END,
+                error_code = CASE WHEN transform_jobs.state = 'failed' AND ?6 THEN NULL
+                    ELSE transform_jobs.error_code END,
+                error_hint = CASE WHEN transform_jobs.state = 'failed' AND ?6 THEN NULL
+                    ELSE transform_jobs.error_hint END,
+                state = CASE WHEN transform_jobs.state = 'failed' AND ?6 THEN 'queued'
+                    ELSE transform_jobs.state END",
+            params![item_id, job.as_str(), priority, now, trigger, revive],
+        )?;
+        Ok(())
+    }
+
+    /// 启动时补排：已经有这一行（含失败过的）就不动。
+    pub fn backfill_transform(
+        &self,
+        item_id: &str,
+        job: TransformJobKind,
+        priority: i64,
+        now: i64,
+    ) -> Result<()> {
+        self.conn().execute(
+            "INSERT INTO transform_jobs (item_id, job, state, priority, due_at, trigger)
+             VALUES (?1, ?2, 'queued', ?3, ?4, 'auto')
+             ON CONFLICT (item_id, job) DO NOTHING",
+            params![item_id, job.as_str(), priority, now],
+        )?;
+        Ok(())
+    }
+
+    /// 「再转一次」「换一个转」：换上给的插件和参数，挪到最前。这一行正在跑时什么都不改，回 `false`。
+    pub fn redo_transform(&self, redo: &TransformRedo<'_>, now: i64) -> Result<bool> {
+        let n = self.conn().execute(
+            "INSERT INTO transform_jobs
+                (item_id, job, plugin, options, state, priority, due_at, trigger, redo_of)
+             VALUES (?1, ?2, ?3, ?4, 'queued', 0, ?5, 'redo', ?6)
+             ON CONFLICT (item_id, job) DO UPDATE SET
+                plugin = excluded.plugin, options = excluded.options, state = 'queued', wait = NULL,
+                priority = 0, due_at = excluded.due_at, attempts = 0, error_code = NULL,
+                error_hint = NULL, trigger = 'redo', redo_of = excluded.redo_of
+             WHERE transform_jobs.state != 'running'",
+            params![
+                redo.item_id,
+                redo.job.as_str(),
+                redo.plugin,
+                redo.options,
+                now,
+                redo.redo_of
+            ],
+        )?;
+        Ok(n == 1)
+    }
+
+    /// 接没接电源变了：在电池上，自动的（不是点名的）排着的改成等电源；接着电，或者被点了名，就回到排着。
+    pub fn gate_power(&self, on_mains: bool) -> Result<()> {
+        let conn = self.conn();
+        conn.execute(
+            "UPDATE transform_jobs SET state = 'queued', wait = NULL
+             WHERE state = 'waiting' AND wait = 'power' AND (?1 OR priority = 0)",
+            params![on_mains],
+        )?;
+        if !on_mains {
+            conn.execute(
+                "UPDATE transform_jobs SET state = 'waiting', wait = 'power'
+                 WHERE state = 'queued' AND priority > 0",
+                [],
+            )?;
+        }
+        Ok(())
+    }
+
+    /// 到点、排着的里面最先轮到的：点名的在前，再按到点时间、条目、一条里的先后。
+    pub fn next_transform(&self, now: i64) -> Result<Option<TransformJob>> {
+        Ok(self
+            .conn()
+            .query_row(
+                &format!(
+                    "SELECT {TRANSFORM_COLUMNS} FROM transform_jobs
+                     WHERE state = 'queued' AND due_at <= ?1
+                     ORDER BY priority, due_at, item_id, {JOB_ORDER} LIMIT 1"
+                ),
+                params![now],
+                row_to_transform,
+            )
+            .optional()?)
+    }
+
+    /// 标成 `running`；不在排了回 `false`。
+    pub fn claim_transform(&self, item_id: &str, job: TransformJobKind) -> Result<bool> {
+        let n = self.conn().execute(
+            "UPDATE transform_jobs SET state = 'running'
+             WHERE item_id = ?1 AND job = ?2 AND state = 'queued'",
+            params![item_id, job.as_str()],
+        )?;
+        Ok(n == 1)
+    }
+
+    /// 排着、还没到点的里面最早的到点时间。
+    pub fn next_transform_due_after(&self, now: i64) -> Result<Option<i64>> {
+        Ok(self.conn().query_row(
+            "SELECT MIN(due_at) FROM transform_jobs WHERE state = 'queued' AND due_at > ?1",
+            params![now],
+            |r| r.get(0),
+        )?)
+    }
+
+    /// 做完了，或者不用做了：这一行删掉。
+    pub fn finish_transform(&self, item_id: &str, job: TransformJobKind) -> Result<()> {
+        self.conn().execute(
+            "DELETE FROM transform_jobs WHERE item_id = ?1 AND job = ?2",
+            params![item_id, job.as_str()],
+        )?;
+        Ok(())
+    }
+
+    /// 这一条的转换任务全删掉（进回收站、只留文字、清掉）。
+    pub fn drop_transforms(&self, item_id: &str) -> Result<()> {
+        self.conn().execute(
+            "DELETE FROM transform_jobs WHERE item_id = ?1",
+            params![item_id],
+        )?;
+        Ok(())
+    }
+
+    /// 过会儿再试：次数加一。
+    pub fn retry_transform(
+        &self,
+        item_id: &str,
+        job: TransformJobKind,
+        due_at: i64,
+        code: &str,
+        hint: Option<&str>,
+    ) -> Result<()> {
+        self.conn().execute(
+            "UPDATE transform_jobs SET state = 'queued', attempts = attempts + 1, due_at = ?3,
+                error_code = ?4, error_hint = ?5 WHERE item_id = ?1 AND job = ?2",
+            params![item_id, job.as_str(), due_at, code, hint],
+        )?;
+        Ok(())
+    }
+
+    /// 不再自动试，原因留着给条目页那一面写。
+    pub fn fail_transform(
+        &self,
+        item_id: &str,
+        job: TransformJobKind,
+        code: &str,
+        hint: Option<&str>,
+    ) -> Result<()> {
+        self.conn().execute(
+            "UPDATE transform_jobs SET state = 'failed', error_code = ?3, error_hint = ?4
+             WHERE item_id = ?1 AND job = ?2",
+            params![item_id, job.as_str(), code, hint],
+        )?;
+        Ok(())
+    }
+
+    /// 等这个模型：不算一次失败，次数不变。
+    pub fn wait_for_model(&self, item_id: &str, job: TransformJobKind, model: &str) -> Result<()> {
+        self.conn().execute(
+            "UPDATE transform_jobs SET state = 'waiting', wait = ?3
+             WHERE item_id = ?1 AND job = ?2",
+            params![item_id, job.as_str(), format!("model:{model}")],
+        )?;
+        Ok(())
+    }
+
+    /// 等着的模型的名字，去重。
+    pub fn waited_models(&self) -> Result<Vec<String>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
+            "SELECT DISTINCT substr(wait, 7) FROM transform_jobs
+             WHERE state = 'waiting' AND wait LIKE 'model:%' ORDER BY 1",
+        )?;
+        let rows = stmt.query_map([], |r| r.get(0))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// 模型到了：等它的回到排着，马上能做。
+    pub fn model_arrived(&self, model: &str, now: i64) -> Result<()> {
+        self.conn().execute(
+            "UPDATE transform_jobs SET state = 'queued', wait = NULL, due_at = ?2
+             WHERE state = 'waiting' AND wait = ?1",
+            params![format!("model:{model}"), now],
+        )?;
+        Ok(())
+    }
+
+    /// 一条的转换任务，按一条里的先后。
+    pub fn transforms_of(&self, item_id: &str) -> Result<Vec<TransformJob>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(&format!(
+            "SELECT {TRANSFORM_COLUMNS} FROM transform_jobs WHERE item_id = ?1 ORDER BY {JOB_ORDER}"
+        ))?;
+        let rows = stmt.query_map(params![item_id], row_to_transform)?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+}
+
+/// 一条里五种转换任务（feature 003 §4.4）：能播的、口播、关键帧、图里的字、关键帧上的字。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum TransformJobKind {
+    Play,
+    Asr,
+    Keyframes,
+    Ocr,
+    Frames,
+}
+
+impl TransformJobKind {
+    pub const ALL: [TransformJobKind; 5] = [
+        TransformJobKind::Play,
+        TransformJobKind::Asr,
+        TransformJobKind::Keyframes,
+        TransformJobKind::Ocr,
+        TransformJobKind::Frames,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TransformJobKind::Play => "play",
+            TransformJobKind::Asr => "asr",
+            TransformJobKind::Keyframes => "keyframes",
+            TransformJobKind::Ocr => "ocr",
+            TransformJobKind::Frames => "frames",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<TransformJobKind> {
+        Self::ALL.into_iter().find(|j| j.as_str() == s)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TransformState {
+    Queued,
+    Running,
+    /// 等电源或模型，原因在 `wait`。
+    Waiting,
+    /// 不再自动试；原因在 `error_code`、`error_hint`。
+    Failed,
+}
+
+impl TransformState {
+    fn parse(s: &str) -> TransformState {
+        match s {
+            "running" => TransformState::Running,
+            "waiting" => TransformState::Waiting,
+            "failed" => TransformState::Failed,
+            _ => TransformState::Queued,
+        }
+    }
+}
+
+/// `transform_jobs` 的一行。时间都是 Unix 毫秒。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TransformJob {
+    pub item_id: String,
+    pub job: TransformJobKind,
+    /// 点名换插件时有；空是用默认的。
+    pub plugin: Option<String>,
+    /// 点名时给的参数，JSON 对象的文字。
+    pub options: Option<String>,
+    pub state: TransformState,
+    /// `power` 或 `model:<名字>`。
+    pub wait: Option<String>,
+    pub priority: i64,
+    pub due_at: i64,
+    pub attempts: u32,
+    pub error_code: Option<String>,
+    pub error_hint: Option<String>,
+    /// `auto` `open` `redo`
+    pub trigger: String,
+    pub redo_of: Option<String>,
+}
+
+/// 一次「再转一次」要写进 `transform_jobs` 的。
+pub struct TransformRedo<'a> {
+    pub item_id: &'a str,
+    pub job: TransformJobKind,
+    pub plugin: Option<&'a str>,
+    pub options: Option<&'a str>,
+    pub redo_of: Option<&'a str>,
+}
+
+const TRANSFORM_COLUMNS: &str = "item_id, job, plugin, options, state, wait, priority, due_at,
+    attempts, error_code, error_hint, trigger, redo_of";
+/// 一条里的先后：先合起来能播，再口播、关键帧、图里的字，最后关键帧上的字。
+const JOB_ORDER: &str = "CASE job WHEN 'play' THEN 0 WHEN 'asr' THEN 1 WHEN 'keyframes' THEN 2
+    WHEN 'ocr' THEN 3 ELSE 4 END";
+
+fn row_to_transform(r: &rusqlite::Row<'_>) -> rusqlite::Result<TransformJob> {
+    let job: String = r.get(1)?;
+    Ok(TransformJob {
+        item_id: r.get(0)?,
+        job: TransformJobKind::parse(&job).ok_or_else(|| {
+            rusqlite::Error::FromSqlConversionFailure(
+                1,
+                rusqlite::types::Type::Text,
+                format!("unknown transform job `{job}`").into(),
+            )
+        })?,
+        plugin: r.get(2)?,
+        options: r.get(3)?,
+        state: TransformState::parse(&r.get::<_, String>(4)?),
+        wait: r.get(5)?,
+        priority: r.get(6)?,
+        due_at: r.get(7)?,
+        attempts: r.get(8)?,
+        error_code: r.get(9)?,
+        error_hint: r.get(10)?,
+        trigger: r.get(11)?,
+        redo_of: r.get(12)?,
+    })
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -935,6 +1304,100 @@ mod tests {
         );
         jobs.clear_pauses("a/b").unwrap();
         assert!(jobs.pauses_of("a/b", 0).unwrap().is_empty());
+    }
+
+    #[test]
+    fn transform_order_power_models_redo_and_restart() {
+        use TransformJobKind::*;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("jobs.db");
+        let jobs = Jobs::open(&path, 0).unwrap();
+        jobs.schedule_transform("web-b", Ocr, 2, "auto", true, 10)
+            .unwrap();
+        jobs.schedule_transform("web-a", Asr, 1, "auto", true, 20)
+            .unwrap();
+        jobs.schedule_transform("web-a", Play, 1, "auto", true, 20)
+            .unwrap();
+        // 手动收的在导入的前面，一条里先合起来能播
+        let next = jobs.next_transform(100).unwrap().unwrap();
+        assert_eq!((next.item_id.as_str(), next.job), ("web-a", Play));
+        // 点名：挪到最前，换上 open
+        jobs.schedule_transform("web-b", Ocr, 0, "open", false, 30)
+            .unwrap();
+        let next = jobs.next_transform(100).unwrap().unwrap();
+        assert_eq!(
+            (next.item_id.as_str(), next.trigger.as_str()),
+            ("web-b", "open")
+        );
+        // 在电池上：点名的照常，自动的等电源
+        jobs.gate_power(false).unwrap();
+        let waiting: Vec<_> = jobs
+            .transforms_of("web-a")
+            .unwrap()
+            .into_iter()
+            .map(|j| (j.state, j.wait))
+            .collect();
+        assert!(
+            waiting
+                .iter()
+                .all(|w| *w == (TransformState::Waiting, Some("power".into())))
+        );
+        assert_eq!(jobs.next_transform(100).unwrap().unwrap().item_id, "web-b");
+        jobs.gate_power(true).unwrap();
+        assert!(
+            jobs.transforms_of("web-a")
+                .unwrap()
+                .iter()
+                .all(|j| j.state == TransformState::Queued)
+        );
+
+        // 等模型不算次数，模型到了接着排
+        assert!(jobs.claim_transform("web-a", Asr).unwrap());
+        jobs.wait_for_model("web-a", Asr, "m").unwrap();
+        assert_eq!(jobs.waited_models().unwrap(), vec!["m".to_owned()]);
+        jobs.model_arrived("m", 50).unwrap();
+        let asr = jobs.transforms_of("web-a").unwrap().remove(1);
+        assert_eq!(
+            (asr.job, asr.state, asr.attempts),
+            (Asr, TransformState::Queued, 0)
+        );
+
+        // 正在跑的不能再转一次
+        assert!(jobs.claim_transform("web-a", Asr).unwrap());
+        let redo = TransformRedo {
+            item_id: "web-a",
+            job: Asr,
+            plugin: Some("x/y"),
+            options: Some("{}"),
+            redo_of: None,
+        };
+        assert!(!jobs.redo_transform(&redo, 60).unwrap());
+        // 重启：跑着的回到排着
+        drop(jobs);
+        let jobs = Jobs::open(&path, 70).unwrap();
+        assert!(jobs.redo_transform(&redo, 80).unwrap());
+        let asr = jobs.transforms_of("web-a").unwrap().remove(1);
+        assert_eq!(
+            (asr.priority, asr.trigger.as_str(), asr.plugin.as_deref()),
+            (0, "redo", Some("x/y"))
+        );
+
+        // 失败过的：新快照来了重新开始，打开时不动
+        jobs.fail_transform("web-b", Ocr, "internal", None).unwrap();
+        jobs.schedule_transform("web-b", Ocr, 0, "open", false, 90)
+            .unwrap();
+        assert_eq!(
+            jobs.transforms_of("web-b").unwrap()[0].state,
+            TransformState::Failed
+        );
+        jobs.schedule_transform("web-b", Ocr, 2, "auto", true, 90)
+            .unwrap();
+        assert_eq!(
+            jobs.transforms_of("web-b").unwrap()[0].state,
+            TransformState::Queued
+        );
+        jobs.drop_transforms("web-b").unwrap();
+        assert!(jobs.transforms_of("web-b").unwrap().is_empty());
     }
 
     #[test]

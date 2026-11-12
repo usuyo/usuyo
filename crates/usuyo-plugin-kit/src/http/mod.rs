@@ -4,6 +4,7 @@
 //! cookie 只发给调用方指定的主机。
 
 mod address;
+mod proxy;
 mod visitor;
 
 use std::fmt;
@@ -20,6 +21,7 @@ use url::Url;
 
 use address::Refusal;
 pub use address::{Lookup, Policy};
+pub use proxy::Proxy;
 pub use visitor::VisitorError;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
@@ -200,23 +202,45 @@ impl Client {
                 first,
             });
         }
-        let (tx, rx) = mpsc::sync_channel(1);
-        let (target, policy) = (url.clone(), self.policy);
-        std::thread::spawn(move || {
-            tx.send(address::admit(&target, private_ok, &policy)).ok();
-        });
-        let vetted = rx.recv_timeout(left.min(LOOKUP_TIMEOUT)).map_err(|_| {
-            Error::Lookup(std::io::Error::new(
-                std::io::ErrorKind::TimedOut,
-                "DNS lookup timed out",
-            ))
-        })?;
-        vetted.map_err(|r| match r {
-            Refusal::Invalid(why) => Error::Invalid(why),
-            Refusal::NotPublic(why) => Error::NotPublic { why, first },
-            Refusal::Lookup(e) => Error::Lookup(e),
-        })
+        vet(self.policy, url, private_ok, first, left)
     }
+}
+
+impl Policy {
+    /// 一个地址能不能连：http(s)、不带账号密码，解析出的地址照这个策略都能连（只连公网，假 IP 环境照
+    /// [`Policy::fake_ip_names`]）；能连就回查过的地址，调用方只连这些地址。查域名最多等 `left` 和 15 秒里短的那个。
+    /// 不跟跳转：自己跟跳转的调用方每一跳问一次。
+    ///
+    /// 调用方：内核下载模型（`usuyo-core` 的 `models`），它要断流超时和续传，不用 [`Client`]。
+    pub fn vet(&self, url: &Url, left: Duration) -> Result<Vec<SocketAddr>, Error> {
+        vet(*self, url, false, true, left)
+    }
+}
+
+/// 查一跳：查询放在线程里，等不到就不等了。
+fn vet(
+    policy: Policy,
+    url: &Url,
+    private_ok: bool,
+    first: bool,
+    left: Duration,
+) -> Result<Vec<SocketAddr>, Error> {
+    let (tx, rx) = mpsc::sync_channel(1);
+    let target = url.clone();
+    std::thread::spawn(move || {
+        tx.send(address::admit(&target, private_ok, &policy)).ok();
+    });
+    let vetted = rx.recv_timeout(left.min(LOOKUP_TIMEOUT)).map_err(|_| {
+        Error::Lookup(std::io::Error::new(
+            std::io::ErrorKind::TimedOut,
+            "DNS lookup timed out",
+        ))
+    })?;
+    vetted.map_err(|r| match r {
+        Refusal::Invalid(why) => Error::Invalid(why),
+        Refusal::NotPublic(why) => Error::NotPublic { why, first },
+        Refusal::Lookup(e) => Error::Lookup(e),
+    })
 }
 
 pub struct Request<'c> {
@@ -272,6 +296,10 @@ impl Request<'_> {
         {
             return Err(Error::CookieHeader);
         }
+        let proxy = self.client.policy.proxy;
+        if let Some(p) = proxy {
+            p.usable()?;
+        }
         let deadline = Instant::now() + self.timeout;
         let first_url = self.url.clone();
         let hop_safe: Vec<(String, String)> = self
@@ -300,7 +328,23 @@ impl Request<'_> {
                 return Err(Error::Timeout);
             }
             let host = url.host_str().unwrap_or_default();
-            let agent = pinned_agent(host, addrs, left, &self.client.user_agent);
+            // 经代理的明文 http：问代理要的是本机查过的那个数字地址，原来的名字放在 `Host` 里（见 `proxy` 模块）
+            let mut wire = url.clone();
+            let mut host_header = None;
+            let agent = match proxy {
+                Some(p) => {
+                    if let Some(first) = addrs.first() {
+                        host_header = Some(match url.port() {
+                            Some(port) => format!("{host}:{port}"),
+                            None => host.to_owned(),
+                        });
+                        wire.set_ip_host(first.ip())
+                            .map_err(|()| Error::Invalid("cannot address the vetted IP".into()))?;
+                    }
+                    proxied_agent(p, left, &self.client.user_agent)?
+                }
+                None => pinned_agent(host, addrs, left, &self.client.user_agent),
+            };
             // 登录信息只走 https：同一个主机跳到明文 http 也不带。
             let encrypted = url.scheme() == "https" || self.client.policy.cookies_over_http;
             let cookie = self
@@ -313,13 +357,18 @@ impl Request<'_> {
             } else {
                 &hop_safe
             };
+            let host_header = host_header.as_deref();
             let response = match &body {
-                None => with_headers(agent.get(url.as_str()), headers, cookie).call(),
+                None => with_headers(agent.get(wire.as_str()), headers, cookie, host_header).call(),
                 Some(bytes) => {
-                    with_headers(agent.post(url.as_str()), headers, cookie).send(bytes.as_slice())
+                    with_headers(agent.post(wire.as_str()), headers, cookie, host_header)
+                        .send(bytes.as_slice())
                 }
             }
-            .map_err(transport)?;
+            .map_err(|e| match proxy {
+                Some(p) => p.scrub_error(transport(e)),
+                None => transport(e),
+            })?;
             let status = response.status().as_u16();
             let redirect = self.max_redirects > 0 && matches!(status, 301 | 302 | 303 | 307 | 308);
             let Some(location) = response.headers().get("location").filter(|_| redirect) else {
@@ -352,11 +401,16 @@ fn keeps_caller_headers(first: &Url, hop: &Url) -> bool {
 /// 换了主机或降到明文的那一跳也照带的请求头：只说要什么格式，不带来历和凭据。
 const HOP_SAFE_HEADERS: [&str; 2] = ["accept", "accept-language"];
 
+/// `host`：经代理连明文 http 时，地址栏里是查过的数字地址，`Host` 写原来的名字。
 fn with_headers<B>(
     mut request: ureq::RequestBuilder<B>,
     headers: &[(String, String)],
     cookie: Option<&str>,
+    host: Option<&str>,
 ) -> ureq::RequestBuilder<B> {
+    if let Some(host) = host {
+        request = request.header("Host", host);
+    }
     for (name, value) in headers {
         request = request.header(name, value);
     }
@@ -387,6 +441,31 @@ fn pinned_agent(
         addrs,
     };
     ureq::Agent::with_parts(config, DefaultConnector::default(), pinned)
+}
+
+/// 经代理的那一跳：底层客户端只认代理的主机，解析出的是代理自己的地址。
+fn proxied_agent(
+    proxy: &'static Proxy,
+    timeout: Duration,
+    user_agent: &str,
+) -> Result<ureq::Agent, Error> {
+    let config = ureq::Agent::config_builder()
+        .timeout_global(Some(timeout))
+        .timeout_connect(Some(CONNECT_TIMEOUT.min(timeout)))
+        .max_redirects(0)
+        .user_agent(user_agent)
+        .http_status_as_error(false)
+        .proxy(Some(proxy.to_ureq()?))
+        .build();
+    let pinned = Pinned {
+        host: proxy.host().to_owned(),
+        addrs: proxy.addrs()?,
+    };
+    Ok(ureq::Agent::with_parts(
+        config,
+        DefaultConnector::default(),
+        pinned,
+    ))
 }
 
 /// 钉住地址的解析器：只认这一跳的主机，回的就是检查过的那些地址。
@@ -981,5 +1060,319 @@ mod tests {
         let plain = url("http://a.site.test/x");
         assert!(keeps_caller_headers(&plain, &url("https://a.site.test/y")));
         assert!(keeps_caller_headers(&plain, &url("http://a.site.test/y")));
+    }
+
+    /// 本机的小代理：`http` 认 `CONNECT`，`socks5` 认不要账号的 SOCKS5。不管被要求连哪里都接到 `target`
+    /// 那个端口（一个解析错了、把名字指到本机的代理），记下被要求连的「主机:端口」。`reject` 时 `CONNECT` 回 407。
+    fn proxy(kind: &'static str, target: u16, reject: bool) -> (u16, Arc<Mutex<Vec<String>>>) {
+        use std::io::Read;
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let asked: Arc<Mutex<Vec<String>>> = Arc::default();
+        let log = Arc::clone(&asked);
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut client) = stream else { continue };
+                let log = Arc::clone(&log);
+                std::thread::spawn(move || {
+                    let wanted = if kind == "http" {
+                        let mut reader = BufReader::new(client.try_clone().unwrap());
+                        let mut line = String::new();
+                        reader.read_line(&mut line).unwrap();
+                        loop {
+                            let mut h = String::new();
+                            if reader.read_line(&mut h).unwrap_or(0) == 0 || h == "\r\n" {
+                                break;
+                            }
+                        }
+                        let wanted = line
+                            .split_whitespace()
+                            .nth(1)
+                            .unwrap_or_default()
+                            .to_owned();
+                        if reject {
+                            log.lock().unwrap().push(wanted);
+                            let _ = client.write_all(
+                                b"HTTP/1.1 407 Proxy Authentication Required\r\nContent-Length: 0\r\n\r\n",
+                            );
+                            return;
+                        }
+                        client
+                            .write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+                            .unwrap();
+                        wanted
+                    } else {
+                        let mut head = [0u8; 2];
+                        client.read_exact(&mut head).unwrap();
+                        let mut methods = vec![0u8; head[1] as usize];
+                        client.read_exact(&mut methods).unwrap();
+                        client.write_all(&[5, 0]).unwrap();
+                        let mut req = [0u8; 4];
+                        client.read_exact(&mut req).unwrap();
+                        let host = match req[3] {
+                            1 => {
+                                let mut a = [0u8; 4];
+                                client.read_exact(&mut a).unwrap();
+                                std::net::Ipv4Addr::from(a).to_string()
+                            }
+                            4 => {
+                                let mut a = [0u8; 16];
+                                client.read_exact(&mut a).unwrap();
+                                std::net::Ipv6Addr::from(a).to_string()
+                            }
+                            _ => {
+                                let mut len = [0u8; 1];
+                                client.read_exact(&mut len).unwrap();
+                                let mut name = vec![0u8; len[0] as usize];
+                                client.read_exact(&mut name).unwrap();
+                                String::from_utf8(name).unwrap()
+                            }
+                        };
+                        let mut p = [0u8; 2];
+                        client.read_exact(&mut p).unwrap();
+                        client.write_all(&[5, 0, 0, 1, 127, 0, 0, 1, 0, 0]).unwrap();
+                        format!("{host}:{}", u16::from_be_bytes(p))
+                    };
+                    log.lock().unwrap().push(wanted);
+                    let upstream = std::net::TcpStream::connect(("127.0.0.1", target)).unwrap();
+                    let (mut a, mut b) =
+                        (client.try_clone().unwrap(), upstream.try_clone().unwrap());
+                    std::thread::spawn(move || {
+                        let _ = io::copy(&mut a, &mut b);
+                    });
+                    let (mut c, mut d) = (upstream, client);
+                    let _ = io::copy(&mut c, &mut d);
+                });
+            }
+        });
+        (port, asked)
+    }
+
+    /// 经代理时的测试策略：`public.test` 本机查出来是公网地址，`inner.test` 是内网地址，别的本机查不到。
+    fn proxied(proxy: &str) -> Policy {
+        fn lookup(host: &str, port: u16) -> io::Result<Vec<SocketAddr>> {
+            match host {
+                "public.test" | "b.public.test" => {
+                    Ok(vec![SocketAddr::from(([93, 184, 216, 34], port))])
+                }
+                "inner.test" => Ok(vec![SocketAddr::from(([10, 0, 0, 1], port))]),
+                _ => Err(io::Error::new(io::ErrorKind::NotFound, "no such host")),
+            }
+        }
+        Policy {
+            lookup,
+            proxy: Some(Proxy::intern(proxy).unwrap()),
+            ..Policy::strict()
+        }
+    }
+
+    /// 明文 http 经代理：本机查过、是公网的那个数字地址才交给代理，名字只在 `Host` 里；
+    /// 代理那边就算把名字指到本机，它也看不到名字。
+    #[test]
+    fn plain_http_asks_the_proxy_for_the_vetted_address() {
+        let (port, seen) = serve();
+        for kind in ["http", "socks5"] {
+            let (pport, asked) = proxy(kind, port, false);
+            let client = Client::new(UA, Hosts::only(["public.test"]))
+                .with_policy(proxied(&format!("{kind}://127.0.0.1:{pport}")));
+            let ok = client
+                .get(&url(&format!("http://public.test:{port}/end")))
+                .send()
+                .unwrap();
+            assert_eq!(ok.status(), 200, "{kind}");
+            assert_eq!(ok.url().as_str(), format!("http://public.test:{port}/end"));
+            assert_eq!(
+                *asked.lock().unwrap(),
+                vec![format!("93.184.216.34:{port}")],
+                "{kind}: the proxy never sees the name"
+            );
+        }
+        let all = seen.lock().unwrap().clone();
+        assert_eq!(all.len(), 2);
+        for (_, path, _, headers) in &all {
+            assert_eq!(path, "/end");
+            let host: Vec<_> = headers.iter().filter(|h| h.starts_with("host:")).collect();
+            assert_eq!(host, [&format!("host: public.test:{port}")], "{headers:?}");
+        }
+
+        // 本机查不到、或查出来是内网地址的明文 http：不问代理
+        let (pport, asked) = proxy("http", port, false);
+        let any = Client::new(UA, Hosts::any())
+            .with_policy(proxied(&format!("http://127.0.0.1:{pport}")));
+        let err = any.get(&url("http://nowhere.test/")).send().unwrap_err();
+        assert!(matches!(err, Error::Lookup(_)), "{err:?}");
+        let err = any.get(&url("http://inner.test/")).send().unwrap_err();
+        assert!(matches!(err, Error::NotPublic { .. }), "{err:?}");
+        assert!(asked.lock().unwrap().is_empty());
+    }
+
+    /// 一个只出示别的名字的证书（自签的 `other.test`）的本机 TLS 服务。
+    fn tls_server() -> u16 {
+        let cert = rcgen::generate_simple_self_signed(vec!["other.test".to_owned()]).unwrap();
+        let provider = Arc::new(rustls::crypto::ring::default_provider());
+        let config = rustls::ServerConfig::builder_with_provider(provider)
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_no_client_auth()
+            .with_single_cert(
+                vec![cert.cert.der().clone()],
+                rustls::pki_types::PrivateKeyDer::Pkcs8(cert.signing_key.serialize_der().into()),
+            )
+            .unwrap();
+        let config = Arc::new(config);
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { continue };
+                let config = Arc::clone(&config);
+                std::thread::spawn(move || {
+                    let mut conn = rustls::ServerConnection::new(config).unwrap();
+                    // 握手做不完（客户端不认证书）就断了
+                    while conn.is_handshaking() {
+                        if conn.complete_io(&mut stream).is_err() {
+                            break;
+                        }
+                    }
+                });
+            }
+        });
+        port
+    }
+
+    /// https 经代理按名字去：代理把隧道接到一个只能出示别的名字的证书的本机服务，请求失败，
+    /// 什么都没取到。证书和主机名的校验在这条路上一直开着。
+    #[test]
+    fn https_by_name_is_bounded_by_the_certificate() {
+        let tls = tls_server();
+        for kind in ["http", "socks5"] {
+            let (pport, asked) = proxy(kind, tls, false);
+            let client = Client::new(UA, Hosts::only(["unknown.test"]))
+                .with_policy(proxied(&format!("{kind}://127.0.0.1:{pport}")));
+            let err = client
+                .get(&url(&format!("https://unknown.test:{tls}/")))
+                .send()
+                .unwrap_err();
+            assert!(
+                matches!(&err, Error::Network(m) if m.to_ascii_lowercase().contains("certificate")),
+                "{kind}: {err:?}"
+            );
+            assert_eq!(
+                *asked.lock().unwrap(),
+                vec![format!("unknown.test:{tls}")],
+                "{kind}: https goes by name"
+            );
+        }
+    }
+
+    /// 两种协议都先挡：名单外的主机、一看就是本机内网的名字、内网和保留段的数字地址；
+    /// https 的名字本机查出来是内网地址的也挡。每一跳照它自己的协议查。
+    #[test]
+    fn refusals_happen_before_the_proxy_is_asked() {
+        let (port, seen) = serve();
+        let (pport, asked) = proxy("http", port, false);
+        let policy = proxied(&format!("http://127.0.0.1:{pport}"));
+        let only =
+            Client::new(UA, Hosts::only(["public.test", "b.public.test"])).with_policy(policy);
+        let any = Client::new(UA, Hosts::any()).with_policy(policy);
+        let err = only.get(&url("http://other.test/")).send().unwrap_err();
+        assert!(
+            matches!(err, Error::NotAllowed { first: true, .. }),
+            "{err:?}"
+        );
+        for scheme in ["http", "https"] {
+            for host in [
+                "router",
+                "nas.local",
+                "10.0.0.1",
+                "[::1]",
+                "127.0.0.1",
+                "inner.test",
+            ] {
+                let target = format!("{scheme}://{host}/");
+                let err = any.get(&url(&target)).send().unwrap_err();
+                assert!(
+                    matches!(err, Error::NotPublic { first: true, .. }),
+                    "{target}: {err:?}"
+                );
+            }
+        }
+        // 跳到名单外的主机：第一跳经代理去了，第二跳没问代理
+        let err = only
+            .get(&url(&format!(
+                "http://public.test:{port}/to/http://other.test:{port}/x"
+            )))
+            .follow_redirects(5)
+            .send()
+            .unwrap_err();
+        assert!(
+            matches!(err, Error::NotAllowed { first: false, .. }),
+            "{err:?}"
+        );
+        // 跳到本机查不到的明文 http：照 http 的规矩拒，不问代理
+        let err = any
+            .get(&url(&format!(
+                "http://public.test:{port}/to/http://nowhere.test:{port}/x"
+            )))
+            .follow_redirects(5)
+            .send()
+            .unwrap_err();
+        assert!(matches!(err, Error::Lookup(_)), "{err:?}");
+        assert_eq!(
+            *asked.lock().unwrap(),
+            vec![format!("93.184.216.34:{port}"); 2]
+        );
+        assert_eq!(paths(&seen).len(), 2);
+    }
+
+    #[test]
+    fn proxy_credentials_stay_out_of_errors() {
+        let (port, _) = serve();
+        let (pport, asked) = proxy("http", port, true);
+        let policy = proxied(&format!("http://alice:hunter2pass@127.0.0.1:{pport}"));
+        assert!(!format!("{policy:?}").contains("hunter2pass"));
+        let client = Client::new(UA, Hosts::any()).with_policy(policy);
+        let err = client
+            .get(&url(&format!("http://public.test:{port}/end")))
+            .send()
+            .unwrap_err();
+        let text = format!("{err} {err:?}");
+        assert!(
+            !text.contains("hunter2pass") && !text.contains("alice"),
+            "{text}"
+        );
+        assert_eq!(asked.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn a_broken_proxy_setting_is_an_error_not_a_direct_connection() {
+        let broken = Proxy::parse("ftp://x").unwrap_err();
+        assert!(matches!(broken, Error::Invalid(_)));
+        assert!(
+            Policy::strict().proxy.is_none(),
+            "strict never uses a proxy"
+        );
+    }
+
+    /// 经这台机器的系统代理取 `https://example.com/`（`USUYO_TEST_PROXY` 指向代理，不设就跳过）。
+    #[test]
+    fn reaches_example_com_through_the_system_proxy() {
+        let Ok(proxy) = std::env::var("USUYO_TEST_PROXY") else {
+            eprintln!("skipped: USUYO_TEST_PROXY is not set");
+            return;
+        };
+        let policy = Policy {
+            proxy: Some(Proxy::intern(&proxy).unwrap()),
+            ..Policy::strict()
+        };
+        let client = Client::new(UA, Hosts::only(["example.com"])).with_policy(policy);
+        let mut r = client
+            .get(&url("https://example.com/"))
+            .timeout(Duration::from_secs(20))
+            .send()
+            .unwrap();
+        assert_eq!(r.status(), 200);
+        let body = r.read_to_vec(1 << 20).unwrap();
+        assert!(String::from_utf8_lossy(&body).contains("Example Domain"));
     }
 }

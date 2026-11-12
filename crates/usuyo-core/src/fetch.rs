@@ -150,13 +150,14 @@ impl Engine {
         })
     }
 
-    /// 一直跑后台的事：取内容、列导入、收件文件夹、回收站到期。有新任务时 [`Engine::take`] 会叫醒取内容那一路。
+    /// 一直跑后台的事：取内容、列导入、收件文件夹、回收站到期、转换。有新任务时 [`Engine::take`] 会叫醒取内容那一路。
     pub async fn run_worker(&self) {
         tokio::join!(
             self.run_fetches(),
             self.run_imports(),
             self.run_inbox(),
-            self.run_expiry()
+            self.run_expiry(),
+            self.run_transforms()
         );
     }
 
@@ -332,8 +333,9 @@ impl Engine {
                     let plugin = plugin.clone();
                     let input_url = job.url.clone();
                     let item = id.clone();
+                    let imported = job.import_id.is_some();
                     tokio::task::spawn_blocking(move || {
-                        this.attach(&item, &plugin, input_url, snap, files)
+                        this.attach(&item, &plugin, input_url, snap, files, imported)
                     })
                     .await
                     .map_err(|e| Error::Task(e.to_string()))??;
@@ -496,7 +498,8 @@ impl Engine {
         Ok(true)
     }
 
-    /// 取到的输出目录交给资料库当一份快照，再重写 `content.md` 和索引。
+    /// 取到的输出目录交给资料库当一份快照，再重写 `content.md` 和索引，排上转换。
+    /// `imported`：这次取是导入、交进来的一批里的一条，转换排在你手动收的后面。
     fn attach(
         &self,
         id: &ItemId,
@@ -504,6 +507,7 @@ impl Engine {
         input_url: String,
         snap: FetchedSnapshot,
         files: Vec<usuyo_contract::FileHash>,
+        imported: bool,
     ) -> Result<()> {
         let out = &snap.output;
         let fetch = fetch_record(out)?;
@@ -545,6 +549,8 @@ impl Engine {
         let hash = lib.write_content(id, last.as_deref())?;
         self.inner.jobs.set_content_hash(id.as_str(), &hash)?;
         self.reindex_item(&lib, id)?;
+        let by_hand = !imported && Engine::taken_by_hand(&lib.item(id)?.manifest);
+        self.schedule_after_snapshot(&lib, id, by_hand)?;
         // 输出目录已经移进 raw/；`snap` 到这里才丢掉，剩下的暂存一起删。
         drop(snap);
         Ok(())

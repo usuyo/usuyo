@@ -390,16 +390,19 @@ cat "$in0" > "$out/asr.vtt"; reply "$OK""#,
     assert_eq!(paths, ["asr.vtt"]);
     assert_eq!(read(&first.out_dir().join("asr.vtt")), "pcm-bytes");
 
-    // 输入是硬链接进 `in/<callId>/<下标>/` 的，插件看不到资料库里的路径；跑完 `in/` 删掉
+    // 输入是复制进 `in/<callId>/<下标>/` 的，插件看不到资料库里的路径；跑完 `in/` 删掉
     let in0 = read(&f.cache().join("in0"));
     assert!(in0.trim_end().ends_with("/in/3/0/audio.wav"), "{in0}");
     assert!(!in0.contains("library/items"), "{in0}");
     assert!(!Path::new(in0.trim_end()).exists());
     let inode = read(&f.cache().join("inode"));
-    assert_eq!(
+    assert_ne!(
         inode.trim(),
-        std::fs::metadata(&f.input).unwrap().ino().to_string()
+        std::fs::metadata(&f.input).unwrap().ino().to_string(),
+        "a copy, not a hard link"
     );
+    // 交出去的输出目录不在进程的暂存目录里
+    assert!(!first.out_dir().to_string_lossy().contains("usuyo-proc-"));
 
     let env = read(&f.cache().join("env"));
     let models = f.tmp.path().join("models/fake/transform");
@@ -427,6 +430,36 @@ cat "$in0" > "$out/asr.vtt"; reply "$OK""#,
     assert!(!out.exists());
     drop(second);
     assert!(f.call_dirs().is_empty(), "{:?}", f.call_dirs());
+}
+
+#[tokio::test]
+async fn writing_to_an_input_leaves_the_original_alone() {
+    let f = run_script(r#"printf evil > "$in0"; cat "$in0" > "$out/asr.vtt"; reply "$OK""#);
+    let out = f.run().await.unwrap();
+    assert_eq!(read(&out.out_dir().join("asr.vtt")), "evil");
+    assert_eq!(read(&f.input), "pcm-bytes");
+}
+
+#[tokio::test]
+async fn writes_after_the_reply_do_not_reach_the_output() {
+    // 回答以后接着改输出：等测试放出 `go` 再写，写完留下 `done`
+    let f = run_script(
+        r#"cat "$in0" > "$out/asr.vtt"; reply "$OK"
+( while [ ! -f "$USUYO_CACHE_DIR/go" ]; do sleep 0.02; done
+  printf swapped > "$out/asr.vtt" 2>/dev/null; printf more > "$out/extra" 2>/dev/null
+  touch "$USUYO_CACHE_DIR/done" ) &"#,
+    );
+    let out = f.run().await.unwrap();
+    std::fs::write(f.cache().join("go"), "").unwrap();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !f.cache().join("done").exists() {
+        assert!(Instant::now() < deadline, "the plugin never tried to write");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert_eq!(read(&out.out_dir().join("asr.vtt")), "pcm-bytes");
+    assert!(!out.out_dir().join("extra").exists());
+    let paths: Vec<_> = out.files.iter().map(|f| f.path.as_str()).collect();
+    assert_eq!(paths, ["asr.vtt"]);
 }
 
 #[tokio::test]

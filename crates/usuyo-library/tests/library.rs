@@ -101,6 +101,7 @@ fn snapshot(lib: &Library, url: &str, text: &str) -> NewSnapshot {
                 path: "media/video.mp4".into(),
                 kind: "video".into(),
                 group: None,
+                lang: None,
                 extra: Extra::new(),
             }],
             files: Vec::new(),
@@ -2541,13 +2542,15 @@ fn platform_subtitles_are_listed_with_language() {
         path: "media/en.vtt".into(),
         kind: "subtitle".into(),
         group: None,
+        lang: None,
         extra: Extra::new(),
     };
-    en.extra.insert("lang".into(), json!("en"));
+    en.lang = Some("en".into());
     s.fetch.media.push(MediaFile {
         path: "media/subtitle.zh.vtt".into(),
         kind: "subtitle".into(),
         group: None,
+        lang: None,
         extra: Extra::new(),
     });
     s.fetch.media.push(en);
@@ -2555,6 +2558,7 @@ fn platform_subtitles_are_listed_with_language() {
         path: "media/notes.vtt".into(),
         kind: "subtitle".into(),
         group: None,
+        lang: None,
         extra: Extra::new(),
     });
     s.files = usuyo_library::hash_staged(&s.staged).unwrap();

@@ -6,6 +6,8 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs};
 
 use url::{Host, Url};
 
+use super::proxy::Proxy;
+
 /// 查域名：给主机名和端口，回所有解析出的地址。测试换成固定的表。
 pub type Lookup = fn(&str, u16) -> io::Result<Vec<SocketAddr>>;
 
@@ -19,6 +21,8 @@ pub struct Policy {
     pub cookies_over_http: bool,
     /// 宿主查到这台机器开着假 IP 模式的代理：域名查出来全在假 IP 段时照常放行。
     pub fake_ip_names: bool,
+    /// 经这个代理连出去（宿主经 `USUYO_PROXY` 交来的）；`None` 是直连。地址检查换成代理那一套（见 `proxy` 模块）。
+    pub proxy: Option<&'static Proxy>,
 }
 
 impl Policy {
@@ -28,14 +32,16 @@ impl Policy {
             public: is_public,
             cookies_over_http: false,
             fake_ip_names: false,
+            proxy: None,
         }
     }
 
-    /// 插件实际运行时用的：严格策略，加上宿主经 `USUYO_NETWORK` 说明的网络环境。
-    /// 是不是假 IP 环境由宿主拿固定的公网域名去查，不看要取的那个域名自己的回答。
+    /// 插件实际运行时用的：严格策略，加上宿主经 `USUYO_NETWORK` 说明的网络环境和经 `USUYO_PROXY`
+    /// 交来的代理。是不是假 IP 环境由宿主拿固定的公网域名去查，不看要取的那个域名自己的回答。
     pub fn from_host() -> Self {
         Policy {
             fake_ip_names: std::env::var("USUYO_NETWORK").is_ok_and(|v| v == "fake-ip"),
+            proxy: Proxy::from_env(),
             ..Self::strict()
         }
     }
@@ -158,6 +164,21 @@ pub(crate) fn admit(
     let Some(port) = url.port_or_known_default() else {
         return refuse("no port".into());
     };
+    if policy.proxy.is_some() {
+        if url.scheme() == "https" {
+            return admit_proxied(url, private_ok, port, policy);
+        }
+        // 经代理的明文 http 照直连的规矩查（本机要查得到、全是公网），只是连的是代理；
+        // 一看就是本机、内网的名字先挡掉。
+        if let Some(Host::Domain(name)) = url.host()
+            && !private_ok
+            && is_local_name(name)
+        {
+            return Err(Refusal::NotPublic(format!(
+                "`{name}` looks like a local name"
+            )));
+        }
+    }
     // 数字地址由 URL 类型解析，十进制、十六进制、八进制的写法都已经变成 IP
     let (addrs, name) = match url.host() {
         Some(Host::Ipv4(ip)) => (vec![SocketAddr::new(ip.into(), port)], None),
@@ -191,6 +212,47 @@ pub(crate) fn admit(
         )));
     }
     Ok(addrs)
+}
+
+/// 经代理的 https：域名由代理去查，这里不回地址（调用方只连代理）。
+/// 数字地址照样要是公网的；名字不许一看就是本机、内网的；本机查得到、查出来有内网地址的也不许
+/// （假 IP 段在宿主说了是假 IP 环境时不算）。本机查不到不要紧：代理会去查，TLS 证书兜底。
+fn admit_proxied(
+    url: &Url,
+    private_ok: bool,
+    port: u16,
+    policy: &Policy,
+) -> Result<Vec<SocketAddr>, Refusal> {
+    let host = url.host_str().unwrap_or_default();
+    let not_public = |ip: IpAddr| {
+        Err(Refusal::NotPublic(format!(
+            "`{host}` is not a public address ({ip})"
+        )))
+    };
+    match url.host() {
+        Some(Host::Ipv4(ip)) if !private_ok && !(policy.public)(ip.into()) => not_public(ip.into()),
+        Some(Host::Ipv6(ip)) if !private_ok && !(policy.public)(ip.into()) => not_public(ip.into()),
+        Some(Host::Ipv4(_) | Host::Ipv6(_)) => Ok(Vec::new()),
+        Some(Host::Domain(name)) => {
+            if private_ok {
+                return Ok(Vec::new());
+            }
+            if is_local_name(name) {
+                return Err(Refusal::NotPublic(format!(
+                    "`{name}` looks like a local name"
+                )));
+            }
+            if let Ok(addrs) = (policy.lookup)(name, port)
+                && let Some(bad) = addrs.iter().find(|a| {
+                    !((policy.public)(a.ip()) || policy.fake_ip_names && is_fake_ip(a.ip()))
+                })
+            {
+                return not_public(bad.ip());
+            }
+            Ok(Vec::new())
+        }
+        None => Err(Refusal::Invalid("no host".into())),
+    }
 }
 
 /// 系统 DNS。超时由调用方管：检查放在线程里，等不到就不等了。
@@ -305,6 +367,38 @@ mod tests {
             check(input, false),
             Err(Refusal::Invalid(_) | Refusal::NotPublic(_))
         )
+    }
+
+    /// 经代理时每一跳照它自己的协议查：https 的名字本机查不到也行（代理去查，证书兜底），
+    /// 明文 http 的本机要查得到、全是公网。https 跳到 http 就落到 http 那一条。
+    #[test]
+    fn behind_a_proxy_the_rule_follows_the_scheme() {
+        let proxy = Proxy::intern("http://127.0.0.1:9").unwrap();
+        let policy = Policy {
+            lookup: table,
+            proxy: Some(proxy),
+            ..Policy::strict()
+        };
+        let check = |u: &str| admit(&Url::parse(u).unwrap(), false, &policy);
+        assert_eq!(check("https://nowhere.test/").unwrap(), Vec::new());
+        assert!(matches!(
+            check("http://nowhere.test/"),
+            Err(Refusal::Lookup(_))
+        ));
+        assert_eq!(check("http://public.test/").unwrap().len(), 2);
+        for refused in [
+            "https://intranet.test/",
+            "http://intranet.test/",
+            "https://nas.local/",
+            "http://router/",
+            "https://192.168.1.1/",
+            "http://[::1]/",
+        ] {
+            assert!(
+                matches!(check(refused), Err(Refusal::NotPublic(_))),
+                "{refused}"
+            );
+        }
     }
 
     #[test]

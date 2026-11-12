@@ -110,6 +110,9 @@ pub struct TransformRequest {
 
 /// 一次成功的 `run`：校验过的结果和输出目录。
 ///
+/// 输出目录在插件回答以后就从 `out/<callId>/` 改名挪到工作目录里一个只有宿主知道的地方
+/// （`<work_dir>/<UUIDv7>/`，不在进程的暂存目录里），核对的和交出去的都是挪过的那一份：
+/// 回答以后还在跑的插件照它知道的路径写，写不进来。
 /// 调用方（WP5 的转录写入）把 [`out_dir`](Self::out_dir) 整个改名移进转录文件夹；这个值丢掉时，
 /// 目录里剩下的一起删掉。进程关了、换了，它照样在。
 #[derive(Debug)]
@@ -117,7 +120,7 @@ pub struct TransformOutput {
     pub result: RunResult,
     /// 输出目录里的全部文件，按路径排好；每个都是 `result.outputs` 报过的，或 `keyframes/` 里的帧。
     pub files: Vec<OutFile>,
-    out: CallDir,
+    out: HostDir,
 }
 
 impl TransformOutput {
@@ -590,6 +593,13 @@ impl Inner {
         let invalid = |state: &State, message: String| {
             self.host_error(state, &id, ErrorCode::InvalidOutput, message)
         };
+        // 先挪出插件够得着的地方，再核对。
+        let out_dir = HostDir::take(out_dir, &self.config.work_dir).map_err(|source| {
+            PluginError::Staging {
+                what: format!("out/{name}"),
+                source,
+            }
+        })?;
         let mut result: RunResult = self
             .decode(value, "run result")
             .map_err(|m| invalid(state, m))?;
@@ -850,7 +860,8 @@ fn is_language_tag(tag: &str) -> bool {
         })
 }
 
-/// 把输入放进 `in/<callId>/<下标>/<原文件名>`：先硬链接，跨文件系统时复制（协议 §7.1）。
+/// 把输入复制进 `in/<callId>/<下标>/<原文件名>`（协议 §7.1）：插件改了它也碰不到资料库里的原样。
+/// APFS 上 `std::fs::copy` 是写时复制的克隆，大文件也不费空间。
 /// 下标分开同名的文件；原文件名留着扩展名，插件按它认格式。
 fn stage(
     mut inputs: Vec<RunInput>,
@@ -878,13 +889,7 @@ fn stage(
         let sub = dir.join(i.to_string());
         std::fs::create_dir(&sub).map_err(staging)?;
         let dest = sub.join(name);
-        match std::fs::hard_link(&input.path, &dest) {
-            Ok(()) => {}
-            Err(e) if e.kind() == io::ErrorKind::CrossesDevices => {
-                std::fs::copy(&input.path, &dest).map_err(staging)?;
-            }
-            Err(e) => return Err(staging(e)),
-        }
+        std::fs::copy(&input.path, &dest).map_err(staging)?;
         input.path = dest;
     }
     Ok(inputs)
@@ -913,6 +918,31 @@ impl Drop for CallDir {
             Ok(()) => {}
             Err(e) if e.kind() == io::ErrorKind::NotFound => {}
             Err(e) => tracing::warn!(error = %e, "could not remove a transform call directory"),
+        }
+    }
+}
+
+/// 回答以后挪出来的输出目录：`<work_dir>/<UUIDv7>/`，丢掉时删掉。资料库打开时清掉以 UUIDv7 命名的暂存，
+/// 宿主中途退出也不会留下。
+#[derive(Debug)]
+struct HostDir {
+    path: PathBuf,
+}
+
+impl HostDir {
+    fn take(from: CallDir, work_dir: &Path) -> io::Result<HostDir> {
+        let path = work_dir.join(uuid::Uuid::now_v7().to_string());
+        std::fs::rename(&from.path, &path)?;
+        Ok(HostDir { path })
+    }
+}
+
+impl Drop for HostDir {
+    fn drop(&mut self) {
+        match std::fs::remove_dir_all(&self.path) {
+            Ok(()) => {}
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+            Err(e) => tracing::warn!(error = %e, "could not remove a transform output directory"),
         }
     }
 }

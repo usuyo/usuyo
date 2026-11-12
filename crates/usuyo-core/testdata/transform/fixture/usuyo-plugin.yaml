@@ -1,0 +1,24 @@
+# 测试用的获取插件 fixture/local（feature 003 §12、WP13）：只给开发和测试用，不进安装包。
+# fixture.test/<名字> 取到的是 ${PLUGIN_DIR}/fixtures/<名字>/ 里的样例（dash、note、silent、quiet），
+# 由 `just dev-fixture-plugin` 从 crates/usuyo-core/testdata/transform/ 拼好。不联网。
+protocol: 1
+id: fixture/local
+kind: fetch
+name: 测试样例
+description: 把仓库里合成的转换样例当成取到的内容，给转换的验收用
+version: 0.1.0
+license: MIT
+maintainers: [usuyo]
+platforms: [fixture]
+match: ["fixture.test/*"]
+access: public-web
+login: none
+capabilities:
+  fetch:
+    access: public-web
+    login: none
+    outputs: [text, images, media:video, media:audio, subtitle, meta]
+permissions:
+  fs: {write: ["${OUT}"]}
+run:
+  command: ["${PLUGIN_DIR}/plugin.sh"]

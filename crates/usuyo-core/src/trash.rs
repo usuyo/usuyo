@@ -145,6 +145,7 @@ impl Engine {
         };
         for id in &report.forgotten {
             self.inner.index.delete(id)?;
+            self.stop_transforms(id)?;
         }
         if report.forgotten.is_empty() {
             // 只留文字移出来的媒体清掉了：条目还在，回收站页跟着这个事件重拉。

@@ -1,0 +1,7 @@
+{"ok": true, "identity": {"platform": "fixture", "contentId": "dash", "url": "https://fixture.test/dash"}, "kind": "video",
+ "title": "手冲咖啡的三段式注水", "author": {"name": "样例"}, "text": "画面和声音分开存的样例。",
+ "images": [], "media": [
+  {"path": "media/video.mp4", "kind": "video", "mime": "video/mp4", "durationSec": 7.52},
+  {"path": "media/audio.m4a", "kind": "audio", "mime": "audio/mp4", "durationSec": 7.43},
+  {"path": "media/subtitle.zh.vtt", "kind": "subtitle", "lang": "zh"}],
+ "platformTags": [], "completeness": "full", "missing": [], "evidence": {"fetchedAt": "2026-11-11T00:00:00Z", "access": "public-web"}}

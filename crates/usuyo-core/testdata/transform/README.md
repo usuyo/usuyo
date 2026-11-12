@@ -12,4 +12,6 @@
 | `silent.mp4` | `card.png` 缩到 540×720 的静止画面，h264，5 秒，没有音频流 |
 | `quiet.mp4` | `testsrc2` 加 `anullsrc` 的静音 AAC，5 秒 |
 
+`fixture/` 是测试用的获取插件 `fixture/local`（清单、`plugin.sh`、每个样例的 fetch 输出）：`just dev-fixture-plugin` 把它和上面的文件拼成 `dash`（分开的画面、音轨和字幕）、`note`（两张一样的图）、`silent`、`quiet` 四条，装进 `USUYO_HOME` 的插件目录，`https://fixture.test/<名字>` 就取到它们。只给开发和测试用。
+
 重新生成：`./make.sh`（只在 macOS 上；要 `say`、Swift、带 libx264 的 ffmpeg，默认 `/opt/homebrew/bin/ffmpeg`，可用 `FFMPEG=` 换）。`card.swift` 是画字的脚本。CI 直接用提交的文件，不重新生成；每次生成的字节不保证一样。

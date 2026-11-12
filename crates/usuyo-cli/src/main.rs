@@ -153,6 +153,8 @@ fn open(root: &std::path::Path, cli: &Cli) -> Result<Engine> {
     roots.extend(config.plugin_roots);
     config.plugin_roots = roots;
     config.plugin_settings = machine::plugin_settings(root)?;
+    config.transforms_auto = machine::transforms_auto(root)?;
+    config.proxy = machine::proxy_setting(root)?;
     // 登录的 cookie 和密钥：macOS、Windows 进系统钥匙串，别的系统是按机器目录里 0600 的文件。
     config.vault = usuyo_core::system_vault(root);
     Engine::open(config).with_context(|| format!("cannot open library {}", library.display()))
@@ -183,7 +185,9 @@ async fn daemon(engine: Engine, root: &std::path::Path, port: u16) -> Result<()>
         origins: usuyo_api::default_origins(),
         clients: Some(machine::clients_path(root)),
     };
-    let result = usuyo_api::serve(listener, engine, config, stop_signal()).await;
+    let result = usuyo_api::serve(listener, engine.clone(), config, stop_signal()).await;
+    // 转换插件是常驻进程：接口停下以后一个个关掉，不留到守护进程之后。
+    engine.shutdown().await;
     machine::forget_daemon(&info, pid);
     machine::forget_token(&token_path, &token);
     Ok(result?)

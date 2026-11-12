@@ -44,6 +44,9 @@ pub struct MediaFile {
     /// 同一个字符串表示同一段时间线拆开的几个文件（例如分开的画面和音轨）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
+    /// 字幕、音轨的语言（BCP 47）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lang: Option<String>,
     #[serde(flatten)]
     pub extra: Extra,
 }
@@ -65,4 +68,24 @@ pub struct FileHash {
     pub path: String,
     pub size: u64,
     pub sha256: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn media_language_and_group_are_fields_and_round_trip() {
+        let json = serde_json::json!({
+            "path": "media/subtitle.zh.vtt", "kind": "subtitle", "lang": "zh",
+            "group": "main", "mime": "text/vtt"
+        });
+        let m: MediaFile = serde_json::from_value(json.clone()).unwrap();
+        assert_eq!(
+            (m.lang.as_deref(), m.group.as_deref()),
+            (Some("zh"), Some("main"))
+        );
+        assert!(!m.extra.contains_key("lang"), "不留在 extra 里");
+        assert_eq!(serde_json::to_value(&m).unwrap(), json);
+    }
 }

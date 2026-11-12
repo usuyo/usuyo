@@ -1,0 +1,4 @@
+{"ok": true, "identity": {"platform": "fixture", "contentId": "quiet", "url": "https://fixture.test/quiet"}, "kind": "video",
+ "title": "只有静音的视频", "author": {"name": "样例"}, "text": "有音轨，没人说话。",
+ "images": [], "media": [{"path": "media/video.mp4", "kind": "video", "mime": "video/mp4", "durationSec": 5}],
+ "platformTags": [], "completeness": "full", "missing": [], "evidence": {"fetchedAt": "2026-11-11T00:00:00Z", "access": "public-web"}}

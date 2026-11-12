@@ -1,0 +1,4 @@
+{"ok": true, "identity": {"platform": "fixture", "contentId": "silent", "url": "https://fixture.test/silent"}, "kind": "video",
+ "title": "印着字的静止画面", "author": {"name": "样例"}, "text": "没有音轨。",
+ "images": [], "media": [{"path": "media/video.mp4", "kind": "video", "mime": "video/mp4", "durationSec": 5}],
+ "platformTags": [], "completeness": "full", "missing": [], "evidence": {"fetchedAt": "2026-11-11T00:00:00Z", "access": "public-web"}}

@@ -146,6 +146,30 @@ pub fn plugin_settings(root: &Path) -> Result<BTreeMap<String, Value>> {
     Ok(out)
 }
 
+/// `settings.json` 里的 `transforms.auto`（feature 003 §4.4）：没写是开着；写了不是真假的报错。
+pub fn transforms_auto(root: &Path) -> Result<bool> {
+    let s = read_settings(root)?;
+    match s.get("transforms").and_then(|t| t.get("auto")) {
+        None => Ok(true),
+        Some(Value::Bool(b)) => Ok(*b),
+        Some(other) => {
+            anyhow::bail!("settings.json: transforms.auto is {other}, not true or false")
+        }
+    }
+}
+
+/// `settings.json` 里的 `network.proxy`：`system`（没写时）、`direct` 或一个代理地址；写坏了报错，
+/// 错误里不带地址（可能有密码）。
+pub fn proxy_setting(root: &Path) -> Result<usuyo_core::ProxySetting> {
+    let s = read_settings(root)?;
+    match s.get("network").and_then(|n| n.get("proxy")) {
+        None => Ok(usuyo_core::ProxySetting::System),
+        Some(Value::String(text)) => usuyo_core::ProxySetting::parse(text)
+            .map_err(|why| anyhow::anyhow!("settings.json: network.proxy: {why}")),
+        Some(_) => anyhow::bail!("settings.json: network.proxy is not a string"),
+    }
+}
+
 /// 开发时：把 `cargo build` 出来的 `usuyo-plugin-web`（和本程序在同一个目录）和仓库里的清单
 /// 照安装的样子放进 `<root>/dev-plugins/builtin/web/<version>/`。发行版里没有这一步。
 #[cfg(debug_assertions)]

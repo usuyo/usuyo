@@ -1,4 +1,4 @@
-//! usuyo 的引擎：打开着的一个资料库、它的索引、本机任务队列和插件宿主，串成「收下 → 取内容 → 存好 → 搜到」。
+//! usuyo 的引擎：打开着的一个资料库、它的索引、本机任务队列和插件宿主，串成「收下 → 取内容 → 存好 → 转成文字 → 搜到」。
 //!
 //! 接口（HTTP、命令行）只经 [`Engine`]；返回的视图形状照前端的 `endpoints.ts`。
 
@@ -11,8 +11,10 @@ mod inbox;
 mod index_doc;
 mod jobs;
 mod layout;
+mod models;
 mod pace;
 mod registry;
+mod transform;
 mod trash;
 mod vault;
 pub mod view;
@@ -21,7 +23,10 @@ pub use engine::{Engine, EngineConfig, Links, RetryPolicy, Via};
 pub use error::{Error, Result};
 pub use imports::{BATCH_MAX, DeliveredLink, ImportChoice};
 pub use inbox::InboxReport;
+pub use jobs::{TransformJob, TransformJobKind, TransformState};
 pub use layout::{HashLayout, Layout, LayoutItem, Placed};
+pub use models::{ModelError, ModelState};
+pub use transform::{Power, PowerSource, SystemPower};
 pub use trash::{ClockGuard, Expiry};
-pub use usuyo_plugin::{CallLimits, Vault};
+pub use usuyo_plugin::{CallLimits, ProxySetting, TransformLimits, Vault};
 pub use vault::{FileVault, system_vault};

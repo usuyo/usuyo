@@ -1,0 +1,4 @@
+{"ok": true, "identity": {"platform": "fixture", "contentId": "note", "url": "https://fixture.test/note"}, "kind": "post",
+ "title": "手冲参数卡片", "author": {"name": "样例"}, "text": "两张图，第二张是第一张的拷贝。",
+ "images": ["images/001.png", "images/002.png"], "media": [],
+ "platformTags": [], "completeness": "full", "missing": [], "evidence": {"fetchedAt": "2026-11-11T00:00:00Z", "access": "public-web"}}
