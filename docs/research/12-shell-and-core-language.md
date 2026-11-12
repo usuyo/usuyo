@@ -59,7 +59,7 @@
 | ffmpeg、OCR、ASR、embedding | 无关：sidecar 或插件进程 | [CLAUDE.md](../../CLAUDE.md)「重计算」 |
 | 前端 | 无关：只走本机 HTTP 和事件，不调壳生成的绑定 | [ADR-002 和内核的接口](../decisions/ADR-002-frontend-stack.md#和内核的接口) |
 | 接口（HTTP、MCP、CLI、插件协议） | 无关：用 JSON Schema、OpenAPI 写下来，换语言不改接口（推断） | [overview §5](../BUILD.md#3-现在做到哪) |
-| 壳 | 弱相关：壳和 daemon 本来就是两个进程；但和内核同一种语言，就少一套工具链 | [SPEC §9](../SPEC.md#9-clim0) 的 `daemon` |
+| 壳 | 弱相关：壳和 daemon 本来就是两个进程；但和内核同一种语言，就少一套工具链 | [SPEC §9](../BUILD.md#1-用户定下的做法) 的 `daemon` |
 | 全文索引、向量 | 相关：进程内的库 | [04 §1](04-tech-options.md#1-搜索索引与向量检索) |
 | 文件监听 | 相关：资料库一开就要监听 | [§3](#3-对比表) 表下说明 |
 | 插件运行器与隔离 | 相关；但 macOS、Linux 上两种语言都是起外部程序 | [§2.3](#23-插件隔离) |
@@ -248,7 +248,7 @@
 
 **Rust 写内核、CLI、MCP、daemon，加 Tauri 2 壳，前端照 ADR-002 不变。推荐。**
 
-- 进程怎么分：桌面上 daemon 照 [SPEC §9](../SPEC.md#9-clim0) 作独立进程，由 Tauri 当 `externalBin` 起它（推断）。「同一个 crate 在进程内跑」只指手机端。这样 ADR-002 和 HTTP 接口都不用改。Tauri 的 `invoke` 也是壳生成的绑定，照样不用。
+- 进程怎么分：桌面上 daemon 照 [SPEC §9](../BUILD.md#1-用户定下的做法) 作独立进程，由 Tauri 当 `externalBin` 起它（推断）。「同一个 crate 在进程内跑」只指手机端。这样 ADR-002 和 HTTP 接口都不用改。Tauri 的 `invoke` 也是壳生成的绑定，照样不用。
 - 好处：
   - 和壳同一套工具链。
   - 眼下就有：FSEvents 递归监听；tantivy 检索；rusqlite 能加载 libsimple，做中文加拼音的 FTS5。
@@ -315,7 +315,7 @@
 | [04 §6.4](04-tech-options.md#64-桌面壳mygo-与回退路径) | MyGo ★★；「Wails v3 仍 beta」；Tauri ★ | 正文不改，加一行注：已过时，见本篇 | 同左 |
 | `go.mod` | `go 1.26.0`，三个直接依赖 | 换成 `Cargo.toml` | Go 版本按 Wails v3 的要求改 |
 | `cmd/`、`internal/`、`pkg/` | `cmd/xiecun` 11 个文件；`internal/` 下 7 个占位文件；`pkg/contract` 4 个 `.go` 加 `schema/`、`testdata/` | 用 serde + clap 重写；`schema/`、`testdata/` 原样保留 | 不改 |
-| [SPEC §1](../SPEC.md#1-仓库布局monorepo) 仓库布局 | Go 标准布局 | 按 cargo 工作区改 | 不改 |
+| [SPEC §1](../BUILD.md#3-现在做到哪) 仓库布局 | Go 标准布局 | 按 cargo 工作区改 | 不改 |
 | [插件协议 §8.3](../protocol/distribution.md#83-校验与来源证明) | 点名 sigstore-go | 改成 sigstore-verify，或带 Go 校验进程 | 不改 |
 | feature 001 | bleve 方案 | 改索引方案 | 不改 |
 | CI | Go | cargo + pnpm，按平台跑矩阵 | 加 cgo 的各平台构建 |

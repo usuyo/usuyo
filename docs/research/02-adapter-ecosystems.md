@@ -1,9 +1,9 @@
 <a id="调研-02--社区维护的来源适配器生态"></a>
 # 调研 02 — 社区维护的来源适配器生态
 
-状态：草案 · 2026-10-21 · 2026-11-03 审过：[§1](#1-tachiyomi-与-mihon-扩展生态)–[§14](#14-对比表) 的生态事实仍在用；[§0](#0-范围与缺口清单) 的缺口和 [§15](#15-对歇存适配器协议的启示) 的建议多数已进 [插件协议 v1](../protocol/README.md)，文中的 `adapter.yaml`、`requires.cookie`、`method`、`watch` 和「平台适配器放社区仓库」都已换掉（[旧字段对照](../protocol/manifest.md#2-清单)），`priority`、`contentWarning`、0–4 的退出码、经环境变量传 cookie 没有采用；[SPEC §8](../SPEC.md#8-适配器协议-v0) 的 v0 已废。
+状态：草案 · 2026-10-21 · 2026-11-03 审过：[§1](#1-tachiyomi-与-mihon-扩展生态)–[§14](#14-对比表) 的生态事实仍在用；[§0](#0-范围与缺口清单) 的缺口和 [§15](#15-对歇存适配器协议的启示) 的建议多数已进 [插件协议 v1](../protocol/README.md)，文中的 `adapter.yaml`、`requires.cookie`、`method`、`watch` 和「平台适配器放社区仓库」都已换掉（[旧字段对照](../protocol/manifest.md#2-清单)），`priority`、`contentWarning`、0–4 的退出码、经环境变量传 cookie 没有采用；[SPEC §8](../protocol/README.md) 的 v0 已废。
 
-目的：看别人怎么让"来源"由社区维护、以独立进程接入宿主，提炼歇存 [SPEC §8 适配器协议 v0](../SPEC.md#8-适配器协议-v0) 可以借鉴的模式。事实均附来源 URL；凭记忆或只有二手来源的地方标「待核实」，汇总在 [§16](#16-待核实清单)。仓库活跃度数据来自 GitHub API（`gh api repos/<owner>/<repo>`，2026-10-21 取样），引用时给仓库主页 URL。
+目的：看别人怎么让"来源"由社区维护、以独立进程接入宿主，提炼歇存 [SPEC §8 适配器协议 v0](../protocol/README.md) 可以借鉴的模式。事实均附来源 URL；凭记忆或只有二手来源的地方标「待核实」，汇总在 [§16](#16-待核实清单)。仓库活跃度数据来自 GitHub API（`gh api repos/<owner>/<repo>`，2026-10-21 取样），引用时给仓库主页 URL。
 
 目录：[§0 缺口清单](#0-范围与缺口清单) · [§1 Tachiyomi/Mihon](#1-tachiyomi-与-mihon-扩展生态) · [§2 yt-dlp](#2-yt-dlp) · [§3 gallery-dl](#3-gallery-dl) · [§4 you-get](#4-you-get) · [§5 lux](#5-lux) · [§6 BBDown](#6-bbdown) · [§7 RSSHub](#7-rsshub-与-rsshub-radar) · [§8 Cobalt](#8-cobalt) · [§9 Karakeep](#9-karakeep-抓取器) · [§10 Obsidian Web Clipper](#10-obsidian-web-clipper-模板) · [§11 opencli](#11-opencli) · [§12 进程插件系统](#12-独立进程加-json-协议的插件系统) · [§13 其他模式](#13-其他相关模式) · [§14 对比表](#14-对比表) · [§15 启示](#15-对歇存适配器协议的启示) · [§16 待核实](#16-待核实清单)
 
@@ -12,7 +12,7 @@
 
 调研对象是任务指定的清单；每个对象按同一组问题写：如何声明一个来源、如何分发与安装、宿主与来源之间的调用协议、cookie 与登录态如何传递、测试与健康检查、法律与治理、许可证、活跃度。[§13](#13-其他相关模式) 补了四个任务未点名但形态高度相关的系统，写得短。
 
-读 [SPEC §8](../SPEC.md#8-适配器协议-v0) 与 `pkg/contract/adapter.go`、`pkg/contract/schema/adapter.schema.json` 后，整理出下面这些缺口，后文每条启示都对应其中一项：
+读 [SPEC §8](../protocol/README.md) 与 `pkg/contract/adapter.go`、`pkg/contract/schema/adapter.schema.json` 后，整理出下面这些缺口，后文每条启示都对应其中一项：
 
 | 编号 | 缺口 | 现状 |
 |---|---|---|
@@ -415,7 +415,7 @@ Karakeep 不是适配器生态，但它的抓取器把"浏览器 / 无浏览器 
 <a id="15-对歇存适配器协议的启示"></a>
 ## 15. 对歇存适配器协议的启示
 
-按功能面分组。每条标出对应的 [§0](#0-范围与缺口清单) 缺口编号和 [SPEC §8](../SPEC.md#8-适配器协议-v0) 字段；只给形状建议，不替 SPEC 做决定。
+按功能面分组。每条标出对应的 [§0](#0-范围与缺口清单) 缺口编号和 [SPEC §8](../protocol/README.md) 字段；只给形状建议，不替 SPEC 做决定。
 
 <a id="151-声明与匹配"></a>
 ### 15.1 声明与匹配
@@ -455,7 +455,7 @@ Karakeep 不是适配器生态，但它的抓取器把"浏览器 / 无浏览器 
 
 10. **`health` 的输出（G7 · `health`）。** 参照 Docker 的 metadata JSON、Nushell 的 `Hello` + `Signature`、MCP 的 `serverInfo` + `capabilities`、opencli 的 `whoami {logged_in, site, id}` 与 `doctor`（[§12](#12-独立进程加-json-协议的插件系统)、[§11](#11-opencli)）。建议 `health` 输出 `{protocol, version, capabilities, auth: {state: ok | login-required | unknown, account?}, upstream?: {name, version}, checks: [{name, ok, message}]}`，退出码 0 表示可用、非 0 表示不可用。`upstream.version` 让用户看到被包装工具（如 OpenCLI、yt-dlp）的版本，这两个项目都按周甚至按天发版。
 
-11. **契约样例与健康汇总（[SPEC §8](../SPEC.md#8-适配器协议-v0) 末句"契约校验器用 `testdata/` 固定样例跑"）。** yt-dlp 的 `_TESTS` 与 Zotero 的嵌入测试把样例放在适配器旁边；gallery-dl 的 `#url` / `#class` 样例可以离线验证"哪个类接住了哪个 URL"；ftr-site-config 把全库测试结果公开成一页；opencli 的 `adapter test` 用本地夹具，并对行形状设硬约束；RSSHub 路由零单元测试，只靠 `maintainers`，是反例（[§2](#2-yt-dlp)、[§13](#13-其他相关模式)、[§3](#3-gallery-dl)、[§11](#11-opencli)、[§7](#7-rsshub-与-rsshub-radar)）。建议适配器仓库约定 `testdata/canonicalize.json`（`[{url, identity | {match: false}}]`，离线可跑，内核的契约校验器直接消费）和 `testdata/fetch/*.json`（标 `live: true`，CI 可选跑）。"健康上报"汇总成一页"平台 × 适配器的最近一次 `health` / `fetch` 结果"，形式参考 ftr 的测试结果页；上报内容只含适配器 id、版本、结果码，不含 URL 与内容。
+11. **契约样例与健康汇总（[SPEC §8](../protocol/README.md) 末句"契约校验器用 `testdata/` 固定样例跑"）。** yt-dlp 的 `_TESTS` 与 Zotero 的嵌入测试把样例放在适配器旁边；gallery-dl 的 `#url` / `#class` 样例可以离线验证"哪个类接住了哪个 URL"；ftr-site-config 把全库测试结果公开成一页；opencli 的 `adapter test` 用本地夹具，并对行形状设硬约束；RSSHub 路由零单元测试，只靠 `maintainers`，是反例（[§2](#2-yt-dlp)、[§13](#13-其他相关模式)、[§3](#3-gallery-dl)、[§11](#11-opencli)、[§7](#7-rsshub-与-rsshub-radar)）。建议适配器仓库约定 `testdata/canonicalize.json`（`[{url, identity | {match: false}}]`，离线可跑，内核的契约校验器直接消费）和 `testdata/fetch/*.json`（标 `live: true`，CI 可选跑）。"健康上报"汇总成一页"平台 × 适配器的最近一次 `health` / `fetch` 结果"，形式参考 ftr 的测试结果页；上报内容只含适配器 id、版本、结果码，不含 URL 与内容。
 
 <a id="157-适配器源信任与治理"></a>
 ### 15.7 适配器源、信任与治理

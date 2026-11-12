@@ -87,9 +87,9 @@ flowchart LR
 | 改动提议、改动记录（[SPEC §1.5](SPEC.md#15-改动提议)、[§1.6](SPEC.md#16-改动记录)） | v1 草案，资料库层能写能撤 | 接受提议的流程、界面（[006](#006-agent)） |
 | 宿主 ↔ 界面（[SPEC 本机接口](SPEC.md#本机接口第-2-层11-11-照代码)） | 照代码写了；契约文件是 `apps/desktop/web/src/api/endpoints.ts` | 窗口用的路径还不带 `/v1/`、分页、OpenAPI 描述 |
 | 内核推的事件 | server-sent events，八种事件（同上） | 补发、信封 |
-| [MCP 工具](SPEC.md#10-mcp-工具m0) | v0 草案，没实现 | 全部 |
-| [命令行](SPEC.md#9-clim0) | `init`、`add`、`get`、`search`、`reindex`、`daemon` | 不再加命令 |
-| [搜索语法](SPEC.md#11-索引) | tantivy 索引能搜；语法没写 | 查询串、筛选、分页 |
+| [MCP 工具](BUILD.md#006-agent) | v0 草案，没实现 | 全部 |
+| [命令行](BUILD.md#1-用户定下的做法) | `init`、`add`、`get`、`search`、`reindex`、`daemon` | 不再加命令 |
+| [搜索语法](BUILD.md#3-现在做到哪) | tantivy 索引能搜；语法没写 | 查询串、筛选、分页 |
 | [投递接口](protocol/delivery.md#5-投递接口) | `/v1/ping`、`/v1/deliver`（只收链接）、`/v1/batches` 和按投递端发的令牌做了，和窗口用的路由同一个监听口 | 已取到的内容（multipart）、批次查询 |
 | [导出与读回](protocol/transform-export.md#44-导出的-run-与-readback) | 草案 | 笔记库里的文件形状（[007](#007-导出读回和别的工具的导出)） |
 | 配置、版本策略（[SPEC §0.2](SPEC.md#02-版本与兼容)、[§1.1](SPEC.md#11-目录树)） | v1 草案 | 设置的完整清单（[010](#010-设置第一次打开收下浮层)） |
@@ -188,7 +188,7 @@ flowchart LR
 还没做的：
 
 - 私密条目回 `skipped`：本机接口的 `POST /items` 现在一律记成窗口里收的（`via: app`），私密的照收；命令行也从不跳过。投递接口里扩展、手机、`api` 令牌的已经会跳过（[SPEC 本机接口](SPEC.md#本机接口第-2-层11-11-照代码)）。
-- 写 MCP 之前先写内核服务契约：一份描述（[OpenAPI 3.2](https://github.com/OAI/OpenAPI-Specification/releases)）派生本机 HTTP 和 MCP，生成客户端和文档；含搜索语法（自己的小语法：`字段:值`、引号、`-`、`after:`，不把索引实现绑进接口）、事件、端口。界面用的那一半已经照代码写进 [SPEC 本机接口](SPEC.md#本机接口第-2-层11-11-照代码)，契约文件是 `apps/desktop/web/src/api/endpoints.ts`。一起定：Agent 连接名从哪来、MCP 收下工具的 `pickedBy`、撤销工具（能撤哪些已定，[SPEC §1.10 第 18 条](SPEC.md#110-要你看一眼)）、错误和输出 schema 怎么配、游标有效期、各处的间隔、上限和文案。写好以后替换 [SPEC §2](SPEC.md#2-留着的-v0第-2-层重写前保留) 留着的 v0。
+- 写 MCP 之前先写内核服务契约：一份描述（[OpenAPI 3.2](https://github.com/OAI/OpenAPI-Specification/releases)）派生本机 HTTP 和 MCP，生成客户端和文档；含搜索语法（自己的小语法：`字段:值`、引号、`-`、`after:`，不把索引实现绑进接口）、事件、端口。界面用的那一半已经照代码写进 [SPEC 本机接口](SPEC.md#本机接口第-2-层11-11-照代码)，契约文件是 `apps/desktop/web/src/api/endpoints.ts`。一起定：Agent 连接名从哪来、MCP 收下工具的 `pickedBy`、撤销工具（能撤哪些已定，[SPEC §1.10 第 18 条](SPEC.md#110-要你看一眼)）、错误和输出 schema 怎么配、游标有效期、各处的间隔、上限和文案。写好以后替换 [SPEC §2](BUILD.md#006-agent) 留着的 v0。
 
 ACP 会话在窗口里只显示它交来的改动提议和权限请求，不显示对话本身。
 

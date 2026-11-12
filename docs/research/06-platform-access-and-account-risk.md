@@ -228,7 +228,7 @@
 
 **视频号链接（mingjuner123-spec/wechat-inbox-sync）。** 用户给的是一条视频号分享链接。对应关系是推断出来的：视频是「张张AI视界」2026-10-24 发的「蝴蝶号一键转存obsidian」；这个插件的 manifest 作者是 Zhang Zhang，最早的 LICENSE 署名「张张」，同一 GitHub 账号的另一个仓库写明作者的公众号叫「张张AI视界」；网页搜「蝴蝶号」没有别的结果。所以「蝴蝶号」应该就是视频号（图标像蝴蝶；2026-11-01 另一条视频把「DY蝴蝶号」并列成发布平台，见本节末尾），这个插件就是视频里演示的工具。它是 Obsidian 插件：手机经作者的小程序（另有 iOS 快捷指令）把公众号、视频号、抖音、小红书、B站、小宇宙等链接和文件存进作者云端的收件箱，电脑端插件拉取、解析、转写后写成 Markdown。视频号链接默认交给作者的云端解析，抖音、小红书用插件自己的登录会话：抖音在匿名接口和隐藏页面都失败后，会自动带这个会话的 Cookie 直接请求作品详情接口，再交给本地 yt-dlp，所以条目记 `session-api`。可借的是「手机先存、电脑后理」的顺序，以及运营节点的失败分类（需要登录、风控、内容不可用、不支持、网络、上传、转写），可以对照歇存插件协议的错误枚举；但歇存的收件箱应由用户自己掌控，不经开发者的云端。只借设计，不 fork、不打包：1.3.117（2026-08-23）起是 MIT 加 Commons Clause，手机端小程序和云端后端不开源；如确需复用代码，只能基于 1.3.116 及更早的 MIT 版本。作者几乎每天发版，有一位用户反映 4 条链接里 3 条同步失败，失败的是视频号和抖音链接（[mingjuner123-spec/wechat-inbox-sync #135](https://github.com/mingjuner123-spec/wechat-inbox-sync/issues/135)）。
 
-**wechat article exporter（wechat-article/wechat-article-exporter）。** 可自部署的公众号文章批量导出网站：用自己的公众号后台扫码登录，列出目标公众号的文章，再导出 HTML、JSON、Markdown 等格式，属 `session-api`。依赖的后台接口在 2026-07 下旬被微信关闭，作者 2026-07-30 宣布停止维护（[wechat-article/wechat-article-exporter #200](https://github.com/wechat-article/wechat-article-exporter/issues/200)）。还能用的是单篇管线：按公开文章 URL 取页面，整理正文和懒加载图片，区分正常、已删除、异常，在不联网的 QuickJS 沙箱里执行文章页自带的数据脚本，取回标题、作者、公众号、发布时间。这一段不需要登录，正对应 [SPEC §8](../SPEC.md#8-适配器协议-v0) 示例里的公众号适配器。接入：fork 到第三方仓库，只留单篇管线，删掉后台扫码、批量列表、会员限流和凭证通道，入口改成 `canonicalize`、`fetch` 命令行；用户以前用它导出的文件可以作为导入格式。MIT；配套的 wxdown-service 没有许可证，不复用。凭证通道要装根证书对微信客户端做中间人，属 `client-hook`，不提供。
+**wechat article exporter（wechat-article/wechat-article-exporter）。** 可自部署的公众号文章批量导出网站：用自己的公众号后台扫码登录，列出目标公众号的文章，再导出 HTML、JSON、Markdown 等格式，属 `session-api`。依赖的后台接口在 2026-07 下旬被微信关闭，作者 2026-07-30 宣布停止维护（[wechat-article/wechat-article-exporter #200](https://github.com/wechat-article/wechat-article-exporter/issues/200)）。还能用的是单篇管线：按公开文章 URL 取页面，整理正文和懒加载图片，区分正常、已删除、异常，在不联网的 QuickJS 沙箱里执行文章页自带的数据脚本，取回标题、作者、公众号、发布时间。这一段不需要登录，正对应 [SPEC §8](../protocol/README.md) 示例里的公众号适配器。接入：fork 到第三方仓库，只留单篇管线，删掉后台扫码、批量列表、会员限流和凭证通道，入口改成 `canonicalize`、`fetch` 命令行；用户以前用它导出的文件可以作为导入格式。MIT；配套的 wxdown-service 没有许可证，不复用。凭证通道要装根证书对微信客户端做中间人，属 `client-hook`，不提供。
 
 **chenjin-cmd/xhs-account-teardown。** Agent Skill：不登录抓小红书账号主页与第一页笔记封面，或凭带 `xsec_token` 的笔记链接抓单条笔记的正文和图片，再由 Agent 识图写账号拆解报告；属 `public-web`，不用账号。对歇存有用的是它实测记下的匿名边界：token 与笔记绑定，错配时返回空数据而不报错；主页给的 32 位 id 不能拼详情路由；token 要从登录态浏览器整链复制。接入：把两个只依赖 python3 标准库和 curl 的脚本移植成第三方获取插件的单条获取，`canonicalize` 从链接取笔记 ID 和 token，`fetch` 产出正文和图片；收藏列表交给 `browser-session` 或视觉层，组合起来账号只出现在列清单这一步（[§1.3](#13-混合路径视觉层拿链接公开页面取内容)）。MIT。只有两次提交，没有 issue；解析依赖页面内嵌状态，改版就失效，插件要带 `health` 检查，失败时提示用户而不是自动重试。README 也提醒小红书风控按 IP 生效，失败后反复重试只会延长封锁。
 
@@ -242,7 +242,7 @@
 
 **indra ocr（datalab-to/indra）。** Datalab 开源的 CPU OCR 工具和小模型，只依赖 ONNX Runtime、OpenCV 和 pypdfium2，不用 PyTorch 和 GPU，默认模型约 76MB，官方测过 macOS（Apple silicon）上能装能跑；4 核约 210 毫秒一页是 x86 服务器 4 个 vCPU 的基准，Apple silicon 上的速度没有公布。逐页 JSONL 里的行级结果换算后可以直接写成 [SPEC §5](../SPEC.md#5-derived-文件约定) 的 OCR 格式；数字版 PDF 先读文字层，只对缺字区域做 OCR，适合歇存保存的 PDF 附件。接入：官方转换插件包装 `indra-ocr <文件> --format json`，常驻模式用它的 Python 接口只加载一次模型；作为 PDF、多语种、旋转页面的第二引擎。中文不是强项，04 选 PP-OCRv6 做中文默认引擎的结论不变（[04 §2](04-tech-options.md#2-ocr-sidecar)）；中文界面截图仍用 PP-OCR。代码 Apache-2.0；权重是修改版 OpenRAIL-M，上一年收入或累计融资超过 2000 万美元只能个人或研究用途，还有范围较宽的竞争条款，要等法律意见再决定能否进官方插件，权重由用户首次运行时下载并展示许可。2026-10-13 建仓，社区 PR 至今没有一个被合并（11 个里 5 个已关闭、6 个仍开着）。
 
-**yxxbc/downvid（Downvid/downvid）。** 用户写的地址对应现在的 Downvid/downvid。跨平台桌面视频下载器，给 yt-dlp 和 FFmpeg 加图形界面，抖音、快手另有直连解析，B站、YouTube 交给 yt-dlp，条目记 `private-api`。可借四处：抖音解析器跟随短链取作品 ID，带 cookie 请求网页详情接口，按码率整理出下载地址和标题、作者、封面、时长；快手解析器对公开作品发不带登录的请求；cookie 策略是手动 cookies.txt 优先，自动模式依次试本机浏览器、成功后缓存 30 分钟、失败的浏览器冷却 10 分钟；错误分类把「短链已失效」「可能需要登录」「不支持的网站」分开，正对应 [SPEC §8](../SPEC.md#8-适配器协议-v0) 运行器换下一个获取方式时需要的错误信封。接入：它只有桌面界面，Go 包在 `internal/` 下不能作为库引用，可在第三方仓库复制或重写这两个解析器（保留 MIT 声明），其余站点直接包装 yt-dlp。MIT；名称和 Logo 按 TRADEMARKS.md 不得用来暗示官方背书，致谢时连同上游 Videdown 一起列。2026-08 分叉，两个多月发了 21 个版本；默认自动模式读用户日常浏览器的登录态交给 yt-dlp，用户不一定意识到，歇存若借鉴应改为专用浏览器资料目录，或让用户显式导入 cookie。
+**yxxbc/downvid（Downvid/downvid）。** 用户写的地址对应现在的 Downvid/downvid。跨平台桌面视频下载器，给 yt-dlp 和 FFmpeg 加图形界面，抖音、快手另有直连解析，B站、YouTube 交给 yt-dlp，条目记 `private-api`。可借四处：抖音解析器跟随短链取作品 ID，带 cookie 请求网页详情接口，按码率整理出下载地址和标题、作者、封面、时长；快手解析器对公开作品发不带登录的请求；cookie 策略是手动 cookies.txt 优先，自动模式依次试本机浏览器、成功后缓存 30 分钟、失败的浏览器冷却 10 分钟；错误分类把「短链已失效」「可能需要登录」「不支持的网站」分开，正对应 [SPEC §8](../protocol/README.md) 运行器换下一个获取方式时需要的错误信封。接入：它只有桌面界面，Go 包在 `internal/` 下不能作为库引用，可在第三方仓库复制或重写这两个解析器（保留 MIT 声明），其余站点直接包装 yt-dlp。MIT；名称和 Logo 按 TRADEMARKS.md 不得用来暗示官方背书，致谢时连同上游 Videdown 一起列。2026-08 分叉，两个多月发了 21 个版本；默认自动模式读用户日常浏览器的登录态交给 yt-dlp，用户不一定意识到，歇存若借鉴应改为专用浏览器资料目录，或让用户显式导入 cookie。
 
 **ah-skill（ahang008/ah-skills）。** 阿杭的 Codex Skill 目录仓库：主要是指向各独立仓库的索引，另有两个短视频系列制作入口、一个经 Gemini 网页润色口播稿的桥接包和一个本地口播剪辑包，本身不从内容平台取数据。对歇存有用的只有发布纪律：PROVENANCE.md 写清每次公开的范围、不包含的内容和依赖来源，THIRD_PARTY_NOTICES.md 单列外部依赖与许可边界，歇存的插件仓库模板可以要求同样的来源说明。许可证是「AH Source Available Non-Commercial License 1.0」，商业用途（包括放进插件、Skill、市场列表）要书面授权，不 fork、不分发。两个系列入口依赖的剪辑 Skill 已因律师函删除，入口实际已无可用依赖。
 
@@ -1051,14 +1051,14 @@
 <a id="17-对歇存的启示"></a>
 ## 17. 对歇存的启示
 
-以下都是提议。清单、契约和设置的改动留到实现插件运行器时再做，这次不改 [SPEC §8](../SPEC.md#8-适配器协议-v0)、ADR-003 和 product-model。
+以下都是提议。清单、契约和设置的改动留到实现插件运行器时再做，这次不改 [SPEC §8](../protocol/README.md)、ADR-003 和 product-model。
 
 **2026-11-01 更新。** 用户定了方向：风控由用户自己承担，产品按实用优化，声明写清楚，仓库按 Tachiyomi / Keiyoushi 的方式分开。据此，[§17.1](#171-清单里声明获取层级) 的 `access`、`login` 两个字段保留为给用户挑选用的标签；宿主推导的 `risk` 档、平台修正表，以及 [§17.2](#172-设置里怎么让用户选) 的「失败后不往上换」默认值和高风险层单独确认，都不再采用。采纳情况和定稿的字段见 [插件协议](../protocol/README.md)；本报告的风险证据保留作参考。
 
 <a id="171-清单里声明获取层级"></a>
 ### 17.1 清单里声明获取层级
 
-在 [ADR-003 §3](../decisions/ADR-003-plugins.md#3-清单) 定的统一清单上，给 `kind: fetch` 的插件加两个必填字段（`login` 取代 [SPEC §8](../SPEC.md#8-适配器协议-v0) 现有的 `requires.cookie`），再由宿主推出第三个：
+在 [ADR-003 §3](../decisions/ADR-003-plugins.md#3-清单) 定的统一清单上，给 `kind: fetch` 的插件加两个必填字段（`login` 取代 [SPEC §8](../protocol/README.md) 现有的 `requires.cookie`），再由宿主推出第三个：
 
 - `access`：七层取值之一（[约定](#约定)），写默认路径用到的最高一层；
 - `login`：`none`、`optional`、`required`；
@@ -1124,7 +1124,7 @@ permissions:
 - **每个平台一张列表。** 列出这个平台已安装的获取方式，每行显示层级、「不用账号」或「用账号」、风险档、来源（获取方式都是第三方：从单独的获取方式组织装的标「第三方来源 · 组织名」，按 owner/repo 装的标「第三方 · 未经歇存审核」，写法随 ADR-003 修订定）、GitHub App 校验结果、最近一次失败原因。不登录的方式标「不用账号」，并说明只有 IP 层的限制。
 - **按风险从低到高排序，默认先试低风险的。** 同一档按安装顺序，用户可以拖动调整。
 - **高风险层单独确认。** 启用 `private-api`、`client-hook` 时弹出说明：这一层做什么、平台规则怎么写、已有哪些处罚报告（链到证据）；`client-hook` 另外说明要用户自己装证书或注入，歇存不代办。微信上的视觉层也单独确认。
-- **失败后自动换方式时不往上换。** [SPEC §8](../SPEC.md#8-适配器协议-v0) 的运行器是「失败换下一个、全部失败停在 link」；提议默认只在同档或更低档里换。遇到需要登录、限流、平台拦截时，不换到更高风险的层，也不换后端重试，停在 `link` 并提示用户（做法同 Agent-Reach 的终止码）；被平台拦截后，这个平台的自动化整体冷却一段时间。
+- **失败后自动换方式时不往上换。** [SPEC §8](../protocol/README.md) 的运行器是「失败换下一个、全部失败停在 link」；提议默认只在同档或更低档里换。遇到需要登录、限流、平台拦截时，不换到更高风险的层，也不换后端重试，停在 `link` 并提示用户（做法同 Agent-Reach 的终止码）；被平台拦截后，这个平台的自动化整体冷却一段时间。
 - **节奏全局管。** 每个平台一个节奏上限（单条触发、间隔、每日上限），所有获取方式共用；「跟着收」的订阅用到要登录的方式时，默认频率更低并提示。
 - **账号来源让用户选。** 「复用日常浏览器」和「另起专用浏览器资料目录」两种做法，证据看法不一（[§11](#11-agent-接入层)），提议两种都给，并写明各自已知的问题。
 
@@ -1142,7 +1142,7 @@ permissions:
 <a id="173-首批自己适配的插件"></a>
 ### 17.3 首批自己适配的插件
 
-挑选原则：先补零风险、低风险的层；许可证允许（MIT、Apache、BSD 一类可以 fork，GPL 系只包装用户自装的副本）；维护活跃；已有命令行、HTTP 或 MCP，好包装。下面的获取插件都不进官方组织，按用户的方向放进单独的获取方式组织（见 [§17.4](#174-fork-与许可证)），仓库命名暂用 `xiecun-fetch-<平台>`，产品改名后跟着换；协议按 [ADR-003 §2](../decisions/ADR-003-plugins.md#2-进程与协议) 沿用 [SPEC §8](../SPEC.md#8-适配器协议-v0) 的命令行子命令（该节的 `method` 字段还列了 `local-service`、`mcp`、`http-api`、`browser`），上游只有 HTTP 或 MCP 的，插件里写一层薄的命令行转接。
+挑选原则：先补零风险、低风险的层；许可证允许（MIT、Apache、BSD 一类可以 fork，GPL 系只包装用户自装的副本）；维护活跃；已有命令行、HTTP 或 MCP，好包装。下面的获取插件都不进官方组织，按用户的方向放进单独的获取方式组织（见 [§17.4](#174-fork-与许可证)），仓库命名暂用 `xiecun-fetch-<平台>`，产品改名后跟着换；协议按 [ADR-003 §2](../decisions/ADR-003-plugins.md#2-进程与协议) 沿用 [SPEC §8](../protocol/README.md) 的命令行子命令（该节的 `method` 字段还列了 `local-service`、`mcp`、`http-api`、`browser`），上游只有 HTTP 或 MCP 的，插件里写一层薄的命令行转接。
 
 | 平台 | 层级 | 推荐 | 理由 | 包装方式 |
 |---|---|---|---|---|
@@ -1157,7 +1157,7 @@ permissions:
 | B站 | `session-api` | 包装用户自装的 [yutto-dev/yutto](https://github.com/yutto-dev/yutto)，只开放收藏夹、稍后再看、普通投稿 | 仍在维护；GPL 只做独立进程 | 命令行 |
 | YouTube | `official-export` | Takeout 导入，补上稍后观看的 CSV（参照 [ItsMaciek/WatchNow](https://github.com/ItsMaciek/WatchNow)） | 零风险 | 命令行 |
 | YouTube | `private-api`，不登录 | 包装 [yt-dlp/yt-dlp](https://github.com/yt-dlp/yt-dlp) 和 [jdepoix/youtube-transcript-api](https://github.com/jdepoix/youtube-transcript-api)，不传 cookie | Unlicense、MIT；没有账号风险 | 命令行 |
-| 公众号 | `public-web` | fork [wechat-article/wechat-article-exporter](https://github.com/wechat-article/wechat-article-exporter) 的单篇管线，或 [fengxxc/wechatmp2markdown](https://github.com/fengxxc/wechatmp2markdown)（Go） | MIT；不登录；两个上游都已停更（wechat-article-exporter 2026-07-30 起停止维护，wechatmp2markdown 2025-03 后没有发版），fork 后自己维护；正对应 [SPEC §8](../SPEC.md#8-适配器协议-v0) 的示例 | 命令行 |
+| 公众号 | `public-web` | fork [wechat-article/wechat-article-exporter](https://github.com/wechat-article/wechat-article-exporter) 的单篇管线，或 [fengxxc/wechatmp2markdown](https://github.com/fengxxc/wechatmp2markdown)（Go） | MIT；不登录；两个上游都已停更（wechat-article-exporter 2026-07-30 起停止维护，wechatmp2markdown 2025-03 后没有发版），fork 后自己维护；正对应 [SPEC §8](../protocol/README.md) 的示例 | 命令行 |
 | 公众号（微信收藏里的文章） | `vision-ui` | macOS fork [pengyulong/wechat-favorites-exporter](https://github.com/pengyulong/wechat-favorites-exporter)；Windows 包装用户自装的 [Hello-Mr-Crab/pywechat](https://github.com/Hello-Mr-Crab/pywechat) | 目前唯一现成的收藏读取流程；MIT / LGPL；要单独确认微信风险 | 命令行 / MCP |
 | 微信聊天与收藏 | `official-export` | 移植 [freestylefly/WeChatBridge](https://github.com/freestylefly/WeChatBridge) 的合并转发接收；iPhone 备份走用户自装的 [BlueMatthew/WechatExporter](https://github.com/BlueMatthew/WechatExporter) | WeChatBridge 接的是微信自己的合并转发，MIT；WechatExporter 读 iPhone 备份，GPL-2.0，最后发版在 2022-07，新版数据库格式可能已变 | 监听文件夹 / 命令行 |
 | 视频号 | `browser-session` | 移植 [joeseesun/qiaomu-clipper](https://github.com/joeseesun/qiaomu-clipper) 的元宝页内取凭证 | MIT；不装证书、不注入，登录态不出浏览器；风险在元宝账号，界面要写明 | 浏览器扩展 |
@@ -1296,5 +1296,5 @@ permissions:
 **[§17](#17-对歇存的启示)：启示**
 
 - 平台风险修正表放在主仓库随屏蔽清单发布，还是写进客户端。
-- 清单按能力分别声明层级，是否和 [SPEC §8](../SPEC.md#8-适配器协议-v0) 现有的 `capabilities` 列表写法兼容。
+- 清单按能力分别声明层级，是否和 [SPEC §8](../protocol/README.md) 现有的 `capabilities` 列表写法兼容。
 - 兼容 CookieCloud 公开协议、不复制代码地写一个本机接收端，是否需要法律意见。

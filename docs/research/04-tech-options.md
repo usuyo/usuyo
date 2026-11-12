@@ -1,11 +1,11 @@
 <a id="04--技术选型调研搜索ocrasr关键帧去重画布与桌面壳"></a>
 # 04 · 技术选型调研：搜索、OCR、ASR、关键帧、去重、画布与桌面壳
 
-状态：草案 · 2026-10-21 · 2026-11-03 审过：画布结论已进 [ADR-002](../decisions/ADR-002-frontend-stack.md)；「向量检索只用 sqlite-vec」「cjk 开 `output_unigram`」还没进 [SPEC §11](../SPEC.md#11-索引)；MyGo 已到 v0.7.4（2026-11-01），[§6.4](#64-桌面壳mygo-与回退路径) 和 [ADR-001](../decisions/ADR-004-rust-tauri.md) 的版本说法过时，壳的退出条件还没写成 ADR；主界面改为点阵迷雾地图后，渲染选型在原型上重看；[§7](#7-对歇存技术决策的启示) 末尾的待核实在落地前做。
+状态：草案 · 2026-10-21 · 2026-11-03 审过：画布结论已进 [ADR-002](../decisions/ADR-002-frontend-stack.md)；「向量检索只用 sqlite-vec」「cjk 开 `output_unigram`」还没进 [SPEC §11](../BUILD.md#3-现在做到哪)；MyGo 已到 v0.7.4（2026-11-01），[§6.4](#64-桌面壳mygo-与回退路径) 和 [ADR-001](../decisions/ADR-004-rust-tauri.md) 的版本说法过时，壳的退出条件还没写成 ADR；主界面改为点阵迷雾地图后，渲染选型在原型上重看；[§7](#7-对歇存技术决策的启示) 末尾的待核实在落地前做。
 
 > 里程碑口径已废弃：项目改为按完整功能一次性开发。文中的 M0–M3 只指写作时 SPEC 的分段，请按功能面阅读。
 
-关联：[PRD](../PRD.md) · [SPEC §7 去重](../SPEC.md#7-去重) · [SPEC §11 索引](../SPEC.md#11-索引) · [ADR-001](../decisions/ADR-004-rust-tauri.md) · [feature 001](../BUILD.md#3-现在做到哪)
+关联：[PRD](../PRD.md) · [SPEC §7 去重](../SPEC.md#04-id) · [SPEC §11 索引](../BUILD.md#3-现在做到哪) · [ADR-001](../decisions/ADR-004-rust-tauri.md) · [feature 001](../BUILD.md#3-现在做到哪)
 
 <a id="约定"></a>
 ## 约定
@@ -85,7 +85,7 @@
 风险：
 
 - bleve 近两年的发布几乎全是向量与 geo（v2.5–v2.6），CJK 分析器无变化；中文相关问题要靠自己写分析器解决，不要期待上游。
-- bleve vector 被「无 cgo」排除，[SPEC §11](../SPEC.md#11-索引) 里「bleve vector 或 sqlite-vec」的二选一实际只剩后者。
+- bleve vector 被「无 cgo」排除，[SPEC §11](../BUILD.md#3-现在做到哪) 里「bleve vector 或 sqlite-vec」的二选一实际只剩后者。
 - sqlite-vec 与 `sqlite-fts5-bigram` 都是 pre-v1；modernc 导入 `vec` 后不能再 `RegisterPageCache`。
 - Qwen3-Embedding 的指令前缀在 llama.cpp embedding 接口下如何传递，官方 issue 未答复（待核实）；实现时在 sidecar 协议里把 query / document 两种输入分开。
 
@@ -225,7 +225,7 @@ sidecar 接口：
 <a id="5-去重"></a>
 ## 5. 去重
 
-需求回顾（[SPEC §7](../SPEC.md#7-去重)）：内容层指纹 = 文本 SimHash（海明距离 ≤ 3）、图片 pHash、视频「时长 + 关键帧 pHash」；命中写 `sameAs`，不自动合并。
+需求回顾（[SPEC §7](../SPEC.md#04-id)）：内容层指纹 = 文本 SimHash（海明距离 ≤ 3）、图片 pHash、视频「时长 + 关键帧 pHash」；命中写 `sameAs`，不自动合并。
 
 <a id="51-候选对比去重"></a>
 ### 5.1 候选对比（去重）
@@ -245,7 +245,7 @@ sidecar 接口：
 
 阈值经验值：
 
-- SimHash 64 位：Manku、Jain、Sarma（WWW 2007）在 80 亿网页上验证 k = 3 合理，[SPEC §7](../SPEC.md#7-去重) 的 ≤ 3 与之一致。来源：[论文 PDF](https://www.www2007.cpsc.ucalgary.ca/papers/paper215.pdf)。
+- SimHash 64 位：Manku、Jain、Sarma（WWW 2007）在 80 亿网页上验证 k = 3 合理，[SPEC §7](../SPEC.md#04-id) 的 ≤ 3 与之一致。来源：[论文 PDF](https://www.www2007.cpsc.ucalgary.ca/papers/paper215.pdf)。
 - pHash 64 位：教程类来源给 ≤ 10「通常同图」、≤ 5「保守」、无关图约 32；没有找到严格的公开基准，必须用自己的样本调。来源：[pHash in Python 指南](https://mojoauth.com/security-guides/phash-in-python)（查阅 2026-10-21）。
 - vPDQ 256 位用 D = 31（约 12%）作为帧匹配阈，换算到 64 位约为 ≤ 8，与上面的 5–10 区间吻合。
 
@@ -364,20 +364,20 @@ MyGo 的事实核对（ADR 写「仍在 0.5.x」）：
 <a id="7-对歇存技术决策的启示"></a>
 ## 7. 对歇存技术决策的启示
 
-与 [ADR-001](../decisions/ADR-004-rust-tauri.md)、[SPEC §11](../SPEC.md#11-索引)、[SPEC §7](../SPEC.md#7-去重) 的逐条对照。
+与 [ADR-001](../decisions/ADR-004-rust-tauri.md)、[SPEC §11](../BUILD.md#3-现在做到哪)、[SPEC §7](../SPEC.md#04-id) 的逐条对照。
 
 一致之处：
 
 - 「重计算作为独立 sidecar、不 import 进内核」被所有候选验证为必要：sherpa-onnx Go 绑定、tantivy-go、bleve vector、usearch 全部依赖 cgo 或原生共享库，只有以进程为边界才能守住「纯 Go、无 cgo」。
-- bleve 作为 M0 全文索引仍成立；`cjk` 分析器的 bigram 行为与 [SPEC §11](../SPEC.md#11-索引)「CJK 双字分析器」吻合，拼音字段另建的做法与 feature 001 一致。
-- [SPEC §7](../SPEC.md#7-去重) 的 SimHash 海明距离 ≤ 3 有 Manku 2007 的实证支撑；pHash 阈值 SPEC 未写数字，建议初值 ≤ 8 并校准。
+- bleve 作为 M0 全文索引仍成立；`cjk` 分析器的 bigram 行为与 [SPEC §11](../BUILD.md#3-现在做到哪)「CJK 双字分析器」吻合，拼音字段另建的做法与 feature 001 一致。
+- [SPEC §7](../SPEC.md#04-id) 的 SimHash 海明距离 ≤ 3 有 Manku 2007 的实证支撑；pHash 阈值 SPEC 未写数字，建议初值 ≤ 8 并校准。
 - 「本地还是云端由用户选、标明数据是否离开本机」在 ASR / VLM 两处都对应到「OpenAI 兼容端点 + 模型名」这一种配置形态，内核不需要为每个引擎写适配。
 
 冲突或需修订之处：
 
 1. ADR-001「MyGo 仍在 0.5.x」已过时：仓库 2026-09-26 创建，今天发布 v0.6.0 并含破坏性变更，9 天内 8 个版本，单一作者。ADR 的「若届时不稳，回退 Electron」需要补成可执行的退出条件（见 [§6.6](#66-推荐与风险画布与壳)），并把 Wails v2.17.0 加为第一回退（Go 栈不变）。
-2. [SPEC §11](../SPEC.md#11-索引)「向量检索候选：bleve vector 或 sqlite-vec」实际只剩一个：bleve vector 需要 FAISS 共享库与 cgo，被 ADR 排除；sqlite-vec 经 `modernc.org/sqlite/vec` 纯 Go 可用，且与 `jobs.db` 同驱动。建议 SPEC §11 直接写 sqlite-vec，并补一句 embedding 由 sidecar 产出、向量以 `derived/embeddings.bin` 为真相源。
-3. [SPEC §11](../SPEC.md#11-索引) 的 bleve `cjk` 分析器要显式 `output_unigram: true`，否则单字查询与奇数长度词末字不可搜；这不改变决策，但要写进 feature 001 的实现要点与 `internal/index` 测试用例。feature 001 的「不理想则换 gse」回退要注意 `gse-bleve` 已归档，需自写 Tokenizer 包装。
+2. [SPEC §11](../BUILD.md#3-现在做到哪)「向量检索候选：bleve vector 或 sqlite-vec」实际只剩一个：bleve vector 需要 FAISS 共享库与 cgo，被 ADR 排除；sqlite-vec 经 `modernc.org/sqlite/vec` 纯 Go 可用，且与 `jobs.db` 同驱动。建议 SPEC §11 直接写 sqlite-vec，并补一句 embedding 由 sidecar 产出、向量以 `derived/embeddings.bin` 为真相源。
+3. [SPEC §11](../BUILD.md#3-现在做到哪) 的 bleve `cjk` 分析器要显式 `output_unigram: true`，否则单字查询与奇数长度词末字不可搜；这不改变决策，但要写进 feature 001 的实现要点与 `internal/index` 测试用例。feature 001 的「不理想则换 gse」回退要注意 `gse-bleve` 已归档，需自写 Tokenizer 包装。
 4. 一个未在 SPEC 中出现的分叉：modernc SQLite 同时具备 FTS5（内建）、`unicode_bigram` tokenizer（第三方 pre-v1）与 sqlite-vec（内建），全文 + 向量可以落在 `.xiecun/` 下一个 SQLite 文件里，比 bleve 目录 + SQLite 两套存储简单。不建议改 M0，但建议在 M1 向量落地时对两套方案做一次体积与查询延迟实测后再定，并记一条 ADR。
 5. PRD「可重叠分组」排除了最常见的三个画布库（tldraw、Excalidraw、React Flow）的内建分组模型，M3 的工作量应按「自建画布模型 + Konva 渲染」估算，而不是「接一个画布库」；同时 tldraw 的专有许可与遥测使它对 AGPL 项目不可用。CLAUDE.md「画布库待定」可以在此基础上收敛。
 6. OCR 与 ASR 的「留接口」应按 2026 年的现状设计：OCR 目标模型已从 PP-OCRv5 变为 PP-OCRv6（三档 1.5M / 7.7M / 34.5M 参数，RapidOCR 已有 ONNX）；ASR 中文默认应为 SenseVoice / Paraformer 经 sherpa-onnx 或 FunASR llama.cpp runtime，而不是 whisper.cpp；两者的输出契约（bbox 行级 vs 词级、时间戳段级 vs 词级）要在 [SPEC §5](../SPEC.md#5-derived-文件约定) 注明可选粒度。

@@ -522,7 +522,7 @@ Mastodon、Bluesky 的路径出处：
 | JSON Feed 1.1 | 不在 | 读同上；导出成 feed 时首选 | `id` 必填、长期不变、不能复用；扩展用 `_` 开头的对象（[规范](https://www.jsonfeed.org/version/1.1/)） |
 | OPML 2.0 | 不在（只有播客导入提过） | 导入订阅（可以不做）、导出订阅列表 | `type="rss"` 的 outline 用 `xmlUrl`（[规范](http://opml.org/spec2.opml)） |
 | Google Reader API、Fever | 不在 | 读阅读器的星标（A） | Miniflux README、FreshRSS 文档都写了兼容 |
-| MCP 2026-07-28 | 在 | 作服务端：[SPEC §10](../SPEC.md#10-mcp-工具m0)；作客户端：[§9.3](../protocol/wrapping.md#93-包装-mcp-服务) 包装 | — |
+| MCP 2026-07-28 | 在 | 作服务端：[SPEC §10](../BUILD.md#006-agent)；作客户端：[§9.3](../protocol/wrapping.md#93-包装-mcp-服务) 包装 | — |
 | Markdown 加 front matter | 在 | 条目的 `content.md`、导出 | — |
 | Obsidian vault | 在 | 导出和读回；资料库直接当 vault 等 [E2](../PRD.md#79-导出与互通) | — |
 | Netscape 书签 HTML | 在 | 导入（P3）、导出（E1） | — |
@@ -536,7 +536,7 @@ Mastodon、Bluesky 的路径出处：
 |---|---|---|---|
 | 资料库本身就是 Markdown 文件夹 | 在 | [SPEC §2](../SPEC.md#2-资料库目录真相源) | 已有 |
 | 导出到笔记软件并读回 | 在 | 导出插件 | 已有设计 |
-| MCP 读取 | 在 | [SPEC §10](../SPEC.md#10-mcp-工具m0) | 已有设计 |
+| MCP 读取 | 在 | [SPEC §10](../BUILD.md#006-agent) | 已有设计 |
 | 迁出包：Netscape HTML、CSV | 在（[E1](../PRD.md#79-导出与互通) 建议 B） | 命令行 | 小 |
 | 迁出包：带正文、多家能导入的格式 | 等（E1 的 C） | 命令行或导出插件 | 中 |
 | 本机 HTTP 读接口 | 不在：投递接口只有 `ping`、`deliver`、`batches` | 和 MCP 同源生成 | 中 |

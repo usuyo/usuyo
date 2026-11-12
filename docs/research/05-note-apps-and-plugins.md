@@ -688,7 +688,7 @@ permissions:
 
 | 类 | 做什么 | 输入 | 输出 | 典型例子 | 法律与信任 |
 |---|---|---|---|---|---|
-| 获取 fetch（即「获取方式」） | 从平台或外部文件取回内容 | URL、订阅源、导出包 | `raw/` 快照 + 文本 + 媒体（[SPEC §8](../SPEC.md#8-适配器协议-v0)） | 抖音、公众号获取方式；Omnivore zip、BiliNote `note_results`、flomo 导出包的导入 | 风险最高；官方不内置、不收录（[PRD §4](../PRD.md#4-原则) 原则 1，Tachiyomi 教训见 [02 §1](02-adapter-ecosystems.md#1-tachiyomi-与-mihon-扩展生态)） |
+| 获取 fetch（即「获取方式」） | 从平台或外部文件取回内容 | URL、订阅源、导出包 | `raw/` 快照 + 文本 + 媒体（[SPEC §8](../protocol/README.md)） | 抖音、公众号获取方式；Omnivore zip、BiliNote `note_results`、flomo 导出包的导入 | 风险最高；官方不内置、不收录（[PRD §4](../PRD.md#4-原则) 原则 1，Tachiyomi 教训见 [02 §1](02-adapter-ecosystems.md#1-tachiyomi-与-mihon-扩展生态)） |
 | 转换 transform | 把条目里已有的文件变成新的一层 | 条目文件的只读副本或路径 | `derived/` 下的约定文件、`images/keyframes/` | ffmpeg 抽音轨与关键帧、ASR、OCR、画面描述、AI 摘要与标签建议、HTML→Markdown、字幕互转 | 平台中立，可进官方索引 |
 | 导出 export | 把条目和主题页写到别的软件，可选读回用户改动 | 条目与主题页的只读视图（JSON） | 交给宿主写入的文件，或经宿主代理的云 API 调用；读回时返回结构化改动 | Obsidian、通用 Markdown 文件夹、Logseq OG、思源、Notion、飞书、语雀 | 平台中立，可进官方索引；云端目标要标「离开本机」 |
 
@@ -704,7 +704,7 @@ permissions:
 
 | 类 | 进程模型 | 控制协议 | 数据通道 | 网络 | 默认权限 |
 |---|---|---|---|---|---|
-| 获取 | 独立进程（[SPEC §8](../SPEC.md#8-适配器协议-v0) 的 `cli` / `local-service` / `mcp` / `http-api` / `browser`） | 现有子命令 `canonicalize` / `fetch` / `list` / `health`，加 [02 §15.3](02-adapter-ecosystems.md#153-调用错误与产物) 建议的错误信封、退出码、超时 | `--out` 临时目录 | 需要；登录态按 [02 §15.4](02-adapter-ecosystems.md#154-登录态) 经环境变量传 cookie 文件 | 网络 allowlist 限到平台域名；只写临时目录 |
+| 获取 | 独立进程（[SPEC §8](../protocol/README.md) 的 `cli` / `local-service` / `mcp` / `http-api` / `browser`） | 现有子命令 `canonicalize` / `fetch` / `list` / `health`，加 [02 §15.3](02-adapter-ecosystems.md#153-调用错误与产物) 建议的错误信封、退出码、超时 | `--out` 临时目录 | 需要；登录态按 [02 §15.4](02-adapter-ecosystems.md#154-登录态) 经环境变量传 cookie 文件 | 网络 allowlist 限到平台域名；只写临时目录 |
 | 转换（重：ffmpeg、ASR、OCR、本地 VLM） | 原生独立进程，可常驻（模型加载一次处理多条） | stdio 上换行分隔的 JSON-RPC 2.0（与 MCP stdio 同一种分帧）：`describe`、`health`、`run`，`progress` 通知，取消，关 stdin 后退出 | 只传文件路径，大块数据不走管道（Speech Kit 的 PCM 帧是反例） | 默认无；模型由宿主下载 | 读输入与模型目录、写临时目录、GPU 按声明 |
 | 转换（轻：规范化、字幕互转）与导出到文件 | 先用原生进程；有了纯变换插件后由官方 `wasm-runner`（内嵌 wazero）承载 | 同上 | stdin 进 JSON，stdout 出 JSON 或文件字节 | 无 | 零能力 |
 | 转换（HTTP 型：AI 摘要、云 ASR、云 VLM）与导出到云 | 同上 | 同上 | 同上 | 只经宿主代理，按 allowlist；密钥由宿主注入 | 网络 allowlist |
@@ -791,7 +791,7 @@ permissions:
 
 | 编号 | 问题 | 建议 | 影响 |
 |---|---|---|---|
-| P1 | 三类插件共用一份清单，还是各自一份 | 在 `adapter.yaml` 上扩展 `kind`，共用 schema | [SPEC §8](../SPEC.md#8-适配器协议-v0)、`pkg/contract` |
+| P1 | 三类插件共用一份清单，还是各自一份 | 在 `adapter.yaml` 上扩展 `kind`，共用 schema | [SPEC §8](../protocol/README.md)、`pkg/contract` |
 | P2 | 转换插件的控制协议 | stdio 换行分隔 JSON-RPC 2.0，只传文件路径 | 新 ADR；plugin-kit SDK |
 | P3 | 要不要 `wasm-runner` | 要，但等出现纯变换插件再做；wazero 只进 runner，不进内核 | 新 ADR；macOS entitlement 只给 runner |
 | P4 | OS 沙箱做到哪一档 | macOS Seatbelt、Linux bubblewrap（降级 Landlock）、Windows 先只强制 Job Object；界面分「强制 / 部分 / 仅告知」 | 新 ADR；设置页 |

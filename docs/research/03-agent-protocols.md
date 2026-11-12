@@ -1,12 +1,12 @@
 <a id="调研-03--agent-协议与接口现状"></a>
 # 调研 03 — Agent 协议与接口现状
 
-状态：草案 · 2026-10-21 · 2026-11-03 审过：MCP 2026-07-28 仍是最新正式版，go-sdk 仍是 v1.8.0，[§1](#1-mcp-规范现状)–[§6](#6-mcp-之外的本地接口惯例) 的结论成立；[§7](#7-对歇存-mcp-与-acp-设计的启示) 的确认策略、信封和截断还没写进 [SPEC §10](../SPEC.md#10-mcp-工具m0)，本机接口的令牌已进 [插件协议 §5.1](../protocol/delivery.md#51-本机-http-接口)，改动提议的期限见 [open-decisions A2](../PRD.md#78-agent)；文中的 M0–M2 和 `xiecun` 标识照旧名读。
+状态：草案 · 2026-10-21 · 2026-11-03 审过：MCP 2026-07-28 仍是最新正式版，go-sdk 仍是 v1.8.0，[§1](#1-mcp-规范现状)–[§6](#6-mcp-之外的本地接口惯例) 的结论成立；[§7](#7-对歇存-mcp-与-acp-设计的启示) 的确认策略、信封和截断还没写进 [SPEC §10](../BUILD.md#006-agent)，本机接口的令牌已进 [插件协议 §5.1](../protocol/delivery.md#51-本机-http-接口)，改动提议的期限见 [open-decisions A2](../PRD.md#78-agent)；文中的 M0–M2 和 `xiecun` 标识照旧名读。
 
 > 里程碑口径已废弃：项目改为按完整功能一次性开发。文中的 M0–M3 只指写作时 SPEC 的分段，请按功能面阅读。
-关联：[PRD §4 原则 6、§5 Agent](../PRD.md) · [SPEC §10 MCP 工具（M0）](../SPEC.md#10-mcp-工具m0) · [ADR-001 技术栈](../decisions/ADR-004-rust-tauri.md) · [feature 001](../BUILD.md#3-现在做到哪)
+关联：[PRD §4 原则 6、§5 Agent](../PRD.md) · [SPEC §10 MCP 工具（M0）](../BUILD.md#006-agent) · [ADR-001 技术栈](../decisions/ADR-004-rust-tauri.md) · [feature 001](../BUILD.md#3-现在做到哪)
 
-本文回答一个问题：歇存的 MCP 服务与 ACP 客户端应该按哪一版规范、用哪个 SDK、给哪些客户端做，以及 [SPEC §10](../SPEC.md#10-mcp-工具m0) 里悬而未决的几处（确认策略、`changesetId` 句柄、`private` 条目、`untrusted` 信封形状、是否用 resources 暴露内容包）该怎么定。所有网页均于 2026-10-21 抓取；条目后括号里的日期是该来源自身的发布或发版日期。凭记忆、未在来源中确认的地方标「待核实」，汇总在 [§8](#8-待核实清单)。
+本文回答一个问题：歇存的 MCP 服务与 ACP 客户端应该按哪一版规范、用哪个 SDK、给哪些客户端做，以及 [SPEC §10](../BUILD.md#006-agent) 里悬而未决的几处（确认策略、`changesetId` 句柄、`private` 条目、`untrusted` 信封形状、是否用 resources 暴露内容包）该怎么定。所有网页均于 2026-10-21 抓取；条目后括号里的日期是该来源自身的发布或发版日期。凭记忆、未在来源中确认的地方标「待核实」，汇总在 [§8](#8-待核实清单)。
 
 <a id="目录"></a>
 ## 目录
@@ -186,7 +186,7 @@ SDK 就位情况：博客称发布当日 TypeScript、Python、Go、C# SDK 已�
 <a id="16-对歇存的意义"></a>
 ### 1.6 对歇存的意义
 
-- [SPEC §10](../SPEC.md#10-mcp-工具m0) 写的「按 MCP 2026-07-28 规范实现为无状态；changesetId 为显式句柄」与规范方向一致，而且不再是选择题：2026-07-28 的 stdio 本身就禁止把进程当会话，`changesetId` 这类句柄正是规范推荐的唯一跨调用状态载体。
+- [SPEC §10](../BUILD.md#006-agent) 写的「按 MCP 2026-07-28 规范实现为无状态；changesetId 为显式句柄」与规范方向一致，而且不再是选择题：2026-07-28 的 stdio 本身就禁止把进程当会话，`changesetId` 这类句柄正是规范推荐的唯一跨调用状态载体。
 - stdio 不走 OAuth，凭据来自环境；歇存 M0 的 `xiecun mcp` 不需要任何鉴权设计，但 daemon 的本地 HTTP API 需要（见 [§6](#6-mcp-之外的本地接口惯例)）。
 - 确认用户意愿有了协议级手段：form mode elicitation 经 MRTR 返回，无需服务器保持连接；但只在客户端声明了 `elicitation` 能力时可用，服务器必须按能力分支。
 - 不要做：roots、sampling、logging（已弃用）、tasks（扩展，无客户端支持）、SSE 续传、会话。
@@ -446,7 +446,7 @@ SDK 就位情况：博客称发布当日 TypeScript、Python、Go、C# SDK 已�
 <a id="63-对歇存的意义"></a>
 ### 6.3 对歇存的意义
 
-- [SPEC §1](../SPEC.md#1-仓库布局monorepo) 的 `internal/api`（给桌面壳、扩展、手机桥）应沿用 Obsidian / Zotero 的约定：只绑 `127.0.0.1`、固定且可配的端口、`Authorization: Bearer` 令牌放在 `.xiecun/` 下的文件里（浏览器扩展与桌面壳读文件取令牌）、校验 `Origin`、写操作另需确认。手机桥是局域网直传，是唯一要听非回环地址的入口，必须单独鉴权。
+- [SPEC §1](../BUILD.md#3-现在做到哪) 的 `internal/api`（给桌面壳、扩展、手机桥）应沿用 Obsidian / Zotero 的约定：只绑 `127.0.0.1`、固定且可配的端口、`Authorization: Bearer` 令牌放在 `.xiecun/` 下的文件里（浏览器扩展与桌面壳读文件取令牌）、校验 `Origin`、写操作另需确认。手机桥是局域网直传，是唯一要听非回环地址的入口，必须单独鉴权。
 - 浏览器扩展「保存当前页」如果走本地 HTTP，Zotero connector 的经验是：同源策略能挡住网页读响应，但挡不住发请求，所以保存接口本身要有令牌，而且不要给未鉴权请求任何可观测差异。
 - 全局快捷键与「收下」入口可以同时提供 `xiecun://add?url=` 一类 URL scheme，方便 Raycast / Alfred 用户用一条 deeplink 接入，不必写扩展。
 - 以后若想像 Obsidian 那样在本地 HTTP 上也挂 MCP（`/mcp/`），按 [§2.3](#23-对歇存的意义) 必须 `Stateless = true`，并按规范校验 `Origin`。
@@ -456,7 +456,7 @@ SDK 就位情况：博客称发布当日 TypeScript、Python、Go、C# SDK 已�
 <a id="7-对歇存-mcp-与-acp-设计的启示"></a>
 ## 7. 对歇存 MCP 与 ACP 设计的启示
 
-每条对应 [SPEC §10](../SPEC.md#10-mcp-工具m0) 的一个工具或一处未定义。
+每条对应 [SPEC §10](../BUILD.md#006-agent) 的一个工具或一处未定义。
 
 1. **规范基线与工具链（整节）。** 按 2026-07-28 实现，用 go-sdk v1.8.0；stdio 是 M0 唯一传输；旧客户端的 `initialize` 兼容交给 SDK。前置条件：歇存 `go.mod` 升到 `go 1.25`，修订 ADR-001 的「Go 1.23+」；删掉 feature 001 里「若 go-sdk 尚未支持 2026-07-28」的保险条款。不实现 roots / sampling / logging / tasks；日志写 stderr。
 

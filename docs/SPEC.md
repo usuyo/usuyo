@@ -1,9 +1,7 @@
-<a id="歇存-xiecun--技术规格-v01m0"></a>
-<a id="usuyo--技术规格-v01m0"></a>
 <a id="usuyo--技术规格-v1草案"></a>
 # usuyo — 技术规格 v1（草案）
 
-状态：v1 草案 · 2026-11-05。第 0、1 层写好了，等你过目；第 2–4 层还没写（[总纲 现在做到哪](BUILD.md#3-现在做到哪)）。2026-11-11 照代码补了一遍：实现替草案定下的地方标「11-11 代码」，实现还没做到的标「11-11 还没做」；第 2 层先有一节照代码写的[本机接口](#本机接口第-2-层11-11-照代码)。代码在 `crates/`（Rust，[ADR-004](decisions/ADR-004-rust-tauri.md)）。要你看一眼的在 [§0.9](#09-要你看一眼)、[§1.10](#110-要你看一眼)；v0 各节去了哪里见[附](#附v0-各节和-18-处的去向)。
+状态：v1 草案。第 0、1 层写好了；第 2 层只有一节照代码写的[本机接口](#本机接口第-2-层11-11-照代码)，内核服务契约（MCP、OpenAPI、搜索语法）还没写（[总纲 006](BUILD.md#006-agent)）。实现替草案定下的地方标「11-11 代码」，实现还没做到的标「11-11 还没做」。代码在 `crates/`（Rust，[ADR-004](decisions/ADR-004-rust-tauri.md)）。要你看一眼的在 [§0.9](#09-要你看一眼)、[§1.10](#110-要你看一眼)。
 
 <a id="0-约定第-0-层"></a>
 ## 0. 约定（第 0 层）
@@ -265,7 +263,7 @@ items/douyin/douyin-4plrcxk343onmyxibmrr672kga/
 | 字段 | 取值 |
 |---|---|
 | `id` | UUIDv7，同步时按它认 |
-| `entry` | `paste` `drop` `extension` `mobile` `import` `subscription` `mcp` `cli` `api`；v0 的 `sync` 改名，「同步」现在指设备之间 |
+| `entry` | `paste` `drop` `extension` `mobile` `import` `subscription` `mcp` `cli` `api`；「同步」指设备之间 |
 | `takenBy` | 谁决定收的：`user`、`agent:<连接名>`（kebab-case，来源归第 2 层）、`subscription:<id>` |
 | `machinePicked` | `null`、`{"by": "keywords"}`、`{"by": "similarity"}`、`{"by": "upstream", "name": "horizon"}`、`{"by": "agent", "name": "<连接名>"}`；只有你给的具体链接（Agent 收下时说明是你点名的链接，参数名归第 2 层）和你自己平台上的收藏、列表为 `null`；你给关键词让 Agent 去找的也算机器挑的（11-06 定，[§1.10 第 14 条](#110-要你看一眼)） |
 | `matched` | 命中关注时 `[{topic, by: "keywords" \| "similarity"}]`，可以命中几个 |
@@ -345,7 +343,7 @@ items/douyin/douyin-4plrcxk343onmyxibmrr672kga/
 - 标题、作者照 [§0.6](#06-文本和文件) 的 Markdown 链接文字转义。
 - **正文**（11-11 代码）：插件给的 `textFormat: markdown` 只有两条都满足才照原样写：全文没有 `<`；每个链接目标（`](` 或 `]:` 后面，跳过空白）以 `http://`、`https://`、`mailto:`、`usuyo://` 或 `#` 开头，不分大小写。不满足的和 `plain` 一样照 [§0.6](#06-文本和文件) 转义成纯文字。原样还在 `raw/`。
 
-主快照或头部用到的字段变了就重写，原样在 `raw/`，不违背 [PRD 原则 2](PRD.md#4-原则)（[K5 A](PRD.md#710-存储删除与联网)）；CLAUDE.md 的措辞见 [§1.10 第 10 条](#110-要你看一眼)。应用里的原文栏和 `text` 引用读主快照的 `text` 或 `derived/readable.md`（下表），不读 `content.md`。**能看不能改**（11-05 定，[回答表](answers.md)）：宿主把它写成只读文件（系统支持时），总照主快照重写；重写前发现外面改过（和本机记下的上次写的哈希不一样，也不等于这台照现在的 manifest 和主快照会生成的字节；等于的话是另一台经云盘写来的，照收、记下哈希），先把改过的那份放进回收站（`kind: content`），再换回原样（推断）。要写字写在 `notes.md`、主题页里，或者导出到你的 vault 再写（[协议 §4.4](protocol/transform-export.md#44-导出的-run-与-readback)）。它不同步，各台照原样自己生成。这改了 v0「机器永不改写正文」，也偏离[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突) 把它归「原样」层，调研 14 跟着改（[总纲](BUILD.md#5-功能线)）。
+主快照或头部用到的字段变了就重写，原样在 `raw/`，不违背 [PRD 原则 2](PRD.md#4-原则)（[K5 A](PRD.md#710-存储删除与联网)）；CLAUDE.md 的措辞见 [§1.10 第 10 条](#110-要你看一眼)。应用里的原文栏和 `text` 引用读主快照的 `text` 或 `derived/readable.md`（下表），不读 `content.md`。**能看不能改**（11-05 定，[回答表](answers.md)）：宿主把它写成只读文件（系统支持时），总照主快照重写；重写前发现外面改过（和本机记下的上次写的哈希不一样，也不等于这台照现在的 manifest 和主快照会生成的字节；等于的话是另一台经云盘写来的，照收、记下哈希），先把改过的那份放进回收站（`kind: content`），再换回原样（推断）。要写字写在 `notes.md`、主题页里，或者导出到你的 vault 再写（[协议 §4.4](protocol/transform-export.md#44-导出的-run-与-readback)）。它不同步，各台照原样自己生成。这偏离[调研 14 §5](research/14-sync-like-hatoba.md#5-改动和冲突) 把它归「原样」层。
 
 | 栏 | 文件 | 来源 | 链接里的层 |
 |---|---|---|---|
@@ -613,10 +611,7 @@ Agent（经 MCP）或宿主调的模型改已有内容，一个提议一个文�
 <a id="19-schema-和-usuyo-contract"></a>
 ### 1.9 schema 和 usuyo-contract
 
-磁盘上没有 v0 资料库，不写迁移程序。原来的 Go 包 `pkg/contract` 11-11 搬成了 `crates/usuyo-contract`（[ADR-004](decisions/ADR-004-rust-tauri.md)）：磁盘上各记录的 serde 类型，每个对象带 `extra`，不认识的字段原样写回；下面几条 schema 在 `crates/usuyo-contract/schema/`，样例在 `testdata/`。v0 到本层的对照（历史，留着查）：
-
-- 目录：`items/YYYY/MM/<platform>-<id8>-<rand4>/` → `items/<platform>/<itemId>/`；`index/`、`jobs.db`、`config.json` 搬出 `.usuyo/`；`threads/`、`thoughts/`、`canvas.json` → `topics/`、`cards/`（按标题起名）、`canvas/`；`journal/YYYY-MM.jsonl`、`.trash/` → `.usuyo/journal/<deviceId>/`、`.usuyo/trash/`；条目根下的 `images/`、`media/` 进 `raw/<snapshotId>/`，`images/keyframes/` → `derived/keyframes/`。
-- manifest：`schema` → `formatVersion`；`capturedAt`、`origin` → `addedAt`、`origins[]`（`sync` → `subscription`）；快照的 `adapter`、`adapterVersion` → `plugin`、`pluginVersion`，`rawDir` 去掉；`missing` 用 `outputs` 词表；`slimmed` → `text-only`；`jobs`、`fingerprints` 进 `jobs.db`、`derived/`；`attention.json` 去掉（[M6 A](PRD.md#76-地图)）；不写 `additionalProperties: false`。
+`crates/usuyo-contract` 是磁盘上各记录的 serde 类型，每个对象带 `extra`，不认识的字段原样写回；下面几条 schema 在 `crates/usuyo-contract/schema/`，样例在 `testdata/`。不写迁移程序：磁盘上没有更早格式的资料库。
 
 schema 先定这几条：
 
@@ -753,128 +748,3 @@ schema 先定这几条：
 **命令行**：`add`、`get`、`search`、`reindex` 先读 `daemon.json` 和 `api-token`，握手，再 `GET /health`；都成了就经守护进程，不然在本进程里直接开库。握手没过不发令牌。`init` 总在本进程。
 
 **和别处还不一样的**：窗口用的路径不带 `/v1/`（只有投递接口带）；列表回普通数组，没有游标（[§0.8](#08-分页和游标)）；用主令牌经窗口用的路径做的写操作都记 `via: app`，`POST /items` 收下记 `entry: paste`、`takenBy: user`，私密条目照收，命令行经守护进程收下的也一样（[§1.7](#17-删掉) 的表要求 `api` 和终端外的命令行跳过私密）；经 `/v1/deliver` 的投递，扩展、手机、`api` 令牌遇到私密条目会跳过，终端里和终端外的命令行（本进程里直接收下时记 `cli`）都不跳。
-
-<a id="2-留着的-v0第-2-层重写前保留"></a>
-## 2. 留着的 v0（第 2 层重写前保留）
-
-下面六节是 v0 原文，第 2 层（内核服务契约）重写时替换；和第 0、1 层冲突的以第 0、1 层为准，每节开头写了已知的几处。都是历史：现在的代码见 [ADR-004](decisions/ADR-004-rust-tauri.md) 和 `crates/`，本机接口见[上一节](#本机接口第-2-层11-11-照代码)。
-
-<a id="1-仓库布局monorepo"></a>
-<a id="21-仓库布局monorepo"></a>
-### 2.1 仓库布局（monorepo）
-
-v0，第 2 层重写前保留。`adapter` 照插件协议改叫插件，归第 3 层。历史，下面的 Go 布局 11-11 整个换掉了：现在是根目录的 cargo 工作区，`crates/`（各 crate 见 [§0.1](#01-命名)）、`apps/desktop/`（Tauri 2 壳 `src-tauri/` 加前端 `web/`）、`plugins/web/`（预装的通用网页获取）、`justfile`（[ADR-004](decisions/ADR-004-rust-tauri.md)）。
-
-```
-usuyo/
-  cmd/usuyo/            # CLI 入口（也负责启动 daemon 和 mcp 子命令）
-  internal/
-    core/                # 内容包读写、生命周期状态机、去重
-    index/               # bleve 索引（可重建）
-    jobs/                # 任务队列（fetch / normalize / ocr / asr / embed）
-    adapter/             # 适配器协议 + 运行器（子进程）
-    mcp/                 # MCP 服务
-    api/                 # 本地 HTTP/JSON-RPC（给桌面壳、扩展、手机桥）
-    normalize/           # 通用正文抽取（go-readability 等）
-  pkg/contract/          # 对外契约类型（manifest、适配器输入输出），MIT
-  adapters/              # 仅放参考适配器与 SDK 示例，不放平台抓取逻辑；平台适配器在社区仓库
-  apps/desktop/          # MyGo 桌面壳；apps/desktop/web 为 TS 前端（M3 才启用）
-  docs/
-  Makefile
-```
-
-<a id="6-标签规则"></a>
-<a id="22-标签规则"></a>
-### 2.2 标签规则
-
-v0，第 2 层重写前保留。Agent 改标签走 `set-tags` 提议（[§1.5.1](#151-op-词表)）；忽略过的建议记在 `tags.dismissed`。
-
-- `platform`：原样保留，不编辑。
-- `engine`：模型/规则建议，带来源与置信度；只显示给用户确认用。
-- `user`：用户确认或手打；Agent 通过 propose/apply 进入这里。
-- 搜索三种都索引；画布默认只显示 `user`。
-
-<a id="7-去重"></a>
-<a id="23-去重"></a>
-### 2.3 去重
-
-v0，第 2 层重写前保留。11-11 代码只做了身份层（同一身份同一条）；内容层的 SimHash、pHash 还没做，`sameAs` 现在只在合并时维护。身份层改照 [§0.4](#04-id)：同一身份就是同一个 `itemId`，web 链接也有身份；你说「不是」的记在 `notSameAs`；并发照 [§0.6](#06-文本和文件)「同一条只有一个写方」。
-
-1. 身份层：适配器实现 `canonicalize(url) -> identity`（展开短链、去追踪参数、提取平台 ID）。同身份不新建条目，追加快照；新快照更完整则升级 `completeness`。无平台 ID 的条目不参与身份层。
-2. 内容层：文本 SimHash（海明距离 ≤ 3）、图片 pHash、视频时长 + 关键帧 pHash。命中写入 `sameAs`，不自动合并。
-3. 用户裁决：合并 / 保持 / 忽略。
-
-并发：条目创建对 identity 加唯一约束（index 层）+ 任务队列按 identity 去重。
-
-<a id="9-clim0"></a>
-<a id="24-clim0"></a>
-### 2.4 CLI（M0）
-
-v0，第 2 层重写前保留。退出码和 `--json` 的错误照 [§0.3](#03-错误模型)。11-11 代码（`crates/usuyo-cli`）有 `init`、`add`、`get`、`search`、`reindex`、`daemon`，怎么找守护进程见[本机接口](#本机接口第-2-层11-11-照代码)；`tag`、`jobs`、`mcp` 还没有。
-
-```
-usuyo init [dir]                 # 建库
-usuyo add <url|file|->           # 收下；立即返回条目 id，后台获取
-usuyo get <id> [--layer original|derived|notes|all]
-usuyo search <query> [--src douyin] [--in asr] [--kind video] [--json]
-usuyo tag <id> --add a,b --rm c
-usuyo jobs [--retry <id>]
-usuyo reindex
-usuyo daemon                     # 常驻：任务队列 + 本地 API + 文件监听
-usuyo mcp                        # stdio MCP 服务（转发到 daemon，daemon 不在则内嵌）
-```
-
-<a id="10-mcp-工具m0"></a>
-<a id="25-mcp-工具m0"></a>
-### 2.5 MCP 工具（M0）
-
-v0，第 2 层重写前保留，11-11 还没实现。op 照 [§1.5.1](#151-op-词表)：`add_tag`、`rm_tag` 是 `set-tags`，`set_thread` 是 `set-topics`；另加收下工具（[A3 A](PRD.md#78-agent)，[§1.6](#16-改动记录)）；私密和笔记见 [§1.3](#13-条目的四个维度)。撤销照 [§1.6](#16-改动记录)。
-
-- `search(query, filters) -> [{id, title, hitLayer, snippet, untrusted:true, source}]`
-- `get_item(id, layers=[original|derived|notes])`
-- `propose_changes(changes:[{itemId, op:"add_tag"|"rm_tag"|"set_thread", value}]) -> changesetId`
-- `apply_changeset(changesetId)`（需用户确认策略：M0 为 CLI 交互确认）
-- `undo_changeset(changesetId)`
-- 不提供：delete、export、open_url。
-- 标记 `private: true` 的条目和 `notes.md` 默认不返回。
-
-按 MCP 2026-07-28 规范实现为无状态；changesetId 为显式句柄。
-
-<a id="11-索引"></a>
-<a id="26-索引"></a>
-### 2.6 索引
-
-v0，第 2 层重写前保留。索引目录在按机器的 `libraries/<libraryId>/index/`（[§1.1](#11-目录树)）。下面一段是历史：11-11 起索引是 tantivy（`crates/usuyo-index`），分词、拼音和字段以那个 crate 为准，删了能从资料库重建（`usuyo reindex`）。
-
-bleve（纯 Go）。中文用 CJK 双字分析器（解决二字词），同时索引拼音字段（go-pinyin）。字段：title、body、ocr、asr、vision、summary、notes、tags.*、platform、kind、author、publishedAt。向量检索 M1 再加（候选：bleve vector 或 sqlite-vec）。
-
-<a id="附和别的文档对不上的-18-处"></a>
-<a id="8-适配器协议-v0"></a>
-<a id="12-m0-范围"></a>
-<a id="附v0-各节和-18-处的去向"></a>
-## 附：v0 各节和 18 处的去向
-
-v0 的「1. 仓库布局」「6. 标签规则」「7. 去重」「9. CLI」「10. MCP 工具」「11. 索引」留在 [§2](#2-留着的-v0第-2-层重写前保留)；「2. 资料库目录」「3. manifest.json」「4. content.md」「5. derived/」由第 1 层取代（[§1.1](#11-目录树)、[§1.2.1](#121-manifestjson-v1)、[§1.2.3](#123-contentmd-和各栏)、[§1.2.2](#122-raw-和-derived)）；「8. 适配器协议 v0」删掉，由[插件协议 v1](protocol/README.md) 取代，v0 没发布过，不做兼容，清单见[协议 §2](protocol/manifest.md#2-清单)；「12. M0 范围」删掉，不再分 M0，第一版范围见 [PRD §12](PRD.md#12-开发顺序)，feature 001 重写（[总纲](BUILD.md#5-功能线)）。
-
-v0 附录记的 18 处对不上：
-
-| # | 哪处 | 归哪 | 结论 |
-|---|---|---|---|
-| 1 | 本机接口 | 第 2 层 | 11-11 照代码先写了一节：[本机接口](#本机接口第-2-层11-11-照代码) |
-| 2 | 知识层目录 | 这里了结 | `topics/`、`cards/`、`drafts/`；`set_thread` 换成 `set-topics` |
-| 3 | 画布几个 | 这里一半 | 留 `canvas/`，个数等 [M7](PRD.md#76-地图) |
-| 4 | 任务状态 | 这里了结 | 搬进本机 `jobs.db`，资料库只看 `derived/` |
-| 5 | 注意力 | 这里了结 | `attention.json` 去掉，只记「打开过」 |
-| 6 | 存在和私密 | 这里了结 | `state` 三个值，加 `private` |
-| 7 | 通用网页获取 | 插件协议 | 预装照[协议 §8.4](protocol/distribution.md#84-三种来源)；没装时宿主自己算 `web:` 身份（[§0.4](#04-id)） |
-| 8 | MCP 不可信标记 | 第 2 层 | — （11-11 MCP 还没做） |
-| 9 | 配置目录 | 这里了结 | 按机器目录；库里只留库级的 `settings.json` |
-| 10 | 本机接口的令牌 | 这里了结 | 11-11 代码：按机器目录的 `api-token` 存令牌本身，每次启动换，见 [§1.1](#11-目录树) 和[本机接口](#本机接口第-2-层11-11-照代码) |
-| 11 | `.meta.json` | 这里了结 | [§1.2.2](#122-raw-和-derived)；[协议 §4.2](protocol/transform-export.md#42-转换的-run) 已跟着改 |
-| 12 | 快照字段 | 这里了结 | [§1.2.1](#121-manifestjson-v1)；`additionalProperties` 见 [§0.2](#02-版本与兼容) |
-| 13 | `missing` | 这里了结 | 用 `outputs` 词表 |
-| 14 | 导出身份键和导出记录 | 这里了结 | `usuyo_id` 一致；导出记录搬到按机器目录，[协议 §4.4](protocol/transform-export.md#44-导出的-run-与-readback) 已跟着改 |
-| 15 | 插件来源怎么显示 | 插件协议 | [协议 §8.4](protocol/distribution.md#84-三种来源) |
-| 16 | GitHub App | 插件协议 | [O3](BUILD.md#7-只有用户能答的和能验的) 已定 A；部署写进 ADR-003 和协议，见 [总纲](BUILD.md#012-插件的安装和分发) |
-| 17 | 改动提议多久作废 | 这里了结 | 不作废（[§1.10 第 6 条](#110-要你看一眼)） |
-| 18 | 插件清单是 v0 还是 v1 | 第 3 层 | `crates/usuyo-contract`（原 `pkg/contract`）只留资料库类型；插件协议的类型 11-11 在 `crates/usuyo-plugin`，`crates/usuyo-plugin-kit` 转出给插件用，schema 文件还没有 |

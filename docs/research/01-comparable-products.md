@@ -1,7 +1,7 @@
 <a id="01--同类与相邻产品调研"></a>
 # 01 · 同类与相邻产品调研
 
-状态：草案 · 2026-10-21 · 2026-11-03 审过：[§1](#1-产品分述)、[§2](#2-对比表)、[§3](#3-三个重点问题)、[§5](#5-歇存刻意不做的) 的事实仍可参考；[§4](#4-对歇存的启示) 的启示 1、8、17 已进 [open-decisions P3](../PRD.md#72-获取插件)、[ADR-002](../decisions/ADR-002-frontend-stack.md)、[E1](../PRD.md#79-导出与互通)；启示 11–14 的参考适配器、M0–M3 排期和「放下」已作废；文中指向 [SPEC §8](../SPEC.md#8-适配器协议-v0) 的是已废的 v0，以 [插件协议](../protocol/README.md) 为准。
+状态：草案 · 2026-10-21 · 2026-11-03 审过：[§1](#1-产品分述)、[§2](#2-对比表)、[§3](#3-三个重点问题)、[§5](#5-歇存刻意不做的) 的事实仍可参考；[§4](#4-对歇存的启示) 的启示 1、8、17 已进 [open-decisions P3](../PRD.md#72-获取插件)、[ADR-002](../decisions/ADR-002-frontend-stack.md)、[E1](../PRD.md#79-导出与互通)；启示 11–14 的参考适配器、M0–M3 排期和「放下」已作废；文中指向 [SPEC §8](../protocol/README.md) 的是已废的 v0，以 [插件协议](../protocol/README.md) 为准。
 
 > 里程碑口径已废弃：项目改为按完整功能一次性开发。文中的 M0–M3 只指写作时 SPEC 的分段，请按功能面阅读。
 
@@ -31,7 +31,7 @@
 - AI 与 Agent：OpenAI 或本地 Ollama 打标/摘要；REST API；CLI（`@karakeep/cli`）；MCP server `@karakeep/mcp`（npx 或 Docker，`KARAKEEP_API_KEY`），文档列出 21 个工具，含 `delete-bookmark`、`delete-list`、`delete-tag`；0.33.1 发布说明称 MCP 从 8 个工具增至 29 个（文档与发布说明口径不一致，待核实）；0.34 升级到 MCP v2 SDK，"The CLI now bundles the official Karakeep skill"，Skill 可用 `npx skills add karakeep-app/karakeep` 安装。来源：<https://docs.karakeep.app/integrations/mcp>、<https://docs.karakeep.app/integrations/agentic-skills>、<https://docs.karakeep.app/integrations/command-line>。
 - 许可证：AGPL-3.0。活跃度：v0.34.0 发布于 2026-10-17，仓库最近推送 2026-10-19，约 29.9k stars。来源：<https://github.com/karakeep-app/karakeep/releases>。
 - 定价：自托管免费；官方托管版 Karakeep Cloud（cloud.karakeep.app）由团队运营，官方文档页未列价格；第三方称 Pro $4/月，待核实。来源：<https://docs.karakeep.app/installation/cloud-hosting>、<https://aisotools.com/pricing/karakeep>。
-- 对歇存的启示：(1) 它是开源自托管里 Agent 接口最完整的，MCP 直接暴露删除且无确认环节，和歇存 [SPEC §10](../SPEC.md#10-mcp-工具m0)「不提供 delete」形成直接对照；(2) 「CLI 捆绑官方 Skill + skills.sh 分发」是比 MCP 更轻的接入方式，值得歇存在 M0 就写一份 `SKILL.md`；(3) 「搜索依赖外部服务、未配置则禁用」「默认只存可读文本、整页归档可选」是歇存反向选择的两点（bleve 内嵌、raw 永远保留）。
+- 对歇存的启示：(1) 它是开源自托管里 Agent 接口最完整的，MCP 直接暴露删除且无确认环节，和歇存 [SPEC §10](../BUILD.md#006-agent)「不提供 delete」形成直接对照；(2) 「CLI 捆绑官方 Skill + skills.sh 分发」是比 MCP 更轻的接入方式，值得歇存在 M0 就写一份 `SKILL.md`；(3) 「搜索依赖外部服务、未配置则禁用」「默认只存可读文本、整页归档可选」是歇存反向选择的两点（bleve 内嵌、raw 永远保留）。
 
 <a id="readwise-reader"></a>
 ### Readwise Reader
@@ -139,7 +139,7 @@
 - AI 与 Agent：REST API（ALPHA）、Python API（BETA）；无官方 MCP。
 - 许可证：MIT。活跃度：v0.9.73 发布于 2026-10-06，仓库 2026-10-20 推送，约 28.8k stars。来源：<https://github.com/ArchiveBox/ArchiveBox/releases>。
 - 定价：免费。
-- 对歇存的启示：这是现有产品里最接近 [SPEC §2](../SPEC.md#2-资料库目录真相源)「目录即真相、索引可重建」的实现，三条做法可以直接吸收：(1) 每个快照目录自带 `index.json`，目录本身可脱离数据库被识别——对应歇存 `manifest.json`；(2) rescan 把「数据库里没有的目录」当作新发现而不是错误，冲突报告不覆盖——`xiecun reindex` 应照此定义（[SPEC §11](../SPEC.md#11-索引)、验收 5）；(3) 多抽取器并存写同一目录——对应歇存 `raw/` + `derived/` 分层。它也说明了代价：无头浏览器、WARC、yt-dlp 一起上，运行时很重，这是歇存把重计算放 sidecar（[ADR-001](../decisions/ADR-004-rust-tauri.md)）的理由。
+- 对歇存的启示：这是现有产品里最接近 [SPEC §2](../SPEC.md#2-资料库目录真相源)「目录即真相、索引可重建」的实现，三条做法可以直接吸收：(1) 每个快照目录自带 `index.json`，目录本身可脱离数据库被识别——对应歇存 `manifest.json`；(2) rescan 把「数据库里没有的目录」当作新发现而不是错误，冲突报告不覆盖——`xiecun reindex` 应照此定义（[SPEC §11](../BUILD.md#3-现在做到哪)、验收 5）；(3) 多抽取器并存写同一目录——对应歇存 `raw/` + `derived/` 分层。它也说明了代价：无头浏览器、WARC、yt-dlp 一起上，运行时很重，这是歇存把重计算放 sidecar（[ADR-001](../decisions/ADR-004-rust-tauri.md)）的理由。
 
 <a id="singlefile"></a>
 ### SingleFile
@@ -174,7 +174,7 @@
 - AI 与 Agent：Zotero 7 起提供本地 HTTP API（`http://localhost:23119/api/users/0/items`），需开启「允许本机其他应用与 Zotero 通信」；Zotero 10.0 加入 "Local API write support"；只在桌面 GUI 运行时可用，无 headless 模式（论坛有功能请求）。社区 MCP `54yyyu/zotero-mcp` 约 5.5k stars，v0.15.1 发布于 2026-10-16。来源：<https://groups.google.com/g/zotero-dev/c/ElvHhIFAXrY/m/fA7SKKwsAgAJ>、<https://www.zotero.org/support/changelog>、<https://forums.zotero.org/discussion/132184/>、<https://github.com/54yyyu/zotero-mcp>。
 - 许可证：AGPL-3.0。活跃度：Zotero 10.0.6 发布于 2026-10-07（Zotero 8 于 2026-01-22 发布，之后 9、10 在同年推出）。来源：<https://www.zotero.org/support/changelog>、<https://forums.zotero.org/discussion/comment/508488>。
 - 定价：软件免费；云存储 300 MB 免费、2 GB $20/年、6 GB $60/年、无限 $120/年。来源：<https://www.zotero.org/storage>。
-- 对歇存的启示：(1) 「全文索引不备份、可重建；主数据与附件必须整目录备份」是对 [SPEC §2](../SPEC.md#2-资料库目录真相源) `.xiecun/index/` 可删与 `items/` 不可删的直接佐证；(2) 本地 API 绑定 GUI 进程是长期痛点，歇存 `xiecun daemon` 独立于桌面壳、`xiecun mcp` 在 daemon 不在时内嵌运行（[SPEC §9](../SPEC.md#9-clim0)）避开了这个坑。
+- 对歇存的启示：(1) 「全文索引不备份、可重建；主数据与附件必须整目录备份」是对 [SPEC §2](../SPEC.md#2-资料库目录真相源) `.xiecun/index/` 可删与 `items/` 不可删的直接佐证；(2) 本地 API 绑定 GUI 进程是长期痛点，歇存 `xiecun daemon` 独立于桌面壳、`xiecun mcp` 在 daemon 不在时内嵌运行（[SPEC §9](../BUILD.md#1-用户定下的做法)）避开了这个坑。
 
 <a id="eagle"></a>
 ### Eagle
@@ -186,7 +186,7 @@
 - AI 与 Agent：本地 HTTP API `http://localhost:41595/`（Eagle 必须在运行）；2026 年推出 Eagle Skill / MCP 插件（Plugin Center 搜 "MCP" 安装），AI Agent 可扫描标签、建文件夹、合并/删除/翻译标签、改标题描述、从网页收图，执行前 "shows you a confirmation list first"，"Review it, confirm, done"；Eagle 5.0 预告以 AI 整理为主题。来源：<https://api.eagle.cool/>、<https://eagle.cool/blog/post/eagle-plugin-mcp-skill>、<https://en.eagle.cool/blog/post/eagle5-teaser>。
 - 许可证：闭源。活跃度：官网显示 v4.0.0 Build 23（2026-04-01）。
 - 定价：$34.95 一次性（2024-11-01 起，此前 $29.95），加设备 $17.47，30 天试用，"No subscription needed"。来源：<https://eagle.cool/blog/post/price-adjustment-notice-2024>。
-- 对歇存的启示：(1) 商业软件已经验证「每条一个文件夹 + metadata.json」在十万级素材下可用，和 [SPEC §2](../SPEC.md#2-资料库目录真相源) `items/<id>/manifest.json` 同构，歇存可参考其字段命名；(2) MCP 执行前「确认清单」是业界最接近歇存 propose → confirm → apply 的实现，但它没有撤销与日志，歇存多出的 `undo_changeset` 与 journal 是实质差异（[SPEC §10](../SPEC.md#10-mcp-工具m0)）；(3) API 依赖 GUI 运行，同 Zotero。
+- 对歇存的启示：(1) 商业软件已经验证「每条一个文件夹 + metadata.json」在十万级素材下可用，和 [SPEC §2](../SPEC.md#2-资料库目录真相源) `items/<id>/manifest.json` 同构，歇存可参考其字段命名；(2) MCP 执行前「确认清单」是业界最接近歇存 propose → confirm → apply 的实现，但它没有撤销与日志，歇存多出的 `undo_changeset` 与 journal 是实质差异（[SPEC §10](../BUILD.md#006-agent)）；(3) API 依赖 GUI 运行，同 Zotero。
 
 <a id="anytype"></a>
 ### Anytype
@@ -198,7 +198,7 @@
 - AI 与 Agent：本地 REST API（默认 `http://127.0.0.1:31009`，API key 在应用内生成，带 `Anytype-Version` 头）；官方 MCP `anyproto/anytype-mcp`（MIT，由 OpenAPI 规范自动转成 MCP 工具，覆盖搜索、空间、对象、列表、属性、类型），v2.0.1 发布于 2026-09-19，约 534 stars；开发者门户 v2 预览称 "objects as editable JSON documents, built for agents and humans"。来源：<https://github.com/anyproto/anytype-mcp>、<https://developers.anytype.io/>。
 - 许可证：Any Source Available License 1.0——"only (a) for Non-Commercial Use, or (b) for Commercial Use in Allowed Networks"，源可用但不是 OSI 开源。来源：<https://github.com/anyproto/anytype-ts/blob/main/LICENSE.md>。活跃度：anytype-ts v0.57.4 发布于 2026-10-03。
 - 定价：官方定价页为 JS 渲染，本次未抓到；第三方数据互相矛盾（免费档 100 MB 至 1 GB、付费 $5–$19/月不一），待核实。来源：<https://toolradar.com/tools/anytype>、<https://checkthat.ai/brands/anytype/pricing>。
-- 对歇存的启示：(1) 「本地 HTTP API → 用 OpenAPI 自动生成 MCP」让 API 与 MCP 永远一致，歇存 [SPEC §9](../SPEC.md#9-clim0) 的本地 API 与 [§10](../SPEC.md#10-mcp-工具m0) MCP 可以考虑同源生成；(2) 源可用许可是歇存不走的路（[PRD §4.7](../PRD.md#4-原则) AGPL-3.0 + MIT）；(3) 「本地优先但文件只是导出物」与歇存「文件即真相」是两种不同的本地优先，歇存应在 PRD 里把这个区别说清。
+- 对歇存的启示：(1) 「本地 HTTP API → 用 OpenAPI 自动生成 MCP」让 API 与 MCP 永远一致，歇存 [SPEC §9](../BUILD.md#1-用户定下的做法) 的本地 API 与 [§10](../BUILD.md#006-agent) MCP 可以考虑同源生成；(2) 源可用许可是歇存不走的路（[PRD §4.7](../PRD.md#4-原则) AGPL-3.0 + MIT）；(3) 「本地优先但文件只是导出物」与歇存「文件即真相」是两种不同的本地优先，歇存应在 PRD 里把这个区别说清。
 
 <a id="mymind"></a>
 ### mymind
@@ -211,7 +211,7 @@
 - 许可证：闭源。活跃度：持续运营（定价页在线）。
 - 定价：Student of Life $7.99/月或 $79/年；Mastermind $12.99/月或 $129/年；The Bookmarker $4.99/月；"We don't run ads"，"We will never sell your data"。来源：<https://mymind.com/pricing>。
 - 注意力设计：这是对象里把「少」说得最直接的："Folders are dead"、"No need to file it, label or even tag it"，宣言明确不做 social features、vanity metrics、social pressure、collaboration、ads，"Nobody can see what you save to your mind"。来源：<https://mymind.com/>。
-- 对歇存的启示：(1) 「不要求命名、分类、评价」的收下体验（[PRD §3](../PRD.md) 收下）在它这里已被验证为卖点；(2) 但它用「AI 替你归类」换取「不整理」，歇存选择「engine 标签只建议、不替用户决定」（[PRD §6](../PRD.md#6-不做)、[SPEC §6](../SPEC.md#6-标签规则)），这是刻意分歧；(3) 云端、无 API、导出受浏览器限制——所有权弱，是歇存不采纳的部分。
+- 对歇存的启示：(1) 「不要求命名、分类、评价」的收下体验（[PRD §3](../PRD.md) 收下）在它这里已被验证为卖点；(2) 但它用「AI 替你归类」换取「不整理」，歇存选择「engine 标签只建议、不替用户决定」（[PRD §6](../PRD.md#6-不做)、[SPEC §6](../SPEC.md#121-manifestjson-v1)），这是刻意分歧；(3) 云端、无 API、导出受浏览器限制——所有权弱，是歇存不采纳的部分。
 
 <a id="arena"></a>
 ### Are.na
@@ -235,7 +235,7 @@
 - AI 与 Agent：官方远程 MCP `https://mcp.api.fabric.so/mcp`（OAuth 自动），文档列出的工具以创建为主（bookmarks、folders、memories、notes、tasks），支持 Claude Code / Claude Desktop / Cursor / Codex / VS Code / ChatGPT。来源：<https://fabric.so/guide/ai-tools/MCP-setup>。
 - 许可证：闭源。活跃度：持续运营。
 - 定价：Plus $8/月（年付 $96）50 GB；Pro $18/月（年付 $216）250 GB；Max $54/月（年付 $648）1 TB；第三方站点列出的价格与官网不一致，以官网为准。来源：<https://fabric.so/pricing-and-plans-for-individuals>。
-- 对歇存的启示：「MCP 只给写入口、不给读」是一种收口方式，但方向与歇存相反——歇存给 Agent 的是读与提议，不是直接写（[SPEC §10](../SPEC.md#10-mcp-工具m0)）。
+- 对歇存的启示：「MCP 只给写入口、不给读」是一种收口方式，但方向与歇存相反——歇存给 Agent 的是读与提议，不是直接写（[SPEC §10](../BUILD.md#006-agent)）。
 
 <a id="recall"></a>
 ### Recall
@@ -260,7 +260,7 @@
 - AI 与 Agent：AI 摘要、AI 问答、AI 语音、AI 定时报告（每日 8:00 推送到 Cubox 邮箱）。官方 Cubox CLI（`OLCUBO/cubox-cli`，MIT，v1.0.10 发布于 2026-08-27，约 65 stars）配 Skill，面向 Claude Code / Codex / Cursor：批量保存、按文件夹/标签/星标/已读/标注/时间筛选与 RAG 搜索、读取解析后的 Markdown 正文与 AI 解读、读标注、改星标/已读/归档/移动/打标/改标题描述；API key 在应用内生成，文档特别写 "请不要把 Key 粘贴到 AI Agent 对话里"。文档未提 MCP。来源：<https://help.cubox.pro/ai/agents/>、<https://github.com/OLCUBO/cubox-cli>。
 - 许可证：闭源（CLI MIT）。活跃度：2026 年持续更新。
 - 定价：免费版 200 篇容量、每篇 3 个标注；Pro ¥98/年（无限收藏与标注、快照存档解析、嵌套收藏夹，AI 仅有限试用）；Pro+AI ¥198/年（每月 2000 AI 积分，14 天试用）。来源：<https://cubox.pro/pricing/>。
-- 对歇存的启示：(1) 公众号最可靠的入口是「用户在微信里主动转发」，而不是后台接口——歇存没有云账号接不了服务号，等价物是「手机 → 桌面投递」里的文件传输助手兜底（[PRD §5 收集入口](../PRD.md#收集入口)）；(2) 它选择 CLI + Skill 而非 MCP 对接 Agent，且把 key 安全写进文档，歇存 M0 的 stdio MCP 不需要 key，但本地 HTTP API 的 token 文档可照此写（[SPEC §9](../SPEC.md#9-clim0)）；(3) AI 定时报告、每日推送是「制造注意力」的典型，歇存不做（[PRD §6](../PRD.md#6-不做)）。
+- 对歇存的启示：(1) 公众号最可靠的入口是「用户在微信里主动转发」，而不是后台接口——歇存没有云账号接不了服务号，等价物是「手机 → 桌面投递」里的文件传输助手兜底（[PRD §5 收集入口](../PRD.md#收集入口)）；(2) 它选择 CLI + Skill 而非 MCP 对接 Agent，且把 key 安全写进文档，歇存 M0 的 stdio MCP 不需要 key，但本地 HTTP API 的 token 文档可照此写（[SPEC §9](../BUILD.md#1-用户定下的做法)）；(3) AI 定时报告、每日推送是「制造注意力」的典型，歇存不做（[PRD §6](../PRD.md#6-不做)）。
 
 <a id="简悦"></a>
 ### 简悦
@@ -305,7 +305,7 @@
 - AI 与 Agent：面向 Agent 设计——`opencli list` 返回分页能力清单，四个 Skill（`opencli-browser`、`opencli-usage` 等）用 `npx skills add jackwener/opencli` 安装；README 未提 MCP。
 - 许可证：Apache-2.0。活跃度：v2.0.2 发布于 2026-10-20，约 30.5k stars。
 - 定价：免费。
-- 对歇存的启示：(1) 它是 [SPEC §8](../SPEC.md#8-适配器协议-v0) 适配器 `method: browser` 与 `capabilities: [list]` 的现成上游，M2「收藏列表适配器」可以是一个很薄的 OpenCLI 包装；(2) 「复用登录态、不导出 Cookie」是中文社区对边界的通行表达，歇存 `adapter.yaml` 的 `requires.cookie` 字段应能区分「none / 浏览器会话 / 用户粘贴」三档；(3) 平台命令覆盖参差（B 站有收藏、小红书没有），印证 [PRD §9](../PRD.md#9-风险)「平台接口随时失效」，适配器必须按能力声明而非按平台承诺。
+- 对歇存的启示：(1) 它是 [SPEC §8](../protocol/README.md) 适配器 `method: browser` 与 `capabilities: [list]` 的现成上游，M2「收藏列表适配器」可以是一个很薄的 OpenCLI 包装；(2) 「复用登录态、不导出 Cookie」是中文社区对边界的通行表达，歇存 `adapter.yaml` 的 `requires.cookie` 字段应能区分「none / 浏览器会话 / 用户粘贴」三档；(3) 平台命令覆盖参差（B 站有收藏、小红书没有），印证 [PRD §9](../PRD.md#9-风险)「平台接口随时失效」，适配器必须按能力声明而非按平台承诺。
 
 <a id="中文平台个人备份工具"></a>
 ### 中文平台个人备份工具
@@ -319,7 +319,7 @@
 - 个人收藏夹导出 Skill（逸尘，X 帖 2026-07-29）：把 X / 抖音 / 小红书收藏导出整合为一个 Skill，做法是复用已登录的 Chrome 会话、滚动收藏页、从 DOM 提取链接去重、不导出 Cookie。来源：<https://x.com/gengdaJ/status/2082277952700788914>。
 - MediaCrawler 等多平台采集工具偏向评论与数据分析，不是个人收藏备份，这里不展开。来源：<https://cloud.tencent.com/developer/article/2550627>。
 
-对歇存的启示：(1) 这一组全部依赖登录态或 Cookie、全部带请求延时与风控提示、公众号一条已因上游接口关闭而终止——[PRD §9](../PRD.md#9-风险) 的风险不是假设，适配器协议里的 `requires.cookie`、`limits`、`health` 字段（[SPEC §8](../SPEC.md#8-适配器协议-v0)）和同步「遇风控自动退避并告知」（[PRD §5](../PRD.md#5-功能范围)）都对得上实际；(2) XHS-Downloader 已提供 MCP 模式，说明社区适配器以 `method: mcp` 对接是可行的；(3) 「抖喜欢」式的浏览器扩展（本地文件夹、无服务器）是最贴近歇存原则的形态，M1「抖音最难」的参考适配器可以先做扩展路线而非接口路线（[PRD §8](../PRD.md#8-里程碑)）。
+对歇存的启示：(1) 这一组全部依赖登录态或 Cookie、全部带请求延时与风控提示、公众号一条已因上游接口关闭而终止——[PRD §9](../PRD.md#9-风险) 的风险不是假设，适配器协议里的 `requires.cookie`、`limits`、`health` 字段（[SPEC §8](../protocol/README.md)）和同步「遇风控自动退避并告知」（[PRD §5](../PRD.md#5-功能范围)）都对得上实际；(2) XHS-Downloader 已提供 MCP 模式，说明社区适配器以 `method: mcp` 对接是可行的；(3) 「抖喜欢」式的浏览器扩展（本地文件夹、无服务器）是最贴近歇存原则的形态，M1「抖音最难」的参考适配器可以先做扩展路线而非接口路线（[PRD §8](../PRD.md#8-里程碑)）。
 
 <a id="slax-reader-与-linkwarden"></a>
 ### Slax Reader 与 Linkwarden
@@ -415,7 +415,7 @@
 | XHS-Downloader | API + MCP 模式 | 作品信息 | 下载 | — | — | 无 |
 | Pinboard / Wallabag / Linkding / ArchiveBox | REST | 是 | 是 | 是 | 无 | 无 |
 
-三个共同缺口，正是歇存 [SPEC §10](../SPEC.md#10-mcp-工具m0) 的差异点（以本次查阅的官方文档为限，未实测 MCP 响应）：(1) 没有文档提到给返回内容打「不可信 / 来源」信封；(2) 未见「提议 → 确认 → 应用 → 整批撤销」的变更集，最接近的 Eagle 只有执行前确认；(3) 删除普遍直接暴露给 Agent，只有 Readwise MCP（文档不可删，REST API 仍可删）和 Raindrop（两阶段）做了收口。另一个趋势：Karakeep、Cubox、OpenCLI 都在 MCP 之外（或之前）用 **CLI + SKILL.md** 对接 Coding Agent，分发走 skills.sh。
+三个共同缺口，正是歇存 [SPEC §10](../BUILD.md#006-agent) 的差异点（以本次查阅的官方文档为限，未实测 MCP 响应）：(1) 没有文档提到给返回内容打「不可信 / 来源」信封；(2) 未见「提议 → 确认 → 应用 → 整批撤销」的变更集，最接近的 Eagle 只有执行前确认；(3) 删除普遍直接暴露给 Agent，只有 Readwise MCP（文档不可删，REST API 仍可删）和 Raindrop（两阶段）做了收口。另一个趋势：Karakeep、Cubox、OpenCLI 都在 MCP 之外（或之前）用 **CLI + SKILL.md** 对接 Coding Agent，分发走 skills.sh。
 
 <a id="4-对歇存的启示"></a>
 ## 4. 对歇存的启示
@@ -423,22 +423,22 @@
 每条标明影响的 PRD / SPEC 节。
 
 1. **导入格式清单可以现在定下**：Pocket CSV（ZIP）、Omnivore ZIP（`metadata_*.json` + `contents/*.html` + 高亮 Markdown）、Netscape HTML（浏览器、Raindrop、Linkding、Karakeep、Cubox、Pinboard）、Readwise CSV 与「Full Files and Articles」ZIP、Instapaper CSV、Wallabag JSON、wechat-article-exporter 的 html/json/md。其中 Omnivore ZIP 和 Readwise ZIP 带正文，导入时完整度可直接到 `partial` 或 `full`；其余只有链接，停在 `link`。→ [PRD §5 导入方式](../PRD.md#导入方式)、[SPEC §3](../SPEC.md#3-manifestjson) `completeness`。
-2. **raw 快照采用 SingleFile HTML**：linkding、ArchiveBox、Karakeep 都收这个格式，歇存浏览器扩展可以就是 SingleFile → 本地 API，不自写序列化。→ [SPEC §2](../SPEC.md#2-资料库目录真相源) `raw/`、[§8](../SPEC.md#8-适配器协议-v0) `outputs: raw-html`、[PRD §5 收集入口](../PRD.md#收集入口)。
-3. **`xiecun reindex` 按 ArchiveBox rescan 的语义定义**：遍历 `items/`，把索引里没有的目录当新发现，身份冲突报告不覆盖，索引目录可整体删除。→ [SPEC §11](../SPEC.md#11-索引)、[§12](../SPEC.md#12-m0-范围) 验收 5。
+2. **raw 快照采用 SingleFile HTML**：linkding、ArchiveBox、Karakeep 都收这个格式，歇存浏览器扩展可以就是 SingleFile → 本地 API，不自写序列化。→ [SPEC §2](../SPEC.md#2-资料库目录真相源) `raw/`、[§8](../protocol/README.md) `outputs: raw-html`、[PRD §5 收集入口](../PRD.md#收集入口)。
+3. **`xiecun reindex` 按 ArchiveBox rescan 的语义定义**：遍历 `items/`，把索引里没有的目录当新发现，身份冲突报告不覆盖，索引目录可整体删除。→ [SPEC §11](../BUILD.md#3-现在做到哪)、[§12](../BUILD.md#6-依赖顺序) 验收 5。
 4. **manifest.json 对照 Eagle metadata.json 补齐只读字段**：Eagle 的 `btime / mtime / palettes / annotation` 说明「每条一个 JSON」在十万级规模可用；歇存已有的字段够用，不需要加，但可以把「目录名创建后不变」写成与 Eagle 相同的保证。→ [SPEC §2](../SPEC.md#2-资料库目录真相源)、[§3](../SPEC.md#3-manifestjson)。
-5. **MCP 不提供 delete 的决定保持**：Karakeep 直接给 `delete-bookmark`，Raindrop 做两阶段，Readwise MCP 让文档只能归档（其 REST API 仍有删除）——业界在收口但没收完。歇存更进一步：Agent 没有删除，用户删除也先进 `.trash/` 30 天。→ [SPEC §10](../SPEC.md#10-mcp-工具m0)、[§2](../SPEC.md#2-资料库目录真相源) `.trash/`、[PRD §5 Agent](../PRD.md#agent)。
-6. **propose / apply / undo 是独有的，值得当卖点写**：Eagle 的确认清单是最接近的，但没有 journal 和整批撤销。→ [PRD §4 原则 6](../PRD.md#4-原则)、[SPEC §10](../SPEC.md#10-mcp-工具m0)。
-7. **M0 就写一份 SKILL.md，和 MCP 并行**：Karakeep CLI 捆绑官方 Skill、Cubox 用 CLI + Skill 不做 MCP、OpenCLI 用 `npx skills add` 分发。对 Claude Code / Codex 用户，Skill 比 MCP 配置更轻。→ [PRD §4 原则 6](../PRD.md#4-原则)、[PRD §8 M0](../PRD.md#8-里程碑)、[SPEC §9](../SPEC.md#9-clim0)。
-8. **本地 API 与 MCP 同源生成**：Anytype 用 OpenAPI 规范自动生成 MCP 工具，保证两者一致。歇存 [SPEC §9](../SPEC.md#9-clim0) 本地 HTTP API 与 [§10](../SPEC.md#10-mcp-工具m0) MCP 若共用一份契约定义，可避免双写。→ [SPEC §9](../SPEC.md#9-clim0)、[§10](../SPEC.md#10-mcp-工具m0)；可写成 ADR。
-9. **daemon 独立于 GUI 的决定保持**：Zotero、Eagle、Anytype 的本地 API 都要求桌面应用在前台运行，是用户抱怨最多的点之一。→ [SPEC §9](../SPEC.md#9-clim0) `xiecun daemon` / `xiecun mcp` 内嵌回退、[ADR-001](../decisions/ADR-004-rust-tauri.md)。
-10. **搜索不依赖外部服务**：Karakeep「`MEILI_ADDR` 未设则搜索禁用」是反例；bleve 内嵌正确。→ [ADR-001](../decisions/ADR-004-rust-tauri.md)、[SPEC §11](../SPEC.md#11-索引)。
-11. **公众号的「最简」参考适配器定位为「从已打开页面抽取」**：wechat-article-exporter 因上游后台接口被关而终止，Cubox 的入口是用户在微信里主动转发，OpenCLI 的公众号能力是「下载当前文章为 Markdown」。接口路线不可靠，所见即所存最稳。→ [PRD §8 M1](../PRD.md#8-里程碑)、[SPEC §8](../SPEC.md#8-适配器协议-v0)。
-12. **抖音参考适配器先走浏览器扩展路线**：现有工具（XHS-Downloader、DouK-Downloader）全部依赖 Cookie、带请求延时与风控提示，且抖音参数算法「不再维护」；「抖喜欢」式扩展（本机文件夹、无服务器）更贴近歇存原则。→ [PRD §8 M1](../PRD.md#8-里程碑)、[PRD §9](../PRD.md#9-风险)、[SPEC §8](../SPEC.md#8-适配器协议-v0) `requires.cookie` 应区分「none / 浏览器会话 / 用户粘贴」。
-13. **OpenCLI 作为 M2 收藏列表适配器的上游**：B 站 `favorite` 已有；小红书、抖音的收藏列表命令缺失，适配器须按能力声明而非按平台承诺。→ [PRD §8 M2](../PRD.md#8-里程碑)、[SPEC §8](../SPEC.md#8-适配器协议-v0) `capabilities`。
+5. **MCP 不提供 delete 的决定保持**：Karakeep 直接给 `delete-bookmark`，Raindrop 做两阶段，Readwise MCP 让文档只能归档（其 REST API 仍有删除）——业界在收口但没收完。歇存更进一步：Agent 没有删除，用户删除也先进 `.trash/` 30 天。→ [SPEC §10](../BUILD.md#006-agent)、[§2](../SPEC.md#2-资料库目录真相源) `.trash/`、[PRD §5 Agent](../PRD.md#agent)。
+6. **propose / apply / undo 是独有的，值得当卖点写**：Eagle 的确认清单是最接近的，但没有 journal 和整批撤销。→ [PRD §4 原则 6](../PRD.md#4-原则)、[SPEC §10](../BUILD.md#006-agent)。
+7. **M0 就写一份 SKILL.md，和 MCP 并行**：Karakeep CLI 捆绑官方 Skill、Cubox 用 CLI + Skill 不做 MCP、OpenCLI 用 `npx skills add` 分发。对 Claude Code / Codex 用户，Skill 比 MCP 配置更轻。→ [PRD §4 原则 6](../PRD.md#4-原则)、[PRD §8 M0](../PRD.md#8-里程碑)、[SPEC §9](../BUILD.md#1-用户定下的做法)。
+8. **本地 API 与 MCP 同源生成**：Anytype 用 OpenAPI 规范自动生成 MCP 工具，保证两者一致。歇存 [SPEC §9](../BUILD.md#1-用户定下的做法) 本地 HTTP API 与 [§10](../BUILD.md#006-agent) MCP 若共用一份契约定义，可避免双写。→ [SPEC §9](../BUILD.md#1-用户定下的做法)、[§10](../BUILD.md#006-agent)；可写成 ADR。
+9. **daemon 独立于 GUI 的决定保持**：Zotero、Eagle、Anytype 的本地 API 都要求桌面应用在前台运行，是用户抱怨最多的点之一。→ [SPEC §9](../BUILD.md#1-用户定下的做法) `xiecun daemon` / `xiecun mcp` 内嵌回退、[ADR-001](../decisions/ADR-004-rust-tauri.md)。
+10. **搜索不依赖外部服务**：Karakeep「`MEILI_ADDR` 未设则搜索禁用」是反例；bleve 内嵌正确。→ [ADR-001](../decisions/ADR-004-rust-tauri.md)、[SPEC §11](../BUILD.md#3-现在做到哪)。
+11. **公众号的「最简」参考适配器定位为「从已打开页面抽取」**：wechat-article-exporter 因上游后台接口被关而终止，Cubox 的入口是用户在微信里主动转发，OpenCLI 的公众号能力是「下载当前文章为 Markdown」。接口路线不可靠，所见即所存最稳。→ [PRD §8 M1](../PRD.md#8-里程碑)、[SPEC §8](../protocol/README.md)。
+12. **抖音参考适配器先走浏览器扩展路线**：现有工具（XHS-Downloader、DouK-Downloader）全部依赖 Cookie、带请求延时与风控提示，且抖音参数算法「不再维护」；「抖喜欢」式扩展（本机文件夹、无服务器）更贴近歇存原则。→ [PRD §8 M1](../PRD.md#8-里程碑)、[PRD §9](../PRD.md#9-风险)、[SPEC §8](../protocol/README.md) `requires.cookie` 应区分「none / 浏览器会话 / 用户粘贴」。
+13. **OpenCLI 作为 M2 收藏列表适配器的上游**：B 站 `favorite` 已有；小红书、抖音的收藏列表命令缺失，适配器须按能力声明而非按平台承诺。→ [PRD §8 M2](../PRD.md#8-里程碑)、[SPEC §8](../protocol/README.md) `capabilities`。
 14. **「放下」是空白地带**：对象中未见把删除 / 瘦身做成一等功能的。[PRD §3](../PRD.md) 的「放下」与 [§5 生命周期](../PRD.md#生命周期)可以在 M3 之前就在 CLI 里做出来（`xiecun slim` / `xiecun trash`），作为差异点。→ [PRD §5 生命周期](../PRD.md#生命周期)。
 15. **文案可借 mymind / Pinboard / flomo 的否定句式**：[PRD §6](../PRD.md#6-不做)「不做」已是这种写法；对外页面可以把 Pocket（2025-07）、Omnivore（2024-11）、方片收集（2017 后停更）作为「平台和服务都会消失」的三个例子。→ [PRD §1](../PRD.md#1-定位)、[PRD §6](../PRD.md#6-不做)。
 16. **对「收藏无用论」的回应**：flomo 说收藏是搬运、不增值。歇存的回答是：无用的是躺在平台里、搜不到、随时下架的收藏；变成本地可搜文本并能交给 Agent 之后，它才有用，而且不用你再看一遍。→ [PRD §1](../PRD.md#1-定位)。
-17. **迁出通道**：歇存「文件即导出」，但别的工具不认 `manifest.json`。建议 M2 之后给 CLI 加 Netscape HTML / CSV 导出（这不违反 [SPEC §10](../SPEC.md#10-mcp-工具m0)「MCP 不提供 export」，那条约束的是 Agent 外发）。→ 建议新增到 [PRD §5](../PRD.md#5-功能范围)，待用户决定。
+17. **迁出通道**：歇存「文件即导出」，但别的工具不认 `manifest.json`。建议 M2 之后给 CLI 加 Netscape HTML / CSV 导出（这不违反 [SPEC §10](../BUILD.md#006-agent)「MCP 不提供 export」，那条约束的是 Agent 外发）。→ 建议新增到 [PRD §5](../PRD.md#5-功能范围)，待用户决定。
 18. **成功标准里的「保险赔付率」有现实对照**：Pocket 用户在 2025-11 之后、Omnivore 用户在 2024-11 之后需要的正是这个数字。→ [PRD §7](../PRD.md#7-成功标准)。
 
 <a id="5-歇存刻意不做的"></a>
@@ -452,9 +452,9 @@
 | 推荐与发现流 | Pinboard popular/network、Are.na explore、Pocket 推荐、Readwise feeds | [PRD §6](../PRD.md#6-不做) |
 | 待办、提醒、复习、推送 | Raindrop Reminders、Recall 间隔重复与 quiz、Readwise Daily Review、Cubox AI 定时报告、flomo 每日回顾 | [PRD §4.5](../PRD.md#4-原则)、[§6](../PRD.md#6-不做) |
 | 内置平台抓取代码 | XHS-Downloader、DouK-Downloader、wechat-article-exporter、OpenCLI 的平台命令 | [PRD §4.1](../PRD.md#4-原则)、[§6](../PRD.md#6-不做) |
-| 自动分类替用户决定 | mymind Smart Spaces、Karakeep 自动打标直接生效、Eagle AI Action 自动归档 | [PRD §6](../PRD.md#6-不做)；[SPEC §6](../SPEC.md#6-标签规则) engine 标签只建议 |
+| 自动分类替用户决定 | mymind Smart Spaces、Karakeep 自动打标直接生效、Eagle AI Action 自动归档 | [PRD §6](../PRD.md#6-不做)；[SPEC §6](../SPEC.md#121-manifestjson-v1) engine 标签只建议 |
 | 搜索依赖外部服务 | Karakeep Meilisearch、Omnivore 自托管栈 | [ADR-001](../decisions/ADR-004-rust-tauri.md) |
-| Agent 直接删除与外发 | Karakeep MCP `delete-*`、Raindrop MCP delete、Anytype MCP CRUD、Readwise 删高亮 | [SPEC §10](../SPEC.md#10-mcp-工具m0) |
+| Agent 直接删除与外发 | Karakeep MCP `delete-*`、Raindrop MCP delete、Anytype MCP CRUD、Readwise 删高亮 | [SPEC §10](../BUILD.md#006-agent) |
 | 应用内自建聊天助手 | Cubox AI 问答、Readwise Ghostreader、Recall chat、Fabric assistant | [PRD §4.6](../PRD.md#4-原则) |
 | 源可用但非开源的许可 | Anytype ASAL 1.0、简悦 2.x 部分闭源 | [PRD §4.7](../PRD.md#4-原则) |
 | 「未整理」状态与未读数 | Readwise inbox、Cubox 免费版容量提示 | [PRD §4.5](../PRD.md#4-原则) |
