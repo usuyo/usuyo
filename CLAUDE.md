@@ -6,20 +6,16 @@
 
 ## 文档地图
 
-接着写代码先读 `docs/BUILD.md`：总纲，做到哪了、还剩什么、每条线已经定的、依赖顺序、干活的规矩。
-
-再读这一份：
-
+- `docs/BUILD.md` — 总纲，接着写代码先读：做到哪了、还剩什么、每条线已经定的、依赖顺序、干活的规矩、只有用户能答和能办的
 - `docs/PRD.md` — 产品定义：为什么做、做什么、不做什么
-
-需要时查：
-
+- `docs/SPEC.md` — 技术规格 v1 草案：第 0 层约定、第 1 层资料库 v1、本机接口；第 2 层其余还留着 v0
 - `docs/plugin-protocol.md` — 插件协议 v1 草案（宿主和插件之间）
-- `docs/SPEC.md` — 技术规格 v1 草案：第 0 层约定、第 1 层资料库 v1；第 2 层起还留着 v0
+- `docs/platforms/` — 各平台的获取方案，`README.md` 是总表
 - `docs/answers.md` — 用户逐条的回答，一张表
-- `docs/features/` — 每个功能一份 feature doc（见下方开发流程）
-- `docs/decisions/` — 架构决策记录（ADR），一个决定一个文件
-- `docs/research/` — 调研 01–16，索引在 `docs/research/README.md`；`docs/research/notes/` 是各平台层级判定的旧笔记
+- `docs/features/` — 正在做的线的 feature doc（见下方开发流程），模板 `TEMPLATE.md`
+- `docs/decisions/` — 还有效的架构决策记录（ADR），一个决定一个文件
+- `docs/research/` — 调研 01–16，只当背景，索引在 `docs/research/README.md`；`docs/research/notes/` 是各平台层级判定的旧笔记
+- `docs/acknowledgements.md` — 致谢候选
 
 ## 技术栈（已定，不要擅自更换）
 
@@ -81,15 +77,3 @@ just dev-plugins  # 开发时把旁边 usuyo-fetch/ 的平台插件装到这台�
 just docs <文件>  # 查文档的锚点和链接
 usuyo --help  # CLI
 ```
-
-## 第一版范围
-
-不分 M0–M3 那样的里程碑；先做主要功能，用起来以后按 PRD 一项项补（2026-11-04）。第一版包括：
-
-1. 收下（粘贴、拖入、快捷键）和各平台的取内容：小红书、微信视频号、B 站、X（推特）在前，其余接着做（2026-11-11）；登录、导入收藏、按关键词和创作者主页列都要。
-2. 变成文字（口播、图里的字、正文）和全文加拼音搜索。
-3. 点阵迷雾地图、关注主题、主题页和记一句（先做画布原型）。
-4. MCP、导出到 Obsidian 并读回；命令行不再加新命令（2026-11-11）。
-5. 文字同步。
-
-详见 `docs/PRD.md` §12 和 `docs/BUILD.md`。
