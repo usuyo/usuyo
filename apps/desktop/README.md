@@ -8,10 +8,10 @@
 
 ```
 just app
-# 等同于：cd apps/desktop/src-tauri && cargo tauri build --bundles app
+# 等同于：bun run build
 ```
 
-出来的是 `apps/desktop/src-tauri/target/release/bundle/macos/usuyo.app`，没有签名，只在编它的这台 Mac 上直接双击打开。要先装好 Rust、pnpm（`just init` 装前端依赖）和 `cargo install tauri-cli`。
+出来的是 `apps/desktop/src-tauri/target/release/bundle/macos/usuyo.app`，没有签名，只在编它的这台 Mac 上直接双击打开。要先装好 Rust、bun（`bun install` 装前端依赖）和 `cargo install tauri-cli`。
 
 这一条命令会先跑 `src-tauri/stage-core.sh release`：编出内核 `usuyo` 和预装的网页插件，放进 `src-tauri/binaries/`、`src-tauri/core-plugins/`（都不进 git），再编前端，最后打包。`cargo clippy` 之类直接编壳的命令也要先跑一次这个脚本。
 
@@ -29,12 +29,11 @@ just app
 ## 开发
 
 ```
-just dev          # 一个终端：内核
-cd apps/desktop/web
-pnpm install
-pnpm dev          # 另一个终端：前端，浏览器打开 http://localhost:5173
-pnpm tauri dev    # 或者带窗口运行（壳自己找或起内核）
-pnpm typecheck && pnpm lint && pnpm test && pnpm build
+bun install                              # 仓库根目录，装前端依赖
+bun run dev                              # 带窗口的开发窗口：编守护进程、起 Vite、开窗口
+just dev                                 # 或：一个终端起内核
+bun run --cwd apps/desktop/web dev       # 另一个终端：前端，浏览器打开 http://localhost:5173
+bun run check                            # Rust lint + test，前端 typecheck + lint + test
 ```
 
 开发时前端不直接找内核：页面请求同源的 `/api/...`，Vite 的代理转给 `http://127.0.0.1:47615`（`USUYO_PORT` 可改），在服务端带上令牌（读按机器目录里的 `api-token`，认 `USUYO_HOME`），去掉浏览器的 `Origin`。代理只接这个开发服务器自己页面发的同源请求，令牌换了就先握手（`proxy/proof.ts`），端口上不是内核时回 502 并说明，不带令牌过去。内核没在跑时代理回 502，前端换成样例库（`VITE_USUYO_MOCK=1` 一直用样例库，地址栏带 `?mock=empty` 从空的开始）。

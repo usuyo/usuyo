@@ -2,7 +2,7 @@ default: check
 
 # 装前端依赖；Rust 依赖由 cargo 自己取
 init:
-    cd apps/desktop/web && pnpm install
+    bun install
 
 fmt:
     cargo fmt --all
@@ -14,20 +14,21 @@ lint:
 test:
     cargo test --workspace
 
-check: lint test
+check:
+    bun run check
 
-# 内核守护进程；前端另开一个终端 `cd apps/desktop/web && pnpm dev`，经 Vite 的代理找它（代理在服务端带令牌）
+# 内核守护进程；前端另开一个终端 `bun run --cwd apps/desktop/web dev`，经 Vite 的代理找它（代理在服务端带令牌）
 dev:
     cargo run -p usuyo-cli -- daemon
 
 # 桌面应用（macOS 出 .app，不签名）：apps/desktop/src-tauri/target/release/bundle/macos/usuyo.app
 app:
-    cd apps/desktop/src-tauri && cargo tauri build --bundles app
+    bun run build
 
 # 桌面应用的开发窗口：前端改了当场生效，带 react-grab（点界面上的一处，复制出它所在的组件和源文件）。
 # 要 5173 端口空着；和装好的应用用同一个守护进程端口，两个不同时开。
 app-dev:
-    cd apps/desktop/src-tauri && cargo tauri dev
+    bun run dev
 
 build:
     cargo build --release -p usuyo-cli

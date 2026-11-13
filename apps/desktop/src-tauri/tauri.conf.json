@@ -6,8 +6,8 @@
   "build": {
     "devUrl": "http://localhost:5173",
     "frontendDist": "../web/dist",
-    "beforeDevCommand": "sh src-tauri/stage-core.sh debug && pnpm --dir web dev",
-    "beforeBuildCommand": "sh src-tauri/stage-core.sh release && pnpm --dir web build"
+    "beforeDevCommand": "sh src-tauri/stage-core.sh debug && bun run --cwd web dev",
+    "beforeBuildCommand": "sh src-tauri/stage-core.sh release && bun run --cwd web build"
   },
   "app": {
     "windows": [

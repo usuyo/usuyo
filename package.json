@@ -1,0 +1,13 @@
+{
+  "name": "usuyo",
+  "private": true,
+  "packageManager": "bun@1.4.4",
+  "workspaces": [
+    "apps/desktop/web"
+  ],
+  "scripts": {
+    "dev": "bun run --cwd apps/desktop/web tauri dev",
+    "build": "bun run --cwd apps/desktop/web tauri build --bundles app",
+    "check": "cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace && bun run --cwd apps/desktop/web typecheck && bun run --cwd apps/desktop/web lint && bun run --cwd apps/desktop/web test"
+  }
+}

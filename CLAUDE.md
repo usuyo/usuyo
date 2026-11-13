@@ -21,7 +21,7 @@
 
 - 语言：Rust，最新稳定版（内核、CLI、MCP 服务、守护进程），一个 cargo 工作区，代码在 `crates/`。2026-11-11 从 Go 换过来，见 ADR-004。
 - 桌面壳：Tauri 2，系统 webview 跑 web 前端。壳只做窗口、托盘、快捷键、登录用的网页窗口；守护进程是独立进程，前端只经本机 HTTP 找内核。只做桌面三系统，手机以后原生重写。
-- 前端：TypeScript + React + Vite，包管理 pnpm，见 ADR-002；画布库待定
+- 前端：TypeScript + React + Vite，包管理 bun（2026-11-13 从 pnpm 换，ADR-002 里写的是 pnpm）；画布库待定
 - 存储：文件为真相源（Markdown + 媒体 + JSON），索引用可重建的本地索引（tantivy）
 - 重计算：ffmpeg、OCR、ASR 作为独立进程（转换插件），不进内核
 - 插件（获取、转换、导出）：独立进程，按插件协议（`docs/plugin-protocol.md`）对接，不进内核
@@ -60,7 +60,7 @@
 
 - Rust：库用 `thiserror` 定义自己的错误类型，可执行文件入口用 `anyhow` 收口，错误只在边界处理一次；不用 `unsafe`，不压警告。
 - 测试：`cargo test --workspace`；契约用 `crates/usuyo-contract/testdata/` 里的固定样例校验。
-- 前端：`apps/desktop/web`，pnpm workspace；组件按功能分目录。
+- 前端：`apps/desktop/web`，bun workspace（根 `package.json`）；组件按功能分目录。
 - 提交信息：`<scope>: <summary>`，例如 `core: add content package writer`。
 - 文案：写成熟软件里那种客观的话（参照 Apple 中文界面），不用自己造的说法；界面上的话都走语言文件（简体中文和英文）。规则和用词表在 `docs/spec/conventions.md` §0.10。
 - 不写"破解 / 去水印 / 绕过"这类字眼；统一说"个人备份 / 离线阅读 / 注意力整理"。
@@ -68,11 +68,12 @@
 ## 常用命令
 
 ```
-just init     # 装前端依赖
-just dev      # 启动内核守护进程
-just check    # lint + test
+bun install   # 装前端依赖（just init 同）
+bun run dev   # 桌面应用开发窗口（编守护进程、起 Vite、开窗口）
+bun run build # 桌面应用（macOS 出 .app）
+bun run check # Rust lint + test，前端 typecheck + lint + test（just check 同）
+just dev      # 只启动内核守护进程
 just build    # 产出 target/release/usuyo
-just app      # 桌面应用（macOS 出 .app）
 just dev-plugins  # 开发时把旁边 usuyo-fetch/ 的平台插件装到这台机器上
 just docs <文件>  # 查文档的锚点和链接
 usuyo --help  # CLI
