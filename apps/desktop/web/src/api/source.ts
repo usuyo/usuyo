@@ -85,6 +85,14 @@ export interface Platforms {
   hold(pluginId: string): Promise<FetchPlugin>;
   /** 开或关一种取法。 */
   switchMethod(pluginId: string, methodId: string, enabled: boolean): Promise<FetchPlugin>;
+  /** 去掉拨过的开关，回到各平台各自那一层的默认。 */
+  clearMethod(pluginId: string, methodId: string): Promise<FetchPlugin>;
+  /** 交链接的方法带的脚本全文。 */
+  methodScript(pluginId: string, methodId: string): Promise<string>;
+  /** 在访达里显示那个脚本文件。 */
+  revealScript(pluginId: string, methodId: string): Promise<void>;
+  /** 填一个密钥设置。 */
+  setSecret(pluginId: string, key: string, value: string): Promise<FetchPlugin>;
   sites(): Promise<SiteLogin[]>;
   forgetLogin(site: string): Promise<void>;
   visitors(): Promise<VisitorIdentity[]>;
@@ -223,6 +231,10 @@ const daemon: Source = {
   tryNow: (id) => request<FetchPlugin>(paths.pluginTryNow(id), { method: "POST" }),
   hold: (id) => request<FetchPlugin>(paths.pluginHold(id), { method: "POST" }),
   switchMethod: (id, method, enabled) => request<FetchPlugin>(paths.pluginMethod(id, method), { method: "PUT", body: { enabled } }),
+  clearMethod: (id, method) => request<FetchPlugin>(paths.pluginMethod(id, method), { method: "DELETE" }),
+  methodScript: (id, method) => request<{ text: string }>(paths.methodScript(id, method)).then((r) => r.text),
+  revealScript: (id, method) => request<void>(paths.methodScriptReveal(id, method), { method: "POST" }),
+  setSecret: (id, key, value) => request<FetchPlugin>(paths.pluginSecret(id, key), { method: "PUT", body: { value } }),
   sites: () => request<SiteLogin[]>(paths.sites),
   forgetLogin: (site) => request<void>(paths.siteLogin(site), { method: "DELETE" }),
   visitors: () => request<VisitorIdentity[]>(paths.visitors),

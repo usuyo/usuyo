@@ -14,7 +14,7 @@ import { stateLine } from "./words";
 
 /** 导入：左边选来源、看预览、收；右边一栏是每一次导入的记录，交进来的清单也在这里。 */
 export function ImportPage() {
-  const { open, from } = useSearch({ from: "/import" });
+  const { open, from, pick, reader } = useSearch({ from: "/import" });
   const navigate = useNavigate();
   const imports = useImports();
   const plugins = usePlugins();
@@ -58,10 +58,10 @@ export function ImportPage() {
                   />
                 </div>
                 {from === "file" ? (
-                  <FileImport onStarted={show} />
+                  <FileImport onStarted={show} {...(reader ? { initial: reader } : {})} />
                 ) : (
                   <>
-                    <SourcePicker onStarted={show} />
+                    <SourcePicker onStarted={show} {...(pick ? { initial: pick } : {})} />
                     <DeliverTokens />
                   </>
                 )}

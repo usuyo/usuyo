@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { ChevronLeft, ChevronRight, Pause, Play, RefreshCw } from "lucide-react";
 import type { KeyboardEvent, PointerEvent } from "react";
 import { Button as AriaButton } from "react-aria-components";
@@ -7,6 +8,7 @@ import { Button } from "../ui/Button";
 import { MonoLabel } from "../ui/Chip";
 import { FlashLine, useFlash } from "../ui/Flash";
 import { clock, facetOf, imageName, keepText, type MediaKeep } from "./format";
+import { PAGE } from "../plugins/words";
 import type { Player } from "./usePlayer";
 
 type ImageFacet = Extract<Facet, { layer: "image" }>;
@@ -132,6 +134,13 @@ export function Viewer({
                   <RefreshCw size={14} aria-hidden="true" />
                   <span>重试</span>
                 </Button>
+                <Link
+                  to="/plugins/$platform"
+                  params={{ platform: item.platform.id }}
+                  className="mt-2.5 text-small text-label underline decoration-border2 underline-offset-4 hover:text-text"
+                >
+                  {PAGE.itemPlatformLink(item.platform.name)}
+                </Link>
               </>
             ) : (
               <>

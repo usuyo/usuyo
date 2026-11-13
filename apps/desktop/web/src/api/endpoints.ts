@@ -109,8 +109,15 @@ export const paths = {
   pluginSources: (id: string) => `/plugins/${pluginPath(id)}/sources`,
   /** POST：「现在再试」，去掉这个插件的暂停。 */
   pluginTryNow: (id: string) => `/plugins/${pluginPath(id)}/try-now`,
-  /** PUT `MethodSwitchRequest`：开或关插件的一种取法，回整个插件。没做好的取法回 `unsupported-input`。 */
+  /**
+   * PUT `MethodSwitchRequest`：开或关插件的一种取法，回整个插件。DELETE 去掉拨过的开关，回到各平台各自那一层的默认，回整个插件。
+   * 没做好的取法回 `unsupported-input`。
+   */
   pluginMethod: (id: string, method: string) => `/plugins/${pluginPath(id)}/methods/${encodeURIComponent(method)}`,
+  /** GET `{text}`：这种方法清单里 `script` 写的脚本全文。只认装着的清单写了的、在插件文件夹里的那个文件；不在回 404。 */
+  methodScript: (id: string, method: string) => `/plugins/${pluginPath(id)}/methods/${encodeURIComponent(method)}/script`,
+  /** POST：在访达（或系统的文件管理器）里显示那个脚本文件，204。 */
+  methodScriptReveal: (id: string, method: string) => `/plugins/${pluginPath(id)}/methods/${encodeURIComponent(method)}/script/reveal`,
   /** POST：「先别试」，到你点「现在再试」为止哪儿都不调它。 */
   pluginHold: (id: string) => `/plugins/${pluginPath(id)}/hold`,
   /** PUT `{value}` 填一个密钥设置（协议 §2.11），DELETE 去掉。值从不回出来。 */
@@ -841,6 +848,8 @@ export interface FetchPlugin {
   visitors: string[];
   settings: PluginSetting[];
   pacing: PluginPacing[];
+  /** 清单的 `upstream`：插件调的第三方程序和它的许可；没写时不给。 */
+  upstream?: { name: string; license: string }[];
   /** 所有取法的暂停。 */
   pauses: PluginPause[];
   /** 清单里的每一种取法，照清单的顺序，没做好的也在（协议 §2.3.1）。 */
@@ -922,12 +931,16 @@ export interface FetchMethod {
   pauses: PluginPause[];
   /** 记下来的一句风险，带出处。只是信息，不拦。 */
   riskNote?: { text: string; source: { label: string; url: string } };
+  /** 交链接的方法在清单里写了的脚本文件：在这台电脑上的路径，`present` 是它在插件文件夹里。 */
+  script?: { path: string; present: boolean };
 }
 
 export interface PluginsView {
   plugins: FetchPlugin[];
   /** 装了但没加载的：目录和原因（多半是清单不合规）。 */
   notLoaded: { dir: string; reason: string }[];
+  /** 取不到时的失败日志在这台电脑上的路径（按机器目录的 `logs/fetch-failures.jsonl`）。 */
+  failureLog: string;
 }
 
 export interface MethodSwitchRequest {
@@ -1292,6 +1305,8 @@ export interface SettingsView {
   };
   /** `transforms.auto`：收下以后自己转，只在接着电源时跑（feature 003 §4.4）。 */
   transforms: { auto: boolean };
+  /** `systemTitleBar`：主窗口用系统标题栏（默认不用，只在 macOS 上去得掉）。桌面壳开窗口时读，下次打开 usuyo 时生效。 */
+  window: { systemTitleBar: boolean };
   /** 内核的日志在哪（按机器目录的 `logs/daemon.log`）。 */
   logs: string;
 }
@@ -1300,4 +1315,5 @@ export interface SettingsPatch {
   trashDays?: number | null;
   network?: NetworkSetting;
   transforms?: { auto: boolean };
+  window?: { systemTitleBar: boolean };
 }

@@ -16,10 +16,10 @@ const isStopped = (error: Error | null) => error?.name === "AbortError";
  * 别的工具导出的文件：挑一种读它的方法，选文件（或拖进来）就交过去，交的时候说交了多少、能停下。
  * 内核存一份副本，原文件不动；读出来的和别的导入一样先给你看，你点了才收。
  */
-export function FileImport({ onStarted }: { onStarted: (id: string) => void }) {
+export function FileImport({ onStarted, initial }: { onStarted: (id: string) => void; initial?: string }) {
   const readers = useFileReaders();
   const send = useImportFile();
-  const [readerId, setReaderId] = useState<string | undefined>(undefined);
+  const [readerId, setReaderId] = useState<string | undefined>(initial);
   const [file, setFile] = useState<File | null>(null);
   const [sent, setSent] = useState(0);
   const stopper = useRef<AbortController | null>(null);

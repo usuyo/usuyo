@@ -124,7 +124,15 @@ pub(crate) fn build(engine: Engine, gate: Arc<Gate>, origins: &[String]) -> Rout
         .route("/plugins/{owner}/{repo}/hold", post(plugin_hold))
         .route(
             "/plugins/{owner}/{repo}/methods/{method}",
-            put(plugin_method_switch),
+            put(plugin_method_switch).delete(plugin_method_clear),
+        )
+        .route(
+            "/plugins/{owner}/{repo}/methods/{method}/script",
+            get(method_script),
+        )
+        .route(
+            "/plugins/{owner}/{repo}/methods/{method}/script/reveal",
+            post(method_script_reveal),
         )
         .route(
             "/plugins/{owner}/{repo}/secrets/{key}",
@@ -666,6 +674,40 @@ async fn plugin_method_switch(
         })
         .await?,
     ))
+}
+
+/// 去掉拨过的开关，回到各平台各自那一层的默认，回整个插件。
+async fn plugin_method_clear(
+    State(s): State<AppState>,
+    Path((owner, repo, method)): Path<(String, String, String)>,
+) -> ApiResult<PluginView> {
+    Ok(Json(
+        blocking(move || s.engine.clear_method(&plugin_id(&owner, &repo), &method)).await?,
+    ))
+}
+
+/// 一种交链接的方法的脚本全文：只认装着的清单写了的那个文件，路径不从请求里来。
+async fn method_script(
+    State(s): State<AppState>,
+    Path((owner, repo, method)): Path<(String, String, String)>,
+) -> ApiResult<serde_json::Value> {
+    let text = blocking(move || {
+        s.engine
+            .method_script_text(&plugin_id(&owner, &repo), &method)
+    })
+    .await?;
+    Ok(Json(json!({ "text": text })))
+}
+
+/// 在访达（或系统的文件管理器）里显示那个脚本文件，204。
+async fn method_script_reveal(
+    State(s): State<AppState>,
+    Path((owner, repo, method)): Path<(String, String, String)>,
+) -> Result<StatusCode, Problem> {
+    s.engine
+        .reveal_method_script(&plugin_id(&owner, &repo), &method)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn plugin_try_now(

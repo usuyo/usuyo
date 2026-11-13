@@ -131,6 +131,8 @@
   --spacing-ctl: 40px;
   --spacing-field: 44px;
   --spacing-rail: 248px;
+  /* 没有系统标题栏时顶上自己的那一条（macOS 红绿灯的高度） */
+  --spacing-titlebar: 28px;
   --spacing-content: 288px;
   --spacing-gutter: 40px;
   --spacing-main: 832px;

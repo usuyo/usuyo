@@ -524,6 +524,9 @@ pub struct PluginView {
     pub visitors: Vec<String>,
     pub settings: Vec<SettingView>,
     pub pacing: Vec<PacingView>,
+    /// 清单的 `upstream`：插件调的第三方程序和它的许可。
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub upstream: Vec<Bundled>,
     /// 现在停着的地方和原因，所有方法的；你点的「先别试」方法是 `*`。
     pub pauses: Vec<PauseView>,
     /// 清单里的每一种方法，没做的也在（协议 §2.3.1）。
@@ -570,6 +573,18 @@ pub struct MethodView {
     pub pauses: Vec<PauseView>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub risk_note: Option<usuyo_plugin::protocol::Risk>,
+    /// 交链接的方法在清单里写了的脚本文件：在这台电脑上的路径，和它在不在插件文件夹里。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub script: Option<ScriptView>,
+}
+
+/// 一种方法带的脚本文件（清单的 `methods[].script`）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScriptView {
+    pub path: String,
+    /// 文件在插件文件夹里、是个普通文件。
+    pub present: bool,
 }
 
 /// 一种方法在某个平台上的层级（清单的 `perPlatform`）。`enabled`：没拨过开关时照这一层的默认
@@ -682,6 +697,8 @@ pub struct NotLoaded {
 pub struct PluginsView {
     pub plugins: Vec<PluginView>,
     pub not_loaded: Vec<NotLoaded>,
+    /// 取不到时的失败日志（按机器目录的 `logs/fetch-failures.jsonl`）。
+    pub failure_log: String,
 }
 
 /// 一个登录站点（`/sites`）：登录窗口照它开、照它判断登录好了没有。
@@ -797,6 +814,8 @@ pub struct SettingsView {
     pub trash_held: Option<TrashHeld>,
     pub network: NetworkView,
     pub transforms: TransformsSetting,
+    /// 桌面壳开窗口时照它：`systemTitleBar` 用系统标题栏（默认不用）。下次打开 usuyo 时生效。
+    pub window: WindowSetting,
     /// 内核的日志在哪。
     pub logs: String,
 }
@@ -822,6 +841,12 @@ pub struct NetworkView {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct TransformsSetting {
     pub auto: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowSetting {
+    pub system_title_bar: bool,
 }
 
 /// 推给前端的事件；SSE 的事件名就是 `type`。

@@ -254,10 +254,11 @@ impl Engine {
             }
         }
         let mut platforms = BTreeMap::new();
-        // 平台插件的名字优先，通用网页插件的排后。
+        // 平台插件的名字优先，通用网页插件的排后。管几个平台的插件（yt-dlp 一类）的名字不是哪个平台的名字：
+        // 只有它管的平台照平台 id 叫。
         for p in plugins
             .iter()
-            .filter(|p| !p.spec.is_web())
+            .filter(|p| !p.spec.is_web() && p.spec.platforms.len() == 1)
             .chain(plugins.iter().filter(|p| p.spec.is_web()))
         {
             for platform in &p.spec.platforms {

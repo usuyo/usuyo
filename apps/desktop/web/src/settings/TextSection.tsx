@@ -35,7 +35,7 @@ export function TextSection({ view }: { view: SettingsView }) {
           <span>{auto ? "收下以后自己转" : "只在打开时转"}</span>
         </Switch>
       </Row>
-      <Row label="模型" sub={<>下载和删掉在<Link to="/plugins" search={{ show: "text" }} className="mx-0.5 text-label underline decoration-border2 underline-offset-4 hover:text-text">获取插件</Link>页的「变成文字」里。</>}>
+      <Row label="模型" sub={<>下载和删掉在<Link to="/plugins/text" className="mx-0.5 text-label underline decoration-border2 underline-offset-4 hover:text-text">获取插件</Link>页的「变成文字」里。</>}>
         {models.length > 0 ? (
           <ul className="m-0 flex list-none flex-col gap-1 p-0">
             {models.map((m) => (

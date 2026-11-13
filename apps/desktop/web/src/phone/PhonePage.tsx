@@ -471,8 +471,8 @@ function Methods({ phone }: { phone: PhoneView | null }) {
       {methods.map((m) => (
         <li key={`${m.pluginId}#${m.methodId}`} className="border-b border-border">
           <Link
-            to="/plugins"
-            search={{ platform: m.platformId }}
+            to="/plugins/$platform"
+            params={{ platform: m.platformId }}
             className="press -mx-2.5 my-1 grid gap-x-5 gap-y-0.5 rounded-btn px-2.5 py-2 no-underline hover:bg-chip/60 @lg:grid-cols-[minmax(0,10rem)_minmax(0,1fr)]"
           >
             <span className="min-w-0">

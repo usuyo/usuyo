@@ -83,6 +83,10 @@ impl Methods {
             .copied()
     }
 
+    pub(crate) fn failure_log(&self) -> &Path {
+        &self.failure_log
+    }
+
     /// 开关的样子：拨过的照你拨的，没拨过照方法本身的那一层。没做的总是关着。
     pub(crate) fn enabled(&self, plugin: &FetchPlugin, m: &Method) -> bool {
         m.built && self.switch(plugin, m).unwrap_or_else(|| m.on_by_default())
@@ -368,6 +372,20 @@ impl Engine {
         method_id: &str,
         enabled: bool,
     ) -> Result<PluginView> {
+        self.switch_method(plugin_id, method_id, Some(enabled))
+    }
+
+    /// 去掉拨过的开关：这种方法回到各平台各自那一层的默认（`private-api`、`client-hook` 关着）。
+    pub fn clear_method(&self, plugin_id: &str, method_id: &str) -> Result<PluginView> {
+        self.switch_method(plugin_id, method_id, None)
+    }
+
+    fn switch_method(
+        &self,
+        plugin_id: &str,
+        method_id: &str,
+        enabled: Option<bool>,
+    ) -> Result<PluginView> {
         let plugin = self
             .inner
             .host
@@ -390,16 +408,27 @@ impl Engine {
                 .unwrap_or_else(PoisonError::into_inner);
             let root = &self.inner.machine_root;
             let mut map = crate::settings::read(root)?;
-            set_switch(&mut map, plugin_id, method_id, enabled);
-            crate::settings::write(root, &map)?;
-            self.inner
+            let key = (plugin_id.to_owned(), method_id.to_owned());
+            let mut switches = self
+                .inner
                 .methods
                 .switches
                 .write()
-                .unwrap_or_else(PoisonError::into_inner)
-                .insert((plugin_id.to_owned(), method_id.to_owned()), enabled);
+                .unwrap_or_else(PoisonError::into_inner);
+            match enabled {
+                Some(on) => {
+                    set_switch(&mut map, plugin_id, method_id, on);
+                    crate::settings::write(root, &map)?;
+                    switches.insert(key, on);
+                }
+                None => {
+                    clear_switch(&mut map, plugin_id, method_id);
+                    crate::settings::write(root, &map)?;
+                    switches.remove(&key);
+                }
+            }
         }
-        if enabled {
+        if enabled != Some(false) {
             self.inner.wake.notify_one();
             self.inner.imports_wake.notify_one();
         }
@@ -424,6 +453,26 @@ fn set_switch(map: &mut Map<String, Value>, plugin: &str, method: &str, enabled:
         node = next;
     }
     node.insert("enabled".into(), Value::Bool(enabled));
+}
+
+/// 去掉 `plugins.<插件>.methods.<方法>`；那个插件的 `methods` 空了也去掉，别的键留着。
+fn clear_switch(map: &mut Map<String, Value>, plugin: &str, method: &str) {
+    let Some(Value::Object(plugins)) = map.get_mut("plugins") else {
+        return;
+    };
+    let Some(Value::Object(entry)) = plugins.get_mut(plugin) else {
+        return;
+    };
+    let Some(Value::Object(methods)) = entry.get_mut("methods") else {
+        return;
+    };
+    methods.remove(method);
+    if methods.is_empty() {
+        entry.remove("methods");
+    }
+    if entry.is_empty() {
+        plugins.remove(plugin);
+    }
 }
 
 /// 一种都用不上时告诉你的原因：要登录的照 `login-required`，要访客身份的照 `visitor-required`，

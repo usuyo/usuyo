@@ -24,6 +24,7 @@ export const queryKeys = {
   deliverTokens: ["deliver-tokens"] as const,
   inbox: ["inbox"] as const,
   fileReaders: ["file-readers"] as const,
+  methodScript: (pluginId: string, method: string) => ["method-script", pluginId, method] as const,
   topicPage: (id: string) => ["topic-page", id] as const,
   follows: ["follows"] as const,
   changes: ["changes"] as const,
@@ -394,6 +395,46 @@ export function useSwitchMethod(pluginId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (v: { methodId: string; enabled: boolean }) => call((s) => s.switchMethod(pluginId, v.methodId, v.enabled)),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.plugins }),
+  });
+}
+
+/**
+ * 一次拨几个开关（「用哪种方法」换一项）：照给的先后一个个拨（`enabled` 是 null 的去掉拨过的开关），一个没成就停在那里，已经拨了的留着；
+ * 拨完或停下都重新拉一遍插件，页面照内核说的现在的样子摆。
+ */
+export function useSwitchMethods() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (switches: { pluginId: string; methodId: string; enabled: boolean | null }[]) => {
+      for (const s of switches) {
+        const { pluginId, methodId, enabled } = s;
+        await call((src) => (enabled === null ? src.clearMethod(pluginId, methodId) : src.switchMethod(pluginId, methodId, enabled)));
+      }
+    },
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: queryKeys.plugins }),
+  });
+}
+
+/** 交链接的方法带的脚本全文：从这台电脑上的插件文件夹读，不碰平台。 */
+export function useMethodScript(pluginId: string, method: string, present: boolean) {
+  return useQuery({
+    queryKey: queryKeys.methodScript(pluginId, method),
+    queryFn: () => call((s) => s.methodScript(pluginId, method)),
+    enabled: present,
+    staleTime: Infinity,
+  });
+}
+
+export function useRevealScript() {
+  return useMutation({ mutationFn: (v: { pluginId: string; methodId: string }) => call((s) => s.revealScript(v.pluginId, v.methodId)) });
+}
+
+/** 填一个密钥设置；值不回出来，回的插件上只写填了没有。 */
+export function useSetSecret(pluginId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { key: string; value: string }) => call((s) => s.setSecret(pluginId, v.key, v.value)),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.plugins }),
   });
 }

@@ -19,6 +19,7 @@ const VIEW: SettingsView = {
   trashHeld: { count: 3, since: "2026-08-02T12:00:00.000Z" },
   network: { mode: "system", fakeIp: false },
   transforms: { auto: true },
+  window: { systemTitleBar: false },
   logs: "/Users/someone/Library/Application Support/usuyo/logs/daemon.log",
 };
 
@@ -95,4 +96,12 @@ it("shows the stored proxy without its password and sends the same address back 
   fireEvent.click(screen.getByRole("button", { name: "用这个" }));
   await waitFor(() => expect(sent).toContainEqual({ path: "/api/settings", method: "PATCH", body: { network: { mode: "custom", proxy: "socks5h://127.0.0.1:7891" } } }));
   expect(screen.getByRole("radio", { name: "深色" })).toBeTruthy();
+});
+
+it("the window row stores whether to use the system title bar and says it takes effect on the next launch", async () => {
+  const sent = serve(VIEW);
+  const toggle = await screen.findByRole("switch", { name: "使用系统标题栏" });
+  expect(screen.getByText(/更改在下次打开 usuyo 时生效/)).toBeTruthy();
+  fireEvent.click(toggle);
+  await waitFor(() => expect(sent).toEqual([{ path: "/api/settings", method: "PATCH", body: { window: { systemTitleBar: true } } }]));
 });

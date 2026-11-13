@@ -29,7 +29,7 @@ function SourcesError({ error, plugin }: { error: Error; plugin: FetchPlugin }) 
     <p role="status" className="m-0 mt-2 text-small text-sub">
       {text}
       {code === "login-required" || code === "visitor-required" || code === "rate-limited" || code === "blocked" || code === "unsupported-input" ? (
-        <Link to="/plugins" className="ml-1 text-label underline-offset-2 hover:underline">
+        <Link to="/plugins/$platform" params={{ platform: plugin.platforms[0]?.id ?? plugin.id }} className="ml-1 text-label underline-offset-2 hover:underline">
           去看看
         </Link>
       ) : null}
@@ -41,7 +41,7 @@ function SourcesError({ error, plugin }: { error: Error; plugin: FetchPlugin }) 
  * 一种能列的取法展开以后：问插件这种取法有哪些来源（会调插件，按平台的节奏可能要等一会儿），选一个开始列。
  * 从一条链接开始的取法先填链接，交了才问。
  */
-function Sources({ plugin, method, onStarted }: { plugin: FetchPlugin; method: FetchMethod; onStarted: (id: string) => void }) {
+export function Sources({ plugin, method, onStarted }: { plugin: FetchPlugin; method: FetchMethod; onStarted: (id: string) => void }) {
   const [draft, setDraft] = useState("");
   const [link, setLink] = useState<string | null>(null);
   const fromLink = method.gets.link !== undefined;
@@ -108,10 +108,10 @@ function listsText(plugin: FetchPlugin, m: FetchMethod): string {
  * 从哪里导入：每种能列的、做好了的取法一张卡片。这台电脑上现在用不上的照样摆着，写差什么，展开不了；
  * 只按链接一条条取的插件写清楚清单从哪交进来。
  */
-export function SourcePicker({ onStarted }: { onStarted: (id: string) => void }) {
+export function SourcePicker({ onStarted, initial }: { onStarted: (id: string) => void; initial?: string }) {
   const plugins = usePlugins();
   const readers = new Set((useFileReaders().data ?? []).map((r) => r.id));
-  const [openKey, setOpenKey] = useState<string | null>(null);
+  const [openKey, setOpenKey] = useState<string | null>(initial ?? null);
   const all = plugins.data?.plugins ?? [];
   // 读文件的方法在「别的工具导出的文件」那一半，这里不列。
   const lists = (p: FetchPlugin, m: FetchMethod) => m.built && canList(m) && !readers.has(`${p.id}#${m.id}`);
@@ -155,7 +155,7 @@ export function SourcePicker({ onStarted }: { onStarted: (id: string) => void })
                 {pause ? <div className={`mt-0.5 text-small ${pause.byYou ? "text-sub" : "text-warn"}`}>{pauseText(pause, p.platforms)}</div> : null}
               </AriaButton>
               {!m.usable ? (
-                <Link to="/plugins" search={{ platform: p.platforms[0]?.id ?? p.id }} className="mt-1 inline-block text-small text-label underline-offset-2 hover:underline">
+                <Link to="/plugins/$platform" params={{ platform: p.platforms[0]?.id ?? p.id }} className="mt-1 inline-block text-small text-label underline-offset-2 hover:underline">
                   去「获取插件」看看
                 </Link>
               ) : null}

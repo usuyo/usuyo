@@ -109,6 +109,11 @@ dev-plugins fetch="../usuyo-fetch":
       mkdir -p "$dest"
       cp "$manifest" "$dest/usuyo-plugin.yaml"
       cp "$shared/release/$bin" "$dest/$bin"
+      # 交链接的方法写了的脚本文件（methods[].script，插件文件夹里的相对路径）照原位放在清单旁边
+      for script in $(sed -n 's/^    script:[[:space:]]*//p' "$manifest"); do
+        mkdir -p "$dest/$(dirname "$script")"
+        cp "$src/$script" "$dest/$script"
+      done
       echo "装好了 $id $version → $dest"
     done
 

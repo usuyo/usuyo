@@ -589,6 +589,8 @@ struct WireMethod {
     #[serde(default)]
     delivers: Option<Delivers>,
     #[serde(default)]
+    script: Option<String>,
+    #[serde(default)]
     capabilities: Option<WireCapabilities>,
     #[serde(default)]
     risk: Option<Risk>,
@@ -778,6 +780,8 @@ pub struct Method {
     pub drives: Option<Drives>,
     /// 不在插件进程里跑：由浏览器脚本一类把链接交给本机接口。这时没有能力。
     pub delivers: Option<Delivers>,
+    /// 交链接的方法带的脚本文件：插件文件夹里的相对路径，只有 `Normal` 段。
+    pub script: Option<String>,
     pub capabilities: Capabilities,
     pub risk: Option<Risk>,
 }
@@ -1562,6 +1566,22 @@ fn method(m: &WireMethod, path: &str, ctx: &CapabilityContext<'_>) -> Check<Meth
             "`iphone` and `android` go with `account: own-phone`, `desktop-app` with `account: own-app`",
         ));
     }
+    if let Some(script) = &m.script {
+        if m.delivers.is_none() {
+            return Err(invalid(
+                f("script"),
+                "only methods that deliver links carry a script",
+            ));
+        }
+        if !is_plugin_relative(script) {
+            return Err(invalid(
+                f("script"),
+                format!(
+                    "`{script}` must be a relative path inside the plugin folder, without `.` or `..`"
+                ),
+            ));
+        }
+    }
     if let Some(r) = &m.risk {
         non_empty(&f("risk.text"), &r.text)?;
         non_empty(&f("risk.source.label"), &r.source.label)?;
@@ -1606,9 +1626,22 @@ fn method(m: &WireMethod, path: &str, ctx: &CapabilityContext<'_>) -> Check<Meth
         interaction: m.interaction,
         drives: m.drives,
         delivers: m.delivers,
+        script: m.script.clone(),
         capabilities,
         risk: m.risk.clone(),
     })
+}
+
+/// 插件文件夹里的相对路径：不空，不以 `/` 开头，每一段都是普通的名字（没有 `.`、`..`、盘符）。
+fn is_plugin_relative(path: &str) -> bool {
+    !path.is_empty()
+        && !path.contains('\\')
+        && std::path::Path::new(path)
+            .components()
+            .all(|c| matches!(c, std::path::Component::Normal(_)))
+        && !path
+            .split('/')
+            .any(|seg| seg.is_empty() || seg == "." || seg == "..")
 }
 
 /// `built: false` 的方法写的能力只拿来说它会取得什么（宿主不调），`list.order` 可以不写。

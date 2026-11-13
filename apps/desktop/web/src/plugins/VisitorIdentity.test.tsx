@@ -40,17 +40,17 @@ function show(state: Visitor["state"]) {
 
 it("takes the first identity from a fresh window and asks for a clean one when replacing", () => {
   show("missing");
-  fireEvent.click(screen.getByRole("button", { name: "取访客身份" }));
+  fireEvent.click(screen.getByRole("button", { name: "获取访客身份" }));
   expect(openVisitor).toHaveBeenLastCalledWith("www.example.com", false);
   cleanup();
 
   show("present");
-  fireEvent.click(screen.getByRole("button", { name: "换一份" }));
+  fireEvent.click(screen.getByRole("button", { name: "更换" }));
   expect(openVisitor).toHaveBeenLastCalledWith("www.example.com", true);
   cleanup();
 
   show("expired");
-  fireEvent.click(screen.getByRole("button", { name: "换一份" }));
+  fireEvent.click(screen.getByRole("button", { name: "更换" }));
   expect(openVisitor).toHaveBeenLastCalledWith("www.example.com", true);
 });
 
@@ -66,7 +66,7 @@ it("clears the window's data before the daemon forgets, and keeps the identity w
   });
   vi.stubGlobal("fetch", forget);
   show("present");
-  fireEvent.click(screen.getByRole("button", { name: "去掉" }));
+  fireEvent.click(screen.getByRole("button", { name: "移除" }));
   await waitFor(() => expect(order).toEqual(["clear", "forget"]));
   expect(forget.mock.calls[0]?.[1]?.method).toBe("DELETE");
   cleanup();
@@ -74,7 +74,7 @@ it("clears the window's data before the daemon forgets, and keeps the identity w
   order.length = 0;
   clearVisitorData.mockRejectedValue("没能清掉");
   show("present");
-  fireEvent.click(screen.getByRole("button", { name: "去掉" }));
+  fireEvent.click(screen.getByRole("button", { name: "移除" }));
   expect(await screen.findByText("没能清掉")).toBeTruthy();
   expect(order).toEqual([]);
 });

@@ -19,6 +19,7 @@ mod owner_only;
 mod pace;
 mod phone;
 mod registry;
+mod reveal;
 mod settings;
 mod share_text;
 mod transcripts;

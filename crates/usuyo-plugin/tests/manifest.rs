@@ -99,6 +99,7 @@ fn valid_samples_parse() {
     );
     let script = spec.method("userscript").unwrap();
     assert_eq!(script.delivers, Some(Delivers::Links));
+    assert_eq!(script.script.as_deref(), Some("userscript/saved.user.js"));
     assert!(script.built && !script.callable());
     let phone = spec.method("iphone").unwrap();
     assert!(!phone.built && !phone.callable());
@@ -381,7 +382,11 @@ fn methods_are_checked() {
     );
     // 做了、在插件里跑的要有能力；交链接的不能有
     rejects(
-        &replace(&d, "    delivers: links\n", ""),
+        &replace(
+            &d,
+            "    delivers: links\n    script: userscript/saved.user.js\n",
+            "",
+        ),
         "methods[2].capabilities",
     );
     rejects(
@@ -392,6 +397,33 @@ fn methods_are_checked() {
         ),
         "methods[2].capabilities",
     );
+    // 脚本文件只给交链接的方法，路径在插件文件夹里
+    rejects(
+        &replace(
+            &d,
+            "    account: none\n    capabilities:\n",
+            "    account: none\n    script: a.user.js\n    capabilities:\n",
+        ),
+        "methods[0].script",
+    );
+    for bad in [
+        "/etc/passwd",
+        "../x.user.js",
+        "userscript/../../x.js",
+        "./a.js",
+        "a//b.js",
+        "",
+        "a\\b.js",
+    ] {
+        rejects(
+            &replace(
+                &d,
+                "    script: userscript/saved.user.js\n",
+                &format!("    script: \"{}\"\n", bad.replace('\\', "\\\\")),
+            ),
+            "methods[2].script",
+        );
+    }
     // 只有登录进 usuyo 的方法拿得到登录站点
     rejects(
         &replace(

@@ -12,6 +12,13 @@ export async function daemonConnection(): Promise<{ base: string; token: string 
   return invoke<{ base: string; token: string }>("daemon_connection");
 }
 
+/** 这个窗口开的时候去掉了系统标题栏没有（只在 macOS 的桌面壳里会去掉）；不在桌面壳里是 false。 */
+export async function titleBarHidden(): Promise<boolean> {
+  if (!isDesktopShell()) return false;
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<boolean>("title_bar_hidden");
+}
+
 async function currentWindow() {
   const { getCurrentWindow } = await import("@tauri-apps/api/window");
   return getCurrentWindow();

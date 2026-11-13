@@ -45,6 +45,14 @@ export function method(m: MethodSpec): FetchMethod {
 // 没做好的取法，清单里写了能力的，内核照样给 `gets`：做好以后会取得什么。
 const notBuilt = (m: MethodSpec) => method({ ...m, built: false, enabled: false });
 
+/** 样例脚本的开头：说明和地址照插件带的脚本写。 */
+const SAMPLE_SCRIPT = `// ==UserScript==
+// @name         usuyo：交出 X 的书签和喜欢
+// @description  在你自己的「书签」「喜欢」页上，只看页面自己请求回来的时间线；点「交给 usuyo」时把链接交过去。
+// @match        https://x.com/*
+// ==/UserScript==
+`;
+
 const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
 
 /**
@@ -91,6 +99,7 @@ function basePlugins(): FetchPlugin[] {
           login: "required",
           account: { kind: "own-browser" },
           gets: { delivers: "links" },
+          script: { path: "~/Library/Application Support/usuyo/plugins/usuyo-fetch/x/0.1.0/userscript/usuyo-x-saved.user.js", present: true },
         }),
         method({ id: "archive", name: "官方归档", access: "official-export", account: { kind: "none" }, gets: { list: [] } }),
         notBuilt({ id: "deliver", name: "内容投递", access: "browser-session", login: "required", account: { kind: "own-browser" }, gets: { fetch: ["text", "images", "media:video"] } }),
@@ -137,6 +146,7 @@ function basePlugins(): FetchPlugin[] {
           login: "required",
           account: { kind: "own-browser" },
           gets: { delivers: "links" },
+          script: { path: "~/Library/Application Support/usuyo/plugins/usuyo-fetch/xiaohongshu/0.1.0/userscript/usuyo-xhs-saved.user.js", present: false },
           riskNote: { text: "网页对采集类扩展弹「有害插件」；只截获、不发请求的脚本没有处罚报告。", source: { label: "XHS-Downloader #283", url: "https://github.com/JoeanAmier/XHS-Downloader/issues/283" } },
         }),
         notBuilt({
@@ -512,7 +522,11 @@ export function createMockPlatforms(empty = false): Platforms {
   return {
     async plugins() {
       await wait(40);
-      return { plugins: plugins.map((p) => ({ ...p, methods: p.methods.map((m) => ({ ...m })) })), notLoaded: [] };
+      return {
+        plugins: plugins.map((p) => ({ ...p, methods: p.methods.map((m) => ({ ...m })) })),
+        notLoaded: [],
+        failureLog: "~/Library/Application Support/usuyo/logs/fetch-failures.jsonl",
+      };
     },
     async sources(pluginId, methodId, link) {
       await wait(600);
@@ -541,6 +555,32 @@ export function createMockPlatforms(empty = false): Platforms {
       if (!m.built) throw new ApiError(422, "这种取法还没做好", "unsupported-input");
       p.methods[at] = settle(switched(m, enabled));
       return { ...p, methods: p.methods.map((x) => ({ ...x })) };
+    },
+    async clearMethod(pluginId, methodId) {
+      await wait(60);
+      const p = plugin(pluginId);
+      const at = p.methods.findIndex((x) => x.id === methodId);
+      const m = p.methods[at];
+      if (!m) throw new ApiError(404, `样例里 ${pluginId} 没有取法 ${methodId}`, "not-found");
+      const tier = (a: FetchMethod["access"]) => a !== "private-api" && a !== "client-hook";
+      p.methods[at] = settle({ ...m, enabled: tier(m.access), ...(m.perPlatform ? { perPlatform: m.perPlatform.map((t) => ({ ...t, enabled: tier(t.access) })) } : {}) });
+      return { ...p, methods: p.methods.map((x) => ({ ...x })) };
+    },
+    async methodScript(pluginId, methodId) {
+      await wait(40);
+      const m = plugin(pluginId).methods.find((x) => x.id === methodId);
+      if (!m?.script?.present) throw new ApiError(404, `样例里 ${pluginId} 的 ${methodId} 没带脚本`, "not-found");
+      return SAMPLE_SCRIPT;
+    },
+    async revealScript(pluginId, methodId) {
+      await wait(40);
+      if (!plugin(pluginId).methods.find((x) => x.id === methodId)?.script?.present) throw new ApiError(404, "插件文件夹里没有这个脚本文件", "not-found");
+    },
+    async setSecret(pluginId, key) {
+      await wait(60);
+      const p = plugin(pluginId);
+      p.settings = p.settings.map((x) => (x.key === key ? { ...x, filled: true } : x));
+      return { ...p };
     },
     async tryNow(pluginId) {
       await wait(40);

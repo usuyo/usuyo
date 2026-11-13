@@ -1,4 +1,4 @@
-import { getRouteApi } from "@tanstack/react-router";
+import { getRouteApi, Link } from "@tanstack/react-router";
 import { Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent } from "react";
 import { Button as AriaButton, Input, SearchField, ToggleButton, ToggleButtonGroup } from "react-aria-components";
@@ -11,6 +11,7 @@ import { useFog, useSize } from "../fog/useFog";
 import { useUiStore } from "../store/ui";
 import { SectionLabel } from "../ui/Chip";
 import { Panel } from "./Panel";
+import { HOME } from "./words";
 
 const route = getRouteApi("/");
 const MAP_X = 248;
@@ -365,6 +366,15 @@ export function MapScreen({ map, topics }: { map: MapView; topics: Topic[] }) {
       )}
 
 
+      {map.points.length === 0 ? (
+        <p className="absolute top-1/2 z-[5] m-0 w-max max-w-[calc(100%-var(--spacing-rail)-32px)] -translate-x-1/2 -translate-y-1/2 text-center text-note text-sub" style={{ left: MAP_X + (width - MAP_X) / 2 }}>
+          {HOME.emptyBefore}
+          <Link to="/plugins" className="mx-0.5 text-label underline decoration-border2 underline-offset-4 hover:text-text">
+            {HOME.emptyLink}
+          </Link>
+          {HOME.emptyAfter}
+        </p>
+      ) : null}
       <div className="absolute bottom-4 left-[268px] z-10 text-tag whitespace-pre text-sub">{hint}</div>
       <div
         className="absolute right-4 bottom-4 tabular-nums z-10 text-tag whitespace-nowrap text-sub transition-transform duration-[240ms] ease-out"

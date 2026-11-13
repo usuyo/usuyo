@@ -53,7 +53,7 @@ impl Fixture {
             r#"protocol: 1
 id: {id}
 kind: fetch
-name: 假的
+name: {id}
 version: 1.0.0
 license: MIT
 maintainers: [someone]
@@ -109,6 +109,23 @@ fn hit_ids(engine: &Engine, q: &str) -> Vec<String> {
         .into_iter()
         .map(|h| h.item_id)
         .collect()
+}
+
+#[tokio::test]
+async fn platforms_are_named_by_their_own_plugin_not_by_one_that_covers_several() {
+    let f = Fixture::new();
+    // 名字照字母排在前面的那个管几个平台
+    f.install("a/many", "zhihu, reddit", "a.test/*", "");
+    f.install("b/zhihu", "zhihu", "b.test/*", "");
+    let engine = f.engine();
+    let view = engine.plugins().await.unwrap();
+    let many = view.plugins.iter().find(|p| p.id == "a/many").unwrap();
+    let names: Vec<(&str, &str)> = many
+        .platforms
+        .iter()
+        .map(|p| (p.id.as_str(), p.name.as_str()))
+        .collect();
+    assert_eq!(names, [("zhihu", "b/zhihu"), ("reddit", "reddit")]);
 }
 
 #[tokio::test]

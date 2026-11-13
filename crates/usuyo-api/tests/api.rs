@@ -98,11 +98,17 @@ struct Fixture {
 }
 
 fn fixture() -> Fixture {
+    fixture_with(MANIFEST, |_| {})
+}
+
+/// 换一份清单，`place` 在插件文件夹里另放文件。
+fn fixture_with(manifest: &str, place: impl FnOnce(&std::path::Path)) -> Fixture {
     let tmp = tempfile::tempdir().unwrap();
     let machine = tmp.path().join("machine");
     let dir = machine.join("plugins/fake/web/1.0.0");
     std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("usuyo-plugin.yaml"), MANIFEST).unwrap();
+    std::fs::write(dir.join("usuyo-plugin.yaml"), manifest).unwrap();
+    place(&dir);
     std::fs::write(dir.join("plugin.sh"), PLUGIN).unwrap();
     std::fs::set_permissions(
         dir.join("plugin.sh"),
@@ -787,6 +793,7 @@ async fn transforms_settings_and_the_transform_route() {
     assert_eq!(s["trashDays"], 30);
     assert_eq!(s["network"]["mode"], "system");
     assert_eq!(s["transforms"]["auto"], true);
+    assert_eq!(s["window"]["systemTitleBar"], false);
     assert!(s["logs"].as_str().unwrap().ends_with("logs/daemon.log"));
     assert!(s.get("trashHeld").is_none());
     let res = send(
@@ -802,6 +809,40 @@ async fn transforms_settings_and_the_transform_route() {
     let s = json_of(res).await;
     assert_eq!(s["trashDays"], 90);
     assert_eq!(s["network"]["mode"], "direct");
+    // 用不用系统标题栏：写进按机器的 settings.json，壳下次开窗口时读
+    let s = json_of(
+        send(
+            &f.app,
+            with_body(
+                "PATCH",
+                "/settings",
+                json!({"window": {"systemTitleBar": true}}),
+            ),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(s["window"]["systemTitleBar"], true);
+    assert_eq!(s["network"]["mode"], "direct");
+    let machine: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(f._tmp.path().join("machine/settings.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(machine["window"]["systemTitleBar"], true);
+    problem(
+        send(
+            &f.app,
+            with_body(
+                "PATCH",
+                "/settings",
+                json!({"window": {"systemTitleBar": "yes"}}),
+            ),
+        )
+        .await,
+        StatusCode::BAD_REQUEST,
+        "invalid-args",
+    )
+    .await;
     problem(
         send(
             &f.app,
@@ -834,6 +875,70 @@ async fn transforms_settings_and_the_transform_route() {
         .unwrap()
         .to_owned();
     assert!(allowed.contains("PATCH"), "{allowed}");
+}
+
+#[tokio::test]
+async fn a_script_is_served_only_from_inside_its_plugin_folder() {
+    let scripts = "  - id: script-in\n    name: 脚本\n    access: browser-session\n    login: required\n    account: own-browser\n    delivers: links\n    script: userscript/in.user.js\n  - id: script-missing\n    name: 没带的脚本\n    access: browser-session\n    login: required\n    account: own-browser\n    delivers: links\n    script: userscript/none.user.js\n  - id: script-out\n    name: 指到外面的脚本\n    access: browser-session\n    login: required\n    account: own-browser\n    delivers: links\n    script: out.user.js\npermissions:";
+    let manifest = MANIFEST.replacen("permissions:", scripts, 1);
+    let outside = tempfile::tempdir().unwrap();
+    std::fs::write(outside.path().join("secret.txt"), "不该读到").unwrap();
+    let f = fixture_with(&manifest, |dir| {
+        std::fs::create_dir_all(dir.join("userscript")).unwrap();
+        std::fs::write(dir.join("userscript/in.user.js"), "// ==UserScript==\n").unwrap();
+        std::os::unix::fs::symlink(outside.path().join("secret.txt"), dir.join("out.user.js"))
+            .unwrap();
+    });
+    let plugins = json_of(send(&f.app, authed("/plugins")).await).await;
+    assert!(
+        plugins["failureLog"]
+            .as_str()
+            .unwrap()
+            .ends_with("logs/fetch-failures.jsonl")
+    );
+    let methods = plugins["plugins"][0]["methods"].as_array().unwrap().clone();
+    let script = |id: &str| methods.iter().find(|m| m["id"] == id).unwrap()["script"].clone();
+    assert_eq!(script("script-in")["present"], true);
+    assert!(
+        script("script-in")["path"]
+            .as_str()
+            .unwrap()
+            .ends_with("fake/web/1.0.0/userscript/in.user.js")
+    );
+    assert_eq!(script("script-missing")["present"], false);
+    assert_eq!(script("script-out")["present"], false);
+    assert!(script("page").is_null());
+
+    let text =
+        json_of(send(&f.app, authed("/plugins/fake/web/methods/script-in/script")).await).await;
+    assert_eq!(text, json!({"text": "// ==UserScript==\n"}));
+    for method in ["script-out", "script-missing", "page", "nope"] {
+        problem(
+            send(
+                &f.app,
+                authed(&format!("/plugins/fake/web/methods/{method}/script")),
+            )
+            .await,
+            StatusCode::NOT_FOUND,
+            "not-found",
+        )
+        .await;
+    }
+    // 没有脚本的方法不去开文件管理器
+    problem(
+        send(
+            &f.app,
+            with_body(
+                "POST",
+                "/plugins/fake/web/methods/page/script/reveal",
+                json!({}),
+            ),
+        )
+        .await,
+        StatusCode::NOT_FOUND,
+        "not-found",
+    )
+    .await;
 }
 
 #[tokio::test]
@@ -935,6 +1040,29 @@ async fn plugins_list_every_method_with_what_blocks_it_and_switches_one() {
     assert_eq!(
         settings["plugins"]["fake/web"]["methods"],
         json!({"signed": {"enabled": true}, "page": {"enabled": false}})
+    );
+    // 去掉拨过的开关：回到那一层的默认（private-api 关着），文件里那一项也没了
+    let clear = get("/plugins/fake/web/methods/signed")
+        .method("DELETE")
+        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+        .body(Body::empty())
+        .unwrap();
+    let p = json_of(send(&f.app, clear).await).await;
+    let signed = p["methods"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["id"] == "signed")
+        .unwrap()
+        .clone();
+    assert_eq!(signed["enabled"], false);
+    let settings: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(f._tmp.path().join("machine/settings.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        settings["plugins"]["fake/web"]["methods"],
+        json!({"page": {"enabled": false}})
     );
     // 来源要说是哪种方法；不能列的方法和坏链接回 4xx
     problem(

@@ -53,6 +53,7 @@ methods:
     login: required
     account: own-browser
     delivers: links
+    script: userscript/saved.user.js
   - id: iphone
     name: 手机镜像
     built: false

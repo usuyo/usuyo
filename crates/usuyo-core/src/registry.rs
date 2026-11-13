@@ -10,8 +10,9 @@ use crate::fetch::now_ms;
 use crate::jobs::PauseRow;
 use crate::methods::blockers;
 use crate::view::{
-    AccountView, Blocker, Event, GetsView, LastCall, MethodView, NotLoaded, PacingView, PauseView,
-    PlatformTierView, PluginView, PluginsView, SettingView, SiteView, SourceView, VisitorView,
+    AccountView, Blocker, Bundled, Event, GetsView, LastCall, MethodView, NotLoaded, PacingView,
+    PauseView, PlatformTierView, PluginView, PluginsView, ScriptView, SettingView, SiteView,
+    SourceView, VisitorView,
 };
 use crate::{Error, Result};
 
@@ -106,7 +107,63 @@ fn where_of(p: &FetchPlugin, m: &Method) -> Option<String> {
     }
 }
 
+/// 脚本文件在插件文件夹里的真实位置：解开链接以后还在 `dir` 里面、是个普通文件才算；不然 `None`。
+fn script_file(dir: &std::path::Path, rel: &str) -> Option<std::path::PathBuf> {
+    let root = dir.canonicalize().ok()?;
+    let file = dir.join(rel).canonicalize().ok()?;
+    (file.starts_with(&root) && file.is_file()).then_some(file)
+}
+
+/// 脚本文本最多读这么多；油猴脚本远小于它。
+const SCRIPT_LIMIT: u64 = 4 << 20;
+
 impl Engine {
+    /// 一种交链接的方法的脚本文件：只认装着的清单写了的、解开链接以后还在那个插件文件夹里的。
+    fn method_script(&self, plugin_id: &str, method_id: &str) -> Result<std::path::PathBuf> {
+        let plugin = self
+            .inner
+            .host
+            .plugin(plugin_id)
+            .ok_or_else(|| Error::NotFound(format!("plugin {plugin_id}")))?;
+        let m = plugin
+            .spec
+            .method(method_id)
+            .ok_or_else(|| Error::NotFound(format!("method {method_id} of {plugin_id}")))?;
+        let rel = m.script.as_deref().ok_or_else(|| {
+            Error::NotFound(format!("method {method_id} of {plugin_id} names no script"))
+        })?;
+        script_file(&plugin.dir, rel).ok_or_else(|| {
+            Error::NotFound(format!(
+                "{rel} is not a file inside the folder of {plugin_id}"
+            ))
+            .hinted("插件文件夹里没有这个脚本文件，重新装一次插件")
+        })
+    }
+
+    /// `GET /plugins/{id}/methods/{method}/script`：脚本的全文，给「复制脚本」。
+    pub fn method_script_text(&self, plugin_id: &str, method_id: &str) -> Result<String> {
+        use std::io::Read;
+        let path = self.method_script(plugin_id, method_id)?;
+        let file = std::fs::File::open(&path).map_err(|e| Error::io(&path, e))?;
+        let mut text = String::new();
+        file.take(SCRIPT_LIMIT + 1)
+            .read_to_string(&mut text)
+            .map_err(|e| Error::io(&path, e))?;
+        if text.len() as u64 > SCRIPT_LIMIT {
+            return Err(Error::UnsupportedInput(format!(
+                "{} is larger than {SCRIPT_LIMIT} bytes",
+                path.display()
+            )));
+        }
+        Ok(text)
+    }
+
+    /// `POST /plugins/{id}/methods/{method}/script/reveal`：在访达（或系统的文件管理器）里显示这个脚本文件。
+    pub async fn reveal_method_script(&self, plugin_id: &str, method_id: &str) -> Result<()> {
+        let path = self.method_script(plugin_id, method_id)?;
+        crate::reveal::reveal(&path).await
+    }
+
     /// 装着的获取插件和没加载的。各插件的本机检查过期了的先问一遍（同时问，不带凭据、不碰平台）。
     pub async fn plugins(&self) -> Result<PluginsView> {
         let mut asking = tokio::task::JoinSet::new();
@@ -136,6 +193,12 @@ impl Engine {
             Ok(PluginsView {
                 plugins,
                 not_loaded,
+                failure_log: this
+                    .inner
+                    .methods
+                    .failure_log()
+                    .to_string_lossy()
+                    .into_owned(),
             })
         })
         .await
@@ -240,6 +303,10 @@ impl Engine {
                     }),
                     pauses: own.into_iter().cloned().map(pause_view).collect(),
                     risk_note: m.risk.clone(),
+                    script: m.script.as_ref().map(|rel| ScriptView {
+                        path: p.dir.join(rel).to_string_lossy().into_owned(),
+                        present: script_file(&p.dir, rel).is_some(),
+                    }),
                 }
             })
             .collect();
@@ -294,6 +361,15 @@ impl Engine {
                 })
                 .collect(),
             pacing,
+            upstream: p
+                .header
+                .upstream
+                .iter()
+                .map(|u| Bundled {
+                    name: u.name.clone(),
+                    license: u.license.clone(),
+                })
+                .collect(),
             pauses: pauses.into_iter().map(pause_view).collect(),
             methods,
         })

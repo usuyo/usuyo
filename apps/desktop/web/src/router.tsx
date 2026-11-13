@@ -91,19 +91,29 @@ const takeRoute = createRoute({
   component: lazyRouteComponent(() => import("./capture/CapturePage"), "CapturePage"),
 });
 
-export interface PluginsSearch {
-  /** `text`：开着「变成文字」那一栏；不给是第一个平台。 */
-  show?: "text";
-  /** 开着哪个平台（`Platform.id`）；「手机」页的取法链过来用。 */
-  platform?: string;
-}
-
+// 获取插件：每个平台一页（`/plugins/<平台 id>`），「变成文字」是 `/plugins/text`；`/plugins` 开第一个平台。
 const pluginsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/plugins",
-  validateSearch: (search: Record<string, unknown>): PluginsSearch =>
-    search.show === "text" ? { show: "text" } : typeof search.platform === "string" && search.platform !== "" ? { platform: search.platform } : {},
   component: lazyRouteComponent(() => import("./plugins/PluginsPage"), "PluginsPage"),
+});
+
+const pluginsIndexRoute = createRoute({
+  getParentRoute: () => pluginsRoute,
+  path: "/",
+  component: lazyRouteComponent(() => import("./plugins/PluginsPage"), "FirstPlatform"),
+});
+
+const pluginsTextRoute = createRoute({
+  getParentRoute: () => pluginsRoute,
+  path: "text",
+  component: lazyRouteComponent(() => import("./plugins/PluginsPage"), "TextRoute"),
+});
+
+const platformRoute = createRoute({
+  getParentRoute: () => pluginsRoute,
+  path: "$platform",
+  component: lazyRouteComponent(() => import("./plugins/PluginsPage"), "PlatformRoute"),
 });
 
 export interface ImportSearch {
@@ -111,6 +121,10 @@ export interface ImportSearch {
   open?: string;
   /** `file`：从「别的工具导出的文件」那一半开始。 */
   from?: "file";
+  /** 平台页链过来：先展开这一种能列的方法（`<插件 id>#<方法 id>`）。 */
+  pick?: string;
+  /** 平台页链过来：先选好这一种读文件的方法（`FileReader.id`）。 */
+  reader?: string;
 }
 
 const importRoute = createRoute({
@@ -119,6 +133,8 @@ const importRoute = createRoute({
   validateSearch: (search: Record<string, unknown>): ImportSearch => ({
     ...(typeof search.open === "string" && search.open !== "" ? { open: search.open } : {}),
     ...(search.from === "file" ? { from: "file" as const } : {}),
+    ...(typeof search.pick === "string" && search.pick !== "" ? { pick: search.pick } : {}),
+    ...(typeof search.reader === "string" && search.reader !== "" ? { reader: search.reader } : {}),
   }),
   component: lazyRouteComponent(() => import("./imports/ImportPage"), "ImportPage"),
 });
@@ -157,7 +173,7 @@ const laterRoute = createRoute({
   component: LaterPage,
 });
 
-const routeTree = rootRoute.addChildren([homeRoute, searchRoute, itemRoute, topicRoute, draftsRoute, draftRoute, followRoute, changesRoute, exportRoute, takeRoute, pluginsRoute, phoneRoute, importRoute, trashRoute, settingsRoute, laterRoute]);
+const routeTree = rootRoute.addChildren([homeRoute, searchRoute, itemRoute, topicRoute, draftsRoute, draftRoute, followRoute, changesRoute, exportRoute, takeRoute, pluginsRoute.addChildren([pluginsIndexRoute, pluginsTextRoute, platformRoute]), phoneRoute, importRoute, trashRoute, settingsRoute, laterRoute]);
 
 export function createAppRouter(history?: Parameters<typeof createRouter>[0]["history"]) {
   return createRouter({ routeTree, history });

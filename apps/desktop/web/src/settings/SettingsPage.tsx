@@ -7,9 +7,12 @@ import { Diagnostics } from "./Diagnostics";
 import { Network } from "./Network";
 import { Storage } from "./Storage";
 import { TextSection } from "./TextSection";
+import { WindowSection } from "./WindowSection";
+import { WINDOW } from "./words";
 
 const SECTIONS = [
   { id: "appearance", name: "外观" },
+  { id: "window", name: WINDOW.section },
   { id: "network", name: "网络" },
   { id: "storage", name: "存储与回收站" },
   { id: "text", name: "变成文字" },
@@ -48,6 +51,9 @@ export function SettingsPage() {
           <div className="flex min-w-0 max-w-[760px] flex-col">
             <Section id="appearance" name="外观" sub="只在这台电脑上，不跟着资料库走。">
               <Appearance />
+            </Section>
+            <Section id="window" name={WINDOW.section} sub={WINDOW.sectionSub}>
+              {gate((v) => <WindowSection view={v} />)}
             </Section>
             <Section id="network" name="网络" sub="获取插件去平台取东西时，从哪个出口出去。">
               {gate((v) => (

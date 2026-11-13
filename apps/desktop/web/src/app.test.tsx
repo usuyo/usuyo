@@ -24,3 +24,26 @@ it("shows one calm line when the daemon is not running", async () => {
   expect((await screen.findAllByText("内核没在运行")).length).toBeGreaterThan(0);
   expect(screen.queryByText(/error/i)).toBeNull();
 });
+
+it("opens on the map even when the library is empty, with one quiet line instead of a first-run page", async () => {
+  vi.stubGlobal("scrollTo", vi.fn());
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: URL) => {
+      const path = new URL(input).pathname;
+      if (path.endsWith("/map")) return Promise.resolve(Response.json({ regions: [], points: [], unreadable: [] }));
+      if (path.endsWith("/topics")) return Promise.resolve(Response.json([]));
+      if (path.endsWith("/events")) return new Promise(() => {});
+      return Promise.resolve(Response.json({ code: "not-found" }, { status: 404 }));
+    }),
+  );
+  const router = createAppRouter(createMemoryHistory({ initialEntries: ["/"] }));
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  );
+  const line = await screen.findByText(/尚未添加任何内容/);
+  expect(line.querySelector("a")?.getAttribute("href")).toBe("/plugins");
+  expect(screen.getByRole("searchbox", { name: "搜索" })).toBeTruthy();
+});

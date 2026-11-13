@@ -4,6 +4,7 @@
 mod daemon;
 mod login;
 mod site_cookies;
+mod window;
 
 use std::sync::Arc;
 
@@ -11,6 +12,7 @@ use tauri::{Manager, RunEvent};
 
 use crate::daemon::{Connection, Daemon};
 use crate::login::Logins;
+use crate::window::Chrome;
 
 /// 前端经 `src/shell/` 要内核的地址和令牌；内核还没起来时等它。
 /// 前端连不上或令牌不对时再要一次，壳重新核对、必要时重新找（内核重启过就换了令牌）。
@@ -20,6 +22,13 @@ async fn daemon_connection(daemon: tauri::State<'_, Arc<Daemon>>) -> Result<Conn
     tauri::async_runtime::spawn_blocking(move || daemon.connection())
         .await
         .map_err(|e| e.to_string())?
+}
+
+/// 这个窗口开的时候去掉了系统标题栏没有（只在 macOS 上会去掉）。前端照它留出顶上那一条；
+/// 设置里改的是下一次开窗口时的样子，所以不看设置。
+#[tauri::command]
+fn title_bar_hidden(chrome: tauri::State<'_, Chrome>) -> bool {
+    chrome.hidden_title_bar
 }
 
 /// 细节进日志，给前端一句话。
@@ -137,7 +146,8 @@ fn main() {
             login_done,
             clear_login,
             clear_visitor,
-            open_settings_pane
+            open_settings_pane,
+            title_bar_hidden
         ])
         .setup(|app| {
             let plugins = app.path().resource_dir()?.join("plugins");
@@ -145,6 +155,12 @@ fn main() {
             let logins = Arc::new(Logins::new(Arc::clone(&daemon)));
             app.manage(Arc::clone(&daemon));
             app.manage(Arc::clone(&logins));
+            // 设置写坏了也要开得了窗口：照默认（不用系统标题栏）开，原因进日志。
+            let system_title_bar = window::system_title_bar(daemon.machine_dir()).unwrap_or_else(|e| {
+                eprintln!("usuyo: window.systemTitleBar not read, opening without the system title bar: {e:#}");
+                false
+            });
+            app.manage(window::open_main(app, system_title_bar)?);
             // 调试版，对着本机自己起的测试页试登录窗口：`USUYO_OPEN_LOGIN=<站点>` 一启动就开那个站点的登录窗口，
             // `USUYO_CLEAR_LOGIN=<站点>` 一启动就清掉那个站点的网页数据（同「退出登录」的后一半）。
             #[cfg(debug_assertions)]

@@ -48,7 +48,7 @@ const SEEN: PhoneDryRun = { read: 31, match: { flow: "小红书 · 收藏", step
 /** 读过几次 `GET /phone`。 */
 const reads: string[] = [];
 
-function serve(phone: PhoneView | null, plugins: PluginsView = { plugins: [xhs], notLoaded: [] }, dryRun: PhoneDryRun = SEEN) {
+function serve(phone: PhoneView | null, plugins: PluginsView = { plugins: [xhs], notLoaded: [], failureLog: "" }, dryRun: PhoneDryRun = SEEN) {
   const sent: string[] = [];
   reads.length = 0;
   vi.stubGlobal("scrollTo", vi.fn());
@@ -267,7 +267,7 @@ it("lists the methods that use a phone, what each still needs, and links to its 
   const list = await screen.findByRole("list", { name: "用到手机的取法" });
   const links = within(list).getAllByRole("link");
   expect(links).toHaveLength(2);
-  expect(links[0]?.getAttribute("href")).toBe("/plugins?platform=xiaohongshu");
+  expect(links[0]?.getAttribute("href")).toBe("/plugins/xiaohongshu");
   expect(within(list).getByText("差：给屏幕录制、连上 iPhone")).toBeTruthy();
   expect(within(list).getByText("插件写了，还没做好")).toBeTruthy();
   expect(within(list).getByText("记下的：镜像没有公开的识别接口。")).toBeTruthy();

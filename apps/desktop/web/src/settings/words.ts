@@ -42,3 +42,14 @@ export function heldText(held: { count: number; since: string }, days: number | 
   const span = days === null ? "" : `超过了回收站留的 ${days} 天`;
   return `这台电脑的时间比 ${dayText(held.since)}往后跳了一大截${span ? `，${span}` : ""}。为了不因为时间不对把回收站整个清掉，到期的 ${held.count} 项先留着没清。时间是对的，就照时间清掉它们。`;
 }
+
+/** 「窗口」那一节。 */
+export const WINDOW = {
+  section: "窗口",
+  sectionSub: "仅应用于这台电脑。",
+  titleBar: "使用系统标题栏",
+  titleBarSub:
+    "关闭时窗口顶部不显示系统标题栏，内容延伸到窗口顶部，左上角的窗口按钮显示在 usuyo 的顶栏上，拖移顶栏可以移动窗口。更改在下次打开 usuyo 时生效。仅适用于 macOS；Windows 和 Linux 始终使用系统标题栏。",
+  on: "已开启",
+  off: "已关闭",
+};

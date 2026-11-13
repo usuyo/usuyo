@@ -1152,6 +1152,13 @@
           ],
           "default": null
         },
+        "script": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "sites": {
           "type": "array",
           "default": [],

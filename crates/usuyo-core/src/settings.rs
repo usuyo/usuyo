@@ -1,4 +1,4 @@
-//! 设置页的那几项：按机器的 `settings.json` 里的 `network.proxy`、`transforms.auto`，资料库的 `trashDays`，
+//! 设置页的那几项：按机器的 `settings.json` 里的 `network.proxy`、`transforms.auto`、`window.systemTitleBar`，资料库的 `trashDays`，
 //! 时钟守卫拦下的回收站项。按机器的 `settings.json` 只经这里的 [`read`]、[`write`]（方法的开关在 `methods`），
 //! 别的键原样留着；改了马上生效。
 
@@ -11,7 +11,7 @@ use usuyo_plugin::ProxySetting;
 
 use crate::engine::{Engine, Via};
 use crate::trash::ClockGuard;
-use crate::view::{NetworkView, SettingsView, TransformsSetting, TrashHeld};
+use crate::view::{NetworkView, SettingsView, TransformsSetting, TrashHeld, WindowSetting};
 use crate::{Error, Result};
 
 fn settings_path(machine_root: &Path) -> PathBuf {
@@ -60,6 +60,21 @@ pub fn transforms_auto(machine_root: &Path) -> Result<bool> {
     }
 }
 
+/// `window.systemTitleBar`：桌面壳开窗口时用不用系统标题栏。没写是不用；写了不是真假的报错。
+/// 壳不链内核，开窗口时自己读同一个文件的这一项（`apps/desktop/src-tauri/src/window.rs`）。
+fn system_title_bar(machine_root: &Path) -> Result<bool> {
+    match read(machine_root)?
+        .get("window")
+        .and_then(|w| w.get("systemTitleBar"))
+    {
+        None => Ok(false),
+        Some(Value::Bool(b)) => Ok(*b),
+        Some(other) => Err(Error::InvalidArgs(format!(
+            "settings.json: window.systemTitleBar is {other}, not true or false"
+        ))),
+    }
+}
+
 /// `network.proxy`：`system`（没写时）、`direct` 或一个代理地址；写坏了报错，错误里不带地址（可能有密码）。
 pub fn proxy_setting(machine_root: &Path) -> Result<ProxySetting> {
     match read(machine_root)?
@@ -84,6 +99,7 @@ pub struct SettingsPatch {
     pub trash_days: Option<Option<u32>>,
     pub network: Option<NetworkPatch>,
     pub transforms: Option<TransformsPatch>,
+    pub window: Option<WindowPatch>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -105,6 +121,12 @@ pub enum NetworkMode {
 #[serde(deny_unknown_fields)]
 pub struct TransformsPatch {
     pub auto: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct WindowPatch {
+    pub system_title_bar: bool,
 }
 
 /// 写了的字段（含 `null`）是 `Some`。
@@ -170,6 +192,9 @@ impl Engine {
             transforms: TransformsSetting {
                 auto: transforms_auto(root)?,
             },
+            window: WindowSetting {
+                system_title_bar: system_title_bar(root)?,
+            },
             logs: root.join("logs/daemon.log").to_string_lossy().into_owned(),
         })
     }
@@ -204,6 +229,7 @@ impl Engine {
             }),
         };
         let auto = patch.transforms.map(|t| t.auto);
+        let title_bar = patch.window.map(|w| w.system_title_bar);
         // 资料库那一项先改：它没改成，按机器的文件和正在用的值都不动。
         if let Some(days) = patch.trash_days {
             let mut lib = self.lib();
@@ -219,7 +245,7 @@ impl Engine {
                 },
             )?;
         }
-        if proxy.is_some() || auto.is_some() {
+        if proxy.is_some() || auto.is_some() || title_bar.is_some() {
             let _guard = self
                 .inner
                 .settings_lock
@@ -237,6 +263,9 @@ impl Engine {
             }
             if let Some(a) = auto {
                 set(&mut map, "transforms", "auto", Value::Bool(a));
+            }
+            if let Some(t) = title_bar {
+                set(&mut map, "window", "systemTitleBar", Value::Bool(t));
             }
             write(root, &map)?;
         }
@@ -286,6 +315,30 @@ mod tests {
         let p: SettingsPatch = serde_json::from_str("{}").unwrap();
         assert_eq!(p.trash_days, None);
         assert!(serde_json::from_str::<SettingsPatch>(r#"{"nope": 1}"#).is_err());
+    }
+
+    #[test]
+    fn system_title_bar_is_off_unless_written() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(!system_title_bar(dir.path()).unwrap());
+        std::fs::write(
+            dir.path().join("settings.json"),
+            r#"{"window": {"systemTitleBar": true}}"#,
+        )
+        .unwrap();
+        assert!(system_title_bar(dir.path()).unwrap());
+        std::fs::write(
+            dir.path().join("settings.json"),
+            r#"{"window": {"systemTitleBar": 1}}"#,
+        )
+        .unwrap();
+        assert!(system_title_bar(dir.path()).is_err());
+        let p: SettingsPatch =
+            serde_json::from_str(r#"{"window": {"systemTitleBar": false}}"#).unwrap();
+        assert_eq!(p.window.map(|w| w.system_title_bar), Some(false));
+        assert!(
+            serde_json::from_str::<SettingsPatch>(r#"{"window": {"titleBar": false}}"#).is_err()
+        );
     }
 
     #[test]

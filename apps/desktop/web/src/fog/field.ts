@@ -34,15 +34,7 @@ export interface LibraryScene {
   landing: ReadonlySet<string>;
 }
 
-export interface EmptyScene {
-  kind: "empty";
-  frame: Frame;
-  /** 中间那块字，雾让开一个椭圆。 */
-  clearing: { cx: number; cy: number; rx: number; ry: number };
-  drops: { id: string; x: number; y: number }[];
-}
-
-export type FogScene = LibraryScene | EmptyScene;
+export type FogScene = LibraryScene;
 
 export interface FogEvents {
   hover?: (id: string | null) => void;
@@ -227,8 +219,7 @@ export class FogField {
     this.lampA = this.ez("lampA", this.raw ? 1 : 0, this.raw ? 8 : 4);
     const ctx = this.canvas.getContext("2d");
     if (!ctx) return false;
-    if (scene.kind === "library") this.drawLibrary(ctx, scene, red);
-    else this.drawEmpty(ctx, scene, red);
+    this.drawLibrary(ctx, scene, red);
     return !red || this.moving;
   }
 
@@ -317,64 +308,6 @@ export class FogField {
     const dx = x - this.lamp.x;
     const dy = y - this.lamp.y;
     return 1 - this.lampA * (1 - smooth(LAMP * 0.32, LAMP, Math.sqrt(dx * dx + dy * dy)));
-  }
-
-  private drawEmpty(ctx: CanvasRenderingContext2D, scene: EmptyScene, red: boolean): void {
-    const f = scene.frame;
-    const pal = currentPalette();
-    this.begin(ctx, f);
-    this.noiseGrid([0.26, 0.8], false);
-    for (const d of scene.drops) if (!this.drops.has(d.id)) this.drops.set(d.id, { x: d.x, y: d.y, t0: this.t });
-    const drops = scene.drops.flatMap((d) => {
-      const dr = this.drops.get(d.id);
-      return dr ? [{ d: dr, ph: this.phase(dr, red) }] : [];
-    });
-    if (drops.some((x) => x.ph.age < 1.8)) this.moving = true;
-    const B = scene.clearing;
-    const bk = this.buckets;
-    const { cols, rows } = this.dims;
-    for (let gy = 0; gy < rows; gy++) {
-      const y = gy * 9 + 4.5;
-      for (let gx = 0; gx < cols; gx++) {
-        const x = gx * 9 + 4.5;
-        let px = x;
-        let py = y;
-        const ex = (x - B.cx) / B.rx;
-        const ey = (y - B.cy) / B.ry;
-        let k = smooth(1, 1.5, Math.sqrt(ex * ex + ey * ey));
-        if (k < 0.004) continue;
-        k *= this.lampTerm(x, y);
-        for (const { d, ph } of drops) {
-          const ddx = x - d.x;
-          const ddy = y - d.y;
-          const dd = Math.sqrt(ddx * ddx + ddy * ddy);
-          if (dd > 120) continue;
-          // 落下的条目给它的名字留一小块；聚拢时附近的格子往落点滑、变薄。
-          k *= 1 - ph.on * (1 - smooth(26, 70, dd));
-          if (ph.gathering) {
-            const w = 1 - smooth(10, 110, dd);
-            px += (d.x - px) * ph.g * w;
-            py += (d.y - py) * ph.g * w;
-            k *= 1 - ph.g * w * 0.85;
-          }
-        }
-        const dens = this.sample(x, y) * k;
-        if (dens < 0.07) continue;
-        const lv = Math.min(7, Math.floor(dens * 8));
-        bk[lv]?.push(px, py);
-      }
-    }
-    this.paint(ctx, bk, pal.fogRgb, 1);
-    for (const { d, ph } of drops) {
-      if (ph.on > 0.01) {
-        ctx.fillStyle = `rgba(${pal.itemRgb},${(0.95 * ph.on).toFixed(3)})`;
-        ctx.beginPath();
-        ctx.arc(d.x, d.y, 3, 0, TAU);
-        ctx.fill();
-      }
-      // 圆环是手刚动过的地方，所以它是唯一用强调色的；往外走一次就没了。
-      this.ring(ctx, d, ph, pal.accentRgb);
-    }
   }
 
   private ring(ctx: CanvasRenderingContext2D, d: { x: number; y: number }, ph: Phase, rgb: string): void {

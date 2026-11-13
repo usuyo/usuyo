@@ -5,14 +5,14 @@ import { useModelChange, useTransforms } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
 import { sizeText } from "../item/faces";
 import { Button } from "../ui/Button";
-import { JOB_TEXT } from "./words";
+import { JOB_TEXT, PAGE } from "./words";
 
 /** 「变成文字」那一栏：装着的转换插件，各做哪几样；模型的大小、许可，下载和删掉。 */
 export function TransformsPanel() {
   const transforms = useTransforms();
   return (
-    <section aria-label="变成文字" className="min-w-0 animate-fade">
-      <h2 className="m-0 text-name font-semibold text-text">变成文字</h2>
+    <section aria-label={PAGE.textEntry} className="min-w-0 animate-fade">
+      <h2 className="m-0 text-name font-semibold text-text">{PAGE.textEntry}</h2>
       <p className="m-0 mt-1.5 max-w-[640px] text-note text-sub">
         把口播、图里的字、画面上的字转出来的插件。都在这台电脑上跑，不把内容发出去。模型只在你点了「下载」以后才下，放在这台电脑自己的目录里，不进资料库。
       </p>

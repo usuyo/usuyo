@@ -52,7 +52,7 @@ function serve(view: TransformsView) {
     vi.fn((input: URL | string, init?: RequestInit) => {
       const path = new URL(input).pathname;
       if (init?.method === "POST") posted.push(path);
-      if (path.endsWith("/plugins")) return Promise.resolve(Response.json({ plugins: [], notLoaded: [] }));
+      if (path.endsWith("/plugins")) return Promise.resolve(Response.json({ plugins: [], notLoaded: [], failureLog: "" }));
       if (path.endsWith("/transforms")) return Promise.resolve(Response.json(view));
       if (path.endsWith("/download")) return Promise.resolve(Response.json({ state: "downloading" }, { status: 202 }));
       if (path.endsWith("/remove")) return Promise.resolve(new Response(null, { status: 204 }));
@@ -61,7 +61,7 @@ function serve(view: TransformsView) {
       return Promise.resolve(Response.json({ code: "not-found", detail: "no such route" }, { status: 404 }));
     }),
   );
-  const router = createAppRouter(createMemoryHistory({ initialEntries: ["/plugins?show=text"] }));
+  const router = createAppRouter(createMemoryHistory({ initialEntries: ["/plugins/text"] }));
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <RouterProvider router={router} />

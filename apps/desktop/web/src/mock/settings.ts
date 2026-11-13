@@ -11,9 +11,10 @@ export function createMockSettings(trash: { days(): number | null; setDays(days:
     ...(empty ? {} : { trashHeld: { count: 3, since: "2026-08-02T12:00:00.000Z" } }),
     network: { mode: "system", fakeIp: true },
     transforms: { auto: true },
+    window: { systemTitleBar: false },
     logs: "~/Library/Application Support/usuyo/logs/daemon.log",
   };
-  const snapshot = (): SettingsView => ({ ...view, network: { ...view.network }, transforms: { ...view.transforms }, trashDays: trash.days() });
+  const snapshot = (): SettingsView => ({ ...view, network: { ...view.network }, transforms: { ...view.transforms }, window: { ...view.window }, trashDays: trash.days() });
   return {
     async settings() {
       await wait(40);
@@ -27,6 +28,7 @@ export function createMockSettings(trash: { days(): number | null; setDays(days:
         view.network = { ...patch.network, fakeIp: view.network.fakeIp };
       }
       if (patch.transforms) view.transforms = { ...patch.transforms };
+      if (patch.window) view.window = { ...patch.window };
       return snapshot();
     },
     async releaseHeld() {

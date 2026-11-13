@@ -57,8 +57,7 @@ impl Daemon {
         Ok(Daemon::at(machine_root()?, plugins, port()))
     }
 
-    /// 按机器的目录：登录窗口在 Windows、Linux 上的网页数据也放这下面。
-    #[cfg(not(target_vendor = "apple"))]
+    /// 按机器的目录：开窗口时读的 `settings.json` 在这里；登录窗口在 Windows、Linux 上的网页数据也放这下面。
     pub fn machine_dir(&self) -> &Path {
         &self.root
     }
