@@ -62,7 +62,7 @@
 - 测试：`cargo test --workspace`；契约用 `crates/usuyo-contract/testdata/` 里的固定样例校验。
 - 前端：`apps/desktop/web`，pnpm workspace；组件按功能分目录。
 - 提交信息：`<scope>: <summary>`，例如 `core: add content package writer`。
-- 文案：中文为主；产品内用"收下 / 存着 / 回头看"，不用"收藏 / 待办 / 未读"。
+- 文案：写成熟软件里那种客观的话（参照 Apple 中文界面），不用自己造的说法；界面上的话都走语言文件（简体中文和英文）。规则和用词表在 `docs/spec/conventions.md` §0.10。
 - 不写"破解 / 去水印 / 绕过"这类字眼；统一说"个人备份 / 离线阅读 / 注意力整理"。
 
 ## 常用命令
