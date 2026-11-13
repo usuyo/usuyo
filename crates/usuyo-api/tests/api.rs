@@ -551,6 +551,63 @@ async fn errors_are_problem_details() {
 }
 
 #[tokio::test]
+async fn the_language_setting_switches_the_daemons_sentences() {
+    let f = fixture();
+    let s = json_of(send(&f.app, authed("/settings")).await).await;
+    assert_eq!(s["language"], "system");
+    let take = || {
+        with_body(
+            "POST",
+            "/items",
+            json!({"input": "这里没有链接", "kind": "link"}),
+        )
+    };
+    let hint = |p: Value| p["hint"].as_str().unwrap().to_owned();
+    // 跟随系统：测试里的系统语言是简体中文
+    let p = json_of(send(&f.app, take()).await).await;
+    assert_eq!(hint(p), "这段文字中没有可添加的链接。");
+
+    let res = send(
+        &f.app,
+        with_body("PATCH", "/settings", json!({"language": "en"})),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(json_of(res).await["language"], "en");
+    let stored: Value = serde_json::from_slice(
+        &std::fs::read(f._tmp.path().join("machine/settings.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(stored["language"], "en");
+    let p = json_of(send(&f.app, take()).await).await;
+    assert_eq!(
+        hint(p),
+        "This text doesn't contain a link that can be added."
+    );
+    // 错误码不翻译
+    let p = json_of(send(&f.app, take()).await).await;
+    assert_eq!(p["code"], "unsupported-input");
+
+    problem(
+        send(
+            &f.app,
+            with_body("PATCH", "/settings", json!({"language": "fr"})),
+        )
+        .await,
+        StatusCode::BAD_REQUEST,
+        "invalid-args",
+    )
+    .await;
+    send(
+        &f.app,
+        with_body("PATCH", "/settings", json!({"language": "zh-Hans"})),
+    )
+    .await;
+    let p = json_of(send(&f.app, take()).await).await;
+    assert_eq!(hint(p), "这段文字中没有可添加的链接。");
+}
+
+#[tokio::test]
 async fn events_stream_announces_takes() {
     let f = fixture();
     let res = send(&f.app, authed("/events")).await;

@@ -53,6 +53,7 @@ struct Fixture {
     _tmp: TempDir,
     host: PluginHost,
     work: PathBuf,
+    locale: usuyo_plugin::Locale,
 }
 
 /// 装一个假插件：`script` 是 sh 的正文，`$1` 是子命令，fetch 时 `$out` 是输出目录。
@@ -84,16 +85,18 @@ fn install_with(script: &str, tune: impl FnOnce(&mut CallLimits)) -> Fixture {
     };
     tune(&mut limits);
     let work = tmp.path().join("work");
+    let locale = usuyo_plugin::Locale::new("zh-Hans");
     let config = HostConfig {
         work_dir: work.clone(),
         cache_dir: tmp.path().join("cache"),
-        locale: "zh-CN".into(),
+        locale: locale.clone(),
         limits,
     };
     Fixture {
         host: PluginHost::new(config, found.fetch),
         work,
         _tmp: tmp,
+        locale,
     }
 }
 
@@ -178,13 +181,18 @@ async fn fetch_succeeds_and_keeps_what_the_plugin_calls_missing() {
 
     let env = std::fs::read_to_string(f.cache().join("env")).unwrap();
     assert!(env.lines().any(|l| l == "USUYO_PROTOCOL=1"), "{env}");
-    assert!(env.lines().any(|l| l == "USUYO_LOCALE=zh-CN"));
+    assert!(env.lines().any(|l| l == "USUYO_LOCALE=zh-Hans"));
     assert!(
         env.lines()
             .any(|l| l.starts_with("HOME=") && l.contains("/work/")),
         "{env}"
     );
     assert!(!env.contains("CARGO_"), "host environment leaked: {env}");
+    // 设置里换了语言，下一次调用就带新的
+    f.locale.set("en");
+    f.fetch(None, &CallOptions::default()).await.unwrap();
+    let env = std::fs::read_to_string(f.cache().join("env")).unwrap();
+    assert!(env.lines().any(|l| l == "USUYO_LOCALE=en"), "{env}");
 
     // 丢掉快照，暂存目录一起删掉
     let out = snap.out_dir();
@@ -621,7 +629,7 @@ fn candidates_put_web_last() {
         HostConfig {
             work_dir: tmp.path().join("work"),
             cache_dir: tmp.path().join("cache"),
-            locale: "zh-CN".into(),
+            locale: usuyo_plugin::Locale::new("zh-Hans"),
             limits: CallLimits::default(),
         },
         found.fetch,
@@ -834,7 +842,7 @@ async fn networked_plugins_get_the_proxy_and_others_do_not() {
         HostConfig {
             work_dir: tmp.path().join("work"),
             cache_dir: tmp.path().join("cache"),
-            locale: "zh-CN".into(),
+            locale: usuyo_plugin::Locale::new("zh-Hans"),
             limits: CallLimits::default(),
         },
         found.fetch,

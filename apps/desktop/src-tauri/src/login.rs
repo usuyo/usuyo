@@ -8,6 +8,7 @@
 //! 等声明的 cookie 都出现（没声明名字的等名字不再变），交给内核 `PUT /visitors/{site}`。
 //! 访客身份的网页数据是 `visitor:<站点>` 那一份，和同一主机的账号分开。
 
+use crate::words::{self, Lang};
 use std::collections::HashMap;
 #[cfg(not(target_vendor = "apple"))]
 use std::path::PathBuf;
@@ -197,8 +198,9 @@ impl Logins {
                 .ok_or_else(|| anyhow!("{site} has no login page"))?,
         )?;
         let manual = spec.cookies.is_empty();
-        let bar = json!({ "mode": if manual { "manual" } else { "auto" }, "name": spec.name });
-        let title = format!("登录{} · usuyo", spec.name);
+        let lang = Lang::of(self.daemon.machine_dir());
+        let bar = json!({ "mode": if manual { "manual" } else { "auto" }, "name": spec.name, "lang": lang.tag() });
+        let title = words::LOGIN_TITLE.fill(lang, &[("site", &spec.name)]);
         self.open_window(app, site.to_owned(), &title, url, bar, Goal::Login(spec))
     }
 
@@ -215,8 +217,9 @@ impl Logins {
             .find(|v| v.site == site)
             .ok_or_else(|| anyhow!("no installed plugin uses a visitor identity for {site}"))?;
         let url = page_url(&v.url)?;
-        let bar = json!({ "mode": "visitor", "name": v.name });
-        let title = format!("取{}的访客身份 · usuyo", v.name);
+        let lang = Lang::of(self.daemon.machine_dir());
+        let bar = json!({ "mode": "visitor", "name": v.name, "lang": lang.tag() });
+        let title = words::VISITOR_TITLE.fill(lang, &[("site", &v.name)]);
         self.open_window(app, store, &title, url, bar, Goal::Visitor(v))
     }
 
@@ -348,7 +351,7 @@ impl Logins {
                             continue;
                         }
                         if selected.is_empty() {
-                            say(bar, "还没看到这个站点的登录。登录好了再点一次。");
+                            say(bar, words::NOT_SIGNED_IN_YET.pick(self.lang()));
                             continue;
                         }
                         true
@@ -359,7 +362,7 @@ impl Logins {
                     if !ready {
                         continue;
                     }
-                    say(bar, "看到登录了，正在交给 usuyo……");
+                    say(bar, words::SENDING_LOGIN.pick(self.lang()));
                     self.api(
                         "PUT",
                         &["sites", &spec.site, "login"],
@@ -390,7 +393,7 @@ impl Logins {
                 }
                 Err(e) => {
                     eprintln!("usuyo: cannot hand the login to the daemon: {e:#}");
-                    say(bar, "没能交给 usuyo 的后台，过一会儿自己再试。");
+                    say(bar, words::SEND_FAILED.pick(self.lang()));
                     failed_at = Some(std::time::Instant::now());
                 }
             }
@@ -436,6 +439,12 @@ impl Logins {
 }
 
 /// 在上面那条里说一句。
+impl Logins {
+    fn lang(&self) -> Lang {
+        Lang::of(self.daemon.machine_dir())
+    }
+}
+
 fn say(bar: &Webview, text: &str) {
     let text = serde_json::to_string(text).unwrap_or_default();
     let _ = bar.eval(format!("window.usuyoSay && window.usuyoSay({text});"));

@@ -14,6 +14,7 @@ use crate::engine::Engine;
 use crate::fetch::now_ms;
 use crate::jobs::ImportRow;
 use crate::view::{Event, FileReaderView, ImportView};
+use crate::words::{self, Said};
 use crate::{Error, Result};
 
 /// 窗口里交的一个文件最多多大（官方归档带着图和视频，几个 GiB 常见）。
@@ -129,7 +130,7 @@ impl Engine {
     pub fn prepare_file_import(&self, reader: &str, name: &str) -> Result<FileUpload> {
         let (plugin_id, method) = reader.split_once('#').ok_or_else(|| {
             Error::InvalidArgs(format!("reader `{reader}` is not `<plugin>#<method>`"))
-                .hinted("没说用哪种方法读这个文件")
+                .hinted(words::NO_READER.said())
         })?;
         let plugin = self.reader_plugin(plugin_id)?;
         let reads = plugin.spec.method(method).is_some_and(reads_files);
@@ -137,7 +138,7 @@ impl Engine {
             return Err(Error::UnsupportedInput(format!(
                 "{plugin_id} has no method `{method}` that reads files"
             ))
-            .hinted(format!("{}没有读文件的这种方法", plugin.header.name)));
+            .hinted(words::NO_READ_METHOD.with(&[("plugin", &plugin.header.name)])));
         }
         self.list_method(&plugin, method)?;
         let name = display_name(name);
@@ -220,10 +221,10 @@ impl Engine {
         }
         let now = self.import_row(&row.id)?;
         if let (Some(code), None) = (&now.stop_code, now.wait_until) {
-            let hint = now
-                .stop_hint
-                .clone()
-                .unwrap_or_else(|| format!("{reader}读不了这个文件"));
+            let hint = now.stop_hint.as_deref().map_or_else(
+                || words::CANT_READ_FILE.with(&[("plugin", &reader)]),
+                Said::from_stored,
+            );
             self.delete_import(&row.id)?;
             return Err(Error::InvalidArgs(format!(
                 "{} {} could not read the file: {code}",
@@ -237,11 +238,9 @@ impl Engine {
     }
 
     fn reader_plugin(&self, id: &str) -> Result<FetchPlugin> {
-        self.inner
-            .host
-            .plugin(id)
-            .cloned()
-            .ok_or_else(|| Error::NotFound(format!("plugin {id}")).hinted("没有装这个插件"))
+        self.inner.host.plugin(id).cloned().ok_or_else(|| {
+            Error::NotFound(format!("plugin {id}")).hinted(words::NOT_INSTALLED.said())
+        })
     }
 
     /// 一次 `file` 类导入的副本：`imports/<导入 id>/input[.扩展名]`。

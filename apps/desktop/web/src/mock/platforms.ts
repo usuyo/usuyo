@@ -12,6 +12,8 @@ import type {
 } from "../api/endpoints";
 import { ApiError } from "../api/client";
 import type { Platforms } from "../api/source";
+import { formatDayTime } from "../i18n/format";
+import { said } from "./said";
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const inMinutes = (m: number) => new Date(Date.now() + m * 60_000).toISOString();
@@ -20,11 +22,10 @@ type MethodSpec = Pick<FetchMethod, "id" | "name" | "access" | "account" | "gets
 
 /** 停着的写成一条原因，同内核：限流、被拦写到几点，「先别试」写到你点「现在再试」为止。 */
 function pausedHint(p: FetchMethod["pauses"][number]): string {
-  if (p.byYou) return "你让它先别试，到你点「现在再试」为止";
-  const d = p.until ? new Date(p.until) : null;
-  const at = d ? `${d.getMonth() + 1} 月 ${d.getDate()} 日 ${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}` : null;
-  const why = p.code === "rate-limited" ? "平台限流了" : p.code === "blocked" ? "平台拦住了" : "停着";
-  return at ? `${why}，${at}以前不用它` : `${why}，等你点「现在再试」`;
+  if (p.byYou) return said("已暂停，点按「立即重试」后恢复", "Paused until you click Retry Now");
+  const at = p.until ? formatDayTime(p.until) : null;
+  const why = p.code === "rate-limited" ? said("平台提示请求过于频繁", "The platform reported too many requests") : p.code === "blocked" ? said("平台阻止了请求", "The platform blocked the request") : said("已暂停", "Paused");
+  return at ? said(`${why}，${at} 前不使用`, `${why}; not used until ${at}`) : said(`${why}，点按「立即重试」后恢复`, `${why}; resumes when you click Retry Now`);
 }
 
 /** `off`、`not-built`、`paused` 由开关、做没做好、暂停算出来；别的原因（登录、访客身份、本机检查）照样例写的留着。 */
@@ -32,8 +33,8 @@ function settle(m: FetchMethod): FetchMethod {
   const kept = m.blockers.filter((b) => b.code !== "off" && b.code !== "not-built" && b.code !== "paused");
   const paused = m.pauses[0];
   const blockers = !m.built
-    ? [{ code: "not-built", hint: "这种方法还没做" }]
-    : [...(m.enabled ? [] : [{ code: "off", hint: "你关掉了这种方法" }]), ...kept, ...(paused ? [{ code: "paused", hint: pausedHint(paused) }] : [])];
+    ? [{ code: "not-built", hint: said("这种获取方式尚未提供", "This fetch method isn't available yet") }]
+    : [...(m.enabled ? [] : [{ code: "off", hint: said("你已关闭这种获取方式", "You turned off this fetch method") }]), ...kept, ...(paused ? [{ code: "paused", hint: pausedHint(paused) }] : [])];
   return { ...m, blockers, usable: blockers.length === 0 };
 }
 
@@ -136,7 +137,7 @@ function basePlugins(): FetchPlugin[] {
           access: "public-web",
           account: { kind: "visitor", sites: ["www.xiaohongshu.com"], where: "小红书" },
           gets: { fetch: ["text", "images", "media:video"] },
-          blockers: [{ code: "visitor-missing", hint: "要先开一次小红书首页，取一份访客身份" }],
+          blockers: [{ code: "visitor-missing", hint: said("需要先打开一次小红书首页，获取访客身份", "Open the 小红书 home page once to get a visitor identity first") }],
           riskNote: { text: "不填 cookie 批量取约 108 条后，复制链接的账号被下线。", source: { label: "XHS-Downloader #305", url: "https://github.com/JoeanAmier/XHS-Downloader/issues/305" } },
         }),
         method({
@@ -180,7 +181,7 @@ function basePlugins(): FetchPlugin[] {
           access: "public-web",
           account: { kind: "none" },
           gets: { fetch: ["meta", "images"] },
-          blockers: [{ code: "check-failed", hint: "这台电脑上没找到 Node 22，插件跑不起来" }],
+          blockers: [{ code: "check-failed", hint: said("这台电脑上没有 Node 22，插件无法运行", "Node 22 isn't installed on this computer, so the plugin can't run") }],
         }),
         // 要在 usuyo 里登录、还没登录的一种。
         method({
@@ -190,7 +191,7 @@ function basePlugins(): FetchPlugin[] {
           login: "required",
           account: { kind: "in-usuyo", sites: ["yuanbao.tencent.com"], where: "腾讯元宝" },
           gets: { fetch: ["media:video"] },
-          blockers: [{ code: "login-missing", hint: "要先在 usuyo 里登录腾讯元宝" }],
+          blockers: [{ code: "login-missing", hint: said("需要先在 usuyo 中登录腾讯元宝", "Sign in to 腾讯元宝 in usuyo first") }],
           riskNote: { text: "公开部署的解析服务被大量调用后，元宝账号被封。", source: { label: "wx_channels_download #495", url: "https://github.com/ltaoo/wx_channels_download/issues/495" } },
         }),
         notBuilt({ id: "pc-client", name: "电脑微信", access: "client-hook", login: "required", account: { kind: "own-app", where: "微信视频号" }, drives: "desktop-app", gets: { fetch: ["media:video"] } }),
@@ -235,7 +236,7 @@ function basePlugins(): FetchPlugin[] {
           access: "public-web",
           account: { kind: "none" },
           gets: { list: [], link: "收藏夹或个人空间的链接" },
-          lastCall: { at: minutesAgo(25), ok: false, code: "not-found", hint: "这个收藏夹不公开，或者已经删掉了" },
+          lastCall: { at: minutesAgo(25), ok: false, code: "not-found", hint: said("这个收藏夹不公开，或者已被删除", "This favorites folder isn't public, or it was deleted") },
         }),
         method({
           id: "favorites",
@@ -245,7 +246,7 @@ function basePlugins(): FetchPlugin[] {
           account: { kind: "in-usuyo", sites: ["www.bilibili.com"], where: "B站" },
           gets: { list: ["稍后再看"] },
           // 样例里这一种刚被限流：页面上写原因和什么时候再试
-          pauses: [{ method: "favorites", scope: "bilibili", byYou: false, until: inMinutes(12), code: "rate-limited", hint: "B站说请求太频繁，过一会儿再试" }],
+          pauses: [{ method: "favorites", scope: "bilibili", byYou: false, until: inMinutes(12), code: "rate-limited", hint: said("B站提示请求过于频繁，稍后再试", "Bilibili reported too many requests. Try again later.") }],
           riskNote: { text: "一例大会员被冻结，因果不明。", source: { label: "yutto #452", url: "https://github.com/yutto-dev/yutto/issues/452" } },
         }),
         notBuilt({ id: "yutto", name: "yutto（高清音视频、字幕）", access: "session-api", login: "required", account: { kind: "in-usuyo", sites: ["www.bilibili.com"], where: "B站" }, gets: { fetch: ["media:video", "subtitle"] } }),
@@ -728,7 +729,7 @@ export function createMockPlatforms(empty = false): Platforms {
     },
     async importFile(readerId, file, onSent, signal) {
       const reader = [...FILE_READERS].find((r) => r.id === readerId);
-      if (!reader) throw new ApiError(404, "no such file reader", "not-found", "没有这种读文件的方法");
+      if (!reader) throw new ApiError(404, "no such file reader", "not-found", said("没有这种读取文件的方式", "No such file reader"));
       // 照约 200 MB/s 交，一步 120 毫秒，能停下。
       for (let sent = 0; sent < file.size; ) {
         await wait(120);
@@ -739,7 +740,7 @@ export function createMockPlatforms(empty = false): Platforms {
       await wait(300);
       // 样例里，名字对不上的当作插件认不出的文件；内核自己不按名字拒。
       if (!reader.patterns.some((pattern) => globMatch(pattern, file.name))) {
-        throw new ApiError(400, "the plugin could not read the file", "invalid-args", `这不像${reader.plugin}的${reader.name}：里面没有它认得的文件`);
+        throw new ApiError(400, "the plugin could not read the file", "invalid-args", said(`这不是${reader.plugin}的${reader.name}：里面没有它能识别的文件`, `This isn't a ${reader.plugin} ${reader.name}: it contains no file it recognizes`));
       }
       const id = `0193f2b0-${(imports.size + 1).toString().padStart(4, "0")}-7f3a-8b4c-5d6e7f8a9b0c`;
       const all = archiveEntries(reader.id === LINK_LIST.id ? 9 : 31);

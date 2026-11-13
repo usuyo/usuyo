@@ -1,65 +1,62 @@
-// 改动记录的几句话：谁、在哪台电脑、做了什么、这一批现在怎样。只说发生过的事，不计数。
+// 更改记录的几句话：谁、在哪台电脑、做了什么、这一批现在怎样。只说发生过的事，不计数。
 import type { ChangeActor, ChangeBatch, ChangeOp } from "../api/endpoints";
+import { t } from "../i18n";
+import { formatClockTime } from "../i18n/format";
 import { dayText } from "../item/format";
 
 export function actorText(by: ChangeActor): string {
   switch (by.kind) {
     case "you":
-      return "你";
+      return t("changes.actor.you");
     case "agent":
       return by.name;
     case "readback":
-      return `从 ${by.target} 读回`;
+      return t("changes.actor.readback", { target: by.target });
     default:
-      return "同步来的";
+      return t("changes.actor.sync");
   }
 }
 
-const OP_TEXT: Record<ChangeOp["op"], string> = {
-  "add-item": "收下",
-  "set-note": "记一句",
-  "edit-page": "改一段",
-  "add-citation": "加一处引用",
-  "add-to-topic": "放进主题",
-  "keep-text": "只留文字",
-  restore: "拿回来",
-};
-
-/** 一处做了什么：「收下「这周的豆子」」「把「Portra 400」放进「胶片摄影」」「在「咖啡」里改一段」。 */
+/** 一处做了什么：「添加了「这周的豆子」」「将「Portra 400」添加到「胶片摄影」」「编辑了「咖啡」中的一段」。 */
 export function opText(o: ChangeOp): string {
-  const t = `「${o.target.title}」`;
+  const title = o.target.title;
   switch (o.op) {
     case "add-to-topic":
-      return o.after ? `把${t}放进「${o.after}」` : `把${t}放进主题`;
+      return o.after ? t("changes.op.addToTopic", { title, topic: o.after }) : t("changes.op.addToSomeTopic", { title });
     case "edit-page":
+      return t("changes.op.editPage", { title });
     case "add-citation":
-      return `在${t}里${OP_TEXT[o.op]}`;
+      return t("changes.op.addCitation", { title });
     case "set-note":
-      return `给${t}${OP_TEXT[o.op]}`;
+      return t("changes.op.setNote", { title });
+    case "keep-text":
+      return t("changes.op.keepText", { title });
+    case "restore":
+      return t("changes.op.restore", { title });
     default:
-      return `${OP_TEXT[o.op]}${t}`;
+      return t("changes.op.addItem", { title });
   }
 }
 
 export function stateText(b: Pick<ChangeBatch, "state">): string {
   switch (b.state) {
     case "proposed":
-      return "改动提议：你接受了才生效";
+      return t("changes.state.proposed");
     case "declined":
-      return "都不要了，资料库没变";
+      return t("changes.state.declined");
     case "undone":
-      return "撤销了";
+      return t("changes.state.undone");
     default:
-      return "生效了";
+      return t("changes.state.applied");
   }
 }
 
-/** 「今天」「昨天」「11 月 9 日」。 */
+/** 「今天」「昨天」「11月9日」。 */
 export function dayHeading(iso: string, now = new Date()): string {
   const d = new Date(iso);
   const start = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
   const days = Math.round((start(now) - start(d)) / 86_400_000);
-  return days === 0 ? "今天" : days === 1 ? "昨天" : dayText(iso);
+  return days === 0 ? t("common.today") : days === 1 ? t("common.yesterday") : dayText(iso);
 }
 
 /** 按「谁」挑着看。 */
@@ -71,8 +68,7 @@ export function byWho(b: ChangeBatch, who: Who): boolean {
   return b.by.kind === who;
 }
 
-/** 「14:20」：日子写在上面那一行。 */
+/** 时分，按当前语言（「14:20」「2:20 PM」）：日子写在上面那一行。 */
 export function hm(iso: string): string {
-  const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  return formatClockTime(iso);
 }

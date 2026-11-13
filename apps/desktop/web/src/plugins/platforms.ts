@@ -1,6 +1,8 @@
 // 获取插件页按平台分：一个平台一页。一种方法放在哪一张卡片上、「用哪种方法」那个选择框现在是哪一项、
 // 换一项要拨哪几个开关，都在这里算；页面只照着摆。
 import type { Access, FetchMethod, FetchPlugin, MethodAccount, PluginsView } from "../api/endpoints";
+import enPlugins from "../i18n/en/plugins";
+import zhPlugins from "../i18n/zh-Hans/plugins";
 import { canList } from "./words";
 
 /** 一个平台上的一种方法：方法和它所在的插件。一个插件管几个平台，就在几个平台上各出现一次。 */
@@ -157,13 +159,20 @@ export function savedKind(u: Use, readers: Set<string>): SavedKind {
   return "list";
 }
 
+/** 脚本说明里写读哪一页的那种说法，每种语言一个（`plugins.script.pagesPattern`），`{pages}` 处是要取出来的一段。 */
+const PAGES_PATTERNS = [zhPlugins.script.pagesPattern, enPlugins.script.pagesPattern].map((p) => {
+  const [before = "", after = ""] = p.split("{pages}");
+  const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`${esc(before)}(.+?)${esc(after)}`, "i");
+});
+
 /**
  * 脚本里写的那一页：说明里「在你自己的……页上」那一段（例如「书签」「喜欢」），和 `@match` 的地址。
- * 都取自插件带的脚本，应用里不写死哪个平台。
+ * 都取自插件带的脚本，应用里不写死哪个平台。脚本用哪种语言写说明和界面用哪种语言无关，两种说法都认。
  */
 export function scriptPages(text: string): { pages: string | null; matches: string[] } {
   const description = /^\/\/\s*@description\s+(.+)$/m.exec(text)?.[1] ?? "";
-  const pages = /在你自己的(.+?)页上/.exec(description)?.[1]?.trim() ?? null;
+  const pages = PAGES_PATTERNS.map((r) => r.exec(description)?.[1]?.trim()).find((x) => x !== undefined) ?? null;
   const matches = [...text.matchAll(/^\/\/\s*@match\s+(\S+)/gm)].map((m) => m[1] ?? "").filter((m) => m !== "");
   return { pages, matches };
 }

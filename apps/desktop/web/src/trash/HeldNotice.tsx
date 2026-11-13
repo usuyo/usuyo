@@ -2,17 +2,18 @@ import { useState } from "react";
 import type { SettingsView } from "../api/endpoints";
 import { useReleaseHeld } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
+import { t } from "../i18n";
 import { heldText } from "../settings/words";
 import { Button } from "../ui/Button";
 
-/** 时钟跳了、到期检查被拦下时那一块：说清楚为什么没清，只给「照时间清掉」一个动作。回收站页和设置页都放它。 */
+/** 时钟跳了、到期检查被拦下时那一块：说清楚为什么没删，只给「按时间删除」一个动作。废纸篓页和设置页都放它。 */
 export function HeldNotice({ view }: { view: SettingsView }) {
   const release = useReleaseHeld();
   const [asking, setAsking] = useState(false);
   if (!view.trashHeld) {
     return release.data ? (
       <p role="status" className="m-0 text-small text-sub">
-        照时间清掉了 {release.data.removed} 项。
+        {t("trash.held.done", { count: release.data.removed })}
       </p>
     ) : null;
   }
@@ -31,15 +32,15 @@ export function HeldNotice({ view }: { view: SettingsView }) {
                 release.mutate();
               }}
             >
-              清掉这 {view.trashHeld.count} 项，找不回来
+              {t("trash.held.confirm", { count: view.trashHeld.count })}
             </Button>
             <Button variant="quiet" size="sm" onPress={() => setAsking(false)}>
-              先留着
+              {t("trash.held.keep")}
             </Button>
           </>
         ) : (
           <Button variant="outline" size="sm" onPress={() => setAsking(true)}>
-            照时间清掉
+            {t("trash.held.release")}
           </Button>
         )}
       </div>

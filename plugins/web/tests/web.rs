@@ -194,7 +194,7 @@ fn install() -> Fixture {
         HostConfig {
             work_dir: tmp.path().join("work"),
             cache_dir: tmp.path().join("cache"),
-            locale: "zh-CN".into(),
+            locale: usuyo_plugin::Locale::new("zh-Hans"),
             limits: CallLimits::default(),
         },
         found.fetch,

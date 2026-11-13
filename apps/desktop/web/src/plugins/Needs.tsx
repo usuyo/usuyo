@@ -9,7 +9,8 @@ import { Button } from "../ui/Button";
 import type { Use } from "./platforms";
 import { SiteLoginButton } from "./SiteLoginRow";
 import { VisitorTake } from "./VisitorIdentity";
-import { LOGIN_STATE, PAGE, VISITOR_STATE } from "./words";
+import { t } from "../i18n";
+import { LOGIN_STATE, VISITOR_STATE } from "./words";
 
 interface Need {
   key: string;
@@ -35,7 +36,7 @@ function needsOf(u: Use, sites: SiteLogin[], visitors: VisitorIdentity[]): Need[
       out.push({
         key: `login:${s}`,
         ok: site.login === "present",
-        text: PAGE.needLogin(site.name, LOGIN_STATE[site.login]),
+        text: t("plugins.needs.login", { name: site.name, state: LOGIN_STATE[site.login] }),
         ...(site.login === "present" ? {} : { action: <SiteLoginButton site={site} /> }),
       });
     }
@@ -47,7 +48,7 @@ function needsOf(u: Use, sites: SiteLogin[], visitors: VisitorIdentity[]): Need[
       out.push({
         key: `visitor:${s}`,
         ok: visitor.state === "present",
-        text: PAGE.needVisitor(visitor.name, VISITOR_STATE[visitor.state]),
+        text: t("plugins.needs.visitor", { name: visitor.name, state: VISITOR_STATE[visitor.state] }),
         ...(visitor.state === "present" ? {} : { action: <VisitorTake visitor={visitor} /> }),
       });
     }
@@ -56,26 +57,26 @@ function needsOf(u: Use, sites: SiteLogin[], visitors: VisitorIdentity[]): Need[
     out.push({
       key: "phone",
       ok: m.usable,
-      text: PAGE.needPhone(m.account.where ?? ""),
+      text: t("plugins.needs.phone", { where: m.account.where ?? "" }),
       action: (
         <Link to="/phone" className="text-small text-label underline decoration-border2 underline-offset-4 hover:text-text">
-          {PAGE.goPhone}
+          {t("plugins.needs.goPhone")}
         </Link>
       ),
     });
   }
   const checks = m.blockers.filter((b) => CHECKS.has(b.code));
   for (const b of checks) {
-    out.push({ key: `check:${b.hint}`, ok: false, text: b.hint, action: <TryAgain pluginId={u.plugin.id} label={PAGE.recheck} /> });
+    out.push({ key: `check:${b.hint}`, ok: false, text: b.hint, action: <TryAgain pluginId={u.plugin.id} label={t("plugins.needs.recheck")} /> });
   }
   // 插件的密钥设置不分方法：用开发者凭据的、本机检查没过的，把还没填的列上。
   if (m.account.kind === "developer" || checks.length > 0) {
     for (const s of u.plugin.settings.filter((x) => x.secret && !x.filled)) {
-      out.push({ key: `secret:${s.key}`, ok: false, text: PAGE.needSecret(s.label), action: <SecretField pluginId={u.plugin.id} setting={s} /> });
+      out.push({ key: `secret:${s.key}`, ok: false, text: t("plugins.needs.secret", { label: s.label }), action: <SecretField pluginId={u.plugin.id} setting={s} /> });
     }
   }
   for (const b of m.blockers.filter((x) => x.code === "paused")) {
-    out.push({ key: `paused:${b.hint}`, ok: false, text: b.hint, action: <TryAgain pluginId={u.plugin.id} label={PAGE.retryNow} /> });
+    out.push({ key: `paused:${b.hint}`, ok: false, text: b.hint, action: <TryAgain pluginId={u.plugin.id} label={t("plugins.needs.retryNow")} /> });
   }
   return out;
 }
@@ -83,9 +84,9 @@ function needsOf(u: Use, sites: SiteLogin[], visitors: VisitorIdentity[]): Need[
 /** 一种方法在这台电脑上要的几样，一样一行，带现在的样子和动手的地方；什么都不缺时说一句。 */
 export function Needs({ use, sites, visitors }: { use: Use; sites: SiteLogin[]; visitors: VisitorIdentity[] }) {
   const needs = needsOf(use, sites, visitors);
-  if (needs.length === 0) return <p className="m-0 text-small text-sub">{PAGE.needNothing}</p>;
+  if (needs.length === 0) return <p className="m-0 text-small text-sub">{t("plugins.needs.nothing")}</p>;
   return (
-    <ul aria-label={PAGE.needsLabel(use.method.name)} className="m-0 flex list-none flex-col gap-2 p-0">
+    <ul aria-label={t("plugins.needs.label", { name: use.method.name })} className="m-0 flex list-none flex-col gap-2 p-0">
       {needs.map((n) => (
         <li key={n.key} className="flex items-start gap-2">
           <span className="mt-[3px] shrink-0 text-sub" aria-hidden="true">
@@ -93,7 +94,7 @@ export function Needs({ use, sites, visitors }: { use: Use; sites: SiteLogin[]; 
           </span>
           <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-x-3 gap-y-1.5">
             <span className={`min-w-0 flex-[1_1_220px] text-note ${n.ok ? "text-sub" : "text-label"}`}>
-              <span className="sr-only-text">{n.ok ? PAGE.needDone : PAGE.needTodo}</span>
+              <span className="sr-only-text">{n.ok ? t("plugins.needs.done") : t("plugins.needs.todo")}</span>
               {n.text}
             </span>
             {n.action ? <div className="min-w-0">{n.action}</div> : null}
@@ -131,12 +132,12 @@ export function SecretField({ pluginId, setting }: { pluginId: string; setting: 
     >
       <TextField value={value} onChange={setValue} aria-label={setting.label} type="password" className="w-[200px] max-w-full">
         <Input
-          placeholder={setting.filled ? PAGE.secretFilled : setting.label}
+          placeholder={setting.filled ? t("plugins.needs.secretFilled") : setting.label}
           className="h-ctl-sm w-full rounded-input border border-border2 bg-transparent px-3 font-sans text-note text-text outline-none focus:border-label"
         />
       </TextField>
       <Button type="submit" variant="soft" size="sm" isDisabled={set.isPending || value.trim() === ""}>
-        {PAGE.secretSave}
+        {t("plugins.needs.secretSave")}
       </Button>
       {set.error ? <ErrorLine error={set.error} className="w-full" /> : null}
     </Form>

@@ -18,6 +18,7 @@ use usuyo_plugin::{CallOptions, DeclaredSite, DeclaredVisitor, FetchPlugin, Logi
 use crate::engine::Engine;
 use crate::fetch::now_ms;
 use crate::view::{Blocker, Event, PluginView};
+use crate::words::{self, Lang, Said};
 use crate::{Error, Result};
 
 /// 插件的本机检查多久问一次。
@@ -159,6 +160,22 @@ fn append_failure(path: &Path, line: &FailureLine<'_>) -> std::io::Result<()> {
     f.write_all(&bytes)
 }
 
+/// 一种方法用不上的一个原因：码，和两种语言的一句。
+#[derive(Debug, Clone)]
+pub(crate) struct Why {
+    pub code: String,
+    pub hint: Said,
+}
+
+impl Why {
+    pub(crate) fn shown(&self, lang: Lang) -> Blocker {
+        Blocker {
+            code: self.code.clone(),
+            hint: self.hint.pick(lang).to_owned(),
+        }
+    }
+}
+
 /// 一种方法这台机器上为什么用不上；空的是用得上。名字取自清单，不写平台名。
 pub(crate) fn blockers(
     m: &Method,
@@ -166,20 +183,20 @@ pub(crate) fn blockers(
     health: Option<&HealthSeen>,
     sites: &[DeclaredSite],
     visitors: &[DeclaredVisitor],
-) -> Vec<Blocker> {
+) -> Vec<Why> {
     let mut out = Vec::new();
-    let mut add = |code: &str, hint: String| {
-        out.push(Blocker {
+    let mut add = |code: &str, hint: Said| {
+        out.push(Why {
             code: code.into(),
             hint,
         });
     };
     if !m.built {
-        add("not-built", "这种方法还没做".into());
+        add("not-built", words::BLOCK_NOT_BUILT.said());
         return out;
     }
     if !enabled {
-        add("off", "你关掉了这种方法".into());
+        add("off", words::BLOCK_OFF.said());
     }
     if m.login == Login::Required {
         for name in &m.sites {
@@ -190,11 +207,11 @@ pub(crate) fn blockers(
                 LoginState::Present => {}
                 LoginState::Missing => add(
                     "login-missing",
-                    format!("要先在 usuyo 里登录{}", d.site.name),
+                    words::BLOCK_LOGIN_MISSING.with(&[("site", &d.site.name)]),
                 ),
                 LoginState::Expired => add(
                     "login-expired",
-                    format!("{}的登录过期了，要重新登录", d.site.name),
+                    words::BLOCK_LOGIN_EXPIRED.with(&[("site", &d.site.name)]),
                 ),
             }
         }
@@ -207,25 +224,29 @@ pub(crate) fn blockers(
             LoginState::Present => {}
             LoginState::Missing => add(
                 "visitor-missing",
-                format!("要先开一次{}首页，取一份访客身份", v.visitor.name),
+                words::BLOCK_VISITOR_MISSING.with(&[("site", &v.visitor.name)]),
             ),
             LoginState::Expired => add(
                 "visitor-expired",
-                format!("{}的访客身份过期了，要再取一份", v.visitor.name),
+                words::BLOCK_VISITOR_EXPIRED.with(&[("site", &v.visitor.name)]),
             ),
         }
     }
     match health.map(|h| &h.result) {
         None => {}
-        Some(Err(why)) => add("health-failed", format!("插件没能自查：{why}")),
+        Some(Err(why)) => add(
+            "health-failed",
+            words::BLOCK_HEALTH_FAILED.with_said(&[("why", &Said::from_stored(why))]),
+        ),
         Some(Ok(h)) => {
             for c in h.checks.iter().filter(|c| !c.ok) {
                 if c.methods.is_empty() || c.methods.iter().any(|x| x == &m.id) {
                     add(
                         "check-failed",
-                        c.message
-                            .clone()
-                            .unwrap_or_else(|| format!("没过：{}", c.name)),
+                        c.message.as_deref().map_or_else(
+                            || words::BLOCK_CHECK_FAILED.with(&[("name", &c.name)]),
+                            Said::plain,
+                        ),
                     );
                 }
             }
@@ -477,14 +498,18 @@ fn clear_switch(map: &mut Map<String, Value>, plugin: &str, method: &str) {
 
 /// 一种都用不上时告诉你的原因：要登录的照 `login-required`，要访客身份的照 `visitor-required`，
 /// 别的照「这个链接现在取不了」。
-fn blocker_failure(plugin: &FetchPlugin, m: &Method, b: &Blocker) -> CallFailure {
+fn blocker_failure(plugin: &FetchPlugin, m: &Method, b: &Why) -> CallFailure {
     let code = match b.code.as_str() {
         "login-missing" | "login-expired" => ErrorCode::LoginRequired,
         "visitor-missing" | "visitor-expired" => ErrorCode::VisitorRequired,
         _ => ErrorCode::UnsupportedInput,
     };
     let mut f = CallFailure::new(code, format!("{} {}: {}", plugin.id(), m.id, b.code));
-    f.hint = Some(format!("{}：{}", m.name, b.hint));
+    f.hint = Some(
+        words::METHOD_BLOCKED
+            .with_said(&[("method", &Said::plain(&m.name)), ("why", &b.hint)])
+            .to_stored(),
+    );
     if m.account == Account::InUsuyo
         && let Some(site) = m.sites.first()
     {

@@ -46,25 +46,25 @@ const sample = () => createMockFollows(createMockLibrary(false), false).follows(
 
 it("lists each follow with what it takes and why it waits, and labels what the machine picked", async () => {
   serve(await sample());
-  expect(await screen.findByText("只收命中「胶片摄影」的关键词、「C41」的")).toBeTruthy();
-  expect(screen.getByText(/平台说请求太频繁，只停这一个/)).toBeTruthy();
-  const recent = screen.getByRole("region", { name: "最近收下的" });
-  expect(within(recent).getAllByText("机器挑的")).toHaveLength(2);
+  expect(await screen.findByText("仅添加匹配「胶片摄影」的关键词和「C41」的内容")).toBeTruthy();
+  expect(screen.getByText(/此订阅已暂停/)).toBeTruthy();
+  const recent = screen.getByRole("region", { name: "最近添加" });
+  expect(within(recent).getAllByText("自动选取")).toHaveLength(2);
 });
 
 it("tries a feed once before following it, then follows it as tried", async () => {
   const sent = serve(await sample());
-  fireEvent.click(await screen.findByRole("button", { name: "跟着收一个新的" }));
-  fireEvent.click(screen.getByRole("radio", { name: "一个订阅源" }));
-  fireEvent.change(screen.getByPlaceholderText("RSS、Atom 或 JSON Feed 的地址"), { target: { value: "https://example.org/feed.xml" } });
-  fireEvent.click(screen.getByRole("button", { name: "试列一次" }));
-  expect(await screen.findByText(/第一次只记下现在有的，不收/)).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "就这样跟着收" }));
+  fireEvent.click(await screen.findByRole("button", { name: "新建订阅" }));
+  fireEvent.click(screen.getByRole("radio", { name: "订阅源" }));
+  fireEvent.change(screen.getByPlaceholderText("RSS、Atom 或 JSON Feed 地址"), { target: { value: "https://example.org/feed.xml" } });
+  fireEvent.click(screen.getByRole("button", { name: "试运行" }));
+  expect(await screen.findByText(/首次运行只记录现有内容，不添加/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "订阅" }));
   await waitFor(() => expect(sent.find((s) => s.path.endsWith("/follows"))?.body).toMatchObject({ kind: "feed", url: "https://example.org/feed.xml", take: { all: false, topics: ["film"] }, everyHours: 24 }));
 });
 
 it("says one calm sentence when the daemon cannot follow yet", async () => {
   serve(null);
-  expect(await screen.findByText(/这台电脑上的 usuyo 内核还不会跟着收/)).toBeTruthy();
-  expect(screen.queryByRole("button", { name: "跟着收一个新的" })).toBeNull();
+  expect(await screen.findByText(/此版本的 usuyo 尚不支持订阅/)).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "新建订阅" })).toBeNull();
 });

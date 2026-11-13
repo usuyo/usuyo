@@ -3,10 +3,11 @@ import { useEffect, useState, type ClipboardEvent, type KeyboardEvent } from "re
 import { Input, Label, TextField } from "react-aria-components";
 import { useTake } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
+import { t } from "../i18n";
 import { useUiStore } from "../store/ui";
 
-/** 左栏顶上的「粘贴链接，收下」：粘贴或回车就收下，下面那行字换成「收下了」一秒。 */
-export function TakeField({ note = "也可以把链接拖到地图上" }: { note?: string }) {
+/** 左栏顶上添加链接的那一栏：粘贴或回车就添加，下面那行字换成「已添加」一秒。 */
+export function TakeField({ note = t("frame.take.note") }: { note?: string }) {
   const [value, setValue] = useState("");
   const [toast, setToast] = useState<{ text: string; n: number } | null>(null);
   const take = useTake();
@@ -27,7 +28,7 @@ export function TakeField({ note = "也可以把链接拖到地图上" }: { note
       {
         onSuccess: (res) => {
           if (!res.seen) markLanding(res.id);
-          setToast((t) => ({ text: res.seen ? "以前收下过，补了一次快照" : "收下了", n: (t?.n ?? 0) + 1 }));
+          setToast((last) => ({ text: res.seen ? t("frame.take.snapshot") : t("frame.take.added"), n: (last?.n ?? 0) + 1 }));
         },
       },
     );
@@ -35,12 +36,12 @@ export function TakeField({ note = "也可以把链接拖到地图上" }: { note
 
   return (
     <div>
-      <TextField value={value} onChange={setValue} aria-label="收下一条链接" className="mt-[22px]">
+      <TextField value={value} onChange={setValue} aria-label={t("frame.take.label")} className="mt-[22px]">
         <Label className="flex h-field items-center gap-2 rounded-input border border-border2 bg-bg px-3 text-sub">
           <Link2 size={15} aria-hidden="true" className="shrink-0" />
-          <span className="sr-only-text">收下一条链接</span>
+          <span className="sr-only-text">{t("frame.take.label")}</span>
           <Input
-            placeholder="粘贴链接，收下"
+            placeholder={t("frame.take.placeholder")}
             className="h-ctl min-w-0 flex-1 border-0 bg-transparent p-0 text-note text-text outline-none"
             onPaste={(e: ClipboardEvent<HTMLInputElement>) => {
               const text = e.clipboardData.getData("text");

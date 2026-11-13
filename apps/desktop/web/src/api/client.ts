@@ -17,7 +17,7 @@ export class DaemonUnreachableError extends Error {
 
 /**
  * 内核回了非 2xx。`code` 是 problem+json 里的 `code`（SPEC §0.3），回的不是 problem 时没有；
- * `hint` 是给人看的一句中文，界面照它显示；`message` 是 `detail`，给日志。
+ * `hint` 是给人看的一句话，按设置的语言写，界面照它显示；`message` 是 `detail`，给日志。
  */
 export class ApiError extends Error {
   readonly status: number;

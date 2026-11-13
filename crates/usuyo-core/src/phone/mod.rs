@@ -177,22 +177,22 @@ impl PhoneError {
         }
     }
 
-    pub(crate) fn hint(&self) -> &'static str {
+    pub(crate) fn hint(&self) -> crate::words::Said {
+        use crate::words as w;
         match self {
-            PhoneError::NotServed => "这台电脑上的 usuyo 内核不管手机。",
-            PhoneError::Unsupported(_) => "mirroir 只给 Apple 芯片的 Mac 出了包，这台电脑装不了。",
-            PhoneError::Busy => "mirroir 正在装，装完再试。",
-            PhoneError::ServiceDown(_) => {
-                "「mirroir serve」没在这台 Mac 上跑：先照「驱动」那一行把它登记好。"
-            }
-            PhoneError::Service(_) => "「mirroir serve」回的话看不懂。",
-            PhoneError::ServiceTimeout => "「mirroir serve」没有及时回话。",
-            PhoneError::Tool { .. } => "读不了这一屏：iPhone 镜像没连上，或者授权还没给。",
-            PhoneError::Program { .. } => "这台 Mac 上的一个系统程序没有回话。",
-            PhoneError::Pasteboard(_) => "看不了这台 Mac 的剪贴板变没变。",
-            PhoneError::Open(_) => "没能打开系统设置。",
-            PhoneError::NoAdb => "这台电脑上没找到 adb。",
+            PhoneError::NotServed => w::PHONE_NOT_SERVED,
+            PhoneError::Unsupported(_) => w::PHONE_UNSUPPORTED,
+            PhoneError::Busy => w::PHONE_BUSY,
+            PhoneError::ServiceDown(_) => w::PHONE_SERVICE_DOWN,
+            PhoneError::Service(_) => w::PHONE_SERVICE_BAD,
+            PhoneError::ServiceTimeout => w::PHONE_SERVICE_TIMEOUT,
+            PhoneError::Tool { .. } => w::PHONE_TOOL,
+            PhoneError::Program { .. } => w::PHONE_PROGRAM,
+            PhoneError::Pasteboard(_) => w::PHONE_PASTEBOARD,
+            PhoneError::Open(_) => w::PHONE_OPEN,
+            PhoneError::NoAdb => w::PHONE_NO_ADB,
         }
+        .said()
     }
 }
 
@@ -201,7 +201,7 @@ impl PhoneError {
 enum Busy {
     Idle,
     Installing,
-    Failed(&'static str),
+    Failed(crate::words::Words),
 }
 
 pub(crate) struct Phone {
@@ -288,7 +288,7 @@ impl Phone {
     }
 
     /// 驱动那一行：装没装、能不能换新、没装上的原因、要你做的那一步。
-    fn driver_view(&self, served: Option<&str>) -> PhoneDriver {
+    fn driver_view(&self, served: Option<&str>, lang: crate::words::Lang) -> PhoneDriver {
         let release = &self.config.release;
         let installed = driver::installed(&self.config.driver_dir, &release.binary);
         let offer = self.asset().map(|a| crate::view::DriverOffer {
@@ -301,11 +301,13 @@ impl Phone {
         let (state, version, hint) = match (&busy, &installed) {
             (Busy::Installing, _) => (DriverState::Installing, None, None),
             // 换新没成：装着的那份还在，原因照样给
-            (Busy::Failed(h), Some(v)) => {
-                (DriverState::Present, Some(v.clone()), Some((*h).to_owned()))
-            }
+            (Busy::Failed(h), Some(v)) => (
+                DriverState::Present,
+                Some(v.clone()),
+                Some(h.pick(lang).to_owned()),
+            ),
             (Busy::Idle, Some(v)) => (DriverState::Present, Some(v.clone()), None),
-            (Busy::Failed(h), None) => (DriverState::Failed, None, Some((*h).to_owned())),
+            (Busy::Failed(h), None) => (DriverState::Failed, None, Some(h.pick(lang).to_owned())),
             (Busy::Idle, None) => (DriverState::Absent, None, None),
         };
         let available = match &version {
@@ -313,9 +315,13 @@ impl Phone {
             _ => offer,
         };
         let step = match (state, &version, served) {
-            (DriverState::Present, Some(_), None) => Some(driver::register_step(&binary)),
-            (DriverState::Present, Some(v), Some(s)) if s != v => Some(driver::renew_step(&binary)),
-            (DriverState::Absent | DriverState::Failed, _, Some(_)) => Some(driver::stop_step()),
+            (DriverState::Present, Some(_), None) => Some(driver::register_step(&binary, lang)),
+            (DriverState::Present, Some(v), Some(s)) if s != v => {
+                Some(driver::renew_step(&binary, lang))
+            }
+            (DriverState::Absent | DriverState::Failed, _, Some(_)) => {
+                Some(driver::stop_step(lang))
+            }
             _ => None,
         };
         PhoneDriver {
@@ -436,6 +442,7 @@ impl Engine {
                 &p.config.adb_dirs,
                 p.config.adb_server,
                 p.config.program_limit,
+                self.lang(),
             ),
         );
         let (grants, mirroring, served) = reached?;
@@ -445,7 +452,7 @@ impl Engine {
                     macos: macos?,
                     mirroring: has_mirroring,
                 },
-                driver: p.driver_view(served.as_deref()),
+                driver: p.driver_view(served.as_deref(), self.lang()),
                 grants,
                 mirroring,
                 clipboard: lock(&p.clipboard).clone(),
@@ -523,6 +530,7 @@ impl Engine {
             p.config.adb_path.as_deref(),
             &p.config.adb_dirs,
             p.config.program_limit,
+            self.lang(),
         )
         .await?;
         let mut view = self.phone_view().await?;

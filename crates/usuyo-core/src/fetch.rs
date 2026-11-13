@@ -24,6 +24,7 @@ use crate::engine::{Engine, Via};
 use crate::jobs::FetchJob;
 use crate::pace;
 use crate::view::{Event, TakeResponse};
+use crate::words::{self, Said};
 use crate::{Error, Result};
 
 /// 后台任务每轮最多睡多久；有新任务时会被叫醒。
@@ -46,19 +47,19 @@ impl Engine {
         }
         let url = crate::share_text::link_in(input).ok_or_else(|| {
             Error::UnsupportedInput("no http(s) link in the input".into())
-                .hinted("这段文字里没有能收下的链接")
+                .hinted(words::NO_LINK.said())
         })?;
         // 带用户名、密码的链接不收：它们会原样进标题、身份和 `content.md`。
         if !url.username().is_empty() || url.password().is_some() {
-            let more = if crate::share_text::link_count(input) > 1 {
-                "（只看第一条链接）"
+            let hint = if crate::share_text::link_count(input) > 1 {
+                words::LINK_WITH_PASSWORD_FIRST
             } else {
-                ""
+                words::LINK_WITH_PASSWORD
             };
             return Err(Error::UnsupportedInput(
                 "links with a user name or password are not taken".into(),
             )
-            .hinted(format!("带用户名或密码的链接不收{more}")));
+            .hinted(hint.said()));
         }
         let (identity, fetch_url) = self.identify(&url).await?;
         let this = self.clone();
@@ -334,7 +335,7 @@ impl Engine {
                             format!("{pid} {} is paused here", method.id),
                         );
                         if p.held {
-                            f.hint = Some("你让这个插件先别试了".into());
+                            f.hint = Some(words::PLUGIN_PAUSED.said().to_stored());
                         }
                         f
                     });
@@ -523,21 +524,21 @@ impl Engine {
     /// 不守节奏；不换别的方法，也不补缺。
     async fn run_ref_job(&self, job: &FetchJob, by: RefFetch) -> Result<()> {
         let id = ItemId::parse(&job.item_id)?;
-        let fail = |code: ErrorCode, message: String, hint: String| {
+        let fail = |code: ErrorCode, message: String, hint: Said| {
             let mut f = CallFailure::new(code, message);
-            f.hint = Some(hint);
+            f.hint = Some(hint.to_stored());
             f
         };
         let outcome = match (&by.plugin, &by.input) {
             (None, _) => Err(fail(
                 ErrorCode::UnsupportedInput,
                 format!("plugin {} is not installed", by.plugin_id),
-                "读这个文件的插件不在了".into(),
+                words::READER_GONE.said(),
             )),
             (_, Some(input)) if !input.is_file() => Err(fail(
                 ErrorCode::DependencyMissing,
                 format!("the copy of file:{} is gone", by.file_name),
-                format!("交进来的文件 {} 不在了", by.file_name),
+                words::SENT_FILE_GONE_NAMED.with(&[("name", &by.file_name)]),
             )),
             (Some(plugin), input) => {
                 let request = FetchRequest {

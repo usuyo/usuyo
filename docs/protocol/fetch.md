@@ -62,7 +62,7 @@
 | `USUYO_CACHE_DIR` | 总是 | `${CACHE}` |
 | `USUYO_MODELS_DIR` | 转换插件的常驻进程 | `${MODELS}`，按机器目录的 `models/<owner>/<repo>/` |
 | `USUYO_CALL_ID` | 一次一进程的调用；常驻进程没有，一个进程接好几次调用 | 这次调用的 id，写日志用 |
-| `USUYO_LOCALE` | 总是 | 用户界面语言，例如 `zh-CN`；`hint` 按它写 |
+| `USUYO_LOCALE` | 总是 | 用户界面语言：`zh-Hans` 或 `en`（设置里选的，跟随系统时照系统的首选语言）；`hint` 按它写，`zh` 开头写简体中文，别的写英文。设置里换了，之后起的进程拿到新的 |
 | `USUYO_NETWORK` | 宿主查到这台机器开着假 IP 模式的代理时 | 值是 `fake-ip`。这时系统给每个域名都回 `198.18.0.0/15` 里的地址；plugin-kit 的客户端据此放行查出来全在这一段的域名，没有这个变量就照旧拒绝。是不是这种环境由宿主拿固定的公网域名去查 |
 | `USUYO_SETTINGS` | 有设置时 | 非密钥设置的 JSON 文件路径（[§3.13](#313-宿主和-plugin-kit-现在做到的11-11)） |
 | `USUYO_SECRETS` | 插件声明了 `secret: true` 的设置、且用户填了值时，和 `login` 无关 | 一个 0600 的临时文件，内容只有 `{"<key>": "<value>"}`，调用结束即删 |

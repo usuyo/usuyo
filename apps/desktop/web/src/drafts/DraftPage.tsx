@@ -7,11 +7,12 @@ import type { Draft } from "../api/endpoints";
 import { useDraft, useDraftChange } from "../api/hooks";
 import { ErrorLine, NotServedLine } from "../components/ErrorLine";
 import { Rail } from "../frame/Rail";
+import { currentLocale, rich, t } from "../i18n";
 import { Choice } from "../ui/Choice";
 import { PageText } from "../writing/PageText";
 import { citeSource, whereText } from "../writing/words";
 import { QuotePicker } from "./QuotePicker";
-import { editedText, KIND_CHOICES } from "./words";
+import { editedText, kindChoices } from "./words";
 
 const route = getRouteApi("/drafts/$id");
 
@@ -21,14 +22,14 @@ export function DraftPage() {
   const draft = useDraft(id);
   return (
     <div className="relative h-full overflow-hidden bg-bg">
-      <Rail label="主导航" />
+      <Rail label={t("common.nav.main")} />
       <main className="@container absolute inset-y-0 right-0 left-rail overflow-y-auto px-6 pt-5 pb-20 lg:px-gutter">
         <Link to="/drafts" className="press -ml-2 inline-flex h-ctl-sm items-center gap-2 rounded-btn pr-3 pl-2 text-note text-sub no-underline hover:text-text">
           <ArrowLeft size={16} aria-hidden="true" />
-          <span>所有成稿</span>
+          <span>{t("drafts.page.all")}</span>
         </Link>
         {isNotServed(draft.error) ? (
-          <NotServedLine className="mt-4">这台电脑上的 usuyo 内核还没有成稿；以后在这里把引过的原话拼成你自己的一篇。</NotServedLine>
+          <NotServedLine className="mt-4">{t("drafts.notServed")}</NotServedLine>
         ) : draft.error ? (
           <ErrorLine error={draft.error} className="mt-4" />
         ) : null}
@@ -55,8 +56,8 @@ function DraftBody({ draft }: { draft: Draft }) {
   return (
     <div className="mt-3 grid items-start gap-x-10 gap-y-8 @[860px]:grid-cols-[minmax(0,1fr)_minmax(0,320px)]">
       <article className="min-w-0 max-w-[720px]">
-        <TextField value={title} onChange={setTitle} aria-label="标题">
-          <Label className="sr-only-text">标题</Label>
+        <TextField value={title} onChange={setTitle} aria-label={t("drafts.page.titleLabel")}>
+          <Label className="sr-only-text">{t("drafts.page.titleLabel")}</Label>
           <Input
             onBlur={commitTitle}
             onKeyDown={(e) => {
@@ -66,22 +67,14 @@ function DraftBody({ draft }: { draft: Draft }) {
           />
         </TextField>
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
-          <Choice label="这一篇是" options={KIND_CHOICES} value={draft.kind} isDisabled={change.isPending} onChange={(kind) => change.mutate({ kind: "meta", patch: { kind } })} />
+          <Choice label={t("drafts.page.kindLabel")} options={kindChoices()} value={draft.kind} isDisabled={change.isPending} onChange={(kind) => change.mutate({ kind: "meta", patch: { kind } })} />
           <span className="text-small text-sub">
-            {editedText(draft.updatedAt)}　<span className="mono text-tag text-faint select-text">{draft.page.file}</span>
+            {editedText(draft.updatedAt)} <span className="mono ml-2 text-tag text-faint select-text">{draft.page.file}</span>
           </span>
         </div>
         {draft.from.length > 0 ? (
           <p className="m-0 mt-2 text-small text-sub">
-            用到的主题：
-            {draft.from.map((t, i) => (
-              <span key={t.id}>
-                {i > 0 ? "、" : ""}
-                <Link to="/topics/$id" params={{ id: t.id }} className="text-label underline decoration-border2 underline-offset-4 hover:text-text">
-                  {t.name}
-                </Link>
-              </span>
-            ))}
+            <TopicsUsed topics={draft.from} />
           </p>
         ) : null}
         {change.error ? <ErrorLine error={change.error} className="mt-3" /> : null}
@@ -89,23 +82,26 @@ function DraftBody({ draft }: { draft: Draft }) {
           <PageText
             page={draft.page}
             busy={change.isPending}
-            empty="还是空的。先写一句，或者从右边引一段原话进来。"
+            empty={t("drafts.page.empty")}
             onEdit={(patch) => change.mutate({ kind: "page", patch })}
           />
         </div>
         {order.length > 0 ? (
           <section aria-labelledby="draft-sources-h" className="mt-12 border-t border-border pt-5">
             <h2 id="draft-sources-h" className="m-0 text-note font-semibold text-text">
-              出处
+              {t("drafts.page.sources")}
             </h2>
-            <p className="m-0 mt-0.5 text-small text-sub">导出和复制时跟着这一篇走，排在页尾；来源删掉了，原话照样留着。</p>
+            <p className="m-0 mt-0.5 text-small text-sub">{t("drafts.page.sourcesSub")}</p>
             <ol className="m-0 mt-3 flex list-none flex-col gap-2 p-0">
               {order.map((c, i) => (
                 <li key={c.label} className="grid grid-cols-[2rem_minmax(0,1fr)] text-small">
                   <span className="mono text-tag text-faint">{i + 1}</span>
                   <span className="text-label">
-                    「{c.quote}」<span className="text-sub">　{citeSource(c)}　{whereText(c.layer, c.position)}</span>
-                    {c.found === "gone" ? <span className="text-faint">　来源已删掉</span> : null}
+                    {t("writing.quote", { quote: c.quote })}
+                    <span className="ml-2 text-sub">
+                      {citeSource(c)} · {whereText(c.layer, c.position)}
+                    </span>
+                    {c.found === "gone" ? <span className="ml-2 text-faint">{t("drafts.page.sourceGone")}</span> : null}
                   </span>
                 </li>
               ))}
@@ -118,4 +114,19 @@ function DraftBody({ draft }: { draft: Draft }) {
       </aside>
     </div>
   );
+}
+
+/** 「引用的主题：咖啡、胶片和城市」：每个主题是一个链接，按当前语言的并列写法连起来。 */
+function TopicsUsed({ topics }: { topics: { id: string; name: string }[] }) {
+  const parts = new Intl.ListFormat(currentLocale(), { type: "conjunction" }).formatToParts(topics.map((x) => x.name));
+  const list = parts.map((p, i) => {
+    if (p.type === "literal") return <span key={`l${i}`}>{p.value}</span>;
+    const topic = topics[parts.slice(0, i).filter((q) => q.type === "element").length];
+    return topic ? (
+      <Link key={topic.id} to="/topics/$id" params={{ id: topic.id }} className="text-label underline decoration-border2 underline-offset-4 hover:text-text">
+        {topic.name}
+      </Link>
+    ) : null;
+  });
+  return <>{rich("drafts.page.topicsUsed", { list: <span>{list}</span> })}</>;
 }

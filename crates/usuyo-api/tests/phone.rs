@@ -667,7 +667,7 @@ async fn without_a_phone_config_every_route_is_not_found() {
         let (s, v) = call(&app, m, p, b).await;
         assert_eq!(s, StatusCode::NOT_FOUND, "{p}");
         assert_eq!(v["code"], "not-found");
-        assert_eq!(v["hint"], "这台电脑上的 usuyo 内核不管手机。");
+        assert_eq!(v["hint"], "此版本的 usuyo 服务不支持手机。");
     }
 }
 
@@ -794,17 +794,17 @@ async fn failed_installs_say_why_and_leave_nothing() {
         (
             "/pack.tar.gz",
             Some("0".repeat(64)),
-            "下载下来的包和钉住的 SHA256 对不上，已经丢掉了，没有放进这台电脑。",
+            "下载的安装包与固定的 SHA256 不一致，已丢弃。这台电脑上没有放入任何文件。",
         ),
         (
             "/gone.tar.gz",
             None,
-            "官方 release 上没有这一版的包，什么都没放进这台电脑。",
+            "官方发布中没有这一版的安装包。这台电脑上没有放入任何文件。",
         ),
         (
             "/slow.tar.gz",
             None,
-            "网络不通，或者下载断了，什么都没放进这台电脑。",
+            "网络连接失败，或下载中断。这台电脑上没有放入任何文件。",
         ),
     ] {
         let mut options = Options {
@@ -835,7 +835,7 @@ async fn an_unsupported_machine_is_refused_with_one_sentence() {
     assert_eq!(v["code"], "unsupported-input");
     assert_eq!(
         v["hint"],
-        "mirroir 只给 Apple 芯片的 Mac 出了包，这台电脑装不了。"
+        "mirroir 只提供 Apple 芯片 Mac 的版本，无法安装在这台电脑上。"
     );
     assert!(
         view(&f.app).await["ios"]["driver"]
@@ -904,7 +904,7 @@ async fn a_wrong_token_reads_as_not_answering() {
     let (s, v) = call(&f.app, "POST", "/phone/ios/dry-run", None).await;
     assert_eq!(s, StatusCode::SERVICE_UNAVAILABLE);
     assert_eq!(v["code"], "unavailable");
-    assert_eq!(v["hint"], "「mirroir serve」回的话看不懂。");
+    assert_eq!(v["hint"], "无法识别「mirroir serve」的回复。");
 }
 
 #[tokio::test]
@@ -951,7 +951,7 @@ async fn open_settings_opens_only_the_three_panes() {
     )
     .await;
     assert_eq!(s, StatusCode::INTERNAL_SERVER_ERROR);
-    assert_eq!(v["hint"], "没能打开系统设置。");
+    assert_eq!(v["hint"], "无法打开系统设置。");
 }
 
 #[tokio::test]
@@ -978,7 +978,7 @@ async fn the_clipboard_test_watches_only_the_change_count() {
     std::fs::remove_file(f.bin.join("count")).unwrap();
     let (s, v) = call(&f.app, "POST", "/phone/ios/clipboard-test", None).await;
     assert_eq!(s, StatusCode::INTERNAL_SERVER_ERROR);
-    assert_eq!(v["hint"], "看不了这台 Mac 的剪贴板变没变。");
+    assert_eq!(v["hint"], "无法检查这台 Mac 的剪贴板是否变化。");
 }
 
 #[tokio::test]
@@ -1013,10 +1013,7 @@ async fn the_dry_run_reads_once_and_matches_the_plugins_flows() {
     let (s, v) = call(&f.app, "POST", "/phone/ios/dry-run", None).await;
     assert_eq!(s, StatusCode::FAILED_DEPENDENCY);
     assert_eq!(v["code"], "dependency-missing");
-    assert_eq!(
-        v["hint"],
-        "读不了这一屏：iPhone 镜像没连上，或者授权还没给。"
-    );
+    assert_eq!(v["hint"], "无法读取这一屏：iPhone 镜像未连接，或尚未授权。");
     // 回的话里不带它说的字
     assert!(!v.to_string().contains("not running"));
 
@@ -1026,7 +1023,7 @@ async fn the_dry_run_reads_once_and_matches_the_plugins_flows() {
     assert_eq!(s, StatusCode::FAILED_DEPENDENCY);
     assert_eq!(
         v["hint"],
-        "「mirroir serve」没在这台 Mac 上跑：先照「驱动」那一行把它登记好。"
+        "「mirroir serve」未在这台 Mac 上运行。先按「驱动」一行中的步骤完成登记。"
     );
 }
 
@@ -1039,7 +1036,7 @@ async fn update_replaces_an_older_driver_or_keeps_it_with_the_reason() {
         (
             Some("0".repeat(64)),
             "0.46.0",
-            Some("下载下来的包和钉住的 SHA256 对不上，已经丢掉了，没有放进这台电脑。"),
+            Some("下载的安装包与固定的 SHA256 不一致，已丢弃。这台电脑上没有放入任何文件。"),
         ),
     ] {
         let f = fixture(Options {
@@ -1099,7 +1096,7 @@ async fn only_the_look_action_runs_adb_devices() {
                 {"serial": "2B1F…9A4D", "model": "Pixel 8", "state": "device"},
             ],
             "step": {
-                "text": "adb 的服务在这台电脑的后台跑着，会一直留着，usuyo 不去停它。要停掉它，在「终端」里跑：",
+                "text": "adb 服务在这台电脑的后台运行，会一直保留，usuyo 不会停止它。要停止它，在「终端」中运行：",
                 "commands": [format!("'{}' kill-server", adb.display())],
             },
         })
@@ -1141,7 +1138,7 @@ async fn looking_for_phones_without_adb_says_so() {
     let (s, v) = call(&f.app, "POST", "/phone/android/devices", None).await;
     assert_eq!(s, StatusCode::FAILED_DEPENDENCY);
     assert_eq!(v["code"], "dependency-missing");
-    assert_eq!(v["hint"], "这台电脑上没找到 adb。");
+    assert_eq!(v["hint"], "这台电脑上找不到 adb。");
 }
 
 /// 令牌只发给认得出的那一条连接：连接的另一头要是你自己跑的驱动。看不见的（别的用户的）、别的用户的、

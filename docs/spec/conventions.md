@@ -50,7 +50,7 @@ semver：patch 改错；minor 加可选字段、枚举值、错误码、接口�
 | 面 | 写法 |
 |---|---|
 | 插件 | 照协议的信封；JSON-RPC 插件用 `-32000`，`data` 是错误对象 |
-| HTTP | RFC 9457：加 `type`（`urn:usuyo:problem:<code>`，客户端认 `code`）、`title`（固定英文）、`status`、`detail`（插件报的错是它的 `hint`，没有就 `message`；宿主自己报的是英文的 `message`，给日志）、`hint`（给人看的一句中文，界面照它显示；插件给了 `hint` 也放这里，宿主自己报的错只在界面要显示的那几处有：列来源、导入、从文件导入、交内容）、`instance`（`urn:uuid:<callId>`）；带 `Retry-After` |
+| HTTP | RFC 9457：加 `type`（`urn:usuyo:problem:<code>`，客户端认 `code`）、`title`（固定英文）、`status`、`detail`（插件报的错是它的 `hint`，没有就 `message`；宿主自己报的是英文的 `message`，给日志）、`hint`（给人看的一句话，按设置的语言写，界面照它显示（[§0.10](#010-界面文案和多语言)）；插件给了 `hint` 也放这里，宿主自己报的错只在界面要显示的那几处有：列来源、导入、从文件导入、交内容）、`instance`（`urn:uuid:<callId>`）；带 `Retry-After` |
 | MCP | `isError: true`，文字是 `detail`，`structuredContent` 是错误对象（和输出 schema 怎么配，第 2 层核实） |
 | 命令行 | 退出码 `0` 成功、`1` 失败、`2` 用法错（和插件一致）、`130` 被取消；`--json` 时 stdout 是 `{"ok": false, "error": {…}}` |
 
@@ -169,23 +169,116 @@ SHA-256，小写十六进制，算存下来的字节。字段名叫 `sha256` 时
 
 **用词**
 
-| 说 | 不说 |
-|---|---|
-| 添加（动作）、已保存（状态） | 收下、存着 |
-| 稍后阅读 | 回头看 |
-| 转写（口播成文字）、文字识别（图里和画面上的字）；合起来的栏目叫「转写与识别」 | 变成文字 |
-| 获取方式 | 取法、方法 |
-| 导入已保存的内容 | 拿回存过的 |
-| 获取访客身份 | 领访客身份 |
-| 可用、不可用、尚未提供 | 现在能用、用不上、还没做 |
-| 暂停、立即重试 | 先别试、现在再试 |
-| 发送到 usuyo | 交给 usuyo |
-| 废纸篓（macOS）、回收站（Windows） | — |
+同一样东西全应用只有一个叫法，两种语言都照这张表。表里没有的，用 Apple 自己的 App（访达、照片、备忘录、Safari、系统设置）在简体中文和英文里的叫法，再补进这张表。
+
+| 说 | English | 不说 |
+|---|---|---|
+| 添加（动作）、已保存（状态） | Add, Saved | 收下、存着 |
+| 稍后阅读 | Read Later | 回头看 |
+| 转写（口播成文字）、文字识别（图里和画面上的字）；合起来的栏目叫「转写与识别」 | Transcription, Text Recognition; the section is "Transcription & Text Recognition" | 变成文字 |
+| 获取方式 | fetch method | 取法、方法 |
+| 导入已保存的内容 | Import Saved Items | 拿回存过的 |
+| 获取访客身份 | Get Visitor Identity | 领访客身份 |
+| 可用、不可用、尚未提供 | Available, Unavailable, Not available yet | 现在能用、用不上、还没做 |
+| 暂停、立即重试 | Pause, Retry Now | 先别试、现在再试 |
+| 发送到 usuyo | Send to usuyo | 交给 usuyo |
+| 废纸篓（macOS）、回收站（Windows、Linux） | Trash (macOS, Linux), Recycle Bin (Windows) | — |
+| 访达（macOS）、文件资源管理器（Windows）、文件管理器（Linux） | Finder, File Explorer, file manager | — |
+| 条目 | item | 一条（当名词） |
+| 资料库 | library | 库 |
+| usuyo 服务（界面上说守护进程） | usuyo service | 内核 |
+| 获取插件 | Fetch Plugins | — |
+| 转写（口播那一层） | Transcript | 口播文字 |
+| 图中文字 | Text in Images | 图里的字 |
+| 画面中文字 | Text in Video | 画面上的字 |
+| 正文（作者写的那一层） | Post Text | 作者写的 |
+| 备注（你写的一句）；添加备注 | Note; Add Note | 记一句 |
+| 仅保留文字 | Keep Text Only | 只留文字 |
+| 恢复（从废纸篓） | Restore | 拿回来 |
+| 立即删除 | Delete Immediately | 清除、清掉 |
+| 订阅（跟着收） | Subscriptions; Subscribe, Unsubscribe | 跟着收 |
+| 文稿 | Drafts; New Draft | 成稿 |
+| 更改记录 | Change History | 改动记录 |
+| 建议的更改 | Suggested Changes | 改动提议 |
+| 撤销、重做 | Undo, Redo | 撤 |
+| 接受、拒绝 | Accept, Decline | 不要了 |
+| 关注、取消关注（主题） | Follow, Unfollow | 不再关注 |
+| 自动（外观的深浅） | Auto | 跟系统 |
+| 跟随系统（语言） | System | — |
+| 拷贝 | Copy | 复制 |
+| 在浏览器中打开 | Open in Browser | 打开原帖 |
+| 自动选取（机器按词或相似度挑的） | Auto-selected | 机器挑的 |
+| 自动转写、自动识别 | Auto-transcribed, Auto-recognized | 机器转的、机器认的 |
+| 模型生成 | Generated | 机器写的 |
+| 正在…（进行中的状态） | …ing | 在…… |
+| 无结果 | No Results | 没有搜到 |
+| 仅链接 | Link Only | 只有链接 |
+| Android | Android | 安卓 |
+| 请求频率 | Request Rate | 节奏 |
+| 层级 | tier | 档位 |
+| 通用（设置的第一节）、语言 | General, Language | — |
+| 正在下载、已下载、下载失败、未下载、重新下载 | Downloading…, Downloaded, Download failed, Not downloaded, Download Again | 在下载、下好了、没下成、还没下载、再下一次 |
+| 转写语音、识别图中文字、识别画面中文字、提取关键帧、合成可播放的视频（转换插件做的事） | Transcribe speech, Recognize text in images, Recognize text in video, Extract keyframes, Combine into playable video | 口播转成文字、认图里的字、取关键帧 |
+| 重新转写、重新识别、重新处理 | Transcribe Again, Recognize Again, Redo | 再转 |
+| 版本（同一层的几份） | Versions | 几份 |
+| 图片、视频（条目的两种画面） | Images, Video | 画面 |
+| 原始链接 | Original Link | 原帖链接 |
+| 相关段落 | Related Passages | 线头 |
+| 问题、添加问题（主题页换个问题读） | Questions, Add Question | 角度 |
+| 匹配、匹配规则 | match, Matching | 命中、怎么算命中 |
+| 引用 | Quote | 引进来、拿原话 |
+| 保存、编辑（你写的字） | Save, Edit | 记下、改一下 |
+| 排列方式 | Arrange By | 排列 |
+| 添加于{日期} | Added {date} | {日期}收下 |
+| 已完整保存、已保存部分内容 | Saved, Partly saved | 都存好了、存下了一部分 |
+| 新建订阅、取消订阅、试运行、检查频率 | New Subscription, Unsubscribe, Trial Run, How often to check | 跟着收一个新的、不再跟着收、试列一次、多久看一次 |
+| 继续导入、放弃导入、移除记录 | Continue Import, Discard Import, Remove Record | 接着导入、不要这次导入了、去掉这条记录 |
+| 全部添加、全部不添加、逐条选择 | Add All, Add None, Choose Items | 全收、全不收、逐条挑 |
+| 生成令牌、撤销（令牌） | Generate Token, Revoke | 发一个令牌 |
+| 发送到 usuyo 的列表、发送自{来源} | List sent to usuyo, Sent from {source} | 交进来的清单、交进来的一批 |
+| 其他工具导出的文件 | Files Exported from Other Apps | 别的工具导出的文件 |
+| 仓库（Obsidian 的） | vault | 库 |
+| 高亮 | Highlights | 划线 |
+| 读回（导出前读回 Obsidian 里的更改）、跳过 | read back, Skipped | 没读也没写 |
+| 导出位置、导出记录、导入记录、选择来源 | Location, Export History, Import History, Choose a Source | 导到哪、从哪里导入 |
+| 登录、重新登录、退出登录、完成登录 | Sign In, Sign In Again, Sign Out, Done Signing In | 登录好了 |
+| 网站数据 | website data | 网页数据 |
+| 在{fileManager}中显示 | Show in {fileManager} | — |
+| 自动（获取方式的选择）、单独设置 | Automatic, Custom | — |
+| 已记录（记下的风险） | On record | 记下的 |
+| 接通电源 | connected to power | 接着电源 |
+| 使用系统代理、不使用代理、自定义代理、连接方式 | Use system proxy, No proxy, Custom proxy, Connection | 跟系统代理、直连、自己填一个代理、插件出门 |
+| 保留时间、永久 | Keep items, Forever | 回收站留、一直留着 |
+| 按时间删除… | Delete as Scheduled… | 照时间清掉 |
+| 安装、卸载 | Install, Uninstall | 装上、卸掉 |
+| 录屏与系统录音（macOS 15 起的名字） | Screen & System Audio Recording | 屏幕录制 |
+| 读取屏幕、测试 | Read Screen, Test | 看一眼、试一下 |
+| 离开这台电脑 | Leaves This Computer | 离开本机 |
+| 此插件已暂停、已关闭此获取方式 | This plugin is paused, This fetch method is turned off | 你让这个插件先别试了、你关掉了这种方法 |
+| 没有音轨、未检测到语音、画面几乎不变、未识别到文字、有重复的图片 | No audio track, No speech detected, The picture barely changes, No text recognized, Some images are duplicates | 没有声音轨、没听到人说话、没认出字 |
+| 官方发布 | official release | 官方 release |
+
+**English**
+
+- Title-style capitalization for buttons, menu commands, tab and section titles, window titles and column headings ("Delete Immediately", "Change History"); sentence-style for labels, descriptions, checkboxes, options and sentences ("Use system title bar"). Same as Apple's Human Interface Guidelines.
+- Verbs on buttons; no "please", no exclamation marks, no "we". Contractions are fine ("isn't", "can't"). A button that asks for more before it acts ends with "…".
+- Straight apostrophe `'` in the language files; one ellipsis character `…`. Quotation marks are “…”; Chinese uses 「…」.
+
+**格式**
+
+- 日期和时间用系统的 `Intl` 按语言写（`i18n/format.ts`）：中文「11月13日」「2025年11月13日」照系统的写法，不加空格，是上面「数字和单位之间留空格」的例外；英文「Nov 13」。时分照 `Intl` 的默认：中文 24 小时，英文 12 小时。
+- 数字用 `Intl.NumberFormat`（`12,345`）；文件大小十进制、和访达一样（`163 MB`、`1.2 GB`）；并列的几项用 `Intl.ListFormat`（「A、B和C」「A, B, and C」；几个短句并列用 `narrow`：「A、B、C」），「和」挨着数字或西文时留空格（「7 个主题页和 1 篇文稿」）。中文的时分补两位（`09:05`）。
 
 **多语言**
 
-- 界面上的每一句话都从语言文件里取，源码里不写死；键按页面和用途起名，不拿中文原句当键。先有简体中文（`zh-Hans`）和英文（`en`），默认跟系统，设置里能换。
+- 界面上的每一句话都从语言文件里取，源码里不写死；键按页面和用途起名，不拿中文原句当键。先有简体中文（`zh-Hans`）和英文（`en`），默认跟随系统（系统首选语言是中文用简体中文，别的用英文），设置的「语言」里能换，存在按机器的 `settings.json` 的 `language`（[按机器的目录](machine.md)），改了马上生效。
 - 带数量和变量的句子用带占位的整句，不拼接；日期、数字、文件大小按语言格式化。
-- 内核和插件给界面的话（`hint`）同样按语言给：宿主把语言经 `USUYO_LOCALE` 交给插件；错误码、层级这类给机器看的值不翻译，由界面按码取话。
-- 英文同样照 Apple 的写法：句首大写，按钮用动词，不用 please。
+- 内核和插件给界面的话（`hint`）同样按语言给：内核照设置的语言写 `hint`；宿主把语言经 `USUYO_LOCALE`（`zh-Hans`、`en`）交给插件；错误码、层级这类给机器看的值不翻译，由界面按码取话。内核自己的句子两种语言并排写在各 crate 的一张表里（`crates/usuyo-core/src/words.rs` 这样的 `words.rs`）。
 
+**语言文件在哪、怎么加一句**
+
+- 前端：`apps/desktop/web/src/i18n/`。`zh-Hans/<页面>.ts` 和 `en/<页面>.ts` 一页一个文件，同名的键；`common.ts` 放几页共用的。没有用 i18n 库：一个带类型的小目录就够（`messages.ts`、`index.ts`）。
+- 加一句：在 `zh-Hans/<页面>.ts` 里按用途起键写中文，在 `en/<页面>.ts` 同一处写英文；页面里 `t("<页面>.<键>")`，有变量的 `t("trash.kept", { count })`，一句里有链接或按键的用 `rich("home.empty", { link: <Link to="/plugins" /> })`（`<link>` 里的字成了链接的字；元素自己有内容时留着它的）。
+- 中文句子里填进来的值是西文或数字（不带汉字）、又挨着汉字时，界面自动在两边留一个空格（「由 X 插件获取」），语言文件里不用为它留空格；带汉字的值（「B站」、日期）照原样。
+- 写法：变量 `{name}`；英文要分单复数的写 `{ one: "…", other: "…" }`，按 `count` 选；要换成界面元素的一段写 `<link>…</link>`；`{trash}`、`{fileManager}` 由界面按系统填，不用传。单复数那几个名字（`zero`、`one`、`two`、`few`、`many`、`other`）不拿来当别的键。
+- 检查：英文缺了键、某一句的变量或标签和中文不一样、调用时少给了变量，`tsc` 都报错（`i18n/check.ts` 有这几种的类型断言）；测试再查两种语言键一样，源码里语言文件、测试和样例库以外不出现中文字符（`i18n/cjk.test.ts`）。

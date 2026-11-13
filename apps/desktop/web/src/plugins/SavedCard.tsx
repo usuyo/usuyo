@@ -12,15 +12,20 @@ import { Select, type SelectOption } from "../ui/Select";
 import { SmallSwitch } from "./LinkCard";
 import { Needs } from "./Needs";
 import { onByDefault, savedKind, scriptPages, keyOf, type PlatformPage, type SavedKind, type Use } from "./platforms";
-import { accountText, ACCESS_TEXT, getsText, lastCallText, PAGE, TIER_TEXT } from "./words";
+import { rich, t } from "../i18n";
+import { formatList } from "../i18n/format";
+import { accountText, ACCESS_TEXT, clauses, getsText, lastCallText, TIER_TEXT } from "./words";
 
-const KIND_TEXT: Record<SavedKind, string> = {
-  file: PAGE.kindFile,
-  script: PAGE.kindScript,
-  phone: PAGE.kindPhone,
-  "link-list": PAGE.kindLinkList,
-  list: PAGE.kindList,
-};
+function kindText(kind: SavedKind): string {
+  const text: Record<SavedKind, () => string> = {
+    file: () => t("plugins.saved.kind.file"),
+    script: () => t("plugins.saved.kind.script"),
+    phone: () => t("plugins.saved.kind.phone"),
+    "link-list": () => t("plugins.saved.kind.linkList"),
+    list: () => t("plugins.saved.kind.list"),
+  };
+  return text[kind]();
+}
 
 /**
  * 「拿回存过的」：一个选择框选一种（做好了的在前，没做的灰着），下面是照这一种走的几步，每步写现在怎样、在哪动手。
@@ -32,26 +37,30 @@ export function SavedCard({ page, sites, visitors, readers }: { page: PlatformPa
   const later = page.saved.filter((u) => !u.method.built);
   const [picked, setPicked] = useState<string | null>(null);
   const chosen = built.find((u) => keyOf(u) === picked) ?? built.find((u) => u.method.usable) ?? built[0];
-  const name = (u: Use) => (page.plugins.length > 1 ? `${u.method.name} · ${u.plugin.name}` : u.method.name);
+  const name = (u: Use) => (page.plugins.length > 1 ? t("plugins.link.optionName", { method: u.method.name, plugin: u.plugin.name }) : u.method.name);
   const options: SelectOption[] = [
-    ...built.map((u) => ({ id: keyOf(u), text: name(u), sub: `${KIND_TEXT[savedKind(u, ids)]} · ${ACCESS_TEXT[u.method.access]}` })),
-    ...later.map((u) => ({ id: keyOf(u), text: name(u), sub: PAGE.notBuilt, disabled: true })),
+    ...built.map((u) => ({ id: keyOf(u), text: name(u), sub: t("plugins.link.optionSub", { first: kindText(savedKind(u, ids)), second: ACCESS_TEXT[u.method.access] }) })),
+    ...later.map((u) => ({ id: keyOf(u), text: name(u), sub: t("plugins.link.notBuilt"), disabled: true })),
   ];
 
   if (page.saved.length === 0) {
     return (
-      <Card title={PAGE.savedTitle}>
-        <CardRow title={PAGE.savedNoneTitle} sub={PAGE.savedNoneSub} />
+      <Card title={t("plugins.saved.title")}>
+        <CardRow title={t("plugins.saved.noneTitle")} sub={t("plugins.saved.noneSub")} />
       </Card>
     );
   }
 
   return (
-    <Card title={PAGE.savedTitle} sub={PAGE.savedSub}>
+    <Card title={t("plugins.saved.title")} sub={t("plugins.saved.sub")}>
       <CardRow
-        title={PAGE.importWay}
-        sub={chosen ? `${KIND_TEXT[savedKind(chosen, ids)]}；${accountText(chosen.method.account, chosen.method.account.sites ?? chosen.plugin.platforms.map((x) => x.name))}` : PAGE.notBuilt}
-        control={<Select label={PAGE.importWay} options={options} value={chosen ? keyOf(chosen) : null} placeholder={PAGE.notBuilt} onChange={setPicked} />}
+        title={t("plugins.saved.way")}
+        sub={
+          chosen
+            ? t("plugins.saved.waySub", { kind: kindText(savedKind(chosen, ids)), account: accountText(chosen.method.account, chosen.method.account.sites ?? chosen.plugin.platforms.map((x) => x.name)) })
+            : t("plugins.link.notBuilt")
+        }
+        control={<Select label={t("plugins.saved.way")} options={options} value={chosen ? keyOf(chosen) : null} placeholder={t("plugins.link.notBuilt")} onChange={setPicked} />}
       >
         {chosen ? <Steps key={keyOf(chosen)} use={chosen} kind={savedKind(chosen, ids)} reader={readers.find((r) => r.id === keyOf(chosen))} sites={sites} visitors={visitors} /> : null}
       </CardRow>
@@ -66,19 +75,19 @@ function Steps({ use, kind, reader, sites, visitors }: { use: Use; kind: SavedKi
   const ready = <Needs use={use} sites={sites} visitors={visitors} />;
   const toImport = (
     <Link to="/import" search={{ pick: key }} className="press inline-flex h-ctl-sm items-center rounded-btn border border-border2 bg-chip px-3.5 text-note font-medium text-text no-underline hover:border-label/60">
-      {PAGE.goImport}
+      {t("plugins.saved.goImport")}
     </Link>
   );
   const steps: { key: string; title: ReactNode; body?: ReactNode }[] =
     kind === "file"
       ? [
-          { key: "get", title: PAGE.stepGetFile, body: <FileHow reader={reader} /> },
+          { key: "get", title: t("plugins.saved.stepGetFile"), body: <FileHow reader={reader} /> },
           {
             key: "pick",
-            title: PAGE.stepPickFile,
+            title: t("plugins.saved.stepPickFile"),
             body: (
               <Link to="/import" search={{ from: "file", reader: key }} className="press inline-flex h-ctl-sm items-center rounded-btn border border-border2 bg-chip px-3.5 text-note font-medium text-text no-underline hover:border-label/60">
-                {PAGE.pickFile}
+                {t("plugins.saved.pickFile")}
               </Link>
             ),
           },
@@ -87,22 +96,26 @@ function Steps({ use, kind, reader, sites, visitors }: { use: Use; kind: SavedKi
         ? scriptSteps(use)
         : kind === "phone"
           ? [
-              { key: "what", title: PAGE.stepWhat, body: <p className="m-0 text-note text-label">{getsText(m.gets).join("；") || m.name}</p> },
-              { key: "phone", title: PAGE.stepPhone, body: ready },
+              { key: "what", title: t("plugins.saved.stepWhat"), body: <p className="m-0 text-note text-label">{clauses(getsText(m.gets)) || m.name}</p> },
+              { key: "phone", title: t("plugins.saved.stepPhone"), body: ready },
             ]
           : kind === "link-list"
             ? [
-                { key: "ready", title: PAGE.stepReady, body: ready },
-                { key: "link", title: PAGE.stepLink, body: <Sources plugin={use.plugin} method={m} onStarted={(id) => void navigate({ to: "/import", search: { open: id } })} /> },
+                { key: "ready", title: t("plugins.saved.stepReady"), body: ready },
+                { key: "link", title: t("plugins.saved.stepLink"), body: <Sources plugin={use.plugin} method={m} onStarted={(id) => void navigate({ to: "/import", search: { open: id } })} /> },
               ]
             : [
-                { key: "ready", title: PAGE.stepReady, body: ready },
-                { key: "go", title: PAGE.stepList((m.gets.list ?? []).join("、")), body: toImport },
+                { key: "ready", title: t("plugins.saved.stepReady"), body: ready },
+                {
+                  key: "go",
+                  title: (m.gets.list ?? []).length > 0 ? t("plugins.saved.stepList", { lists: formatList(m.gets.list ?? []) }) : t("plugins.saved.stepListAny"),
+                  body: toImport,
+                },
               ];
   return (
     <div className="flex flex-col gap-3">
       <OffSwitch use={use} />
-      <ol aria-label={PAGE.steps(m.name)} className="m-0 flex list-none flex-col gap-3.5 p-0">
+      <ol aria-label={t("plugins.saved.steps", { name: m.name })} className="m-0 flex list-none flex-col gap-3.5 p-0">
         {steps.map((s, i) => (
           <li key={s.key} className="flex gap-2.5">
             <span className="mono flex size-5 shrink-0 items-center justify-center rounded-full border border-border2 text-tag text-label">{i + 1}</span>
@@ -113,7 +126,7 @@ function Steps({ use, kind, reader, sites, visitors }: { use: Use; kind: SavedKi
           </li>
         ))}
       </ol>
-      {m.riskNote ? <p className="m-0 text-small text-faint">{PAGE.risk(m.riskNote.text, m.riskNote.source.label)}</p> : null}
+      {m.riskNote ? <p className="m-0 text-small text-faint">{t("plugins.saved.risk", { text: m.riskNote.text, source: m.riskNote.source.label })}</p> : null}
       {m.lastCall ? <p className={`m-0 text-small ${m.lastCall.ok ? "text-sub" : "text-warn"}`}>{lastCallText(m.lastCall)}</p> : null}
     </div>
   );
@@ -126,8 +139,8 @@ function OffSwitch({ use }: { use: Use }) {
   if (m.enabled) return null;
   return (
     <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1.5 rounded-btn bg-card2 px-3 py-2.5">
-      <p className="m-0 min-w-0 flex-[1_1_240px] text-small text-label">{onByDefault(m.access) ? PAGE.offByYouSaved : PAGE.offByTierSaved(TIER_TEXT[m.access])}</p>
-      <SmallSwitch label={PAGE.offSwitch(m.name)} isSelected={false} isDisabled={switcher.isPending} onChange={(v) => switcher.mutate({ methodId: m.id, enabled: v })} />
+      <p className="m-0 min-w-0 flex-[1_1_240px] text-small text-label">{onByDefault(m.access) ? t("plugins.saved.offByYou") : t("plugins.saved.offByTier", { tier: TIER_TEXT[m.access] })}</p>
+      <SmallSwitch label={t("plugins.saved.offSwitch", { name: m.name })} isSelected={false} isDisabled={switcher.isPending} onChange={(v) => switcher.mutate({ methodId: m.id, enabled: v })} />
       {switcher.error ? <ErrorLine error={switcher.error} className="w-full" /> : null}
     </div>
   );
@@ -139,7 +152,7 @@ function FileHow({ reader }: { reader: FileReader | undefined }) {
     <div className="text-note text-label">
       {reader.reads}
       {reader.patterns.length > 0 ? <span className="mono mt-0.5 block text-tag text-faint">{reader.patterns.join("  ")}</span> : null}
-      {reader.lists.length > 0 ? <span className="mt-0.5 block text-small text-sub">{PAGE.readsAlso(reader.lists.join("、"))}</span> : null}
+      {reader.lists.length > 0 ? <span className="mt-0.5 block text-small text-sub">{t("plugins.saved.readsAlso", { lists: formatList(reader.lists) })}</span> : null}
     </div>
   );
 }
@@ -149,22 +162,22 @@ function scriptSteps(use: Use): { key: string; title: ReactNode; body?: ReactNod
   return [
     {
       key: "manager",
-      title: PAGE.stepManager,
-      body: <p className="m-0 text-small text-sub">{PAGE.stepManagerBody}</p>,
+      title: t("plugins.script.stepManager"),
+      body: <p className="m-0 text-small text-sub">{t("plugins.script.stepManagerBody")}</p>,
     },
-    { key: "script", title: PAGE.stepScript, body: <ScriptFile use={use} /> },
-    { key: "token", title: PAGE.stepToken, body: <TokenStep name={PAGE.tokenName(use.plugin.name)} /> },
-    { key: "page", title: PAGE.stepPage, body: <ScriptPage use={use} /> },
+    { key: "script", title: t("plugins.script.stepScript"), body: <ScriptFile use={use} /> },
+    { key: "token", title: t("plugins.script.stepToken"), body: <TokenStep name={t("plugins.script.tokenName", { plugin: use.plugin.name })} /> },
+    { key: "page", title: t("plugins.script.stepPage"), body: <ScriptPage use={use} /> },
     {
       key: "hand",
-      title: PAGE.stepSend,
+      title: t("plugins.script.stepSend"),
       body: (
         <p className="m-0 text-small text-sub">
-          {PAGE.sendBefore}
-          <Link to="/import" className="mx-0.5 text-label underline decoration-border2 underline-offset-4 hover:text-text">
-            {PAGE.sendLink}
-          </Link>
-          {PAGE.sendAfter}
+          {rich("plugins.script.sendBody", {
+            sendButton: t("plugins.quoted.sendButton"),
+            diagnoseButton: t("plugins.quoted.diagnoseButton"),
+            link: <Link to="/import" className="mx-0.5 text-label underline decoration-border2 underline-offset-4 hover:text-text" />,
+          })}
         </p>
       ),
     },
@@ -176,18 +189,18 @@ function ScriptFile({ use }: { use: Use }) {
   const reveal = useRevealScript();
   const text = useMethodScript(use.plugin.id, use.method.id, script?.present === true);
   const flash = useFlash();
-  if (!script) return <p className="m-0 text-small text-sub">{PAGE.noScript}</p>;
-  if (!script.present) return <p className="m-0 text-small text-warn">{PAGE.scriptMissing(script.path)}</p>;
+  if (!script) return <p className="m-0 text-small text-sub">{t("plugins.script.none")}</p>;
+  if (!script.present) return <p className="m-0 text-small text-warn">{t("plugins.script.missing", { path: script.path })}</p>;
   return (
     <div className="min-w-0">
-      <p className="m-0 text-small text-sub">{PAGE.stepScriptBody}</p>
+      <p className="m-0 text-small text-sub">{t("plugins.script.stepScriptBody")}</p>
       <code className="mono mt-1.5 block truncate rounded-sm bg-chip px-2.5 py-1.5 text-tag text-label select-text" title={script.path}>
         {script.path}
       </code>
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
         <Button variant="outline" size="sm" isDisabled={reveal.isPending} onPress={() => reveal.mutate({ pluginId: use.plugin.id, methodId: use.method.id })}>
           <FolderOpen size={14} aria-hidden="true" />
-          {PAGE.reveal}
+          {t("plugins.script.reveal")}
         </Button>
         <Button
           variant="outline"
@@ -196,13 +209,13 @@ function ScriptFile({ use }: { use: Use }) {
           onPress={() => {
             if (!text.data) return;
             navigator.clipboard.writeText(text.data).then(
-              () => flash.show(PAGE.copiedScript),
-              () => flash.show(PAGE.copyScriptFailed),
+              () => flash.show(t("plugins.script.copied")),
+              () => flash.show(t("plugins.script.copyFailed")),
             );
           }}
         >
           <Copy size={14} aria-hidden="true" />
-          {PAGE.copyScript}
+          {t("plugins.script.copy")}
         </Button>
         <FlashLine flash={flash} className="text-small text-sub" />
       </div>
@@ -216,15 +229,15 @@ function ScriptFile({ use }: { use: Use }) {
 function ScriptPage({ use }: { use: Use }) {
   const text = useMethodScript(use.plugin.id, use.method.id, use.method.script?.present === true);
   const found = text.data ? scriptPages(text.data) : null;
-  const platform = use.plugin.platforms.map((p) => p.name).join("、");
+  const platform = formatList(use.plugin.platforms.map((p) => p.name));
   return (
     <div className="text-small text-sub">
       {found?.pages ? (
         <p className="m-0 text-note text-label">
-          {PAGE.pageBody(platform, found.pages)}
+          {t("plugins.script.pageBody", { platform, pages: found.pages })}
         </p>
       ) : (
-        <p className="m-0 text-note text-label">{PAGE.pageFallback(platform)}</p>
+        <p className="m-0 text-note text-label">{t("plugins.script.pageFallback", { platform })}</p>
       )}
       {found && found.matches.length > 0 ? <span className="mono mt-0.5 block text-tag text-faint">{found.matches.join("  ")}</span> : null}
     </div>
@@ -237,34 +250,33 @@ function TokenStep({ name }: { name: string }) {
   const create = useCreateDeliverToken();
   const [fresh, setFresh] = useState<NewDeliverToken | null>(null);
   const flash = useFlash();
-  const scripts = (tokens.data ?? []).filter((t) => t.kind === "extension");
+  const scripts = (tokens.data ?? []).filter((x) => x.kind === "extension");
   return (
     <div className="min-w-0">
       <p className="m-0 text-small text-sub">
-        {PAGE.tokenBody}
-        {scripts.length > 0 ? PAGE.tokensIssued(scripts.map((t) => t.name).join("、")) : PAGE.tokensNone}
+        {scripts.length > 0 ? t("plugins.script.tokenIntroIssued", { names: formatList(scripts.map((x) => x.name)) }) : t("plugins.script.tokenIntro")}
       </p>
       {fresh ? (
         <div className="mt-1.5 rounded-btn border border-border2 bg-card2 px-3 py-2.5">
-          <div className="text-small text-label">{PAGE.tokenOnce}</div>
+          <div className="text-small text-label">{t("plugins.script.tokenOnce")}</div>
           <div className="mt-1.5 flex items-center gap-1.5">
             <code className="mono min-w-0 flex-1 truncate rounded-sm bg-chip px-2.5 py-1.5 text-tag text-text select-all">{fresh.token}</code>
             <Button
               variant="outline"
               size="sm"
               square
-              aria-label={PAGE.copyToken}
+              aria-label={t("plugins.script.copyToken")}
               onPress={() => {
                 navigator.clipboard.writeText(fresh.token).then(
-                  () => flash.show(PAGE.copied),
-                  () => flash.show(PAGE.copyFailed),
+                  () => flash.show(t("common.copied")),
+                  () => flash.show(t("common.copyFailed")),
                 );
               }}
             >
               <Copy size={14} aria-hidden="true" />
             </Button>
             <Button variant="quiet" size="sm" onPress={() => setFresh(null)}>
-              {PAGE.done}
+              {t("common.done")}
             </Button>
           </div>
           <FlashLine flash={flash} className="mt-1 block text-small text-sub" />
@@ -279,15 +291,15 @@ function TokenStep({ name }: { name: string }) {
             create.mutate(
               { name, kind: "extension" },
               {
-                onSuccess: (t) => {
-                  setFresh(t);
+                onSuccess: (made) => {
+                  setFresh(made);
                   create.reset();
                 },
               },
             )
           }
         >
-          {PAGE.issueToken}
+          {t("plugins.script.issueToken")}
         </Button>
       )}
       {create.error ? <ErrorLine error={create.error} className="mt-1" /> : null}

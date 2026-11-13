@@ -4,22 +4,24 @@ import { ErrorLine } from "../components/ErrorLine";
 import { Rail } from "../frame/Rail";
 import { Appearance } from "./Appearance";
 import { Diagnostics } from "./Diagnostics";
+import { General } from "./General";
 import { Network } from "./Network";
 import { Storage } from "./Storage";
 import { TextSection } from "./TextSection";
 import { WindowSection } from "./WindowSection";
-import { WINDOW } from "./words";
+import { t, type MessageKey } from "../i18n";
 
 const SECTIONS = [
-  { id: "appearance", name: "外观" },
-  { id: "window", name: WINDOW.section },
-  { id: "network", name: "网络" },
-  { id: "storage", name: "存储与回收站" },
-  { id: "text", name: "变成文字" },
-  { id: "diagnostics", name: "诊断" },
-  { id: "agent", name: "Agent" },
-  { id: "sync", name: "同步" },
-] as const;
+  { id: "general", name: "settings.general.name" },
+  { id: "appearance", name: "settings.appearance.name" },
+  { id: "window", name: "settings.window.name" },
+  { id: "network", name: "settings.network.name" },
+  { id: "storage", name: "settings.storage.name" },
+  { id: "text", name: "settings.text.name" },
+  { id: "diagnostics", name: "settings.diagnostics.name" },
+  { id: "agent", name: "settings.agent.name" },
+  { id: "sync", name: "settings.sync.name" },
+] as const satisfies { id: string; name: MessageKey }[];
 
 /**
  * 设置：一页从上到下，左边是目录。改了马上生效，没有「保存」。
@@ -32,63 +34,52 @@ export function SettingsPage() {
 
   return (
     <div className="relative h-full overflow-hidden bg-bg">
-      <Rail label="主导航" />
+      <Rail label={t("common.nav.main")} />
       <main className="@container absolute inset-y-0 right-0 left-rail overflow-y-auto scroll-smooth px-6 pt-7 pb-24 motion-reduce:scroll-auto lg:px-gutter">
-        <h1 className="m-0 text-title font-semibold text-text">设置</h1>
-        <p className="m-0 mt-1 text-note text-sub">改了马上生效。会让内容离开这台电脑的，旁边写着。</p>
+        <h1 className="m-0 text-title font-semibold text-text">{t("settings.title")}</h1>
+        <p className="m-0 mt-1 text-note text-sub">{t("settings.intro")}</p>
         <div className="mt-8 grid items-start gap-x-10 @3xl:grid-cols-[160px_minmax(0,1fr)]">
-          <nav aria-label="设置的几节" className="sticky top-0 hidden flex-col gap-0.5 @3xl:flex">
+          <nav aria-label={t("settings.sectionsLabel")} className="sticky top-0 hidden flex-col gap-0.5 @3xl:flex">
             {SECTIONS.map((s) => (
               <a
                 key={s.id}
                 href={`#${s.id}`}
                 className="press flex h-ctl-xs items-center rounded-sm px-2.5 text-note text-sub no-underline hover:bg-chip/60 hover:text-text"
               >
-                {s.name}
+                {t(s.name)}
               </a>
             ))}
           </nav>
           <div className="flex min-w-0 max-w-[760px] flex-col">
-            <Section id="appearance" name="外观" sub="只在这台电脑上，不跟着资料库走。">
+            <Section id="general" name={t("settings.general.name")} sub={t("settings.general.sub")}>
+              {gate((v) => <General view={v} />)}
+            </Section>
+            <Section id="appearance" name={t("settings.appearance.name")} sub={t("settings.appearance.sub")}>
               <Appearance />
             </Section>
-            <Section id="window" name={WINDOW.section} sub={WINDOW.sectionSub}>
+            <Section id="window" name={t("settings.window.name")} sub={t("settings.window.sub")}>
               {gate((v) => <WindowSection view={v} />)}
             </Section>
-            <Section id="network" name="网络" sub="获取插件去平台取东西时，从哪个出口出去。">
+            <Section id="network" name={t("settings.network.name")} sub={t("settings.network.sub")}>
               {gate((v) => (
                 // 内核那边的出口变了（别处改的、事件来的）就照新的重新摆。
                 <Network key={`${v.network.mode} ${v.network.proxy ?? ""}`} view={v} />
               ))}
             </Section>
-            <Section id="storage" name="存储与回收站" sub="资料库就是一个普通文件夹，不开 usuyo 也能读。">
+            <Section id="storage" name={t("settings.storage.name")} sub={t("settings.storage.sub")}>
               {gate((v) => <Storage view={v} />)}
             </Section>
-            <Section id="text" name="变成文字" sub="把口播、图里的字、画面上的字转出来，都在这台电脑上做。">
+            <Section id="text" name={t("settings.text.name")} sub={t("settings.text.sub")}>
               {gate((v) => <TextSection view={v} />)}
             </Section>
-            <Section id="diagnostics" name="诊断" sub="出了问题时来这里看。">
+            <Section id="diagnostics" name={t("settings.diagnostics.name")} sub={t("settings.diagnostics.sub")}>
               <Diagnostics logs={settings.data?.logs} />
             </Section>
-            <Section id="agent" name="Agent" sub="让你自己的 Agent 经 MCP 用资料库。">
-              <Later
-                lines={[
-                  "这里会放：开关、接上的是哪个 Agent、它做过什么。",
-                  "Agent 只能搜、读、提议改动；改已有的内容先出改动提议，你确认以后才生效，能整批撤销。不能删除，也不能把内容发出去。",
-                  "私密条目和你写的笔记，默认不给 Agent 看。",
-                ]}
-                state="还没接上：这一版的 usuyo 还没有 MCP 服务。"
-              />
+            <Section id="agent" name={t("settings.agent.name")} sub={t("settings.agent.sub")}>
+              <Later lines={[t("settings.agent.plan"), t("settings.agent.limits"), t("settings.agent.privacy")]} state={t("settings.agent.state")} />
             </Section>
-            <Section id="sync" name="同步" sub="在你自己的几台电脑之间同步文字。" away>
-              <Later
-                lines={[
-                  "这里会放：接上你自己的 Cloudflare 账号、配第二台电脑、看同步到哪儿了。",
-                  "跑在你自己的账号里，没有 usuyo 的服务器；离开这台电脑以前先加密，主密码只有你知道。",
-                  "同步文字和机器转出来的文字，视频和图先不同步。",
-                ]}
-                state="还没接上：不接也能在这台电脑上一直用下去。"
-              />
+            <Section id="sync" name={t("settings.sync.name")} sub={t("settings.sync.sub")} away>
+              <Later lines={[t("settings.sync.plan"), t("settings.sync.privacy"), t("settings.sync.scope")]} state={t("settings.sync.state")} />
             </Section>
           </div>
         </div>
@@ -104,7 +95,7 @@ function Section({ id, name, sub, away, children }: { id: string; name: string; 
         <h2 id={`${id}-h`} className="m-0 text-section font-semibold text-text">
           {name}
         </h2>
-        {away ? <span className="rounded-chip border border-border2 px-1.5 text-tag text-label">离开本机</span> : null}
+        {away ? <span className="rounded-chip border border-border2 px-1.5 text-tag text-label">{t("settings.away")}</span> : null}
       </div>
       <p className="m-0 mt-1 text-note text-sub">{sub}</p>
       <div className="mt-4">{children}</div>

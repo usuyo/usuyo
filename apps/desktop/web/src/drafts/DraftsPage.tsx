@@ -4,6 +4,7 @@ import { isNotServed } from "../api/client";
 import { useDrafts, useNewDraft } from "../api/hooks";
 import { ErrorLine, NotServedLine } from "../components/ErrorLine";
 import { Rail } from "../frame/Rail";
+import { t } from "../i18n";
 import { Button } from "../ui/Button";
 import { editedText, kindText } from "./words";
 
@@ -15,12 +16,12 @@ export function DraftsPage() {
   const missing = isNotServed(drafts.error);
   return (
     <div className="relative h-full overflow-hidden bg-bg">
-      <Rail label="主导航" />
+      <Rail label={t("common.nav.main")} />
       <main className="absolute inset-y-0 right-0 left-rail overflow-y-auto px-6 pt-7 pb-16 lg:px-gutter">
         <header className="flex max-w-[760px] flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
-            <h1 className="m-0 text-title font-semibold text-text">成稿</h1>
-            <p className="m-0 mt-1 text-note text-sub">把引过的原话拼成你自己的一篇：文章、帖子、脚本。每处引用都带着出处，点回去是那一秒、那张图。</p>
+            <h1 className="m-0 text-title font-semibold text-text">{t("drafts.title")}</h1>
+            <p className="m-0 mt-1 text-note text-sub">{t("drafts.intro")}</p>
           </div>
           {missing ? null : (
             <Button
@@ -30,14 +31,14 @@ export function DraftsPage() {
               onPress={() => create.mutate({ title: "", kind: "article" }, { onSuccess: (d) => void navigate({ to: "/drafts/$id", params: { id: d.id } }) })}
             >
               <PenLine size={15} aria-hidden="true" />
-              写一篇
+              {t("drafts.new")}
             </Button>
           )}
         </header>
-        {missing ? <NotServedLine className="mt-6">这台电脑上的 usuyo 内核还没有成稿；以后在这里把引过的原话拼成你自己的一篇。</NotServedLine> : null}
+        {missing ? <NotServedLine className="mt-6">{t("drafts.notServed")}</NotServedLine> : null}
         {drafts.error && !missing ? <ErrorLine error={drafts.error} className="mt-6" /> : null}
         {create.error ? <ErrorLine error={create.error} className="mt-3" /> : null}
-        {drafts.data && drafts.data.length === 0 ? <p className="m-0 mt-8 text-body text-sub">还没有成稿。写一篇，从主题页和搜到的原话里引进来。</p> : null}
+        {drafts.data && drafts.data.length === 0 ? <p className="m-0 mt-8 text-body text-sub">{t("drafts.empty")}</p> : null}
         <ul className="m-0 mt-6 flex max-w-[760px] list-none flex-col border-t border-border p-0">
           {(drafts.data ?? []).map((d) => (
             <li key={d.id} className="border-b border-border">

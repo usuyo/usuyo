@@ -7,7 +7,8 @@ import { useItemChange } from "../api/hooks";
 import { openExternal, webUrl } from "../shell";
 import { TopicPill } from "../ui/Chip";
 import { FlashLine, useFlash } from "../ui/Flash";
-import { dayText, keepText, savedText, type MediaKeep } from "./format";
+import { t } from "../i18n";
+import { dayText, keepText, savedText, sentences, type MediaKeep } from "./format";
 
 function Row({ label, top, children }: { label: string; top?: boolean; children: ReactNode }) {
   return (
@@ -23,12 +24,12 @@ export function ItemMeta({ item, topics, keep }: { item: Item; topics: Topic[]; 
   const src = useFlash();
   const topicFlash = useFlash();
   const change = useItemChange(item.id);
-  const followed = new Set(topics.filter((t) => t.followed).map((t) => t.id));
-  const names = new Map(topics.map((t) => [t.id, t.name]));
+  const followed = new Set(topics.filter((x) => x.followed).map((x) => x.id));
+  const names = new Map(topics.map((x) => [x.id, x.name]));
   return (
     <div className="flex min-w-0 flex-[1_1_280px] flex-col gap-2.5">
       <div className="flex min-h-7 items-center gap-3">
-        <span className="w-[52px] shrink-0 text-small text-faint">来自</span>
+        <span className="w-[52px] shrink-0 text-small text-faint">{t("item.meta.source")}</span>
         <span className="text-note text-label">
           {item.platform.name}
           {item.author ? ` · ${item.author}` : ""} ·
@@ -37,65 +38,65 @@ export function ItemMeta({ item, topics, keep }: { item: Item; topics: Topic[]; 
           isDisabled={webUrl(item.url) === null}
           onPress={() => {
             void openExternal(item.url).then((opened) => {
-              if (opened) src.show("在浏览器里打开了");
+              if (opened) src.show(t("item.page.opened"));
             });
           }}
           className="-my-1 -ml-1.5 h-ctl-sm cursor-pointer rounded-sm border-0 bg-transparent px-1.5 font-sans text-note text-text underline decoration-border2 underline-offset-4 outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent"
         >
-          原帖链接
+          {t("item.meta.originalLink")}
         </AriaButton>
         <FlashLine flash={src} className="text-small whitespace-nowrap text-sub" />
       </div>
-      <Row label="收下">{dayText(item.takenAt)}</Row>
-      <Row label="存下了">
+      <Row label={t("item.meta.added")}>{dayText(item.takenAt)}</Row>
+      <Row label={t("item.meta.saved")}>
         {savedText(item, keep)}
         {item.missing ? <span className="text-warn">{item.missing}</span> : null}
       </Row>
-      <Row label="主题" top>
+      <Row label={t("item.meta.topics")} top>
         <div className="flex min-h-ctl-sm flex-wrap items-center gap-1.5">
-          {item.topicIds.map((t) => (
-            <Link key={t} to="/topics/$id" params={{ id: t }} aria-label={`打开主题「${names.get(t) ?? t}」`} className="press rounded-full no-underline">
-              <TopicPill followed={followed.has(t)} size="md">
-                {names.get(t)}
+          {item.topicIds.map((id) => (
+            <Link key={id} to="/topics/$id" params={{ id }} aria-label={t("item.meta.openTopic", { name: names.get(id) ?? id })} className="press rounded-full no-underline">
+              <TopicPill followed={followed.has(id)} size="md">
+                {names.get(id)}
               </TopicPill>
             </Link>
           ))}
           <DialogTrigger>
             <AriaButton className="press flex h-ctl-sm cursor-pointer items-center gap-1.5 rounded-full border border-dashed border-border2 bg-transparent px-3 font-sans text-small font-medium text-label outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent">
               <Plus size={12} aria-hidden="true" />
-              <span>放进主题</span>
+              <span>{t("item.meta.addToTopic")}</span>
             </AriaButton>
             <Popover placement="top start" offset={8} className="w-[300px] animate-rise rounded-card border border-border2 bg-card p-3 shadow-panel">
-              <Dialog aria-label="放进哪个主题" className="outline-none">
-                <div className="px-0.5 pb-2 text-tag text-sub">点一下放进去，再点一下拿出来；没有的写个名字</div>
+              <Dialog aria-label={t("item.meta.chooseTopic")} className="outline-none">
+                <div className="px-0.5 pb-2 text-tag text-sub">{t("item.meta.chooseHint")}</div>
                 <div className="flex flex-wrap gap-1.5">
-                  {topics.map((t) => {
-                    const on = item.topicIds.includes(t.id);
-                    const fo = followed.has(t.id);
+                  {topics.map((topic) => {
+                    const on = item.topicIds.includes(topic.id);
+                    const fo = followed.has(topic.id);
                     return (
                       <ToggleButton
-                        key={t.id}
+                        key={topic.id}
                         isSelected={on}
                         onChange={(member) => {
-                          change.mutate({ kind: "topic", topicId: t.id, member });
-                          topicFlash.show(member ? `放进了「${t.name}」` : `从「${t.name}」拿出来了`);
+                          change.mutate({ kind: "topic", topicId: topic.id, member });
+                          topicFlash.show(member ? t("item.meta.addedTo", { name: topic.name }) : t("item.meta.removedFrom", { name: topic.name }));
                         }}
                         className={`press h-ctl-sm cursor-pointer rounded-full border px-3 font-sans text-small font-medium outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent ${on ? `bg-chip ${fo ? "border-accent text-accent" : "border-label text-text"}` : "border-border bg-transparent text-sub"}`}
                       >
-                        {t.name}
+                        {topic.name}
                       </ToggleButton>
                     );
                   })}
                 </div>
                 <NewTopicField
                   onSubmit={(name) => {
-                    const existing = topics.find((t) => t.name === name);
+                    const existing = topics.find((x) => x.name === name);
                     if (existing) {
                       if (!item.topicIds.includes(existing.id)) change.mutate({ kind: "topic", topicId: existing.id, member: true });
-                      topicFlash.show(`放进了「${existing.name}」`);
+                      topicFlash.show(t("item.meta.addedTo", { name: existing.name }));
                       return;
                     }
-                    change.mutate({ kind: "new-topic", name }, { onSuccess: () => topicFlash.show(`建了「${name}」，放进去了`) });
+                    change.mutate({ kind: "new-topic", name }, { onSuccess: () => topicFlash.show(t("item.meta.createdAndAdded", { name })) });
                   }}
                 />
               </Dialog>
@@ -112,9 +113,9 @@ export function ItemMeta({ item, topics, keep }: { item: Item; topics: Topic[]; 
 function NewTopicField({ onSubmit }: { onSubmit: (name: string) => void }) {
   const [name, setName] = useState("");
   return (
-    <TextField value={name} onChange={setName} aria-label="新主题的名字" className="mt-2.5">
+    <TextField value={name} onChange={setName} aria-label={t("item.meta.newTopicLabel")} className="mt-2.5">
       <Input
-        placeholder="新主题，回车放进去"
+        placeholder={t("item.meta.newTopicPlaceholder")}
         maxLength={80}
         className="h-ctl-sm w-full rounded-input border border-border2 bg-transparent px-3 font-sans text-small text-text outline-none data-[focused]:border-label"
         onKeyDown={(e) => {
@@ -185,34 +186,32 @@ export function ItemActions({ item, keep }: { item: Item; keep: MediaKeep }) {
       {item.stored === "text-only" && keep.gone ? null : item.stored === "text-only" ? (
         <ActionCard
           icon={<RotateCcw size={14} aria-hidden="true" />}
-          label="恢复视频和封面"
-          sub="从回收站拿回来，回到都存好了"
-          onPress={() =>
-            change.mutate({ kind: "restore-media" }, { onSuccess: () => setMsg("视频和封面从回收站拿回来了") })
-          }
+          label={t("item.actions.restoreMedia")}
+          sub={t("item.actions.restoreMediaSub")}
+          onPress={() => change.mutate({ kind: "restore-media" }, { onSuccess: () => setMsg(t("item.actions.restoredMedia")) })}
         />
       ) : (
         <ActionCard
           icon={<FileText size={14} aria-hidden="true" />}
-          label={armed === "text" ? "再点一次，只留文字" : "只留文字"}
-          sub={saved ? `视频和图片移进回收站，${keepText(keep.days)}，文字留着` : "只有链接，还没有视频和图片可以移走"}
+          label={armed === "text" ? t("item.actions.keepTextArmed") : t("item.actions.keepText")}
+          sub={saved ? sentences(t("item.actions.keepTextSub"), keepText(keep.days)) : t("item.actions.keepTextLinkOnly")}
           off={!saved}
           armed={armed === "text"}
-          cancelText="不改了"
+          cancelText={t("common.cancel")}
           onCancel={() => setArmed(null)}
           onPress={() => {
             if (armed !== "text") return setArmed("text");
             setArmed(null);
-            change.mutate({ kind: "text-only" }, { onSuccess: () => setMsg("视频和封面移进了回收站，口播文字和图里的字留着") });
+            change.mutate({ kind: "text-only" }, { onSuccess: () => setMsg(t("item.actions.keptText")) });
           }}
         />
       )}
       <ActionCard
         icon={<Trash2 size={14} aria-hidden="true" />}
-        label={armed === "del" ? "再点一次，删掉这条" : "删掉这条"}
-        sub={`整条移进回收站，${keepText(keep.days)}`}
+        label={armed === "del" ? t("item.actions.deleteArmed") : t("item.actions.delete")}
+        sub={sentences(t("item.actions.deleteSub"), keepText(keep.days))}
         armed={armed === "del"}
-        cancelText="不删了"
+        cancelText={t("common.cancel")}
         onCancel={() => setArmed(null)}
         onPress={() => {
           if (armed !== "del") return setArmed("del");
@@ -224,13 +223,13 @@ export function ItemActions({ item, keep }: { item: Item; keep: MediaKeep }) {
       {saved ? (
         <ActionCard
           icon={<RefreshCw size={14} aria-hidden="true" />}
-          label={change.isPending && change.variables.kind === "refetch" ? "正在重新获取" : "重新获取"}
+          label={change.isPending && change.variables.kind === "refetch" ? t("item.actions.refetching") : t("item.actions.refetch")}
           sub={
             item.stored === "text-only"
               ? keep.gone
-                ? "从原帖再取一次；这条还是只留文字"
-                : "从原帖再取一次文字；回收站里的视频和封面不动，要拿回来点上面那张"
-              : "从原帖再取一次，存着的不动"
+                ? t("item.actions.refetchSubTextOnlyGone")
+                : t("item.actions.refetchSubTextOnly")
+              : t("item.actions.refetchSub")
           }
           off={change.isPending}
           onPress={() =>
@@ -239,11 +238,7 @@ export function ItemActions({ item, keep }: { item: Item; keep: MediaKeep }) {
               {
                 // 内核只是排上了；取到以后事件流会让这一条自己刷新。
                 onSuccess: () =>
-                  setMsg(
-                    item.stored === "text-only"
-                      ? "在从原帖再取一次；这条还是只留文字，原来存的都留着"
-                      : "在从原帖再取一次；取到了会多一份，原来存的都留着",
-                  ),
+                  setMsg(item.stored === "text-only" ? t("item.actions.refetchQueuedTextOnly") : t("item.actions.refetchQueued")),
               },
             )
           }

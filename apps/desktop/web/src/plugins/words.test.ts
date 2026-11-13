@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { loginText, pauseText, timeText, visitorText } from "./words";
+import { setLanguageChoice } from "../i18n";
+import { accountText, getsText, lastCallText, loginText, pauseText, timeText, visitorText } from "./words";
 
 describe("plugin words", () => {
   const now = new Date(2026, 10, 11, 14, 0, 0);
@@ -16,8 +17,8 @@ describe("plugin words", () => {
   });
 
   it("names the account a plugin needs in plain words", () => {
-    expect(loginText("required", ["B站"])).toBe("要登录你的B站账号");
-    expect(loginText("none", [])).toBe("不用账号");
+    expect(loginText("required", ["B站"])).toBe("需要登录你的B站账号");
+    expect(loginText("none", [])).toBe("不需要账号");
   });
 
   it("tells a missing visitor identity from one that no longer works, and stays neutral without the state", () => {
@@ -31,6 +32,19 @@ describe("plugin words", () => {
   it("adds seconds only when the time is close, and the date when it is another day", () => {
     expect(timeText(new Date(2026, 10, 11, 14, 0, 15).toISOString(), now)).toBe("14:00:15");
     expect(timeText(new Date(2026, 10, 11, 18, 30).toISOString(), now)).toBe("18:30");
-    expect(timeText(new Date(2026, 10, 12, 9, 5).toISOString(), now)).toBe("11 月 12 日 09:05");
+    expect(timeText(new Date(2026, 10, 12, 9, 5).toISOString(), now)).toBe("11月12日 09:05");
+  });
+
+  it("writes the same sentences in English, with lists and the scope in parentheses", () => {
+    setLanguageChoice("en");
+    const until = new Date(2026, 10, 11, 15, 0, 0).toISOString();
+    const p = { method: "favorites", scope: "bilibili", byYou: false, until, code: "rate-limited" };
+    expect(pauseText(p, [{ id: "bilibili", name: "Bilibili" }, { id: "youtube", name: "YouTube" }], now)).toBe("The platform reported too many requests (Bilibili) · Retries at 3:00 PM");
+    expect(pauseText({ method: "*", scope: "*", byYou: true }, [], now)).toBe("Paused. This plugin isn't used until you click Retry Now.");
+    expect(loginText("optional", ["X", "Bluesky"])).toBe("Signing in to X and Bluesky gets more content");
+    expect(accountText({ kind: "visitor" }, [])).toBe("No account needed; uses the site's visitor identity");
+    expect(getsText({ fetch: ["text", "images", "media:video"], list: ["Bookmarks", "Likes"] })).toEqual(["Single item: post text, images, and video", "Lists: Bookmarks and Likes"]);
+    expect(lastCallText({ at: new Date(2026, 10, 11, 13, 0).toISOString(), ok: false, code: "blocked" }, now)).toBe("Last used 1:00 PM: failed. The platform blocked this plugin");
+    expect(visitorText("missing")).toBe("Visitor identity required. Get one on the Fetch Plugins page.");
   });
 });

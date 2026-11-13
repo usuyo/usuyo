@@ -16,6 +16,7 @@ import type {
 } from "../api/endpoints";
 import type { Drafts, Library, Topics } from "../api/source";
 import { TOPICS } from "./data";
+import { said } from "./said";
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -90,7 +91,7 @@ const COFFEE_ANGLES: { id: string; question: string; runs: { id: string; at: str
       {
         id: "r-sour-2",
         at: "2026-11-08T13:20:00.000Z",
-        model: "Qwen3 8B · 本机",
+        model: said("Qwen3 8B · 本机", "Qwen3 8B · Local"),
         points: [
           { text: "注水的前一部分偏向酸甜，前段倒得少会更甜。", cites: [{ at: ["c1", "asr", "前 40% 的水决定酸甜"], checked: true }, { at: ["c1", "asr", "想甜一点"], checked: true }] },
           { text: "水温低时酸更明显，几位都在 88 度附近看到这一点。", cites: [{ at: ["c5", "asr", "88 度这一杯"], checked: true }, { at: ["c3", "text", "如果觉得太酸"], checked: true }] },
@@ -100,7 +101,7 @@ const COFFEE_ANGLES: { id: string; question: string; runs: { id: string; at: str
       {
         id: "r-sour-1",
         at: "2026-11-02T09:05:00.000Z",
-        model: "Qwen3 8B · 本机",
+        model: said("Qwen3 8B · 本机", "Qwen3 8B · Local"),
         points: [{ text: "水温和注水比例都会改变酸感。", cites: [{ at: ["c5", "asr", "88 度这一杯"], checked: true }] }],
       },
     ],
@@ -112,7 +113,7 @@ const COFFEE_ANGLES: { id: string; question: string; runs: { id: string; at: str
       {
         id: "r-gear-1",
         at: "2026-11-08T13:24:00.000Z",
-        model: "Qwen3 8B · 本机",
+        model: said("Qwen3 8B · 本机", "Qwen3 8B · Local"),
         points: [
           { text: "先升级磨豆机，不先换壶。", cites: [{ at: ["c4", "asr", "预算多一点"], checked: true }] },
           { text: "入门手冲选锥刀、有刻度的手摇。", cites: [{ at: ["c4", "asr", "先看刀盘"], checked: true }, { at: ["c4", "asr", "再看调节"], checked: true }, { at: ["c4", "asr", "三百块以内"], checked: true }] },
@@ -380,7 +381,7 @@ export function createMockPages(library: Library, empty: boolean): Topics & Draf
       const run = {
         id: `r${++s.seq}`,
         at: new Date().toISOString(),
-        model: "Qwen3 8B · 本机",
+        model: said("Qwen3 8B · 本机", "Qwen3 8B · Local"),
         points: segments.map((seg) => ({ text: `「${seg.text}」和这个问题有关。`, cites: [{ segment: seg, checked: true }] })),
       };
       s.angles = s.angles.map((a) => (a.id === angleId ? { ...a, runs: [run, ...a.runs] } : a));
@@ -396,7 +397,7 @@ export function createMockPages(library: Library, empty: boolean): Topics & Draf
       await seedDrafts();
       const now = new Date().toISOString();
       const id = `d${++draftSeq}`;
-      drafts.set(id, { draft: { id, title: body.title.trim() || "没起名的一篇", kind: body.kind, createdAt: now, updatedAt: now }, blocks: [], citations: [], from: [] });
+      drafts.set(id, { draft: { id, title: body.title.trim() || said("未命名文稿", "Untitled Draft"), kind: body.kind, createdAt: now, updatedAt: now }, blocks: [], citations: [], from: [] });
       return draftView(id);
     },
     async draft(id) {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { setLanguageChoice } from "../i18n";
 import type { Citation, PageBlock } from "../api/endpoints";
 import { citeSource, foundText, jumpOf, pageAfter, whereText } from "./words";
 
@@ -7,9 +8,11 @@ const image = { kind: "image", imageKey: "p2" } as const;
 
 describe("where a quotation sits and how to jump back", () => {
   it("names the layer and the second or the picture", () => {
-    expect(whereText("asr", time)).toBe("口播 02:30");
-    expect(whereText("ocr", image)).toBe("图里的字 · 图 2");
-    expect(whereText("text")).toBe("作者写的");
+    expect(whereText("asr", time)).toBe("转写 02:30");
+    expect(whereText("ocr", image)).toBe("图中文字 · 图 2");
+    expect(whereText("text")).toBe("正文");
+    setLanguageChoice("en");
+    expect(whereText("ocr", image)).toBe("Text in Images · Image 2");
   });
   it("jumps to the second or the picture", () => {
     expect(jumpOf(time)).toEqual({ t: 150 });
@@ -32,15 +35,17 @@ const cite = (over: Partial<Citation>): Citation => ({
 
 it("says how a quotation was found back, and nothing when it is the same", () => {
   expect(foundText(cite({}))).toBeNull();
-  expect(foundText(cite({ found: "changed", now: "粉二十克" }))).toBe("这一处现在写成：「粉二十克」");
-  expect(foundText(cite({ found: "missing" }))).toBe("原文里找不到这句了，这是当时抄下的");
-  expect(foundText(cite({ found: "gone", itemId: null }))).toBe("来源已删掉，这是当时抄下的");
+  expect(foundText(cite({ found: "changed", now: "粉二十克" }))).toBe("此处现在为「粉二十克」");
+  expect(foundText(cite({ found: "missing" }))).toBe("原文中已找不到这句话，这里显示的是引用时的文字");
+  expect(foundText(cite({ found: "gone", itemId: null }))).toBe("来源已删除，这里显示的是引用时的文字");
 });
 
 it("writes the source with the year only when it is not this year", () => {
   const now = new Date("2026-11-12T00:00:00Z");
-  expect(citeSource(cite({}), now)).toBe("比例　豆研所　10 月 21 日");
-  expect(citeSource(cite({ date: "2025-03-02", author: undefined }), now)).toBe("比例　2025 年 3 月 2 日");
+  expect(citeSource(cite({}), now)).toBe("比例 · 豆研所 · 10月21日");
+  expect(citeSource(cite({ date: "2025-03-02", author: undefined }), now)).toBe("比例 · 2025年3月2日");
+  setLanguageChoice("en");
+  expect(citeSource(cite({ date: "2025-03-02", author: undefined }), now)).toBe("比例 · Mar 2, 2025");
 });
 
 describe("the page sent back after one edit", () => {

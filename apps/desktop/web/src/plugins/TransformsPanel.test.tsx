@@ -77,18 +77,18 @@ it("lists transform plugins with each model's size and licence, downloads one, a
   expect(screen.getByText(/许可：FunASR/)).toBeTruthy();
   await waitFor(() => expect(posted).toContain("/api/transforms/builtin/asr-sherpa/models/sense-voice-int8/download"));
 
-  fireEvent.click(screen.getByRole("button", { name: "删掉" }));
-  expect(screen.getByText(/已经转出来的文字都留着/)).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "删掉模型" }));
+  fireEvent.click(screen.getByRole("button", { name: "删除" }));
+  expect(screen.getByText(/已经转写和识别的文字会保留/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "删除模型" }));
   await waitFor(() => expect(posted).toContain("/api/transforms/lin/asr-firered/models/firered/remove"));
 });
 
 it("shows each plugin by name with its jobs in words, and a missing model as a plain fact", async () => {
   serve(VIEW);
   expect(await screen.findByText("音视频")).toBeTruthy();
-  expect(screen.getByText("合成能播的视频、取关键帧")).toBeTruthy();
-  expect(screen.getByText("自带 FFmpeg（LGPL-2.1-or-later）")).toBeTruthy();
-  expect(screen.getAllByText("口播转成文字")).toHaveLength(2);
+  expect(screen.getByText("合成可播放的视频和提取关键帧")).toBeTruthy();
+  expect(screen.getByText("包含 FFmpeg（LGPL-2.1-or-later）")).toBeTruthy();
+  expect(screen.getAllByText("转写语音")).toHaveLength(2);
   expect(screen.getByText("sense-voice-int8")).toBeTruthy();
   // 只差模型没下：一句平常的话，不标成出了问题。
   expect(screen.getByText("要先下载模型").className).not.toContain("text-warn");

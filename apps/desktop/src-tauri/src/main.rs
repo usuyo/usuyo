@@ -5,6 +5,7 @@ mod daemon;
 mod login;
 mod site_cookies;
 mod window;
+mod words;
 
 use std::sync::Arc;
 
@@ -13,6 +14,7 @@ use tauri::{Manager, RunEvent};
 use crate::daemon::{Connection, Daemon};
 use crate::login::Logins;
 use crate::window::Chrome;
+use crate::words::{Lang, Words};
 
 /// 前端经 `src/shell/` 要内核的地址和令牌；内核还没起来时等它。
 /// 前端连不上或令牌不对时再要一次，壳重新核对、必要时重新找（内核重启过就换了令牌）。
@@ -31,10 +33,14 @@ fn title_bar_hidden(chrome: tauri::State<'_, Chrome>) -> bool {
     chrome.hidden_title_bar
 }
 
-/// 细节进日志，给前端一句话。
-fn plain(what: &str, e: &anyhow::Error) -> String {
-    eprintln!("usuyo: {what}: {e:#}");
-    format!("没能{what}")
+/// 细节进日志，给前端一句话（照设置的语言）。
+fn plain(app: &tauri::AppHandle, what: Words, e: &anyhow::Error) -> String {
+    eprintln!("usuyo: {}: {e:#}", what.pick(Lang::En));
+    what.pick(lang(app)).to_owned()
+}
+
+fn lang(app: &tauri::AppHandle) -> Lang {
+    Lang::of(app.state::<Arc<Daemon>>().machine_dir())
 }
 
 /// 开一个站点的登录窗口。前端只给站点名，登录页和要等的 cookie 由壳自己问内核。
@@ -45,10 +51,11 @@ async fn open_login(
     site: String,
 ) -> Result<(), String> {
     let logins = Arc::clone(&logins);
+    let handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || logins.open_login(&app, &site))
         .await
         .map_err(|e| e.to_string())?
-        .map_err(|e| plain("打开登录窗口", &e))
+        .map_err(|e| plain(&handle, words::CANT_OPEN_LOGIN, &e))
 }
 
 /// 开取访客身份的窗口（不登录）。前端只给站点名，打开哪一页、等哪些 cookie 由壳自己问内核。
@@ -65,12 +72,13 @@ async fn open_visitor(
         logins
             .clear(&app, &login::visitor_store(&site))
             .await
-            .map_err(|e| plain("清掉上一份访客身份的网页数据", &e))?;
+            .map_err(|e| plain(&app, words::CANT_CLEAR_OLD_VISITOR, &e))?;
     }
+    let handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || logins.open_visitor(&app, &site))
         .await
         .map_err(|e| e.to_string())?
-        .map_err(|e| plain("打开访客身份的窗口", &e))
+        .map_err(|e| plain(&handle, words::CANT_OPEN_VISITOR, &e))
 }
 
 /// 登录窗口上面那条里的「登录好了」。只认那条自己的页面。
@@ -90,7 +98,7 @@ async fn clear_visitor(
     logins
         .clear(&app, &login::visitor_store(&site))
         .await
-        .map_err(|e| plain("清掉访客身份的网页数据", &e))
+        .map_err(|e| plain(&app, words::CANT_CLEAR_VISITOR, &e))
 }
 
 /// 退出登录以后清掉这个站点的网页数据。
@@ -104,7 +112,7 @@ async fn clear_login(
     logins
         .clear(&app, &site)
         .await
-        .map_err(|e| plain("清掉这个站点的网页数据", &e))
+        .map_err(|e| plain(&app, words::CANT_CLEAR_LOGIN, &e))
 }
 
 /// `open_settings_pane` 能打开的，只有这三样：系统设置里屏幕录制、辅助功能那一栏，和 iPhone 镜像这个 App。
@@ -126,13 +134,14 @@ fn settings_target(pane: &str) -> Option<&'static str> {
 #[tauri::command]
 fn open_settings_pane(app: tauri::AppHandle, pane: String) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
-    let target = settings_target(&pane).ok_or_else(|| format!("没有这一栏：{pane}"))?;
+    let target = settings_target(&pane)
+        .ok_or_else(|| words::NO_SUCH_PANE.fill(lang(&app), &[("pane", &pane)]))?;
     let opened = if target.starts_with('/') {
         app.opener().open_path(target, None::<&str>)
     } else {
         app.opener().open_url(target, None::<&str>)
     };
-    opened.map_err(|e| plain("打开系统设置", &anyhow::Error::new(e)))
+    opened.map_err(|e| plain(&app, words::CANT_OPEN_SETTINGS, &anyhow::Error::new(e)))
 }
 
 fn main() {

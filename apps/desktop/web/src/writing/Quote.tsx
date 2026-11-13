@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import type { Citation, Position, SegmentRef } from "../api/endpoints";
+import { t } from "../i18n";
 import { citeSource, foundText, jumpOf, whereText } from "./words";
 
 const LINK = "press -mx-2 block rounded-btn px-2 py-1.5 no-underline hover:bg-chip/60";
@@ -28,9 +29,10 @@ function Slip({
 }) {
   const body = (
     <span className="grid grid-cols-[minmax(0,1fr)] gap-0.5">
-      <span className="text-body text-text select-text">「{quote}」</span>
+      <span className="text-body text-text select-text">{t("writing.quote", { quote })}</span>
       <span className="truncate text-small text-sub">
-        <span className="mono text-tag text-faint">{where}</span>　{source}
+        <span className="mono mr-2 text-tag text-faint">{where}</span>
+        {source}
       </span>
     </span>
   );
@@ -74,7 +76,7 @@ export function SegmentSlip({ segment, action, note }: { segment: SegmentRef; ac
       position={segment.position}
       where={whereText(segment.layer, segment.position)}
       quote={segment.text}
-      source={[segment.platform.name, segment.title, segment.author].filter(Boolean).join("　")}
+      source={[segment.platform.name, segment.title, segment.author].filter(Boolean).join(" · ")}
       note={note ?? null}
       action={action}
     />

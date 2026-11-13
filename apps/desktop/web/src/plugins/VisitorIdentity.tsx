@@ -5,8 +5,9 @@ import { ErrorLine } from "../components/ErrorLine";
 import { clearVisitorData, openVisitor } from "../shell";
 import { Button } from "../ui/Button";
 import { CardRow } from "../ui/Card";
-import { PAGE, VISITOR_STATE } from "./words";
-
+import { t } from "../i18n";
+import { formatList } from "../i18n/format";
+import { VISITOR_STATE } from "./words";
 
 /** 取一份（或换一份）访客身份：开一次那个站点的页面，页面自己生成的访客 cookie 由壳交给内核。 */
 function useTake(visitor: Visitor) {
@@ -16,9 +17,9 @@ function useTake(visitor: Visitor) {
     setSay(null);
     try {
       const opened = await openVisitor(visitor.site, stored);
-      setSay(opened ? PAGE.visitorOpened : PAGE.visitorAppOnly);
+      setSay(opened ? t("plugins.accounts.visitorOpened") : t("plugins.accounts.visitorAppOnly"));
     } catch (error) {
-      setSay(typeof error === "string" ? error : PAGE.visitorFailed);
+      setSay(typeof error === "string" ? error : t("plugins.accounts.visitorFailed"));
     }
   }
   return { take, say, setSay, stored };
@@ -38,7 +39,7 @@ export function VisitorTake({ visitor }: { visitor: Visitor }) {
   return (
     <div className="min-w-0">
       <Button variant="soft" size="sm" onPress={() => void take()}>
-        {stored ? PAGE.replaceVisitor : PAGE.takeVisitor}
+        {stored ? t("plugins.accounts.replaceVisitor") : t("plugins.accounts.takeVisitor")}
       </Button>
       <Say text={say} />
     </div>
@@ -59,7 +60,7 @@ export function VisitorIdentity({ visitor, users }: { visitor: Visitor; users?: 
     try {
       await clearVisitorData(visitor.site);
     } catch (error) {
-      setSay(typeof error === "string" ? error : PAGE.visitorClearFailed);
+      setSay(typeof error === "string" ? error : t("plugins.accounts.visitorClearFailed"));
       return;
     }
     forget.mutate(visitor.site);
@@ -67,22 +68,22 @@ export function VisitorIdentity({ visitor, users }: { visitor: Visitor; users?: 
 
   return (
     <CardRow
-      title={PAGE.visitorTitle(visitor.name)}
+      title={t("plugins.accounts.visitorTitle", { name: visitor.name })}
       sub={
         <>
           <span className={visitor.state === "expired" ? "text-warn" : stored ? "text-label" : "text-sub"}>{VISITOR_STATE[visitor.state]}</span>
-          {users && users.length > 0 ? PAGE.users(users.join("、")) : ""}
-          <span className="block">{PAGE.visitorBody(visitor.name)}</span>
+          {users && users.length > 0 ? ` · ${t("plugins.accounts.users", { names: formatList(users) })}` : ""}
+          <span className="block">{t("plugins.accounts.visitorBody", { name: visitor.name })}</span>
         </>
       }
       control={
         <>
           <Button variant={stored ? "outline" : "soft"} size="sm" onPress={() => void take()}>
-            {stored ? PAGE.replaceVisitor : PAGE.takeVisitor}
+            {stored ? t("plugins.accounts.replaceVisitor") : t("plugins.accounts.takeVisitor")}
           </Button>
           {stored ? (
             <Button variant="quiet" size="sm" onPress={() => void remove()} isDisabled={forget.isPending}>
-              {PAGE.removeVisitor}
+              {t("plugins.accounts.removeVisitor")}
             </Button>
           ) : null}
         </>

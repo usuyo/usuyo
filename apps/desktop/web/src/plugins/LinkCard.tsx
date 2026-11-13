@@ -8,7 +8,9 @@ import { Card, CardRow } from "../ui/Card";
 import { Select, type SelectOption } from "../ui/Select";
 import { Needs } from "./Needs";
 import { accessOn, alsoMoves, autoOrder, enabledOn, linkChoice, linkSwitches, onByDefault, keyOf, type PlatformPage, type Use } from "./platforms";
-import { accountText, ACCESS_TEXT, getsText, lastCallText, OUTPUT_TEXT, PAGE, TIER_TEXT } from "./words";
+import { t } from "../i18n";
+import { formatList } from "../i18n/format";
+import { accountText, ACCESS_TEXT, clauses, getsText, lastCallText, OUTPUT_TEXT, TIER_TEXT } from "./words";
 
 const AUTO = "auto";
 
@@ -19,14 +21,14 @@ function accountOf(u: Use): string {
 
 /** 选项和说明里的名字：一个平台有几个插件时带上插件的名字。 */
 function nameOf(u: Use, page: PlatformPage): string {
-  return page.plugins.length > 1 ? `${u.method.name} · ${u.plugin.name}` : u.method.name;
+  return page.plugins.length > 1 ? t("plugins.link.optionName", { method: u.method.name, plugin: u.plugin.name }) : u.method.name;
 }
 
 /** 一种方法现在怎样，一句：用得上，或内核说的第一个原因。 */
 function stateOf(u: Use, platform: string): { text: string; ok: boolean } {
-  if (!enabledOn(u, platform)) return { text: onByDefault(accessOn(u, platform)) ? PAGE.offByYou : PAGE.offByTier, ok: false };
-  if (u.method.usable) return { text: PAGE.usable, ok: true };
-  return { text: u.method.blockers.map((b) => b.hint).join("；"), ok: false };
+  if (!enabledOn(u, platform)) return { text: onByDefault(accessOn(u, platform)) ? t("plugins.link.offByYou") : t("plugins.link.offByTier"), ok: false };
+  if (u.method.usable) return { text: t("plugins.usable"), ok: true };
+  return { text: clauses(u.method.blockers.map((b) => b.hint)), ok: false };
 }
 
 /**
@@ -42,31 +44,31 @@ export function LinkCard({ page, sites, visitors }: { page: PlatformPage; sites:
   const lone = built.length === 1 && built[0] !== undefined && onByDefault(accessOn(built[0], page.id)) ? built[0] : undefined;
   const multi = built.filter((u) => u.plugin.platforms.length > 1);
   const options: SelectOption[] = [
-    { id: AUTO, text: PAGE.auto, sub: lone ? PAGE.autoLone(nameOf(lone, page)) : PAGE.autoSub },
-    ...(lone ? [] : built).map((u) => ({ id: keyOf(u), text: nameOf(u, page), sub: `${accountOf(u)} · ${ACCESS_TEXT[accessOn(u, page.id)]}` })),
-    ...page.link.filter((u) => !u.method.built).map((u) => ({ id: keyOf(u), text: nameOf(u, page), sub: PAGE.notBuilt, disabled: true })),
+    { id: AUTO, text: t("plugins.link.auto"), sub: lone ? t("plugins.link.autoLone", { name: nameOf(lone, page) }) : t("plugins.link.autoSub") },
+    ...(lone ? [] : built).map((u) => ({ id: keyOf(u), text: nameOf(u, page), sub: t("plugins.link.optionSub", { first: accountOf(u), second: ACCESS_TEXT[accessOn(u, page.id)] }) })),
+    ...page.link.filter((u) => !u.method.built).map((u) => ({ id: keyOf(u), text: nameOf(u, page), sub: t("plugins.link.notBuilt"), disabled: true })),
   ];
   const chosen = choice.kind === "only" ? built.find((u) => keyOf(u) === choice.key) : undefined;
 
   if (page.link.length === 0) {
     return (
-      <Card title={PAGE.linkTitle}>
-        <CardRow title={PAGE.linkNoneTitle} sub={PAGE.linkNoneSub} />
+      <Card title={t("plugins.link.title")}>
+        <CardRow title={t("plugins.link.noneTitle")} sub={t("plugins.link.noneSub")} />
       </Card>
     );
   }
 
   return (
-    <Card title={PAGE.linkTitle} sub={PAGE.linkSub}>
+    <Card title={t("plugins.link.title")} sub={t("plugins.link.sub")}>
       <CardRow
-        title={PAGE.wayTitle}
-        sub={choice.kind === "mixed" ? PAGE.wayMixedSub : PAGE.waySub}
+        title={t("plugins.link.wayTitle")}
+        sub={choice.kind === "mixed" ? t("plugins.link.wayMixedSub") : t("plugins.link.waySub")}
         control={
           <Select
-            label={PAGE.wayTitle}
+            label={t("plugins.link.wayTitle")}
             options={options}
             value={value}
-            placeholder={PAGE.wayMixed}
+            placeholder={t("plugins.link.wayMixed")}
             isDisabled={switches.isPending}
             onChange={(id) => switches.mutate(linkSwitches(page.link, page.id, id))}
           />
@@ -75,7 +77,7 @@ export function LinkCard({ page, sites, visitors }: { page: PlatformPage; sites:
         {switches.error ? <ErrorLine error={switches.error} className="mb-2" /> : null}
         {multi.map((u) => (
           <p key={keyOf(u)} className="m-0 mb-2.5 text-small text-sub">
-            {PAGE.alsoMoves(nameOf(u, page), alsoMoves(u, page.id).join("、"))}
+            {t("plugins.link.alsoMoves", { name: nameOf(u, page), others: formatList(alsoMoves(u, page.id)) })}
           </p>
         ))}
         {chosen ? (
@@ -97,7 +99,7 @@ function AutoExplain({ page, sites, visitors, mixed }: { page: PlatformPage; sit
   return (
     <div className="flex flex-col gap-3">
       <p className="m-0 text-note text-label">
-        {mixed ? PAGE.mixedIntro : PAGE.autoIntro}
+        {mixed ? t("plugins.link.mixedIntro") : t("plugins.link.autoIntro")}
       </p>
       {on.length > 0 ? (
         <ol className="m-0 flex list-none flex-col gap-3 p-0">
@@ -123,12 +125,11 @@ function AutoExplain({ page, sites, visitors, mixed }: { page: PlatformPage; sit
           })}
         </ol>
       ) : (
-        <p className="m-0 text-small text-sub">{PAGE.noneOn}</p>
+        <p className="m-0 text-small text-sub">{t("plugins.link.noneOn")}</p>
       )}
       {off.length > 0 ? (
         <p className="m-0 text-small text-sub">
-          {PAGE.offList}
-          {off.map((u) => `${nameOf(u, page)}（${stateOf(u, page.id).text}）`).join("、")}
+          {t("plugins.link.offList", { list: formatList(off.map((u) => t("plugins.link.offItem", { name: nameOf(u, page), state: stateOf(u, page.id).text }))) })}
         </p>
       ) : null}
     </div>
@@ -142,18 +143,18 @@ function MethodExplain({ use, page, sites, visitors }: { use: Use; page: Platfor
   const gets = getsText(m.gets);
   return (
     <dl className="m-0 grid gap-x-4 gap-y-2.5 @xl:grid-cols-[96px_minmax(0,1fr)]">
-      <Term name={PAGE.termGets}>{gets.length > 0 ? gets.join("；") : PAGE.getsUnknown}</Term>
-      <Term name={PAGE.termAccount}>{accountOf(use)}</Term>
-      <Term name={PAGE.termTier}>
+      <Term name={t("plugins.link.termGets")}>{gets.length > 0 ? clauses(gets) : t("plugins.link.getsUnknown")}</Term>
+      <Term name={t("plugins.link.termAccount")}>{accountOf(use)}</Term>
+      <Term name={t("plugins.link.termTier")}>
         {ACCESS_TEXT[access]}
         <span className="mono ml-1.5 text-tag text-faint">{access}</span>
         <span className="block text-small text-sub">{TIER_TEXT[access]}</span>
       </Term>
-      <Term name={PAGE.termNeeds}>
+      <Term name={t("plugins.link.termNeeds")}>
         <Needs use={use} sites={sites} visitors={visitors} />
       </Term>
       {m.riskNote ? (
-        <Term name={PAGE.termRisk}>
+        <Term name={t("plugins.link.termRisk")}>
           {m.riskNote.text}
           <button
             type="button"
@@ -164,7 +165,7 @@ function MethodExplain({ use, page, sites, visitors }: { use: Use; page: Platfor
           </button>
         </Term>
       ) : null}
-      <Term name={PAGE.termLast}>{m.lastCall ? <span className={m.lastCall.ok ? "" : "text-warn"}>{lastCallText(m.lastCall)}</span> : PAGE.neverUsed}</Term>
+      <Term name={t("plugins.link.termLast")}>{m.lastCall ? <span className={m.lastCall.ok ? "" : "text-warn"}>{lastCallText(m.lastCall)}</span> : t("plugins.link.neverUsed")}</Term>
     </dl>
   );
 }
@@ -193,16 +194,16 @@ function PartRow({ use, page, sites, visitors }: { use: Use; page: PlatformPage;
   const switcher = useSwitchMethod(use.plugin.id);
   const m = use.method;
   const on = enabledOn(use, page.id);
-  const what = (m.gets.fetch ?? []).map((k) => OUTPUT_TEXT[k]).join("、");
+  const what = formatList((m.gets.fetch ?? []).map((k) => OUTPUT_TEXT[k]));
   return (
     <CardRow
-      title={PAGE.partTitle(what)}
-      sub={PAGE.partSub(nameOf(use, page), accountOf(use))}
+      title={t("plugins.link.partTitle", { what })}
+      sub={t("plugins.link.partSub", { name: nameOf(use, page), account: accountOf(use) })}
       control={
         m.built ? (
-          <SmallSwitch label={PAGE.partSwitch(m.name)} isSelected={on} isDisabled={switcher.isPending} onChange={(v) => switcher.mutate({ methodId: m.id, enabled: v })} />
+          <SmallSwitch label={t("plugins.link.partSwitch", { name: m.name })} isSelected={on} isDisabled={switcher.isPending} onChange={(v) => switcher.mutate({ methodId: m.id, enabled: v })} />
         ) : (
-          <span className="text-small text-faint">{PAGE.notBuilt}</span>
+          <span className="text-small text-faint">{t("plugins.link.notBuilt")}</span>
         )
       }
     >
@@ -216,7 +217,7 @@ function PartRow({ use, page, sites, visitors }: { use: Use; page: PlatformPage;
 export function SmallSwitch({ label, isSelected, isDisabled, onChange }: { label: string; isSelected: boolean; isDisabled?: boolean; onChange: (on: boolean) => void }) {
   return (
     <Switch aria-label={label} isSelected={isSelected} isDisabled={isDisabled} onChange={onChange} className="group flex cursor-pointer items-center gap-2 font-sans text-small text-sub outline-none data-[disabled]:cursor-default">
-      <span>{isSelected ? PAGE.switchOn : PAGE.switchOff}</span>
+      <span>{isSelected ? t("plugins.link.switchOn") : t("plugins.link.switchOff")}</span>
       <span className="flex h-5 w-8 items-center rounded-full border border-border2 bg-chip px-0.5 transition-colors duration-150 group-data-[focus-visible]:outline-2 group-data-[focus-visible]:outline-offset-2 group-data-[focus-visible]:outline-accent group-data-[selected]:border-label group-data-[selected]:bg-label">
         <span className="size-3.5 rounded-full bg-text transition-transform duration-150 ease-out group-data-[selected]:translate-x-3 group-data-[selected]:bg-bg motion-reduce:transition-none" />
       </span>

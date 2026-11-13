@@ -14,6 +14,8 @@ pub mod handshake;
 mod problem;
 #[cfg(feature = "server")]
 mod routes;
+#[cfg(feature = "server")]
+mod words;
 
 #[cfg(feature = "server")]
 use std::future::Future;

@@ -8,12 +8,13 @@ use usuyo_plugin::{DeclaredSite, DeclaredVisitor, FetchPlugin};
 use crate::engine::Engine;
 use crate::fetch::now_ms;
 use crate::jobs::PauseRow;
-use crate::methods::blockers;
+use crate::methods::{Why, blockers};
 use crate::view::{
-    AccountView, Blocker, Bundled, Event, GetsView, LastCall, MethodView, NotLoaded, PacingView,
-    PauseView, PlatformTierView, PluginView, PluginsView, ScriptView, SettingView, SiteView,
-    SourceView, VisitorView,
+    AccountView, Bundled, Event, GetsView, LastCall, MethodView, NotLoaded, PacingView, PauseView,
+    PlatformTierView, PluginView, PluginsView, ScriptView, SettingView, SiteView, SourceView,
+    VisitorView,
 };
+use crate::words::{self, Lang, Said};
 use crate::{Error, Result};
 
 fn site_view(d: DeclaredSite) -> SiteView {
@@ -47,7 +48,7 @@ fn visitor_view(d: DeclaredVisitor) -> VisitorView {
     }
 }
 
-fn pause_view(x: PauseRow) -> PauseView {
+fn pause_view(x: PauseRow, lang: Lang) -> PauseView {
     PauseView {
         method: x.method,
         scope: x.scope,
@@ -58,25 +59,28 @@ fn pause_view(x: PauseRow) -> PauseView {
                 .map(usuyo_library::time::format)
         }),
         code: x.code,
-        hint: x.hint,
+        hint: x
+            .hint
+            .as_deref()
+            .map(|h| Said::from_stored(h).pick(lang).to_owned()),
     }
 }
 
 /// 停着的一句话：为什么、到什么时候。
-fn pause_blocker(x: &PauseRow) -> Blocker {
+fn pause_blocker(x: &PauseRow) -> Why {
     let hint = match x.until {
-        _ if x.held => "你让这个插件先别试了，到你点「现在再试」为止".to_owned(),
+        _ if x.held => words::PAUSED_BY_YOU.said(),
         Some(until) => {
             let why = match x.code.as_deref() {
-                Some("rate-limited") => "平台限流了",
-                Some("blocked") => "平台拦下了请求",
-                _ => "上次出了错",
+                Some("rate-limited") => words::PAUSED_RATE,
+                Some("blocked") => words::PAUSED_BLOCKED,
+                _ => words::PAUSED_ERROR,
             };
-            format!("{why}，{}以前不用它", crate::pace::local_time(until))
+            why.with_said(&[("time", &crate::pace::local_time(until))])
         }
-        None => "停着，等你点「现在再试」".to_owned(),
+        None => words::PAUSED_WAITING.said(),
     };
-    Blocker {
+    Why {
         code: "paused".into(),
         hint,
     }
@@ -136,7 +140,7 @@ impl Engine {
             Error::NotFound(format!(
                 "{rel} is not a file inside the folder of {plugin_id}"
             ))
-            .hinted("插件文件夹里没有这个脚本文件，重新装一次插件")
+            .hinted(crate::words::SCRIPT_MISSING.said())
         })
     }
 
@@ -208,6 +212,7 @@ impl Engine {
     /// 一个插件的样子。本机检查用缓存里的（没问过的不算挡）；只读本机文件，不碰钥匙串。
     pub(crate) fn plugin_view(&self, p: &FetchPlugin, now: i64) -> Result<PluginView> {
         let host = &self.inner.host;
+        let lang = self.lang();
         let filled = host.secrets_set(p.id())?;
         let pauses = self.inner.jobs.pauses_of(p.id().as_str(), now)?;
         let calls = self.inner.jobs.method_calls(p.id().as_str())?;
@@ -292,16 +297,23 @@ impl Engine {
                     built: m.built,
                     enabled,
                     usable: blockers.is_empty(),
-                    blockers,
+                    blockers: blockers.iter().map(|b| b.shown(lang)).collect(),
                     last_call: calls.iter().find(|c| c.method == m.id).map(|c| LastCall {
                         at: jiff::Timestamp::from_millisecond(c.at)
                             .map(usuyo_library::time::format)
                             .unwrap_or_default(),
                         ok: c.code.is_none(),
                         code: c.code.clone(),
-                        hint: c.hint.clone(),
+                        hint: c
+                            .hint
+                            .as_deref()
+                            .map(|h| Said::from_stored(h).pick(lang).to_owned()),
                     }),
-                    pauses: own.into_iter().cloned().map(pause_view).collect(),
+                    pauses: own
+                        .into_iter()
+                        .cloned()
+                        .map(|x| pause_view(x, lang))
+                        .collect(),
                     risk_note: m.risk.clone(),
                     script: m.script.as_ref().map(|rel| ScriptView {
                         path: p.dir.join(rel).to_string_lossy().into_owned(),
@@ -370,7 +382,7 @@ impl Engine {
                     license: u.license.clone(),
                 })
                 .collect(),
-            pauses: pauses.into_iter().map(pause_view).collect(),
+            pauses: pauses.into_iter().map(|x| pause_view(x, lang)).collect(),
             methods,
         })
     }

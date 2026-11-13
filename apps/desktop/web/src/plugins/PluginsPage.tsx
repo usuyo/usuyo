@@ -6,7 +6,8 @@ import { Rail } from "../frame/Rail";
 import { PlatformPage } from "./PlatformPage";
 import { autoOrder, enabledOn, keyOf, linkChoice, platformPages, type PlatformPage as Page } from "./platforms";
 import { TransformsPanel } from "./TransformsPanel";
-import { PAGE, timeText } from "./words";
+import { t } from "../i18n";
+import { timeText } from "./words";
 
 /**
  * 左边那一行的一句：停着的先说停着；不然说收链接现在怎么取。不数数，没出错的不标颜色。
@@ -14,16 +15,17 @@ import { PAGE, timeText } from "./words";
 function navLine(page: Page): string {
   const pauses = page.plugins.flatMap((p) => p.pauses).filter((x) => x.byYou || x.scope === page.id || x.scope === "*");
   const pause = pauses.find((x) => x.byYou) ?? pauses[0];
-  if (pause) return pause.byYou ? PAGE.navHeld : pause.until ? PAGE.navPausedUntil(timeText(pause.until)) : PAGE.navPaused;
-  if (page.link.length === 0) return PAGE.navSavedOnly;
+  if (pause) return pause.byYou ? t("plugins.page.navHeld") : pause.until ? t("plugins.page.navPausedUntil", { time: timeText(pause.until) }) : t("plugins.page.navPaused");
+  if (page.link.length === 0) return t("plugins.page.navSavedOnly");
   const choice = linkChoice(page.link, page.id);
-  if (choice.kind === "mixed") return PAGE.navMixed;
+  if (choice.kind === "mixed") return t("plugins.page.navMixed");
   if (choice.kind === "only") {
     const only = page.link.find((u) => keyOf(u) === choice.key);
-    return only ? PAGE.navOnly(only.method.name, only.method.usable) : PAGE.navMixed;
+    if (!only) return t("plugins.page.navMixed");
+    return only.method.usable ? t("plugins.page.navOnly", { name: only.method.name }) : t("plugins.page.navOnlyUnavailable", { name: only.method.name });
   }
   const first = autoOrder(page.link, page.id).find((u) => enabledOn(u, page.id) && u.method.usable);
-  return first ? PAGE.navAuto(first.method.name) : PAGE.navAutoNone;
+  return first ? t("plugins.page.navAuto", { name: first.method.name }) : t("plugins.page.navAutoNone");
 }
 
 // 窄的时候平台排成几行小块、只写名字，页面不被一长列推到下面去；宽了是一列，带那一句。
@@ -32,7 +34,7 @@ const NAV_ROW =
 const NAV_LINE = "hidden max-w-full truncate text-small text-sub @3xl:block";
 const NAV_GROUP = "w-full px-3 pb-1.5 text-tag font-medium text-faint";
 
-/** 获取插件：左边是平台（和「变成文字」），右边是选中的那一页；每个平台一页，有自己的地址。 */
+/** 获取插件：左边是平台（和「转写与识别」），右边是选中的那一页；每个平台一页，有自己的地址。 */
 export function PluginsPage() {
   const plugins = usePlugins();
   const pages = plugins.data ? platformPages(plugins.data) : [];
@@ -44,15 +46,15 @@ export function PluginsPage() {
 
   return (
     <div className="relative h-full overflow-hidden bg-bg">
-      <Rail label="主导航" />
+      <Rail label={t("common.nav.main")} />
       <main className="@container absolute inset-y-0 right-0 left-rail overflow-y-auto px-6 pt-7 pb-10 lg:px-gutter">
-        <h1 className="m-0 text-title font-semibold text-text">{PAGE.title}</h1>
-        <p className="m-0 mt-1 max-w-[720px] text-note text-sub">{PAGE.intro}</p>
+        <h1 className="m-0 text-title font-semibold text-text">{t("plugins.page.title")}</h1>
+        <p className="m-0 mt-1 max-w-[720px] text-note text-sub">{t("plugins.page.intro")}</p>
         {plugins.error ? <ErrorLine error={plugins.error} className="mt-4" /> : null}
         <div className="mt-6 grid items-start gap-x-8 gap-y-6 @3xl:grid-cols-[220px_minmax(0,1fr)]">
-          <nav aria-label={PAGE.navLabel} className="flex min-w-0 flex-wrap gap-0.5 @3xl:sticky @3xl:top-0 @3xl:flex-col @3xl:flex-nowrap">
-            <div className={NAV_GROUP}>{PAGE.navPlatforms}</div>
-            {plugins.data && pages.length === 0 ? <div className="px-3 py-1.5 text-small text-sub">{PAGE.navEmpty}</div> : null}
+          <nav aria-label={t("plugins.page.navLabel")} className="flex min-w-0 flex-wrap gap-0.5 @3xl:sticky @3xl:top-0 @3xl:flex-col @3xl:flex-nowrap">
+            <div className={NAV_GROUP}>{t("plugins.page.navPlatforms")}</div>
+            {plugins.data && pages.length === 0 ? <div className="px-3 py-1.5 text-small text-sub">{t("plugins.page.navEmpty")}</div> : null}
             {pages.map((p) => (
               <Link
                 key={p.id}
@@ -65,10 +67,10 @@ export function PluginsPage() {
                 <span className={NAV_LINE}>{navLine(p)}</span>
               </Link>
             ))}
-            <div className={`${NAV_GROUP} pt-3 @3xl:pt-4`}>{PAGE.navText}</div>
+            <div className={`${NAV_GROUP} pt-3 @3xl:pt-4`}>{t("plugins.page.navText")}</div>
             <Link to="/plugins/text" aria-current={onText ? "page" : undefined} className={`${NAV_ROW} ${onText ? "bg-chip" : ""}`}>
-              <span className={`text-body ${onText ? "font-semibold text-text" : "font-medium text-label"}`}>{PAGE.textEntryNav}</span>
-              <span className={NAV_LINE}>{PAGE.textEntryLine}</span>
+              <span className={`text-body ${onText ? "font-semibold text-text" : "font-medium text-label"}`}>{t("plugins.page.textEntryNav")}</span>
+              <span className={NAV_LINE}>{t("plugins.page.textEntryLine")}</span>
             </Link>
             {notLoaded.length > 0 ? <NotLoaded notLoaded={notLoaded} /> : null}
           </nav>
@@ -106,14 +108,14 @@ function Platform({ id }: { id: string }) {
   const visitors = useVisitors();
   if (!plugins.data) return null;
   const page = platformPages(plugins.data).find((p) => p.id === id);
-  if (!page) return <p className="m-0 animate-fade text-note text-sub">{PAGE.notFound}</p>;
+  if (!page) return <p className="m-0 animate-fade text-note text-sub">{t("plugins.page.notFound")}</p>;
   return <PlatformPage key={page.id} page={page} sites={sites.data ?? []} visitors={visitors.data ?? []} failureLog={plugins.data.failureLog} />;
 }
 
 function NotLoaded({ notLoaded }: { notLoaded: PluginsView["notLoaded"] }) {
   return (
     <>
-      <div className={`${NAV_GROUP} pt-3 @3xl:pt-4`}>{PAGE.navNotLoaded}</div>
+      <div className={`${NAV_GROUP} pt-3 @3xl:pt-4`}>{t("plugins.page.navNotLoaded")}</div>
       {notLoaded.map((n) => (
         <div key={n.dir} className="w-full px-3 py-1.5">
           <div className="mono truncate text-tag text-label" title={n.dir}>
@@ -130,9 +132,9 @@ function NotLoaded({ notLoaded }: { notLoaded: PluginsView["notLoaded"] }) {
 function NothingInstalled() {
   return (
     <div className="max-w-[560px] animate-fade rounded-card border border-dashed border-border2 p-5">
-      <div className="text-body text-label">{PAGE.nothingTitle}</div>
+      <div className="text-body text-label">{t("plugins.page.nothingTitle")}</div>
       <p className="m-0 mt-1 text-note text-sub">
-        {PAGE.nothingBody}
+        {t("plugins.page.nothingBody")}
       </p>
       <code className="mono mt-3 block rounded-sm bg-chip px-3 py-2 text-tag text-text select-text">just dev-plugins</code>
     </div>

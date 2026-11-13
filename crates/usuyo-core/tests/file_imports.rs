@@ -281,7 +281,10 @@ async fn an_unreadable_file_is_refused_and_leaves_nothing() {
     let engine = f.engine();
     let e = upload(&engine, "x.json", "broken").await.unwrap_err();
     assert_eq!(e.code(), "invalid-args");
-    assert_eq!(e.hint(), Some("这不是例子的导出文件"));
+    assert_eq!(
+        e.hint(),
+        Some(usuyo_core::Said::plain("这不是例子的导出文件"))
+    );
     assert!(engine.imports().unwrap().is_empty());
     assert_eq!(dir_entries(&f.copies()), 0);
 }

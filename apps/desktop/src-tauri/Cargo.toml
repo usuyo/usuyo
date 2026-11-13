@@ -23,6 +23,7 @@ psl = "2.1.251"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sha2 = "0.11.1"
+sys-locale = "0.3.2"
 # `unstable`：登录窗口一个窗口里放两块网页（上面我们的一条，下面站点的页面），要 `Window::add_child`。
 tauri = { version = "2", features = ["unstable"] }
 tauri-plugin-opener = "2.7.3"

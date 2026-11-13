@@ -9,6 +9,7 @@
 //! 再在 `~/Library/LaunchAgents/` 写一个登录时启动的后台项。这两样改的是这台 Mac 的设置，守护进程不自己动，
 //! 写成 [`DriverStep`] 由页面交给你。
 
+use crate::words::{self, Lang, Words};
 use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
 
@@ -86,29 +87,17 @@ pub(crate) enum InstallError {
 }
 
 /// 写在「没装上：」后面的一句。
-pub(crate) fn hint(e: &InstallError) -> &'static str {
+pub(crate) fn hint(e: &InstallError) -> Words {
     match e {
-        InstallError::Download(ModelError::Status(404)) => {
-            "官方 release 上没有这一版的包，什么都没放进这台电脑。"
-        }
-        InstallError::Download(ModelError::Refused(_)) => {
-            "连不到 GitHub（看看设置里的代理），什么都没放进这台电脑。"
-        }
+        InstallError::Download(ModelError::Status(404)) => words::DRIVER_NOT_ON_RELEASE,
+        InstallError::Download(ModelError::Refused(_)) => words::DRIVER_NO_GITHUB,
         InstallError::Download(
             ModelError::TooLarge(_) | ModelError::Short { .. } | ModelError::Sha256 { .. },
         )
-        | InstallError::Sha256 { .. } => {
-            "下载下来的包和钉住的 SHA256 对不上，已经丢掉了，没有放进这台电脑。"
-        }
-        InstallError::Download(ModelError::Io { .. }) | InstallError::Io { .. } => {
-            "存不进这台电脑的驱动目录，什么都没留下。"
-        }
-        InstallError::Archive(_) => {
-            "下载下来的包里不是要的那个程序，已经丢掉了，没有放进这台电脑。"
-        }
-        InstallError::Download(_) | InstallError::Task(_) => {
-            "网络不通，或者下载断了，什么都没放进这台电脑。"
-        }
+        | InstallError::Sha256 { .. } => words::DRIVER_SHA_MISMATCH,
+        InstallError::Download(ModelError::Io { .. }) | InstallError::Io { .. } => words::DRIVER_IO,
+        InstallError::Archive(_) => words::DRIVER_WRONG_ARCHIVE,
+        InstallError::Download(_) | InstallError::Task(_) => words::DRIVER_NETWORK,
     }
 }
 
@@ -348,9 +337,9 @@ pub(crate) fn quoted(path: &Path) -> String {
 }
 
 /// 装好了、「mirroir serve」还没在跑：要你登记它。
-pub(crate) fn register_step(binary: &Path) -> DriverStep {
+pub(crate) fn register_step(binary: &Path, lang: Lang) -> DriverStep {
     DriverStep {
-        text: "还差一步要你自己在「终端」里做：让 mirroir 以「mirroir serve」常驻。它会在你的登录钥匙串里放一张只给自己签名用的证书（钥匙串问 codesign 能不能用时选「始终允许」），再登记成登录时启动的后台项；这两样改的是这台 Mac 的设置，所以 usuyo 不替你做。".into(),
+        text: words::STEP_REGISTER.pick(lang).into(),
         commands: vec![
             format!("{} install-agent", quoted(binary)),
             format!("launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/{AGENT}.plist"),
@@ -359,9 +348,9 @@ pub(crate) fn register_step(binary: &Path) -> DriverStep {
 }
 
 /// 换了新的一版、在跑的「mirroir serve」还是旧的那份：要你重新登记、重启它。
-pub(crate) fn renew_step(binary: &Path) -> DriverStep {
+pub(crate) fn renew_step(binary: &Path, lang: Lang) -> DriverStep {
     DriverStep {
-        text: "在跑的「mirroir serve」还是旧的那一版：在「终端」里重新登记一次，再重启它；授权跟着证书走，不用重给。".into(),
+        text: words::STEP_RENEW.pick(lang).into(),
         commands: vec![
             format!("{} install-agent", quoted(binary)),
             format!("launchctl kickstart -k gui/$(id -u)/{AGENT}"),
@@ -370,9 +359,9 @@ pub(crate) fn renew_step(binary: &Path) -> DriverStep {
 }
 
 /// 卸掉了、「mirroir serve」还在跑（它跑的是自己那份副本）：要你停掉它。
-pub(crate) fn stop_step() -> DriverStep {
+pub(crate) fn stop_step(lang: Lang) -> DriverStep {
     DriverStep {
-        text: "「mirroir serve」还在跑，它用的是自己那份副本：在「终端」里停掉它；之后可以在访达里删掉 ~/Library/LaunchAgents/dev.mirroir.serve.plist 和 ~/.mirroir-mcp/mirroir serve.app，在「钥匙串访问」里删掉证书「mirroir serve local signing」。系统设置里给它的授权由系统留着。".into(),
+        text: words::STEP_STOP.pick(lang).into(),
         commands: vec![format!("launchctl bootout gui/$(id -u)/{AGENT}")],
     }
 }

@@ -9,6 +9,7 @@ use std::path::Path;
 use usuyo_contract::{Keyframes, Ocr, RunRecord};
 use usuyo_library::{ItemId, Library};
 
+use crate::words::{self, Words};
 use crate::{Error, Result};
 
 /// 三层转出来的文字（和转换任务同名）。
@@ -78,7 +79,7 @@ pub(crate) struct Transcript {
     pub lang: Option<String>,
     pub pieces: Vec<Piece>,
     /// 很明显的标记（feature 003 §6）写成的一句。
-    pub remark: Option<&'static str>,
+    pub remark: Option<Words>,
 }
 
 /// 最新一次 `keyframes`：给画面那一面的帧和标记。
@@ -91,19 +92,19 @@ pub(crate) struct KeyframeSet {
 }
 
 /// 标记码 → 那一面头上写的一句（feature 003 §6 的表）。
-pub(crate) fn remark_of(code: &str) -> Option<&'static str> {
+pub(crate) fn remark_of(code: &str) -> Option<Words> {
     Some(match code {
-        "no-audio-track" => "没有声音轨",
-        "no-speech" => "没听到人说话",
-        "static-picture" => "画面几乎不动",
-        "no-text" => "没认出字",
-        "duplicate-images" => "有几张图是同一张",
+        "no-audio-track" => words::REMARK_NO_AUDIO,
+        "no-speech" => words::REMARK_NO_SPEECH,
+        "static-picture" => words::REMARK_STATIC,
+        "no-text" => words::REMARK_NO_TEXT,
+        "duplicate-images" => words::REMARK_DUPLICATES,
         _ => return None,
     })
 }
 
 /// 一次转录的那一句：先看 `marks`，再看 `empty` 的 `reason`。
-fn run_remark(r: &RunRecord) -> Option<&'static str> {
+fn run_remark(r: &RunRecord) -> Option<Words> {
     r.marks
         .iter()
         .find_map(|m| remark_of(&m.code))

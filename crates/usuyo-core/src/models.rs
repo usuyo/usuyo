@@ -39,8 +39,8 @@ pub enum ModelState {
     Absent,
     Downloading,
     Present,
-    /// 上次下载没成：给人看的一句（英文的原因只进日志）。
-    Failed(&'static str),
+    /// 上次下载没成：给人看的一句（两种语言；英文的原因只进日志）。
+    Failed(crate::words::Words),
 }
 
 /// `model.json`：`{name, sha256, size, license, files: [{path, size, sha256}]}`，`path` 相对模型文件夹。
@@ -98,17 +98,18 @@ pub enum ModelError {
 
 impl ModelError {
     /// 给人看的一句，写在模型那一栏「没下成」后面。
-    fn hint(&self) -> &'static str {
+    fn hint(&self) -> crate::words::Words {
+        use crate::words as w;
         match self {
             ModelError::Network(_) | ModelError::Stall(_) | ModelError::Status(_) => {
-                "网络不通，或者下载断了"
+                w::MODEL_NETWORK
             }
-            ModelError::Refused(_) => "连不到下载地址（看看设置里的代理）",
+            ModelError::Refused(_) => w::MODEL_REFUSED,
             ModelError::Sha256 { .. } | ModelError::TooLarge(_) | ModelError::Short { .. } => {
-                "下载下来的文件和插件说的不一样"
+                w::MODEL_MISMATCH
             }
-            ModelError::Io { .. } => "存不进这台电脑的模型文件夹",
-            _ => "没下成",
+            ModelError::Io { .. } => w::MODEL_IO,
+            _ => w::MODEL_FAILED,
         }
     }
 }

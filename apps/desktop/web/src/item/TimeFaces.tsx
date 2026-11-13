@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { Button as AriaButton } from "react-aria-components";
 import type { Pending, Segment } from "../api/endpoints";
+import { t } from "../i18n";
 import { reducedMotion } from "../motion/clock";
 import { alignRows, currentRow, FACE_NAME, type CopyFacet } from "./faces";
 import { PendingLine } from "./FaceHead";
@@ -41,10 +42,10 @@ export function TimeFaces({ lanes, heads, player, itemId }: { lanes: Lane[]; hea
 
   return (
     <div className="@container flex min-h-0 flex-col">
-      <div ref={box} role="table" aria-label="说的和画面上的，按时间对齐" className="relative min-h-0 overflow-y-auto">
+      <div ref={box} role="table" aria-label={t("item.column.alignedTable")} className="relative min-h-0 overflow-y-auto">
         <div role="row" className="sticky top-0 z-[1] grid gap-x-3 gap-y-3 border-b border-border bg-bg pb-2.5 @md:grid-cols-[3.5rem_minmax(0,1fr)]">
           <span role="columnheader" className="hidden @md:block">
-            <span className="sr-only-text">时间</span>
+            <span className="sr-only-text">{t("item.column.time")}</span>
           </span>
           <div className={`grid min-w-0 gap-x-3 gap-y-3 ${LANE_COLS[lanes.length] ?? LANE_COLS[3]}`}>
             {lanes.map((l, i) => (
@@ -62,7 +63,7 @@ export function TimeFaces({ lanes, heads, player, itemId }: { lanes: Lane[]; hea
                 <PendingLine pending={l.pending} itemId={itemId} />
               ) : (
                 <p className="m-0 py-2 text-note text-sub">
-                  {FACE_NAME[l.layer]}：这一份是空的
+                  {t("item.face.empty", { face: FACE_NAME[l.layer] })}
                 </p>
               )}
             </div>
@@ -81,7 +82,7 @@ export function TimeFaces({ lanes, heads, player, itemId }: { lanes: Lane[]; hea
               <span role="rowheader" className="contents">
                 <AriaButton
                   onPress={() => player.seek(r.sec)}
-                  aria-label={`从 ${clock(r.sec)} 播`}
+                  aria-label={t("item.column.playFrom", { time: clock(r.sec) })}
                   className={`mono h-ctl-tight cursor-pointer self-start rounded-sm border-0 bg-transparent px-2 text-left text-tag outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent data-[hovered]:text-text ${on ? "text-text" : "text-faint"}`}
                 >
                   {clock(r.sec)}
@@ -119,7 +120,7 @@ function Cell({ lane, segments, on, player }: { lane: Lane; segments: Segment[];
               onPress={() => player.go(pos)}
               onHoverChange={(h) => player.setPeek(h ? pos : null)}
               onFocusChange={(f) => player.setPeek(f ? pos : null)}
-              aria-label={`看 ${clock(pos.sec)} 画面上的「${s.text}」`}
+              aria-label={t("item.column.showFrameText", { time: clock(pos.sec), text: s.text })}
               className={`block w-full cursor-pointer rounded-sm border-0 bg-transparent px-1 py-[5px] text-left font-sans text-body outline-none select-text data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent data-[hovered]:bg-chip/60 ${on ? "text-text" : "text-label"}`}
             >
               <span className="mr-1 inline-block size-1.5 rounded-[1px] border border-border2 align-middle" aria-hidden="true" />

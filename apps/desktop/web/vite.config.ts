@@ -110,5 +110,6 @@ export default defineConfig({
   },
   // 登录窗口上面那一条是另一张页面（src-tauri/src/login.rs）。
   build: { rolldownOptions: { input: { main: "index.html", loginBar: "login-bar.html" } } },
-  test: { environment: "jsdom", setupFiles: ["./src/test-setup.ts"] },
+  // 这台机器常和别的项目的构建一起跑，单项默认的 5 秒不够
+  test: { environment: "jsdom", setupFiles: ["./src/test-setup.ts"], testTimeout: 30_000 },
 });

@@ -91,8 +91,8 @@ pub struct TransformConfig {
     /// `${MODELS}` 的上级，按插件 id 分子目录（`<models_dir>/<owner>/<repo>/`），经 `USUYO_MODELS_DIR`
     /// 交给进程。模型由调用方下好放进去，这里不建、不下。
     pub models_dir: PathBuf,
-    /// 用户界面语言，例如 `zh-CN`。
-    pub locale: String,
+    /// 用户界面语言（`zh-Hans`、`en`），和获取插件共用一个，设置里换了马上换。
+    pub locale: super::Locale,
     pub limits: TransformLimits,
 }
 
@@ -323,7 +323,7 @@ async fn start(
             tmp: &dir.path().join("tmp"),
             bin: &dir.path().join("bin"),
         },
-        &config.locale,
+        &config.locale.get(),
     );
     env.insert("USUYO_MODELS_DIR".into(), models.clone().into());
 

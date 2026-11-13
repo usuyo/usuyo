@@ -7,6 +7,7 @@ import { Button } from "../ui/Button";
 import { MachineTag, PlatformChip } from "../ui/Chip";
 import { Toggle } from "../ui/Toggle";
 import { hitText } from "./words";
+import { t } from "../i18n";
 
 /** 一条成员或命中的：平台、标题、作者，点进条目页。 */
 function ItemLine({ item, sub, action }: { item: ItemSummary; sub?: string; action: ReactNode }) {
@@ -26,7 +27,7 @@ function ItemLine({ item, sub, action }: { item: ItemSummary; sub?: string; acti
 
 /** 成员：你放进来的条目。拿出去只是不在这个主题里，条目照旧存着。 */
 export function Members({ page, busy, onMember }: { page: TopicPage; busy: boolean; onMember: (itemId: string, member: boolean) => void }) {
-  if (page.members.length === 0) return <p className="m-0 text-note text-sub">还没有放进来的条目。在条目页的「放进主题」里，或者从下面命中的里放进来。</p>;
+  if (page.members.length === 0) return <p className="m-0 text-note text-sub">{t("topic.matching.noMembers")}</p>;
   return (
     <ul className="m-0 flex list-none flex-col p-0">
       {page.members.map((m) => (
@@ -34,7 +35,7 @@ export function Members({ page, busy, onMember }: { page: TopicPage; busy: boole
           key={m.id}
           item={m}
           action={
-            <Button variant="ghost" size="xs" square isDisabled={busy} aria-label={`把「${m.title}」拿出这个主题`} onPress={() => onMember(m.id, false)}>
+            <Button variant="ghost" size="xs" square isDisabled={busy} aria-label={t("topic.matching.removeMember", { title: m.title })} onPress={() => onMember(m.id, false)}>
               <X size={13} aria-hidden="true" />
             </Button>
           }
@@ -77,7 +78,7 @@ export function Matching({
                 variant="ghost"
                 size="none"
                 isDisabled={busy}
-                aria-label={`去掉关键词「${k}」`}
+                aria-label={t("topic.matching.removeKeyword", { word: k })}
                 className="size-5 rounded-full"
                 onPress={() => onMatch({ ...page.match, keywords: page.match.keywords.filter((x) => x !== k) })}
               >
@@ -85,10 +86,10 @@ export function Matching({
               </Button>
             </span>
           ))}
-          <TextField value={word} onChange={setWord} aria-label="加一个关键词" className="flex items-center">
-            <Label className="sr-only-text">加一个关键词</Label>
+          <TextField value={word} onChange={setWord} aria-label={t("topic.matching.addKeyword")} className="flex items-center">
+            <Label className="sr-only-text">{t("topic.matching.addKeyword")}</Label>
             <Input
-              placeholder="加一个关键词"
+              placeholder={t("topic.matching.addKeyword")}
               onKeyDown={(e) => {
                 if (e.key === "Enter") add();
               }}
@@ -96,26 +97,26 @@ export function Matching({
             />
           </TextField>
           {word.trim() !== "" ? (
-            <Button variant="ghost" size="xs" square aria-label="加上" isDisabled={busy} onPress={add}>
+            <Button variant="ghost" size="xs" square aria-label={t("topic.matching.add")} isDisabled={busy} onPress={add}>
               <Plus size={13} aria-hidden="true" />
             </Button>
           ) : null}
         </div>
         <p className="m-0 mt-2 text-small text-sub">
-          {page.followed ? "看标题和内容里的字，画面不算。跟着收也照这些词收。" : "不关注的时候不算命中，跟着收也不照这些词收。"}
+          {page.followed ? t("topic.matching.followedHint") : t("topic.matching.unfollowedHint")}
         </p>
       </div>
       <div>
-        <Toggle isSelected={page.match.similarity} isDisabled={busy} onChange={(on) => onMatch({ ...page.match, similarity: on })} label="也按相似度算命中">
-          {page.match.similarity ? "也按相似度算：和成员相近的也算命中" : "只按关键词，相似度没开"}
+        <Toggle isSelected={page.match.similarity} isDisabled={busy} onChange={(on) => onMatch({ ...page.match, similarity: on })} label={t("topic.matching.similarity")}>
+          {page.match.similarity ? t("topic.matching.similarityOn") : t("topic.matching.similarityOff")}
         </Toggle>
-        <p className="m-0 mt-1 text-small text-sub">相似度在这台电脑上算，和成员越像越算；默认关着，开了也只是标出来，不自动放进来。</p>
+        <p className="m-0 mt-1 text-small text-sub">{t("topic.matching.similaritySub")}</p>
       </div>
       {page.hits.length > 0 ? (
         <div>
           <div className="flex items-center gap-2">
-            <MachineTag>机器挑的</MachineTag>
-            <span className="text-small text-sub">命中了、还没放进来的</span>
+            <MachineTag>{t("common.tag.autoSelected")}</MachineTag>
+            <span className="text-small text-sub">{t("topic.matching.unadded")}</span>
           </div>
           <ul className="m-0 mt-1.5 flex list-none flex-col p-0">
             {page.hits.map((h) => (
@@ -125,7 +126,7 @@ export function Matching({
                 sub={hitText(h.words)}
                 action={
                   <Button variant="outline" size="xs" isDisabled={busy} onPress={() => onMember(h.item.id, true)}>
-                    放进来
+                    {t("topic.matching.add")}
                   </Button>
                 }
               />

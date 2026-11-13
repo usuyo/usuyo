@@ -33,6 +33,7 @@ use crate::fetch::now_ms;
 use crate::jobs::{TransformJob, TransformJobKind, TransformRedo, TransformState};
 use crate::models::{Begin, Models};
 use crate::view::Event;
+use crate::words::{self, Said, Words};
 use crate::{Error, Result};
 
 /// 先后（feature 003 §4.4）：点名的、你手动收下的、导入和交进来的。
@@ -849,7 +850,7 @@ impl Engine {
                 let hint = failure
                     .hint
                     .clone()
-                    .unwrap_or_else(|| failure_hint(failure.code).to_owned());
+                    .unwrap_or_else(|| failure_hint(failure.code).said().to_stored());
                 let hint = Some(hint);
                 tracing::info!(item = %row.item_id, job = row.job.as_str(), failure = %failure, "transform failed");
                 let retry_policy = self.inner.retry;
@@ -1523,6 +1524,7 @@ impl Engine {
     pub async fn transforms_view(&self) -> crate::view::TransformsView {
         use crate::view::{Bundled, Health, ModelView, TransformPluginView};
         let t = self.transforms();
+        let lang = self.lang();
         // 几个插件同时问，一个起得慢不拖住别的。
         let asks: Vec<_> = t
             .plugins
@@ -1542,7 +1544,10 @@ impl Engine {
                 Ok(h) => h,
                 Err(e) => {
                     tracing::warn!(plugin = %p.id(), error = %e, "transform plugin health");
-                    (Health::Unavailable, Some("这个插件起不来".to_owned()))
+                    (
+                        Health::Unavailable,
+                        Some(words::TRANSFORM_WONT_START.said()),
+                    )
                 }
             };
             plugins.push(TransformPluginView {
@@ -1570,7 +1575,7 @@ impl Engine {
                     .map(|m| {
                         let state = t.models.state(p.id(), m);
                         let hint = match &state {
-                            crate::ModelState::Failed(h) => Some((*h).to_owned()),
+                            crate::ModelState::Failed(h) => Some(h.pick(lang).to_owned()),
                             _ => None,
                         };
                         ModelView {
@@ -1583,7 +1588,7 @@ impl Engine {
                     })
                     .collect(),
                 health,
-                hint,
+                hint: hint.map(|h| h.pick(lang).to_owned()),
             });
         }
         crate::view::TransformsView {
@@ -1593,10 +1598,7 @@ impl Engine {
     }
 
     /// 插件的 `health`：没过的检查的话（插件给的）当 `hint`。
-    async fn health_of(
-        &self,
-        p: &TransformPlugin,
-    ) -> Result<(crate::view::Health, Option<String>)> {
+    async fn health_of(&self, p: &TransformPlugin) -> Result<(crate::view::Health, Option<Said>)> {
         use crate::view::Health;
         let Some(h) = self.transforms().resident(p)?.health_if_idle().await else {
             return Ok((Health::Ok, None));
@@ -1612,7 +1614,10 @@ impl Engine {
             .iter()
             .any(|m| t.models.record(p.id(), m).is_none())
         {
-            return Ok((Health::Unavailable, Some("要先下载模型".to_owned())));
+            return Ok((
+                Health::Unavailable,
+                Some(words::TRANSFORM_NEEDS_MODEL.said()),
+            ));
         }
         let why: Vec<String> = h
             .checks
@@ -1622,7 +1627,12 @@ impl Engine {
             .collect();
         Ok((
             Health::Unavailable,
-            (!why.is_empty()).then(|| why.join("；")),
+            (!why.is_empty()).then(|| {
+                Said::by(|lang| {
+                    let parts: Vec<&str> = why.iter().map(String::as_str).collect();
+                    words::clauses(lang, &parts)
+                })
+            }),
         ))
     }
 
@@ -1688,7 +1698,8 @@ impl Engine {
             };
             let hint = (state == PendingState::Failed)
                 .then_some(r.error_hint)
-                .flatten();
+                .flatten()
+                .map(|h| self.say(&Said::from_stored(&h)));
             let p = Pending {
                 layer,
                 state,
@@ -1757,15 +1768,12 @@ fn missing_plugin(message: String, job: TransformJobKind) -> Outcome {
     let mut failure = CallFailure::new(ErrorCode::DependencyMissing, message);
     failure.hint = Some(
         match job {
-            TransformJobKind::Asr => "这台电脑上还没有能转口播的插件",
-            TransformJobKind::Ocr | TransformJobKind::Frames => {
-                "这台电脑上还没有能认图里的字的插件"
-            }
-            TransformJobKind::Play | TransformJobKind::Keyframes => {
-                "这台电脑上还没有处理音视频的插件"
-            }
+            TransformJobKind::Asr => words::NO_ASR_PLUGIN,
+            TransformJobKind::Ocr | TransformJobKind::Frames => words::NO_OCR_PLUGIN,
+            TransformJobKind::Play | TransformJobKind::Keyframes => words::NO_AV_PLUGIN,
         }
-        .into(),
+        .said()
+        .to_stored(),
     );
     Outcome::Failed {
         failure,
@@ -1774,14 +1782,14 @@ fn missing_plugin(message: String, job: TransformJobKind) -> Outcome {
 }
 
 /// 插件没给 `hint` 时，条目页那一面「没转出来：」后面写的。插件的 `message` 是英文、给日志的。
-fn failure_hint(code: ErrorCode) -> &'static str {
+fn failure_hint(code: ErrorCode) -> Words {
     match code {
-        ErrorCode::Timeout => "转得太久，停下了",
-        ErrorCode::Crashed => "转换插件中途退出了",
-        ErrorCode::InvalidOutput => "转换插件交回来的东西不对",
-        ErrorCode::UnsupportedInput => "这个文件转不了",
-        ErrorCode::DependencyMissing => "转换插件缺了要用的东西",
-        _ => "转换插件出了错",
+        ErrorCode::Timeout => words::TRANSFORM_TIMEOUT,
+        ErrorCode::Crashed => words::TRANSFORM_CRASHED,
+        ErrorCode::InvalidOutput => words::TRANSFORM_INVALID,
+        ErrorCode::UnsupportedInput => words::TRANSFORM_UNSUPPORTED,
+        ErrorCode::DependencyMissing => words::TRANSFORM_DEPENDENCY,
+        _ => words::TRANSFORM_ERROR,
     }
 }
 

@@ -9,7 +9,9 @@ import type { PlatformPage as Page, Use } from "./platforms";
 import { SavedCard } from "./SavedCard";
 import { SiteLoginRow } from "./SiteLoginRow";
 import { VisitorIdentity } from "./VisitorIdentity";
-import { PAGE, pauseText } from "./words";
+import { t } from "../i18n";
+import { formatList } from "../i18n/format";
+import { pauseText } from "./words";
 
 /**
  * 一个平台的一页：收一条链接、拿回存过的、账号和访客身份、节奏、关于，各一张卡片。
@@ -22,7 +24,7 @@ export function PlatformPage({ page, sites, visitors, failureLog }: { page: Page
       <header>
         <h2 className="m-0 text-name font-semibold text-text">{page.name}</h2>
         <p className="m-0 mt-1 text-note text-sub">
-          {PAGE.header(page.plugins.map((p) => p.name).join("、"))}
+          {t("plugins.page.header", { count: page.plugins.length, plugins: formatList(page.plugins.map((p) => p.name)) })}
         </p>
       </header>
       <LinkCard page={page} sites={sites} visitors={visitors} />
@@ -44,8 +46,8 @@ function AccountsCard({ page, sites, visitors }: { page: Page; sites: SiteLogin[
   const logins = sites.filter((s) => usersOf("in-usuyo", s.site).length > 0);
   const ids = visitors.filter((v) => usersOf("visitor", v.site).length > 0);
   return (
-    <Card title={PAGE.accountsTitle} sub={PAGE.accountsSub}>
-      {logins.length === 0 && ids.length === 0 ? <CardRow title={PAGE.accountsNone} /> : null}
+    <Card title={t("plugins.accounts.title")} sub={t("plugins.accounts.sub")}>
+      {logins.length === 0 && ids.length === 0 ? <CardRow title={t("plugins.accounts.none")} /> : null}
       {logins.map((s) => (
         <SiteLoginRow key={s.site} site={s} users={usersOf("in-usuyo", s.site)} />
       ))}
@@ -59,7 +61,7 @@ function AccountsCard({ page, sites, visitors }: { page: Page; sites: SiteLogin[
 /** 节奏：两次之间隔多久、每天几次；停着的为什么、到什么时候；「现在再试」「先别试」。 */
 function PacingCard({ page }: { page: Page }) {
   return (
-    <Card title={PAGE.pacingTitle} sub={PAGE.pacingSub}>
+    <Card title={t("plugins.pacing.title")} sub={t("plugins.pacing.sub")}>
       {page.plugins.map((p) => (
         <PacingRow key={p.id} plugin={p} platform={page.id} titled={page.plugins.length > 1} />
       ))}
@@ -73,24 +75,26 @@ function PacingRow({ plugin, platform, titled }: { plugin: FetchPlugin; platform
   const pauses = plugin.pauses.filter((x) => x.byYou || x.scope === platform || x.scope === "*");
   const held = plugin.pauses.some((x) => x.byYou);
   const words = !pace
-    ? PAGE.pacingNone
+    ? t("plugins.pacing.none")
     : pace.batch
-      ? PAGE.pacingBatch(pace.intervalSec, pace.daily)
-      : PAGE.pacingNoBatch(pace.intervalSec);
+      ? pace.daily
+        ? t("plugins.pacing.batchDaily", { count: pace.intervalSec, daily: pace.daily })
+        : t("plugins.pacing.batch", { count: pace.intervalSec })
+      : t("plugins.pacing.noBatch", { count: pace.intervalSec });
   return (
     <CardRow
-      title={titled ? plugin.name : PAGE.pacingRow}
+      title={titled ? plugin.name : t("plugins.pacing.row")}
       sub={words}
       control={
         <>
           {pauses.length > 0 ? (
             <Button variant="outline" size="sm" onPress={() => change.mutate({ kind: "try-now" })} isDisabled={change.isPending}>
-              {PAGE.retryNow}
+              {t("plugins.pacing.retryNow")}
             </Button>
           ) : null}
           {!held ? (
             <Button variant="quiet" size="sm" onPress={() => change.mutate({ kind: "hold" })} isDisabled={change.isPending}>
-              {PAGE.pause}
+              {t("plugins.pacing.pause")}
             </Button>
           ) : null}
         </>
@@ -113,7 +117,7 @@ function PacingRow({ plugin, platform, titled }: { plugin: FetchPlugin; platform
 /** 关于：插件的 id 和版本、它调的程序和许可、要填的密钥、失败日志在哪。 */
 function AboutCard({ page, failureLog }: { page: Page; failureLog: string }) {
   return (
-    <Card title={PAGE.aboutTitle}>
+    <Card title={t("plugins.about.title")}>
       {page.plugins.map((p) => (
         <CardRow
           key={p.id}
@@ -124,7 +128,7 @@ function AboutCard({ page, failureLog }: { page: Page; failureLog: string }) {
                 {p.id} · {p.version}
               </span>
               {p.description ? <span className="block">{p.description}</span> : null}
-              <span className="block">{p.upstream && p.upstream.length > 0 ? PAGE.upstream(p.upstream.map((u) => `${u.name}（${u.license}）`).join("、")) : PAGE.noUpstream}</span>
+              <span className="block">{p.upstream && p.upstream.length > 0 ? t("plugins.about.upstream", { list: formatList(p.upstream.map((u) => t("plugins.about.upstreamItem", { name: u.name, license: u.license }))) }) : t("plugins.about.noUpstream")}</span>
             </>
           }
         >
@@ -136,7 +140,7 @@ function AboutCard({ page, failureLog }: { page: Page; failureLog: string }) {
                   <div key={s.key} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
                     <span className="text-note text-label">
                       {s.label}
-                      <span className="ml-1.5 text-small text-sub">{PAGE.secretState(s.filled === true)}</span>
+                      <span className="ml-1.5 text-small text-sub">{s.filled === true ? t("plugins.about.secretFilled") : t("plugins.about.secretEmpty")}</span>
                     </span>
                     <SecretField pluginId={p.id} setting={s} />
                   </div>
@@ -145,7 +149,7 @@ function AboutCard({ page, failureLog }: { page: Page; failureLog: string }) {
           ) : null}
         </CardRow>
       ))}
-      <CardRow title={PAGE.failureLog} sub={PAGE.failureLogSub}>
+      <CardRow title={t("plugins.about.failureLog")} sub={t("plugins.about.failureLogSub")}>
         <code className="mono block truncate rounded-sm bg-chip px-2.5 py-1.5 text-tag text-label select-text" title={failureLog}>
           {failureLog}
         </code>

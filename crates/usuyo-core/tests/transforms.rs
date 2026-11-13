@@ -706,7 +706,7 @@ async fn image_text_and_marks_show_on_their_facets() {
 
     let facets = facets_of(&engine, &note, &Links::default());
     let image = facets.iter().find(|x| x["layer"] == "image").unwrap();
-    assert_eq!(image["remark"], "有几张图是同一张");
+    assert_eq!(image["remark"], "有重复的图片");
     let ocr = facets.iter().find(|x| x["layer"] == "ocr").unwrap();
     let key = image["images"][0]["key"].as_str().unwrap();
     assert_eq!(ocr["segments"][0]["position"]["imageKey"], key);
@@ -716,7 +716,7 @@ async fn image_text_and_marks_show_on_their_facets() {
 
     let facets = facets_of(&engine, &silent, &Links::default());
     let asr = facets.iter().find(|x| x["layer"] == "asr").unwrap();
-    assert_eq!(asr["remark"], "没有声音轨");
+    assert_eq!(asr["remark"], "没有音轨");
     assert_eq!(asr["segments"], json!([]));
     assert!(asr["source"].get("tool").is_none(), "宿主自己判的没有工具");
     assert!(
@@ -736,7 +736,7 @@ async fn without_a_speech_plugin_the_face_says_so_in_words() {
     assert_eq!(p.len(), 1, "{p:?}");
     assert_eq!(p[0]["layer"], "asr");
     assert_eq!(p[0]["state"], "failed");
-    assert_eq!(p[0]["hint"], "这台电脑上还没有能转口播的插件");
+    assert_eq!(p[0]["hint"], "这台电脑上没有可转写的插件");
 }
 
 #[tokio::test]

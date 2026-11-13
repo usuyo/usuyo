@@ -1,4 +1,4 @@
-//! 设置页的那几项：按机器的 `settings.json` 里的 `network.proxy`、`transforms.auto`、`window.systemTitleBar`，资料库的 `trashDays`，
+//! 设置页的那几项：按机器的 `settings.json` 里的 `network.proxy`、`transforms.auto`、`window.systemTitleBar`、`language`，资料库的 `trashDays`，
 //! 时钟守卫拦下的回收站项。按机器的 `settings.json` 只经这里的 [`read`]、[`write`]（方法的开关在 `methods`），
 //! 别的键原样留着；改了马上生效。
 
@@ -12,6 +12,7 @@ use usuyo_plugin::ProxySetting;
 use crate::engine::{Engine, Via};
 use crate::trash::ClockGuard;
 use crate::view::{NetworkView, SettingsView, TransformsSetting, TrashHeld, WindowSetting};
+use crate::words::Lang;
 use crate::{Error, Result};
 
 fn settings_path(machine_root: &Path) -> PathBuf {
@@ -75,6 +76,40 @@ fn system_title_bar(machine_root: &Path) -> Result<bool> {
     }
 }
 
+/// 设置里选的语言：`system`（没写时）跟随系统，或者定下一种。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, serde::Serialize)]
+pub enum Language {
+    #[serde(rename = "system")]
+    System,
+    #[serde(rename = "zh-Hans")]
+    ZhHans,
+    #[serde(rename = "en")]
+    En,
+}
+
+impl Language {
+    /// 这一种在这台机器上是哪种语言；`system` 照 `system` 给的。
+    pub fn resolve(self, system: Lang) -> Lang {
+        match self {
+            Language::System => system,
+            Language::ZhHans => Lang::ZhHans,
+            Language::En => Lang::En,
+        }
+    }
+}
+
+/// `language`：没写是 `system`；写了别的报错。
+pub fn language(machine_root: &Path) -> Result<Language> {
+    match read(machine_root)?.get("language") {
+        None => Ok(Language::System),
+        Some(v) => serde_json::from_value(v.clone()).map_err(|_| {
+            Error::InvalidArgs(format!(
+                "settings.json: language is {v}, not \"system\", \"zh-Hans\" or \"en\""
+            ))
+        }),
+    }
+}
+
 /// `network.proxy`：`system`（没写时）、`direct` 或一个代理地址；写坏了报错，错误里不带地址（可能有密码）。
 pub fn proxy_setting(machine_root: &Path) -> Result<ProxySetting> {
     match read(machine_root)?
@@ -100,6 +135,7 @@ pub struct SettingsPatch {
     pub network: Option<NetworkPatch>,
     pub transforms: Option<TransformsPatch>,
     pub window: Option<WindowPatch>,
+    pub language: Option<Language>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -195,6 +231,7 @@ impl Engine {
             window: WindowSetting {
                 system_title_bar: system_title_bar(root)?,
             },
+            language: language(root)?,
             logs: root.join("logs/daemon.log").to_string_lossy().into_owned(),
         })
     }
@@ -230,6 +267,7 @@ impl Engine {
         };
         let auto = patch.transforms.map(|t| t.auto);
         let title_bar = patch.window.map(|w| w.system_title_bar);
+        let chosen = patch.language;
         // 资料库那一项先改：它没改成，按机器的文件和正在用的值都不动。
         if let Some(days) = patch.trash_days {
             let mut lib = self.lib();
@@ -245,7 +283,7 @@ impl Engine {
                 },
             )?;
         }
-        if proxy.is_some() || auto.is_some() || title_bar.is_some() {
+        if proxy.is_some() || auto.is_some() || title_bar.is_some() || chosen.is_some() {
             let _guard = self
                 .inner
                 .settings_lock
@@ -267,6 +305,9 @@ impl Engine {
             if let Some(t) = title_bar {
                 set(&mut map, "window", "systemTitleBar", Value::Bool(t));
             }
+            if let Some(l) = chosen {
+                map.insert("language".into(), serde_json::to_value(l)?);
+            }
             write(root, &map)?;
         }
         if let Some(p) = proxy {
@@ -277,6 +318,9 @@ impl Engine {
         if let Some(a) = auto {
             self.set_transforms_auto(a)?;
             self.emit(crate::view::Event::TransformsUpdated);
+        }
+        if let Some(l) = chosen {
+            self.set_language(l.resolve(self.inner.system_language));
         }
         self.settings()
     }
@@ -339,6 +383,21 @@ mod tests {
         assert!(
             serde_json::from_str::<SettingsPatch>(r#"{"window": {"titleBar": false}}"#).is_err()
         );
+    }
+
+    #[test]
+    fn language_is_system_unless_written() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(language(dir.path()).unwrap(), Language::System);
+        std::fs::write(dir.path().join("settings.json"), r#"{"language": "en"}"#).unwrap();
+        assert_eq!(language(dir.path()).unwrap(), Language::En);
+        std::fs::write(dir.path().join("settings.json"), r#"{"language": "zh-CN"}"#).unwrap();
+        assert!(language(dir.path()).is_err());
+        assert_eq!(Language::System.resolve(Lang::En), Lang::En);
+        assert_eq!(Language::ZhHans.resolve(Lang::En), Lang::ZhHans);
+        let p: SettingsPatch = serde_json::from_str(r#"{"language": "zh-Hans"}"#).unwrap();
+        assert_eq!(p.language, Some(Language::ZhHans));
+        assert!(serde_json::from_str::<SettingsPatch>(r#"{"language": "fr"}"#).is_err());
     }
 
     #[test]

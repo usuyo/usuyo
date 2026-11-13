@@ -222,7 +222,7 @@ async fn an_unreadable_or_empty_file_answers_with_a_hint_and_leaves_nothing() {
     )
     .await;
     assert_eq!(res.status(), StatusCode::BAD_REQUEST);
-    assert_eq!(json_of(res).await["hint"], "文件是空的");
+    assert_eq!(json_of(res).await["hint"], "文件是空的。");
     assert_eq!(f.copy_count(), 0);
 
     let res = send(
@@ -352,7 +352,7 @@ async fn share_text_is_taken_for_its_first_link() {
     assert_eq!(res.status(), StatusCode::ACCEPTED);
     let res = send(&f.app, batch("没有链接")).await;
     assert_eq!(res.status(), StatusCode::BAD_REQUEST);
-    assert_eq!(json_of(res).await["hint"], "第 1 条不是能用的链接");
+    assert_eq!(json_of(res).await["hint"], "第 1 个链接无法使用。");
     let res = send(&f.app, batch("先 https://a:b@a.test/1 再 https://b.test/2")).await;
     assert_eq!(res.status(), StatusCode::BAD_REQUEST, "只看第一条");
 }

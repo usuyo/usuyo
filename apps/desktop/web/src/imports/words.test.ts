@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ImportView } from "../api/endpoints";
+import { setLanguageChoice } from "../i18n";
+import { visitorText } from "../plugins/words";
 import { acceptOf, stateLine, waitingText } from "./words";
 
 const base: ImportView = {
@@ -19,24 +21,28 @@ describe("import words", () => {
   it("states facts and never a remaining count or a percentage", () => {
     for (const state of ["listing", "ready", "taking", "held", "done"] as const) {
       const line = stateLine({ ...base, state });
-      expect(line).not.toMatch(/%|还剩|剩下/);
+      expect(line).not.toMatch(/%|还剩|剩下|剩余/);
     }
-    expect(stateLine(base)).toBe("收下了 7 条 · 在收");
-    expect(stateLine({ ...base, state: "done" })).toBe("收下了 7 条，1 条内容没取到");
+    expect(stateLine(base)).toBe("已添加 7 条 · 正在添加");
+    expect(stateLine({ ...base, state: "done" })).toBe("已添加 7 条，其中 1 条未获取到内容");
   });
 
   it("explains why an import waits", () => {
     const now = new Date(2026, 10, 11, 14, 0, 0);
     const until = new Date(2026, 10, 11, 14, 0, 5).toISOString();
-    expect(waitingText({ code: "pacing", until }, "B站", undefined, now)).toBe("按B站的节奏，下一条大概 14:00:05");
-    expect(waitingText({ code: "login-required" }, "B站", undefined, now)).toBe("要重新登录B站：登录好了点「接着导入」");
-    expect(waitingText({ code: "visitor-required" }, "小红书", undefined, now)).toBe("需要访客身份；好了点「接着导入」");
-    expect(waitingText({ code: "visitor-required" }, "小红书", "missing", now)).toBe(
-      "需要访客身份：在「获取插件」页面中获取访客身份；好了点「接着导入」",
-    );
-    expect(waitingText({ code: "visitor-required" }, "小红书", "present", now)).toBe("访客身份已失效：更换后重试；好了点「接着导入」");
-    expect(waitingText({ code: "blocked", hint: "B站挡住了" }, "B站", undefined, now)).toBe("B站挡住了 · 等你点「接着导入」");
+    expect(waitingText({ code: "pacing", until }, "B站", undefined, now)).toBe("按B站的请求频率，下一条约在 14:00:05");
+    expect(waitingText({ code: "login-required" }, "B站", undefined, now)).toBe("需要重新登录B站：登录后点按「继续导入」");
+    expect(waitingText({ code: "visitor-required" }, "小红书", undefined, now)).toBe(`${visitorText()}；完成后点按「继续导入」`);
+    expect(waitingText({ code: "visitor-required" }, "小红书", "missing", now)).toBe(`${visitorText("missing")}；完成后点按「继续导入」`);
+    expect(waitingText({ code: "blocked", hint: "B站挡住了" }, "B站", undefined, now)).toBe("B站挡住了 · 处理后点按「继续导入」");
   });
+});
+
+it("states an import in English with the right plural", () => {
+  setLanguageChoice("en");
+  expect(stateLine({ ...base, state: "listing", kind: "file", preview: { new: 1, stored: 0, trashed: 0 } })).toBe("Reading · 1 item found");
+  expect(stateLine({ ...base, state: "listing" })).toBe("Listing · 24 items found");
+  expect(stateLine({ ...base, state: "done" })).toBe("7 added; content not fetched for 1");
 });
 
 it("filters the file picker by the extensions a reader's patterns name", () => {

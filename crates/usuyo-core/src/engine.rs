@@ -28,6 +28,7 @@ use crate::view::{
     Event, HitLayer, ItemSummary, ItemView, MapPoint, MapView, Platform, Reindexed, SearchHit,
     Stored, Topic, Unreadable,
 };
+use crate::words::{self, Said};
 use crate::{Error, Result};
 
 /// 重试最多隔多久。排着的任务到点时间不会比现在晚过这么久（暂停封顶一小时，见 `MAX_PAUSE`）。
@@ -65,7 +66,8 @@ pub struct EngineConfig {
     pub plugin_roots: Vec<PathBuf>,
     pub limits: CallLimits,
     pub retry: RetryPolicy,
-    pub locale: String,
+    /// 设置的语言是 `system` 时用哪种：守护进程照系统的首选语言给；测试里是简体中文。
+    pub system_language: crate::words::Lang,
     /// 插件 id → 用户给它的设置（协议 §2.11），来自按机器的 `settings.json`。
     pub plugin_settings: BTreeMap<String, serde_json::Value>,
     /// 平台登录的 cookie 和插件的密钥设置存在这里。默认是按机器目录里 0600 的 `secrets.json`，
@@ -102,7 +104,7 @@ impl EngineConfig {
             machine_root,
             limits: CallLimits::default(),
             retry: RetryPolicy::default(),
-            locale: "zh-CN".into(),
+            system_language: crate::words::Lang::ZhHans,
             plugin_settings: BTreeMap::new(),
             transforms_auto: true,
             power: Arc::new(SystemPower),
@@ -210,6 +212,11 @@ pub(crate) struct Inner {
     pub import_copies: PathBuf,
     /// 手机那一页；没配就是 `None`。
     pub phone: Option<Arc<crate::phone::Phone>>,
+    /// 内核给的话用哪种语言（设置里选的，`system` 照 [`EngineConfig::system_language`]）。
+    pub language: std::sync::RwLock<crate::words::Lang>,
+    pub system_language: crate::words::Lang,
+    /// 交给插件的 `USUYO_LOCALE`，获取插件和转换插件共用。
+    pub locale: usuyo_plugin::Locale,
 }
 
 #[derive(Clone)]
@@ -267,11 +274,9 @@ impl Engine {
                     .or_insert_with(|| p.header.name.clone());
             }
         }
-        platforms
-            .entry("file".into())
-            .or_insert_with(|| "文件".into());
-
         let pacing = crate::pace::combine(&plugins);
+        let lang = crate::settings::language(&config.machine_root)?.resolve(config.system_language);
+        let locale = usuyo_plugin::Locale::new(lang.tag());
         // 下模型和下手机的驱动共用一份：设置里换了代理，两边一起换。
         let net = Net::system(config.proxy.clone())?;
         let phone = config
@@ -286,7 +291,7 @@ impl Engine {
                 work_dir: work_dir.clone(),
                 cache_dir: config.machine_root.join("cache/plugins"),
                 models_dir: config.machine_root.join("models"),
-                locale: config.locale.clone(),
+                locale: locale.clone(),
                 limits: config.transform_limits,
             },
             models: Models::new(config.machine_root.join("models"), net.clone()),
@@ -299,7 +304,7 @@ impl Engine {
             HostConfig {
                 work_dir,
                 cache_dir: config.machine_root.join("cache/plugins"),
-                locale: config.locale,
+                locale: locale.clone(),
                 limits: config.limits,
             },
             plugins,
@@ -333,6 +338,9 @@ impl Engine {
                 methods,
                 import_copies: machine_dir.join("imports"),
                 phone,
+                language: std::sync::RwLock::new(lang),
+                system_language: config.system_language,
+                locale,
             }),
         };
         if engine.inner.index.needs_rebuild() {
@@ -367,6 +375,30 @@ impl Engine {
         self.inner.events.subscribe()
     }
 
+    /// 内核给的话现在用哪种语言。边界写 `hint` 时也照它（`usuyo-api`）。
+    pub fn lang(&self) -> crate::words::Lang {
+        *self
+            .inner
+            .language
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// 一句话按现在的语言给。
+    pub(crate) fn say(&self, s: &crate::words::Said) -> String {
+        s.pick(self.lang()).to_owned()
+    }
+
+    /// 设置里换了语言：内核的话和之后起的插件进程都用新的。
+    pub(crate) fn set_language(&self, lang: crate::words::Lang) {
+        *self
+            .inner
+            .language
+            .write()
+            .unwrap_or_else(PoisonError::into_inner) = lang;
+        self.inner.locale.set(lang.tag());
+    }
+
     pub(crate) fn emit(&self, e: Event) {
         // 没有人在听时发不出去，不算错。
         let _ = self.inner.events.send(e);
@@ -378,7 +410,11 @@ impl Engine {
             .platforms
             .get(id)
             .cloned()
-            .unwrap_or_else(|| id.to_owned());
+            .unwrap_or_else(|| match id {
+                // 别的工具导出的文件读出来的，没有插件管「file」这个平台时照语言叫
+                "file" => words::PLATFORM_FILE.pick(self.lang()).to_owned(),
+                _ => id.to_owned(),
+            });
         Platform {
             id: id.to_owned(),
             name,
@@ -454,25 +490,30 @@ impl Engine {
 
     fn view_of(&self, m: &Manifest, c: &Content, links: &Links) -> Result<ItemView> {
         let id = m.id.as_str();
-        let facets = crate::facets::facets(id, c, links);
+        let facets = crate::facets::facets(id, c, links, self.lang());
         let failed = self
             .inner
             .jobs
             .job(id)?
             .filter(|j| j.state == JobState::Failed);
+        let lang = self.lang();
         let missing = match failed {
-            Some(j) => Some(format!(
-                "取不到内容：{}",
-                j.error_hint
-                    .or(j.error_code)
-                    .unwrap_or_else(|| "原因不明".into())
-            )),
+            Some(j) => {
+                let why = j
+                    .error_hint
+                    .as_deref()
+                    .map(Said::from_stored)
+                    .or_else(|| j.error_code.map(Said::plain))
+                    .unwrap_or_else(|| words::REASON_UNKNOWN.said());
+                Some(words::FETCH_FAILED.with_said(&[("why", &why)]))
+            }
             None => describe_missing(m).or_else(|| {
                 c.partial
                     .as_ref()
-                    .map(|why| format!("有些没存下来（{why}）"))
+                    .map(|why| words::PARTLY_SAVED.with_said(&[("why", &Said::plain(why))]))
             }),
-        };
+        }
+        .map(|s| s.pick(lang).to_owned());
         Ok(ItemView {
             summary: self.summary(m),
             url: link_of(m),
@@ -861,25 +902,28 @@ fn fetch_url(m: &Manifest) -> Option<String> {
 
 /// 「没存下来：图片、视频（原因）」
 /// 插件没说原因的不写，理由同 [`stored`]。
-fn describe_missing(m: &Manifest) -> Option<String> {
+fn describe_missing(m: &Manifest) -> Option<Said> {
     let reason = m.missing_reason.as_ref()?;
     if m.missing.is_empty() {
         return None;
     }
-    let names: Vec<&str> = m
-        .missing
-        .iter()
-        .map(|o| match o.as_str() {
-            "text" => "正文",
-            "html" => "网页原文",
-            "images" => "图片",
-            "media:video" => "视频",
-            "media:audio" => "音频",
-            "subtitle" => "字幕",
-            "meta" => "标题和作者",
-            "comments" => "评论",
-            other => other,
-        })
-        .collect();
-    Some(format!("没存下来：{}（{reason}）", names.join("、")))
+    let what = Said::by(|lang| {
+        let names: Vec<&str> = m
+            .missing
+            .iter()
+            .map(|o| match o.as_str() {
+                "text" => words::OUT_TEXT.pick(lang),
+                "html" => words::OUT_HTML.pick(lang),
+                "images" => words::OUT_IMAGES.pick(lang),
+                "media:video" => words::OUT_VIDEO.pick(lang),
+                "media:audio" => words::OUT_AUDIO.pick(lang),
+                "subtitle" => words::OUT_SUBTITLE.pick(lang),
+                "meta" => words::OUT_META.pick(lang),
+                "comments" => words::OUT_COMMENTS.pick(lang),
+                other => other,
+            })
+            .collect();
+        words::join(lang, &names)
+    });
+    Some(words::NOT_SAVED.with_said(&[("what", &what), ("why", &Said::plain(reason))]))
 }

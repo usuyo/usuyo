@@ -4,6 +4,8 @@ use std::path::PathBuf;
 
 use usuyo_plugin::PluginError;
 
+use crate::words::Said;
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error(transparent)]
@@ -38,9 +40,9 @@ pub enum Error {
     /// 后台线程没跑完（panic 或被取消）。
     #[error("background task failed: {0}")]
     Task(String),
-    /// 带一句给人看的中文：界面照 `hint` 显示，`source` 的英文进日志。
+    /// 带一句给人看的话（两种语言，[`Said`]）：界面照 `hint` 显示，`source` 的英文进日志。
     #[error("{source}")]
-    Hinted { source: Box<Error>, hint: String },
+    Hinted { source: Box<Error>, hint: Said },
 }
 
 impl Error {
@@ -80,21 +82,23 @@ impl Error {
         }
     }
 
-    /// 给人看的一句话：插件给了 `hint` 就用它。
-    pub fn hint(&self) -> Option<&str> {
+    /// 给人看的一句话：插件给了 `hint` 就用它（只有一种语言，照原样）。
+    pub fn hint(&self) -> Option<Said> {
         match self {
-            Error::Hinted { hint, .. } => Some(hint),
-            Error::Plugin(PluginError::Call { failure, .. }) => failure.hint.as_deref(),
+            Error::Hinted { hint, .. } => Some(hint.clone()),
+            Error::Plugin(PluginError::Call { failure, .. }) => {
+                failure.hint.as_deref().map(Said::from_stored)
+            }
             Error::Phone(e) => Some(e.hint()),
             _ => None,
         }
     }
 
-    /// 配上一句给人看的中文。
-    pub fn hinted(self, hint: impl Into<String>) -> Error {
+    /// 配上一句给人看的话（`words.rs` 里的一句）。
+    pub fn hinted(self, hint: Said) -> Error {
         Error::Hinted {
             source: Box::new(self),
-            hint: hint.into(),
+            hint,
         }
     }
 

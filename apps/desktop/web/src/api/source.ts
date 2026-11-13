@@ -341,7 +341,7 @@ export async function call<T>(run: (source: Source) => Promise<T>): Promise<T> {
     return await run(daemon);
   } catch (error) {
     if (MOCK_FALLBACK && error instanceof DaemonUnreachableError) {
-      if (!usingMock) console.info("usuyo: 内核没在运行，开发服务器改用样例库");
+      if (!usingMock) console.info("usuyo: daemon not running, the dev server uses the sample library");
       usingMock = true;
       return run(await mock());
     }

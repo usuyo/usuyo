@@ -97,15 +97,15 @@ it("gives a list method that starts from a link a link field, asks for its sourc
   const field = await screen.findByLabelText("收藏夹或个人空间的链接");
   expect(seen).toEqual([]);
   fireEvent.change(field, { target: { value: "https://space.bilibili.com/1/favlist?fid=2" } });
-  fireEvent.click(screen.getByRole("button", { name: "看看有什么" }));
-  fireEvent.click(await screen.findByRole("button", { name: "列出来" }));
+  fireEvent.click(screen.getByRole("button", { name: "查找" }));
+  fireEvent.click(await screen.findByRole("button", { name: "列出" }));
   await waitFor(() => expect(seen).toHaveLength(2));
   const [ask, start] = seen;
   expect(ask?.url.searchParams.get("method")).toBe("favorites-public");
   expect(ask?.url.searchParams.get("link")).toBe("https://space.bilibili.com/1/favlist?fid=2");
   expect(start?.body).toEqual({ pluginId: BILI.id, method: "favorites-public", source: SOURCE.source, title: "胶片" });
   // 开始以后那一次导入写着是哪种取法列的。
-  expect(await screen.findByText(/B站 · 公开收藏夹 · 从插件列出来的/)).toBeTruthy();
+  expect(await screen.findByText(/B站 · 公开收藏夹 · /)).toBeTruthy();
 });
 
 const problem = (status: number, code: string, hint?: string) =>
@@ -116,15 +116,15 @@ it("says the daemon's sentence for a link it cannot use, hands share text over a
   fireEvent.click(await screen.findByText("公开收藏夹"));
   const field = await screen.findByLabelText("收藏夹或个人空间的链接");
   fireEvent.change(field, { target: { value: "ftp://space.bilibili.com/1" } });
-  fireEvent.click(screen.getByRole("button", { name: "看看有什么" }));
+  fireEvent.click(screen.getByRole("button", { name: "查找" }));
   expect(await screen.findByText("这段文字里没有链接")).toBeTruthy();
   // 带链接的分享文字照原样交过去，链接由内核取出来。
   const shared = "【胶片】的收藏夹 https://space.bilibili.com/1/favlist?fid=2 快来看看";
   fireEvent.change(field, { target: { value: shared } });
-  fireEvent.click(screen.getByRole("button", { name: "看看有什么" }));
+  fireEvent.click(screen.getByRole("button", { name: "查找" }));
   expect(await screen.findByText("公开收藏夹现在用不上：在按节奏等")).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "看看有什么" }));
-  expect(await screen.findByRole("button", { name: "列出来" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "查找" }));
+  expect(await screen.findByRole("button", { name: "列出" })).toBeTruthy();
   const asked = seen.filter((x) => x.url.pathname.endsWith("/sources"));
   expect(asked).toHaveLength(3);
   expect(asked[1]?.url.searchParams.get("link")).toBe(shared);
@@ -134,6 +134,6 @@ it("says its own sentence for a plugin's error that came without a hint", async 
   serve([problem(502, "login-required")]);
   fireEvent.click(await screen.findByText("公开收藏夹"));
   fireEvent.change(await screen.findByLabelText("收藏夹或个人空间的链接"), { target: { value: "https://space.bilibili.com/1" } });
-  fireEvent.click(screen.getByRole("button", { name: "看看有什么" }));
-  expect(await screen.findByText(/要先登录：在「获取插件」的B站里登录好了/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "查找" }));
+  expect(await screen.findByText(/需要先登录：在「获取插件」的B站中登录后/)).toBeTruthy();
 });

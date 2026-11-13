@@ -1,55 +1,53 @@
-// 设置页上的话：网络出口、回收站、时钟跳了那一句。
+// 设置页上的话：网络连接方式、废纸篓保留多久、时钟跳了那一句。
 import type { NetworkSetting } from "../api/endpoints";
+import { t } from "../i18n";
 import { dayText } from "../item/format";
 
-export const NETWORK_TEXT: Record<NetworkSetting["mode"], { name: string; sub: string }> = {
-  system: {
-    name: "跟系统代理",
-    sub: "插件出门和你的浏览器走同一个出口。平台看到的还是你平常上网的样子，不会突然换一个地方来访问，这样最安静。",
-  },
-  direct: { name: "直连", sub: "不走代理，直接连。系统开着代理时，插件和浏览器就走两条路了。" },
-  custom: { name: "自己填一个代理", sub: "只给插件用，不改系统的设置。写 http://、socks5:// 或 socks5h:// 开头的地址。" },
-};
+/** 连接方式的名字和说明。 */
+export function networkText(mode: NetworkSetting["mode"]): { name: string; sub: string } {
+  switch (mode) {
+    case "system":
+      return { name: t("settings.network.system"), sub: t("settings.network.systemSub") };
+    case "direct":
+      return { name: t("settings.network.direct"), sub: t("settings.network.directSub") };
+    default:
+      return { name: t("settings.network.custom"), sub: t("settings.network.customSub") };
+  }
+}
 
 const PROXY_SCHEMES = ["http:", "socks5:", "socks5h:"];
 
 /** 填的代理地址像不像样：照内核，只认这三种开头，要有主机，不带路径和查询串；可以带用户名和密码。 */
 export function proxyProblem(proxy: string): string | null {
   const p = proxy.trim();
-  if (p === "") return "写一个代理地址";
+  if (p === "") return t("settings.network.proxyEmpty");
   const u = URL.canParse(p) ? new URL(p) : null;
   const fits = u !== null && PROXY_SCHEMES.includes(u.protocol) && u.hostname !== "" && (u.pathname === "" || u.pathname === "/") && u.search === "" && u.hash === "";
-  return fits ? null : "要写成 http://主机:端口 这样，也可以是 socks5:// 或 socks5h://";
+  return fits ? null : t("settings.network.proxyBad");
 }
 
-export const TRASH_CHOICES: { id: "30" | "90" | "forever"; text: string; days: number | null }[] = [
-  { id: "30", text: "30 天", days: 30 },
-  { id: "90", text: "90 天", days: 90 },
-  { id: "forever", text: "一直留着", days: null },
+export const TRASH_DAYS: { id: "30" | "90" | "forever"; days: number | null }[] = [
+  { id: "30", days: 30 },
+  { id: "90", days: 90 },
+  { id: "forever", days: null },
 ];
 
+/** 保留多久的几个选项。 */
+export function trashChoices(): { id: "30" | "90" | "forever"; text: string }[] {
+  return TRASH_DAYS.map((c) => ({ id: c.id, text: c.days === null ? t("settings.storage.forever") : t("settings.storage.days", { count: c.days }) }));
+}
+
 export function trashChoiceOf(days: number | null): "30" | "90" | "forever" | undefined {
-  return TRASH_CHOICES.find((c) => c.days === days)?.id;
+  return TRASH_DAYS.find((c) => c.days === days)?.id;
 }
 
-/** 回收站那一句：放多久，到期怎么样。 */
+/** 废纸篓那一句：放多久，到期怎么样。 */
 export function trashText(days: number | null): string {
-  return days === null ? "删掉的和只留文字移出来的图、视频一直留在回收站里，不会自己清除。" : `删掉的和只留文字移出来的图、视频在回收站里放 ${days} 天，到期就彻底清除，不留记录；到期以前随时拿得回来。`;
+  return days === null ? t("settings.storage.keepsForever") : t("settings.storage.keepsDays", { count: days });
 }
 
-/** 时钟跳了：说清楚发生了什么、为什么没清，只给一个动作。 */
+/** 时钟跳了：说清楚发生了什么、为什么没删，只给一个动作。 */
 export function heldText(held: { count: number; since: string }, days: number | null): string {
-  const span = days === null ? "" : `超过了回收站留的 ${days} 天`;
-  return `这台电脑的时间比 ${dayText(held.since)}往后跳了一大截${span ? `，${span}` : ""}。为了不因为时间不对把回收站整个清掉，到期的 ${held.count} 项先留着没清。时间是对的，就照时间清掉它们。`;
+  const since = dayText(held.since);
+  return days === null ? t("settings.storage.heldForever", { since, count: held.count }) : t("settings.storage.held", { since, days, count: held.count });
 }
-
-/** 「窗口」那一节。 */
-export const WINDOW = {
-  section: "窗口",
-  sectionSub: "仅应用于这台电脑。",
-  titleBar: "使用系统标题栏",
-  titleBarSub:
-    "关闭时窗口顶部不显示系统标题栏，内容延伸到窗口顶部，左上角的窗口按钮显示在 usuyo 的顶栏上，拖移顶栏可以移动窗口。更改在下次打开 usuyo 时生效。仅适用于 macOS；Windows 和 Linux 始终使用系统标题栏。",
-  on: "已开启",
-  off: "已关闭",
-};

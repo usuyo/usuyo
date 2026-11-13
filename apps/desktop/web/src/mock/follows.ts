@@ -3,6 +3,7 @@
 // 订阅源用官方预装的通用网页获取读。最近收下的指向样例库里真有的条目。
 import type { FollowOption, FollowsView, FollowTaken, FollowTrial, FollowView } from "../api/endpoints";
 import type { Follows, Library } from "../api/source";
+import { said } from "./said";
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const HOUR = 3_600_000;
@@ -76,7 +77,13 @@ export function createMockFollows(library: Library, empty: boolean): Follows {
           everyHours: 12,
           on: true,
           lastAt: at(-1),
-          waiting: { code: "rate-limited", hint: "平台说请求太频繁", until: at(5) },
+          waiting: {
+            code: "rate-limited",
+            get hint() {
+              return said("平台提示请求过于频繁", "The platform says there are too many requests");
+            },
+            until: at(5),
+          },
         },
         {
           id: "f-old",
@@ -124,7 +131,7 @@ export function createMockFollows(library: Library, empty: boolean): Follows {
 
   function get(id: string): FollowView {
     const f = follows.find((x) => x.id === id);
-    if (!f) throw new Error("没有这个跟着收");
+    if (!f) throw new Error("no such follow");
     return f;
   }
 
@@ -136,7 +143,7 @@ export function createMockFollows(library: Library, empty: boolean): Follows {
     async trialFollow(body): Promise<FollowTrial> {
       await wait(900);
       const option = OPTIONS.find((o) => o.kind === body.kind && o.pluginId === body.pluginId);
-      if (!option?.built) throw new Error("这个插件还不能这样列");
+      if (!option?.built) throw new Error("this plugin cannot list this way yet");
       if (body.kind === "list") {
         const title = option.sources?.find((s) => s.source === body.source)?.title ?? body.source ?? "";
         const would = ["一周备餐的思路", "城市骑行路线整理"].map((t, i) => ({ title: t, url: `https://www.bilibili.com/video/BV1n${i}xx411c7mD`, actedAt: at(-3 - i) }));
@@ -154,7 +161,7 @@ export function createMockFollows(library: Library, empty: boolean): Follows {
     async newFollow(body) {
       await wait(80);
       const option = OPTIONS.find((o) => o.kind === body.kind && o.pluginId === body.pluginId);
-      if (!option) throw new Error("没有这个插件");
+      if (!option) throw new Error("no such plugin");
       const f: FollowView = {
         id: `f-new${++seq}`,
         kind: body.kind,

@@ -3,6 +3,7 @@ import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { ConfirmImportRequest, ImportEntry, ImportView } from "../api/endpoints";
+import { setLanguageChoice } from "../i18n";
 import { createAppRouter } from "../router";
 // 路由是用到才载入这一页的；先载入，免得第一次转译的时间算进等页面出现的那一秒里。
 import "./ImportPage";
@@ -82,46 +83,57 @@ function serve(v: ImportView) {
 
 it("takes new and trashed entries by default, then whole groups or single entries can be left out", async () => {
   const confirmed = serve(view());
-  expect(await screen.findByRole("button", { name: "开始收下 5 条" })).toBeTruthy();
+  expect(await screen.findByRole("button", { name: "添加 5 条" })).toBeTruthy();
   expect(await screen.findByText("删过的四")).toBeTruthy();
 
   // 回收站那组一下全不收
-  const trashed = screen.getByRole("radiogroup", { name: "你删过的：整组" });
-  fireEvent.click(within(trashed).getByRole("radio", { name: "全不收" }));
-  expect(await screen.findByRole("button", { name: "开始收下 3 条" })).toBeTruthy();
+  const trashed = screen.getByRole("radiogroup", { name: "你删除过的：整组" });
+  fireEvent.click(within(trashed).getByRole("radio", { name: "全部不添加" }));
+  expect(await screen.findByRole("button", { name: "添加 3 条" })).toBeTruthy();
 
   // 新的那组展开，去掉「二」
-  const newGroup = screen.getByRole("radiogroup", { name: "新的：整组" }).closest("section");
+  const newGroup = screen.getByRole("radiogroup", { name: "新内容：整组" }).closest("section");
   if (!newGroup) throw new Error("no section");
-  fireEvent.click(within(newGroup).getByRole("button", { name: "逐条挑" }));
-  fireEvent.click(within(newGroup).getByRole("checkbox", { name: "收下 二" }));
-  expect(await screen.findByRole("button", { name: "开始收下 2 条" })).toBeTruthy();
-  expect(within(newGroup).getByText("收 2 / 3 条")).toBeTruthy();
+  fireEvent.click(within(newGroup).getByRole("button", { name: "逐条选择" }));
+  fireEvent.click(within(newGroup).getByRole("checkbox", { name: "添加 二" }));
+  expect(await screen.findByRole("button", { name: "添加 2 条" })).toBeTruthy();
+  expect(within(newGroup).getByText("添加 2/3 条")).toBeTruthy();
 
-  fireEvent.click(screen.getByRole("button", { name: "开始收下 2 条" }));
+  fireEvent.click(screen.getByRole("button", { name: "添加 2 条" }));
   const sent: ConfirmImportRequest = { new: true, trashed: false, except: [2] };
   await waitFor(() => expect(confirmed).toEqual([sent]));
 });
 
 it("pressing a whole-group choice drops that group's single-entry changes", async () => {
   serve(view());
-  const newGroup = (await screen.findByRole("radiogroup", { name: "新的：整组" })).closest("section");
+  const newGroup = (await screen.findByRole("radiogroup", { name: "新内容：整组" })).closest("section");
   if (!newGroup) throw new Error("no section");
-  fireEvent.click(within(newGroup).getByRole("button", { name: "逐条挑" }));
-  fireEvent.click(await within(newGroup).findByRole("checkbox", { name: "收下 一" }));
-  expect(await screen.findByRole("button", { name: "开始收下 4 条" })).toBeTruthy();
-  fireEvent.click(within(newGroup).getByRole("radio", { name: "全收" }));
-  expect(await screen.findByRole("button", { name: "开始收下 5 条" })).toBeTruthy();
+  fireEvent.click(within(newGroup).getByRole("button", { name: "逐条选择" }));
+  fireEvent.click(await within(newGroup).findByRole("checkbox", { name: "添加 一" }));
+  expect(await screen.findByRole("button", { name: "添加 4 条" })).toBeTruthy();
+  fireEvent.click(within(newGroup).getByRole("radio", { name: "全部添加" }));
+  expect(await screen.findByRole("button", { name: "添加 5 条" })).toBeTruthy();
 });
 
 it("words the discard button for a finished import as removing the record", async () => {
   serve(view({ state: "done", taken: 3 }));
-  fireEvent.click(await screen.findByRole("button", { name: "去掉这条记录" }));
-  expect(screen.getByText("去掉这条导入记录？收下的条目都留着。")).toBeTruthy();
-  expect(screen.queryByRole("button", { name: "不要这次导入了" })).toBeNull();
+  fireEvent.click(await screen.findByRole("button", { name: "移除记录" }));
+  expect(screen.getByText("移除这条导入记录？已添加的条目会保留。")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "放弃导入" })).toBeNull();
 });
 
 it("keeps the cancel wording before everything is taken", async () => {
   serve(view({ state: "taking", taken: 1 }));
-  expect(await screen.findByRole("button", { name: "不要这次导入了" })).toBeTruthy();
+  expect(await screen.findByRole("button", { name: "放弃导入" })).toBeTruthy();
+});
+
+it("counts in whole English sentences, singular and plural", async () => {
+  setLanguageChoice("en");
+  serve(view({ preview: { new: 1, stored: 1, trashed: 0 } }));
+  expect(await screen.findByRole("button", { name: "Add 1 Item" })).toBeTruthy();
+  expect(screen.getByText("1 new item will be added. 1 saved item won't change.")).toBeTruthy();
+  cleanup();
+  serve(view());
+  expect(await screen.findByRole("button", { name: "Add 5 Items" })).toBeTruthy();
+  expect(screen.getByText("New items to add: 3. Items to restore from the Trash: 2. 1 saved item won't change.")).toBeTruthy();
 });

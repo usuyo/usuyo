@@ -2,6 +2,7 @@
 import { ApiError } from "../api/client";
 import type { AndroidDevice, PhoneDryRun, PhoneStep, PhoneView } from "../api/endpoints";
 import type { Phone } from "../api/source";
+import { said } from "./said";
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -14,19 +15,28 @@ const TO = "mirroir serve";
 const BINARY = "'/Users/you/Library/Application Support/usuyo/drivers/mirroir-mcp/mirroir-mcp'";
 const ADB = "/opt/homebrew/bin/adb";
 
-// 和内核 `driver.rs`、`adb.rs` 里的几步同样的话。
-const REGISTER: PhoneStep = {
-  text: "还差一步要你自己在「终端」里做：让 mirroir 以「mirroir serve」常驻。它会在你的登录钥匙串里放一张只给自己签名用的证书（钥匙串问 codesign 能不能用时选「始终允许」），再登记成登录时启动的后台项；这两样改的是这台 Mac 的设置，所以 usuyo 不替你做。",
+// 和内核 `driver.rs`、`adb.rs` 里的几步同样的话；按当前语言给，所以每次现做。
+const REGISTER = (): PhoneStep => ({
+  text: said(
+    "还需要你在「终端」中完成一步：让 mirroir 以「mirroir serve」保持运行。它会在你的登录钥匙串中添加一张仅用于自身签名的证书（钥匙串询问 codesign 能否使用时，选择「始终允许」），并登记为登录时启动的后台项目。这两项会更改这台 Mac 的设置，因此 usuyo 不代你完成。",
+    "One step is left for you to do in Terminal: keep mirroir running as “mirroir serve”. It adds a certificate used only for its own signing to your login keychain (choose “Always Allow” when Keychain asks whether codesign can use it) and registers a background item that starts at login. Both change this Mac's settings, so usuyo doesn't do them for you.",
+  ),
   commands: [`${BINARY} install-agent`, "launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.mirroir.serve.plist"],
-};
-const STOP: PhoneStep = {
-  text: "「mirroir serve」还在跑，它用的是自己那份副本：在「终端」里停掉它；之后可以在访达里删掉 ~/Library/LaunchAgents/dev.mirroir.serve.plist 和 ~/.mirroir-mcp/mirroir serve.app，在「钥匙串访问」里删掉证书「mirroir serve local signing」。系统设置里给它的授权由系统留着。",
+});
+const STOP = (): PhoneStep => ({
+  text: said(
+    "「mirroir serve」仍在运行，它使用自己的副本。在「终端」中停止它；之后可以在访达中删除 ~/Library/LaunchAgents/dev.mirroir.serve.plist 和 ~/.mirroir-mcp/mirroir serve.app，并在「钥匙串访问」中删除证书「mirroir serve local signing」。系统设置中授予它的权限由系统保留。",
+    "“mirroir serve” is still running from its own copy. Stop it in Terminal. Afterward you can delete ~/Library/LaunchAgents/dev.mirroir.serve.plist and ~/.mirroir-mcp/mirroir serve.app in Finder, and the certificate “mirroir serve local signing” in Keychain Access. The permissions granted in System Settings are kept by the system.",
+  ),
   commands: ["launchctl bootout gui/$(id -u)/dev.mirroir.serve"],
-};
-const ADB_STOP: PhoneStep = {
-  text: "adb 的服务在这台电脑的后台跑着，会一直留着，usuyo 不去停它。要停掉它，在「终端」里跑：",
+});
+const ADB_STOP = (): PhoneStep => ({
+  text: said(
+    "adb 服务在这台电脑的后台运行，会一直保留，usuyo 不会停止它。要停止它，在「终端」中运行：",
+    "The adb service runs in the background on this computer and stays running; usuyo doesn't stop it. To stop it, run this in Terminal:",
+  ),
   commands: [`'${ADB}' kill-server`],
-};
+});
 
 /** 内核报来的序列号已经缩短过。 */
 const FOUND: AndroidDevice[] = [
@@ -51,14 +61,14 @@ function start(kind: PhoneMock): PhoneView {
       };
     case "phone-register":
       return {
-        ios: { system, driver: { state: "present", version: "0.47.0", step: REGISTER }, grants: { to: TO, screen: "unknown", accessibility: "unknown" }, mirroring: "not-set-up" },
+        ios: { system, driver: { state: "present", version: "0.47.0", step: REGISTER() }, grants: { to: TO, screen: "unknown", accessibility: "unknown" }, mirroring: "not-set-up" },
         android: { adb: stopped, devices: [] },
       };
     case "phone-update-failed":
       return {
         ios: {
           system,
-          driver: { state: "present", version: "0.46.2", available: RELEASE, hint: "连不到 GitHub（看看设置里的代理），什么都没放进这台电脑。" },
+          driver: { state: "present", version: "0.46.2", available: RELEASE, hint: said("无法连接到 GitHub。检查设置中的代理。这台电脑上没有放入任何内容。", "Can't connect to GitHub. Check the proxy in Settings. Nothing was put on this computer.") },
           grants: { to: TO, screen: "given", accessibility: "given" },
           mirroring: "away",
         },
@@ -68,7 +78,7 @@ function start(kind: PhoneMock): PhoneView {
       return {
         ios: {
           system,
-          driver: { state: "failed", available: RELEASE, hint: "下载下来的包和钉住的 SHA256 对不上，已经丢掉了，没有放进这台电脑。" },
+          driver: { state: "failed", available: RELEASE, hint: said("下载的软件包与固定的 SHA256 不一致，已丢弃，没有放入这台电脑。", "The downloaded package doesn't match the pinned SHA256. It was discarded and nothing was put on this computer.") },
           grants: { to: TO, screen: "unknown", accessibility: "unknown" },
           mirroring: "away",
         },
@@ -77,7 +87,7 @@ function start(kind: PhoneMock): PhoneView {
     case "phone-android":
       return {
         ios: { system, driver: { state: "present", version: "0.47.0" }, grants: { to: TO, screen: "given", accessibility: "given" }, mirroring: "away" },
-        android: { adb: running, devices: [{ serial: "R58N…3K2A", state: "unauthorized" }, { serial: "emul…5554", model: "sdk gphone64 arm64", state: "offline" }], step: ADB_STOP },
+        android: { adb: running, devices: [{ serial: "R58N…3K2A", state: "unauthorized" }, { serial: "emul…5554", model: "sdk gphone64 arm64", state: "offline" }], step: ADB_STOP() },
       };
     default:
       return {
@@ -88,7 +98,7 @@ function start(kind: PhoneMock): PhoneView {
           mirroring: "connected",
           clipboard: { state: "arrived", at: new Date(Date.now() - 20 * 60_000).toISOString(), waitSec: 10 },
         },
-        android: { adb: running, devices: [{ serial: "2B1F…9A4D", model: "Pixel 8", state: "device" }], step: ADB_STOP },
+        android: { adb: running, devices: [{ serial: "2B1F…9A4D", model: "Pixel 8", state: "device" }], step: ADB_STOP() },
       };
   }
 }
@@ -133,7 +143,7 @@ export function createMockPhone(param: string | null): Phone {
     set({ driver: { ...view.ios.driver, state: "installing" } });
     // 样例里装得很快；装好以后还没登记「mirroir serve」的，给登记那一步。授权还是原来的样子（系统记着给过「mirroir serve」的）。
     const registered = view.ios.grants.screen !== "unknown" || view.ios.grants.accessibility !== "unknown";
-    setTimeout(() => set({ driver: { state: "present", version: target.version, ...(registered ? {} : { step: REGISTER }) } }), 2500);
+    setTimeout(() => set({ driver: { state: "present", version: target.version, ...(registered ? {} : { step: REGISTER() }) } }), 2500);
     return copy();
   };
   return {
@@ -147,7 +157,7 @@ export function createMockPhone(param: string | null): Phone {
       await wait(300);
       // 卸掉不停「mirroir serve」：它还在跑时给停掉它的那一步。
       const serving = view.ios.grants.screen !== "unknown" || view.ios.grants.accessibility !== "unknown";
-      set({ driver: { state: "absent", available: RELEASE, ...(serving ? { step: STOP } : {}) } });
+      set({ driver: { state: "absent", available: RELEASE, ...(serving ? { step: STOP() } : {}) } });
       return copy();
     },
     async openSettings() {
@@ -165,8 +175,8 @@ export function createMockPhone(param: string | null): Phone {
     async lookForAndroid() {
       await wait(900);
       const adb = view.android.adb;
-      if (adb === null) throw new ApiError(424, "no adb on this computer", "dependency-missing", "这台电脑上没找到 adb。");
-      view = { ...view, android: { adb: { ...adb, running: true }, devices: structuredClone(FOUND), step: ADB_STOP } };
+      if (adb === null) throw new ApiError(424, "no adb on this computer", "dependency-missing", said("这台电脑上没有找到 adb。", "adb wasn't found on this computer."));
+      view = { ...view, android: { adb: { ...adb, running: true }, devices: structuredClone(FOUND), step: ADB_STOP() } };
       return copy();
     },
     async dryRun() {

@@ -55,42 +55,42 @@ it("shows the page's own text with its quotations, each jumping back to its seco
   // 这句也被一个角度引了：页上的那一处排在最前。
   const [quote] = await screen.findAllByText("「前 40% 的水决定酸甜，后 60% 决定浓淡」");
   expect(quote?.closest("a")?.getAttribute("href")).toBe("/items/c1?t=150");
-  expect(screen.getByText("这一处现在写成：「粉 20 克，水 300 克，就是 1 比 15」")).toBeTruthy();
+  expect(screen.getByText("此处现在为「粉 20 克，水 300 克，就是 1 比 15」")).toBeTruthy();
   // 清掉了的来源不能点。
   const gone = screen.getByText("「深烘的豆子我一般 86 度，浅烘再往上加」");
   expect(gone.closest("a")).toBeNull();
-  expect(screen.getByText("来源已删掉，这是当时抄下的")).toBeTruthy();
+  expect(screen.getByText("来源已删除，这里显示的是引用时的文字")).toBeTruthy();
 });
 
 it("labels what the machine picked, quotes a segment from it and drops a thread without a trace", async () => {
   const sent = serve(await sample());
-  const threads = await screen.findAllByRole("region", { name: /^机器挑的 \d+ 段$/ });
+  const threads = await screen.findAllByRole("region", { name: /^自动选取的 \d+ 段$/ });
   const first = threads[0];
   if (!first) throw new Error("no thread");
-  expect(within(first).getByText("机器挑的")).toBeTruthy();
-  fireEvent.click(within(first).getByRole("button", { name: "引用「水温控制在 92 度左右」到这一页" }));
+  expect(within(first).getByText("自动选取")).toBeTruthy();
+  fireEvent.click(within(first).getByRole("button", { name: "将「水温控制在 92 度左右」引用到此页" }));
   await waitFor(() => expect(sent.some((s) => s.path.endsWith("/topics/coffee/cite"))).toBe(true));
   const body = sent.find((s) => s.path.endsWith("/cite"))?.body;
   expect(body).toMatchObject({ segment: { itemId: "c1", layer: "asr", text: "水温控制在 92 度左右", position: { kind: "time", sec: 102 } } });
 
-  fireEvent.click(within(first).getByRole("button", { name: "不要这一组" }));
-  await waitFor(() => expect(screen.getAllByRole("region", { name: /^机器挑的 \d+ 段$/ })).toHaveLength(threads.length - 1));
+  fireEvent.click(within(first).getByRole("button", { name: "忽略这组" }));
+  await waitFor(() => expect(screen.getAllByRole("region", { name: /^自动选取的 \d+ 段$/ })).toHaveLength(threads.length - 1));
 });
 
 it("says one calm sentence and shows no sample text when the daemon has no topic pages", async () => {
   serve(null);
-  expect(await screen.findByText(/这台电脑上的 usuyo 内核还没有主题页/)).toBeTruthy();
-  expect(screen.queryByText("这一页")).toBeNull();
+  expect(await screen.findByText(/此版本的 usuyo 尚未提供主题页/)).toBeTruthy();
+  expect(screen.queryByText("页面")).toBeNull();
 });
 
 it("edits a paragraph in place and sends the whole page back", async () => {
   const sent = serve(await sample());
-  const [edit] = await screen.findAllByRole("button", { name: "改这段" });
+  const [edit] = await screen.findAllByRole("button", { name: "编辑" });
   if (!edit) throw new Error("no paragraph");
   fireEvent.click(edit);
-  const box = screen.getByRole("textbox", { name: /改这段/ });
+  const box = screen.getByRole("textbox", { name: /编辑段落/ });
   fireEvent.change(box, { target: { value: "同一包豆子，先看前面那几十克水。" } });
-  fireEvent.click(screen.getByRole("button", { name: "记下" }));
+  fireEvent.click(screen.getByRole("button", { name: "保存" }));
   await waitFor(() => expect(sent.some((s) => s.method === "PUT" && s.path.endsWith("/topics/coffee/page"))).toBe(true));
   const body = sent.find((s) => s.path.endsWith("/page"))?.body;
   expect(body).toMatchObject({ blocks: [{ id: "b1", kind: "text", text: "同一包豆子，先看前面那几十克水。", cites: ["k3f7q", "m2x8d"] }, {}, {}, {}, {}] });
@@ -101,9 +101,9 @@ it("labels keyword hits as machine-picked and lets you put one in", async () => 
   const [member] = page.members;
   if (!member) throw new Error("no member");
   const sent = serve({ ...page, followed: true, hits: [{ item: { ...member, id: "f1", title: "命中的一条", topicIds: [] }, words: ["手冲"] }] });
-  expect(await screen.findByText("标题或内容里有「手冲」")).toBeTruthy();
-  const match = screen.getByRole("region", { name: "怎么算命中" });
-  expect(within(match).getByText("机器挑的")).toBeTruthy();
-  fireEvent.click(within(match).getByRole("button", { name: "放进来" }));
+  expect(await screen.findByText("标题或内容中包含「手冲」")).toBeTruthy();
+  const match = screen.getByRole("region", { name: "匹配规则" });
+  expect(within(match).getByText("自动选取")).toBeTruthy();
+  fireEvent.click(within(match).getByRole("button", { name: "添加" }));
   await waitFor(() => expect(sent).toContainEqual({ path: "/api/items/f1/topics", method: "POST", body: { topicId: "coffee", member: true } }));
 });

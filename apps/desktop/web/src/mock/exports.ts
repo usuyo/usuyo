@@ -1,6 +1,7 @@
 // 样例：导出到 Obsidian。和内核同一套接口，数据在内存里。上一次导出读回了两处、有一处两边都改过、有一篇读不了。
 import type { ExportRun, ExportView } from "../api/endpoints";
 import type { Exports } from "../api/source";
+import { said } from "./said";
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const ago = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString();
@@ -11,8 +12,16 @@ const FIRST: ExportRun = {
   state: "done",
   written: 46,
   readBack: [
-    { file: "条目/4:6 冲煮法复刻（一）：比例.md", title: "4:6 冲煮法复刻（一）：比例", what: "记一句", batchId: "b-readback" },
-    { file: "成稿/手冲只动三个数.md", title: "手冲只动三个数", what: "正文改了一段", batchId: "b-readback" },
+    { file: "条目/4:6 冲煮法复刻（一）：比例.md", title: "4:6 冲煮法复刻（一）：比例", get what() {
+        return said("备注", "Note");
+      },
+      batchId: "b-readback",
+    },
+    { file: "成稿/手冲只动三个数.md", title: "手冲只动三个数", get what() {
+        return said("正文中的一段", "A paragraph of the text");
+      },
+      batchId: "b-readback",
+    },
   ],
   both: [
     {
@@ -22,7 +31,14 @@ const FIRST: ExportRun = {
       theirs: "冰手冲：热水 150，冰 100，研磨细一档，冰块用纯净水冻。",
     },
   ],
-  left: [{ file: "条目/胶片摄影师的书单.md", reason: "开头的属性写坏了，读不出来" }],
+  left: [
+    {
+      file: "条目/胶片摄影师的书单.md",
+      get reason() {
+        return said("开头的属性格式有误，无法读取", "The properties at the top are malformed and can't be read");
+      },
+    },
+  ],
 };
 
 const OLDER: ExportRun = { id: "e0", at: ago(24 * 9), state: "done", written: 44, readBack: [], both: [], left: [] };
@@ -48,13 +64,13 @@ export function createMockExports(empty: boolean): Exports {
     },
     async setExportFolder(next) {
       await wait(60);
-      if (next.trim() === "") throw new Error("invalid-args: 文件夹");
+      if (next.trim() === "") throw new Error("invalid-args: folder");
       folder = next.trim();
       return view();
     },
     async exportNow() {
       await wait(1200);
-      if (folder === null) throw new Error("还没选导到哪");
+      if (folder === null) throw new Error("no export folder chosen");
       const run: ExportRun = { id: `e${runs.length + 1}`, at: new Date().toISOString(), state: "done", written: 48, readBack: [], both: [], left: [] };
       runs.unshift(run);
       return { ...run };

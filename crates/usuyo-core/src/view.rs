@@ -816,6 +816,8 @@ pub struct SettingsView {
     pub transforms: TransformsSetting,
     /// 桌面壳开窗口时照它：`systemTitleBar` 用系统标题栏（默认不用）。下次打开 usuyo 时生效。
     pub window: WindowSetting,
+    /// `language`：`system`、`zh-Hans`、`en`。
+    pub language: crate::settings::Language,
     /// 内核的日志在哪。
     pub logs: String,
 }

@@ -574,7 +574,7 @@ async fn after_a_platform_method_fails_the_web_plugin_is_not_asked() {
     let failed = failed_plugins(&f);
     assert!(!failed.contains(&"fake/web".to_owned()), "{failed:?}");
     let v = serde_json::to_value(engine.item(&t.id, &Links::default()).unwrap()).unwrap();
-    assert_eq!(v["missing"], "取不到内容：公开接口改版了", "{v}");
+    assert_eq!(v["missing"], "无法获取内容：公开接口改版了", "{v}");
 }
 
 #[tokio::test]
@@ -611,7 +611,7 @@ async fn the_methods_view_says_where_what_device_and_when_a_pause_ends() {
     assert!(!guest.usable, "停着的用不上");
     let b = guest.blockers.iter().find(|b| b.code == "paused").unwrap();
     assert!(
-        b.hint.contains("限流") && b.hint.contains("以前不用它"),
+        b.hint.contains("请求过于频繁") && b.hint.contains("前不会使用"),
         "{}",
         b.hint
     );
@@ -624,7 +624,7 @@ async fn the_methods_view_says_where_what_device_and_when_a_pause_ends() {
     assert!(
         tool.blockers
             .iter()
-            .any(|b| b.code == "paused" && b.hint.contains("现在再试"))
+            .any(|b| b.code == "paused" && b.hint.contains("立即重试"))
     );
 }
 

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { TakeResponse } from "../api/endpoints";
 import { useTake } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
+import { rich, t } from "../i18n";
 import { dayText } from "../item/format";
 import { useReducedMotion } from "../motion/clock";
 import { onPaletteChange } from "../theme/apply";
@@ -94,7 +95,7 @@ export function CapturePage() {
 
       <div
         role="dialog"
-        aria-label="收下一条"
+        aria-label={t("capture.dialog")}
         aria-hidden={!open}
         inert={!open}
         onPointerEnter={() => setHover(true)}
@@ -107,12 +108,12 @@ export function CapturePage() {
         <div className="relative h-16">
           <label className={`${layer(shown.kind === "idle")} gap-3 px-5`}>
             <Link2 size={18} aria-hidden="true" className="shrink-0 text-sub" />
-            <span className="sr-only-text">分享链接</span>
+            <span className="sr-only-text">{t("capture.linkLabel")}</span>
             <input
               ref={input}
               value={value}
               onChange={(e) => setValue(e.target.value)}
-              placeholder="粘贴一条分享链接，回车收下"
+              placeholder={t("capture.placeholder")}
               autoComplete="off"
               spellCheck={false}
               className="m-0 h-[60px] min-w-0 flex-1 border-0 bg-transparent p-0 font-sans text-[17px] text-text caret-accent outline-none"
@@ -141,9 +142,13 @@ export function CapturePage() {
               <Check size={18} aria-hidden="true" className="shrink-0 text-accent" />
             )}
             <div className="min-w-0 flex-1">
-              <div className="text-section font-semibold text-text">{result?.seen ? "这条以前收下过，补了一次快照" : "收下了"}</div>
+              <div className="text-section font-semibold text-text">{result?.seen ? t("capture.seen") : t("capture.added")}</div>
               <div className="truncate text-small text-sub">
-                {result ? `${result.platform.name} · ${result.title}${result.seen ? ` · ${dayText(result.takenAt)}收下的` : ""}` : ""}
+                {result
+                  ? result.seen
+                    ? t("capture.lineSeen", { platform: result.platform.name, title: result.title, day: dayText(result.takenAt) })
+                    : t("capture.line", { platform: result.platform.name, title: result.title })
+                  : ""}
               </div>
             </div>
           </div>
@@ -158,25 +163,25 @@ export function CapturePage() {
                   <Kbd>⌥</Kbd>
                   <Kbd>Space</Kbd>
                 </span>
-                <span>随时叫出这里</span>
+                <span>{t("capture.openAnytime")}</span>
                 <Sep />
-                <Kbd>回车</Kbd>
-                <span>收下</span>
+                <Kbd>{t("capture.keyReturn")}</Kbd>
+                <span>{t("capture.add")}</span>
                 <Sep />
                 <Kbd>Esc</Kbd>
-                <span>收起</span>
+                <span>{t("common.close")}</span>
               </>
             )}
           </div>
           <div className={`${layer(result?.seen === true)} gap-2 pr-2 pl-5`}>
-            <span className="min-w-0 flex-1">原来存的不动，新快照另存一份</span>
+            <span className="min-w-0 flex-1">{t("capture.seenNote")}</span>
             {result ? (
               <Link
                 to="/items/$id"
                 params={{ id: result.id }}
                 className="press flex h-ctl-sm items-center gap-1.5 rounded-btn px-3 text-note font-medium text-text no-underline hover:bg-chip"
               >
-                <span>打开这条</span>
+                <span>{t("capture.openItem")}</span>
                 <ArrowRight size={14} aria-hidden="true" />
               </Link>
             ) : null}
@@ -199,16 +204,20 @@ export function CapturePage() {
           }}
         >
           <Link2 size={16} aria-hidden="true" />
-          <span>再收下一条</span>
+          <span>{t("capture.addAnother")}</span>
         </Button>
         <div className="flex items-center gap-1.5 text-small text-sub">
-          <span>平时按</span>
-          <Kbd>⌥</Kbd>
-          <Kbd>Space</Kbd>
-          <span>叫出来</span>
+          {rich("capture.shortcut", {
+            keys: (
+              <span className="inline-flex items-center gap-1.5">
+                <Kbd>⌥</Kbd>
+                <Kbd>Space</Kbd>
+              </span>
+            ),
+          })}
         </div>
         <Link to="/" className="mt-2 text-small text-sub underline decoration-border2 underline-offset-4 hover:text-text">
-          回到地图
+          {t("common.backToMap")}
         </Link>
       </div>
     </div>

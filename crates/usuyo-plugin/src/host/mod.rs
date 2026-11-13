@@ -86,9 +86,33 @@ pub struct HostConfig {
     pub work_dir: PathBuf,
     /// `${CACHE}` 的上级，按插件 id 分子目录。
     pub cache_dir: PathBuf,
-    /// 用户界面语言，例如 `zh-CN`，插件按它写 `hint`。
-    pub locale: String,
+    /// 用户界面语言（`zh-Hans`、`en`），插件按它写 `hint`。
+    pub locale: Locale,
     pub limits: CallLimits,
+}
+
+/// 交给插件的 `USUYO_LOCALE`：设置里换了语言马上换，之后起的进程用新的；已经在跑的转换插件进程留着起来时的那个，闲下来关掉以后再起才换。
+#[derive(Debug, Clone)]
+pub struct Locale(Arc<std::sync::RwLock<String>>);
+
+impl Locale {
+    pub fn new(tag: impl Into<String>) -> Self {
+        Self(Arc::new(std::sync::RwLock::new(tag.into())))
+    }
+
+    pub fn get(&self) -> String {
+        self.0
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
+    pub fn set(&self, tag: impl Into<String>) {
+        *self
+            .0
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = tag.into();
+    }
 }
 
 /// 一个装好的获取插件。
@@ -1168,7 +1192,7 @@ fn call_env(
             tmp: &tmp,
             bin: &tmp.join("bin"),
         },
-        &config.locale,
+        &config.locale.get(),
     );
     env.insert("USUYO_CALL_ID".into(), call.id.clone().into());
     if let Some(input) = input_file {

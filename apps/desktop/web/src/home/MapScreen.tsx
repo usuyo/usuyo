@@ -11,7 +11,7 @@ import { useFog, useSize } from "../fog/useFog";
 import { useUiStore } from "../store/ui";
 import { SectionLabel } from "../ui/Chip";
 import { Panel } from "./Panel";
-import { HOME } from "./words";
+import { rich, t } from "../i18n";
 
 const route = getRouteApi("/");
 const MAP_X = 248;
@@ -39,8 +39,8 @@ export function MapScreen({ map, topics }: { map: MapView; topics: Topic[] }) {
   const follow = useFollow();
   const take = useTake();
 
-  const followed = useMemo(() => new Set(topics.filter((t) => t.followed).map((t) => t.id)), [topics]);
-  const names = useMemo(() => new Map(topics.map((t) => [t.id, t.name])), [topics]);
+  const followed = useMemo(() => new Set(topics.filter((x) => x.followed).map((x) => x.id)), [topics]);
+  const names = useMemo(() => new Map(topics.map((x) => [x.id, x.name])), [topics]);
   const { width, height } = size;
   const built = useMemo(
     () => (width === 0 ? null : buildPlaces(map, names, { width, height, mapX: MAP_X })),
@@ -142,12 +142,12 @@ export function MapScreen({ map, topics }: { map: MapView; topics: Topic[] }) {
   const hovered = shownHover && !foldedIds.has(shownHover) ? built?.places.find((p) => p.id === shownHover) : undefined;
   const right = panel ? panel.x0 - 12 : width - 12;
 
-  let hint = "移动鼠标拨开雾　·　点一条看详情　·　左边换排列";
-  if (hover) hint = "点一下，详情在右边打开";
-  else if (searching) hint = hits.size > 0 ? "搜到的在雾里各开了一个口子" : "没有搜到";
-  else if (hoverTopic) hint = followed.has(hoverTopic) ? "点「不再关注」，这个主题回到雾里" : "点「关注」，这个主题一直清楚";
+  let hint = t("home.hint.idle");
+  if (hover) hint = t("home.hint.hoverItem");
+  else if (searching) hint = hits.size > 0 ? t("home.hint.found") : t("home.hint.noResults");
+  else if (hoverTopic) hint = followed.has(hoverTopic) ? t("home.hint.hoverFollowed") : t("home.hint.hoverTopic");
 
-  const railTopics = topics.filter((t) => t.followed);
+  const railTopics = topics.filter((x) => x.followed);
 
   return (
     <div
@@ -162,10 +162,10 @@ export function MapScreen({ map, topics }: { map: MapView; topics: Topic[] }) {
       <canvas ref={canvas} aria-hidden="true" className="absolute inset-0 size-full" />
 
       {/* 左栏和搜索放在前面：按 Tab 先到它们，再到地图上的东西。 */}
-      <Rail label="主页">
-        <SectionLabel className="mt-[26px]">排列</SectionLabel>
+      <Rail label={t("common.nav.home")}>
+        <SectionLabel className="mt-[26px]">{t("home.arrange.title")}</SectionLabel>
         <ToggleButtonGroup
-          aria-label="排列方式"
+          aria-label={t("home.arrange.title")}
           selectionMode="single"
           disallowEmptySelection
           selectedKeys={[arrangement]}
@@ -177,8 +177,8 @@ export function MapScreen({ map, topics }: { map: MapView; topics: Topic[] }) {
         >
           {(
             [
-              ["topic", "主题"],
-              ["source", "来源"],
+              ["topic", t("home.arrange.topic")],
+              ["source", t("home.arrange.source")],
             ] as const
           ).map(([id, text]) => (
             <ToggleButton
@@ -192,25 +192,25 @@ export function MapScreen({ map, topics }: { map: MapView; topics: Topic[] }) {
         </ToggleButtonGroup>
         <div className="relative mt-2 h-[18px] px-1 text-small text-faint">
           <div className={`absolute inset-x-1 top-0 transition-opacity duration-[180ms] ease-out ${arrangement === "topic" ? "opacity-100" : "opacity-0"}`}>
-            按内容相近摆，位置不变
+            {t("home.arrange.topicSub")}
           </div>
           <div className={`absolute inset-x-1 top-0 transition-opacity duration-[180ms] ease-out ${arrangement === "source" ? "opacity-100" : "opacity-0"}`}>
-            按平台分开摆，切回来各回原位
+            {t("home.arrange.sourceSub")}
           </div>
         </div>
-        <SectionLabel className="mt-[26px]">关注的主题</SectionLabel>
+        <SectionLabel className="mt-[26px]">{t("common.followedTopics")}</SectionLabel>
         <div className="mt-1.5 flex flex-col gap-0.5">
-          {railTopics.map((t) => (
+          {railTopics.map((topic) => (
             <RailTopic
-              key={t.id}
-              name={t.name}
-              active={railHover === t.id}
-              onHoverChange={(on) => setRailHover(on ? t.id : null)}
-              onPress={() => void navigate({ to: "/topics/$id", params: { id: t.id } })}
+              key={topic.id}
+              name={topic.name}
+              active={railHover === topic.id}
+              onHoverChange={(on) => setRailHover(on ? topic.id : null)}
+              onPress={() => void navigate({ to: "/topics/$id", params: { id: topic.id } })}
             />
           ))}
           {railTopics.length === 0 ? (
-            <div className="p-1 text-small text-faint">把鼠标放到地图上一片的名字上，点「关注」，那一片就一直清楚。</div>
+            <div className="p-1 text-small text-faint">{t("home.followHint")}</div>
           ) : null}
         </div>
       </Rail>
@@ -218,18 +218,18 @@ export function MapScreen({ map, topics }: { map: MapView; topics: Topic[] }) {
       <SearchField
         value={q}
         onChange={setQuery}
-        aria-label="搜索"
+        aria-label={t("home.search")}
         className="absolute top-4 z-10 flex h-field w-[440px] items-center gap-2.5 rounded-input border border-border bg-hud px-3.5 text-sub"
         style={{ left: MAP_X + (width - MAP_X) / 2 - 220 }}
       >
         <Search size={16} aria-hidden="true" className="shrink-0" />
         <Input
-          placeholder="搜标题、口播、图里的字"
+          placeholder={t("home.searchPlaceholder")}
           className="h-ctl min-w-0 flex-1 border-0 bg-transparent p-0 text-body text-text outline-none [&::-webkit-search-cancel-button]:hidden"
         />
         {q ? (
           <AriaButton
-            aria-label="擦掉搜索词"
+            aria-label={t("home.clearSearch")}
             className="press -mr-1.5 flex size-ctl-xs shrink-0 cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent text-sub outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent data-[hovered]:text-text"
           >
             <X size={14} aria-hidden="true" />
@@ -261,7 +261,7 @@ export function MapScreen({ map, topics }: { map: MapView; topics: Topic[] }) {
             <span
               className={`text-tiny text-faint transition-[opacity,translate] duration-150 ${isH ? "translate-y-0 opacity-100" : "-translate-y-[3px] opacity-0"}`}
             >
-              {r.count} 条
+              {t("home.regionCount", { count: r.count })}
             </span>
           </div>
         );
@@ -291,12 +291,12 @@ export function MapScreen({ map, topics }: { map: MapView; topics: Topic[] }) {
           return (
             <AriaButton
               key={r.id}
-              aria-label={`${on ? "不再关注" : "关注"}「${name}」这个主题`}
+              aria-label={on ? t("home.unfollowTopic", { name }) : t("home.followTopic", { name })}
               onPress={() => follow.mutate({ topicId: r.id, followed: !on })}
               className={`press absolute z-[6] h-ctl-xs -translate-y-1/2 cursor-pointer rounded-full border border-border2 bg-bg px-3 text-small font-medium whitespace-nowrap text-label outline-none data-[focus-visible]:opacity-100 data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent ${show ? "opacity-100" : "pointer-events-none opacity-0"} transition-opacity duration-150`}
               style={{ left: r.x + textWidth(name, fs) / 2 + 10, top: r.y }}
             >
-              {on ? "不再关注" : "关注"}
+              {on ? t("home.unfollow") : t("home.follow")}
             </AriaButton>
           );
         })}
@@ -329,7 +329,7 @@ export function MapScreen({ map, topics }: { map: MapView; topics: Topic[] }) {
       })}
 
       {/* 每个点一个看不见的按钮：键盘能一个个走过去，读屏能读出来。 */}
-      <div role="group" aria-label="地图上的条目">
+      <div role="group" aria-label={t("home.points")}>
         {built?.places
           .filter((p) => !foldedIds.has(p.id))
           .map((p) => {
@@ -360,7 +360,7 @@ export function MapScreen({ map, topics }: { map: MapView; topics: Topic[] }) {
             style={{ left: at(p).x + 12, top: at(p).y - 12, animation: "fade 250ms ease 900ms both, fade 280ms ease 2900ms reverse forwards" }}
           >
             <span className="text-tag font-medium text-label">{p.title}</span>
-            <span className="text-tiny text-faint">只有链接</span>
+            <span className="text-tiny text-faint">{t("home.linkOnly")}</span>
           </div>
         ),
       )}
@@ -368,11 +368,9 @@ export function MapScreen({ map, topics }: { map: MapView; topics: Topic[] }) {
 
       {map.points.length === 0 ? (
         <p className="absolute top-1/2 z-[5] m-0 w-max max-w-[calc(100%-var(--spacing-rail)-32px)] -translate-x-1/2 -translate-y-1/2 text-center text-note text-sub" style={{ left: MAP_X + (width - MAP_X) / 2 }}>
-          {HOME.emptyBefore}
-          <Link to="/plugins" className="mx-0.5 text-label underline decoration-border2 underline-offset-4 hover:text-text">
-            {HOME.emptyLink}
-          </Link>
-          {HOME.emptyAfter}
+          {rich("home.empty", {
+            link: <Link to="/plugins" className="mx-0.5 text-label underline decoration-border2 underline-offset-4 hover:text-text" />,
+          })}
         </p>
       ) : null}
       <div className="absolute bottom-4 left-[268px] z-10 text-tag whitespace-pre text-sub">{hint}</div>
@@ -380,7 +378,7 @@ export function MapScreen({ map, topics }: { map: MapView; topics: Topic[] }) {
         className="absolute right-4 bottom-4 tabular-nums z-10 text-tag whitespace-nowrap text-sub transition-transform duration-[240ms] ease-out"
         style={{ transform: `translateX(${panelOpen ? -(PANEL_W + 16) : 0}px)` }}
       >
-        {lampN !== null ? `灯下 ${lampN} 条` : ""}
+        {lampN !== null ? t("home.lamp", { count: lampN }) : ""}
       </div>
 
 

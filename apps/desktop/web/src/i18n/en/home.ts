@@ -1,0 +1,45 @@
+import type zh from "../zh-Hans/home";
+import { mirror } from "../messages";
+
+export default mirror<typeof zh>()({
+  empty: "Nothing has been added yet. Paste a link at the top left to add it. To import items saved on other platforms, use <link>Fetch Plugins</link>.",
+  hint: {
+    idle: "Move the pointer to clear the fog   ·   Click an item for details   ·   Change the arrangement on the left",
+    hoverItem: "Click to see details on the right",
+    found: "Each result opens a gap in the fog",
+    noResults: "No Results",
+    hoverFollowed: "Click Unfollow to return this topic to the fog",
+    hoverTopic: "Click Follow to keep this topic clear",
+  },
+  arrange: {
+    title: "Arrange By",
+    topic: "Topic",
+    source: "Source",
+    topicSub: "Similar content is placed together; positions stay fixed",
+    sourceSub: "Grouped by platform; items return to their places when you switch back",
+  },
+  followHint: "Hold the pointer over the name of an area on the map and click Follow to keep that area clear.",
+  search: "Search",
+  searchPlaceholder: "Search titles, transcripts, text in images",
+  clearSearch: "Clear Search",
+  regionCount: { one: "{count} item", other: "{count} items" },
+  follow: "Follow",
+  unfollow: "Unfollow",
+  followTopic: "Follow topic “{name}”",
+  unfollowTopic: "Unfollow topic “{name}”",
+  points: "Items on the map",
+  linkOnly: "Link only",
+  lamp: { one: "{count} item in the light", other: "{count} items in the light" },
+  panel: {
+    results: "Search Results",
+    detail: "Item Details",
+    resultCount: { one: "{count} Result", other: "{count} Results" },
+    noResults: "No Results",
+    closeResults: "Close Search Results",
+    resultsHint: "The left column shows where each match is. Click a result to see its details here.",
+    noResultsHint: "Try a sentence from a transcript, text in an image, or an author's name.",
+    closeDetail: "Close Details",
+    added: "Added {day}",
+    openItem: "Open Item Page",
+  },
+});

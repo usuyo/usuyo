@@ -18,6 +18,7 @@ import { ErrorLine } from "../components/ErrorLine";
 import { Button } from "../ui/Button";
 import { MonoLabel } from "../ui/Chip";
 import { FlashLine, useFlash } from "../ui/Flash";
+import { t } from "../i18n";
 import { JOB_TEXT } from "../plugins/words";
 import { copyLabel, FACE_NAME, pendingText, sourceText, type CopyFacet } from "./faces";
 
@@ -47,14 +48,14 @@ export function FaceHead({
     <div className="flex flex-col gap-1.5">
       <div className="flex min-h-ctl-xs flex-wrap items-center gap-x-2 gap-y-1">
         <h3 className="m-0 text-note font-semibold text-text">{FACE_NAME[layer]}</h3>
-        {shown ? <MonoLabel>{shown.segments.length} 段</MonoLabel> : null}
+        {shown ? <MonoLabel>{t("item.face.lines", { count: shown.segments.length })}</MonoLabel> : null}
         <span className="flex-1" />
         <RedoMenu jobs={[layer]} itemId={itemId} busy={busy} label={FACE_NAME[layer]} {...(shown?.source.plugin ? { current: shown.source.plugin } : {})} />
       </div>
       {copies.length > 1 ? (
         <div className="flex flex-wrap items-center gap-1">
           <ToggleButtonGroup
-            aria-label={`${FACE_NAME[layer]}的几份`}
+            aria-label={t("item.face.versions", { face: FACE_NAME[layer] })}
             selectionMode="single"
             disallowEmptySelection
             selectedKeys={shown ? [shown.key] : []}
@@ -80,7 +81,7 @@ export function FaceHead({
       {shown ? (
         <p className="m-0 text-small text-faint">
           {sourceText(layer, shown.source)}
-          {shown.remark ? <span className="text-label">　·　{shown.remark}</span> : null}
+          {shown.remark ? <span className="text-label"> · {shown.remark}</span> : null}
         </p>
       ) : null}
     </div>
@@ -111,9 +112,7 @@ export function RedoMenu({ jobs, itemId, busy, label, current }: { jobs: Transfo
   });
   if (choices.length === 0) return null;
   const text = (c: (typeof choices)[number]) => {
-    const name = `「${c.plugin.name}」`;
-    if (c.job === "play" || c.job === "keyframes") return c.again ? `重新${JOB_TEXT[c.job]}` : `换成${name}${JOB_TEXT[c.job]}`;
-    return c.again ? "再转一次" : `换成${name}转一份`;
+    return c.again ? t(`item.face.again.${c.job}`) : t(`item.face.switchTo.${c.job}`, { plugin: c.plugin.name });
   };
   return (
     <span className="flex items-center gap-2">
@@ -121,21 +120,21 @@ export function RedoMenu({ jobs, itemId, busy, label, current }: { jobs: Transfo
       <MenuTrigger>
         <AriaButton
           isDisabled={busy || redo.isPending}
-          aria-label={`再转一次${label}，或换一个转`}
+          aria-label={t("item.face.redoLabel", { face: label })}
           className="press flex h-ctl-xs cursor-pointer items-center gap-1.5 rounded-sm border-0 bg-transparent px-2 font-sans text-small text-sub outline-none data-[disabled]:cursor-default data-[disabled]:opacity-50 data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent data-[hovered]:bg-chip data-[hovered]:text-text"
         >
           <RefreshCw size={12} aria-hidden="true" />
-          <span>再转</span>
+          <span>{t("item.face.redo")}</span>
         </AriaButton>
         <Popover placement="bottom end" offset={6} className="max-w-[min(320px,calc(100vw-32px))] min-w-[240px] animate-rise rounded-card border border-border2 bg-card p-1.5 shadow-panel">
           <Menu
-            aria-label={`用哪个转${label}`}
+            aria-label={t("item.face.redoMenu", { face: label })}
             className="outline-none"
             disabledKeys={choices.filter((c) => !usable(c.plugin)).map((c) => c.id)}
             onAction={(key) => {
               const c = choices.find((x) => x.id === key);
               if (!c) return;
-              const kept = c.job === "play" || c.job === "keyframes" ? "排上了；做好了换成新的" : "排上了；转好了多一份，原来的留着";
+              const kept = c.job === "play" || c.job === "keyframes" ? t("item.face.queuedReplace") : t("item.face.queuedAdd");
               redo.mutate(c.again && !c.named ? { job: c.job } : { job: c.job, plugin: c.plugin.id }, { onSuccess: () => flash.show(kept) });
             }}
           >
@@ -150,8 +149,8 @@ export function RedoMenu({ jobs, itemId, busy, label, current }: { jobs: Transfo
                   {text(c)}
                 </Text>
                 <Text slot="description" className="text-small text-faint">
-                  {c.again ? `用「${c.plugin.name}」` : JOB_TEXT[c.job]}
-                  {c.plugin.health === "ok" ? "" : `　·　${c.plugin.hint ?? "这个插件现在用不了"}`}
+                  {c.again ? t("item.face.uses", { plugin: c.plugin.name }) : JOB_TEXT[c.job]}
+                  {c.plugin.health === "ok" ? "" : ` · ${c.plugin.hint ?? t("item.face.unavailable")}`}
                 </Text>
               </MenuItem>
             ))}
@@ -188,13 +187,13 @@ export function PendingLine({ pending, itemId }: { pending: Pending; itemId: str
           isDisabled={models.isPending}
           onPress={() => models.mutate({ kind: "download", pluginId: m.plugin, name: m.name })}
         >
-          下载
+          {t("common.download")}
         </Button>
       ) : null}
-      {m && pending.state === "needs-model" ? <span className="text-small text-faint">许可：{m.license}</span> : null}
+      {m && pending.state === "needs-model" ? <span className="text-small text-faint">{t("item.pending.license", { license: m.license })}</span> : null}
       {pending.state === "failed" ? (
         <Button variant="outline" size="xs" isDisabled={retry.isPending} onPress={() => retry.mutate({ jobs: "pending" })}>
-          再试
+          {t("common.retry")}
         </Button>
       ) : null}
       {models.error ? <ErrorLine error={models.error} /> : null}

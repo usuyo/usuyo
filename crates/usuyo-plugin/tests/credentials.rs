@@ -208,7 +208,7 @@ fn fixture() -> Fixture {
         HostConfig {
             work_dir: tmp.path().join("lib/.usuyo/tmp"),
             cache_dir: tmp.path().join("cache"),
-            locale: "zh-CN".into(),
+            locale: usuyo_plugin::Locale::new("zh-Hans"),
             limits: Default::default(),
         },
         found.fetch,

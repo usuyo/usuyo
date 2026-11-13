@@ -131,7 +131,7 @@ it("hands a picked file straight to the chosen reader, then shows what it lists 
   expect(sent[0]?.url.searchParams.get("name")).toBe("site-2026.zip");
   expect(sent[0]?.body).toBe(file);
   await waitFor(() => expect(router.state.location.search).toEqual({ open: VIEW.id }));
-  expect(await screen.findByText("读完了：2 条")).toBeTruthy();
+  expect(await screen.findByText("已读取：2 条")).toBeTruthy();
   // 只在文件里、没有链接的那条只写标题。
   expect((await screen.findAllByText("私信里的一张图")).length).toBeGreaterThan(0);
 });
@@ -139,10 +139,10 @@ it("hands a picked file straight to the chosen reader, then shows what it lists 
 it("says how much has gone over while sending, and stops without an error", async () => {
   const { sent } = serve([READER], () => ({ status: 200, body: VIEW }), true);
   await pick("site-2026.zip", "x".repeat(4000));
-  expect(await screen.findByText("交了 2 KB，一共 4 KB")).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "停下" }));
-  expect(await screen.findByText(/停下了，交了一半的没有留下/)).toBeTruthy();
-  expect(screen.queryByRole("button", { name: "停下" })).toBeNull();
+  expect(await screen.findByText("已发送 2 KB，共 4 KB")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "停止" }));
+  expect(await screen.findByText(/已停止，未保留已发送的部分/)).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "停止" })).toBeNull();
   expect(sent).toHaveLength(1);
 });
 
@@ -150,5 +150,5 @@ it("shows the daemon's sentence when the reader cannot read the file", async () 
   serve([READER], () => ({ status: 400, body: { code: "invalid-args", detail: "plugin: not an archive", hint: "这不像某站的归档：里面没有 data/ 这个文件夹" } }));
   await pick("notes.zip");
   expect(await screen.findByText("这不像某站的归档：里面没有 data/ 这个文件夹")).toBeTruthy();
-  expect(screen.getByRole("button", { name: "选一个文件" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "选择文件…" })).toBeTruthy();
 });

@@ -75,7 +75,7 @@ export function startLiveUpdates(queryClient: QueryClient): () => void {
       } catch (error) {
         if (stop.signal.aborted) return;
         forgetConnection();
-        console.info("usuyo: 事件流断了，过会儿再连", error);
+        console.info("usuyo: event stream closed, reconnecting later", error);
       }
       await sleep(delay, stop.signal);
       delay = Math.min(delay * 2, RETRY_MAX_MS);
@@ -111,7 +111,7 @@ async function read(body: ReadableStream<Uint8Array>, on: (e: DaemonEvent) => vo
     for (const m of parser.push(decoder.decode(value, { stream: true }))) {
       const e: unknown = JSON.parse(m.data);
       if (isDaemonEvent(e)) on(e);
-      else console.info("usuyo: 不认识的事件", m.event);
+      else console.info("usuyo: unknown event", m.event);
     }
   }
 }

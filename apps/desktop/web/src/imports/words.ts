@@ -1,20 +1,23 @@
-// 一次导入走到哪了，用平常的话说。只说事实：收下了几条、为什么在等、下一条大概什么时候；不说还剩多少。
+// 一次导入的状态。只说事实：添加了几条、为什么在等、下一条大概什么时候；不说还剩多少。
 import type { ImportView, ImportWaiting, VisitorIdentity } from "../api/endpoints";
+import { t } from "../i18n";
 import { timeText, visitorText } from "../plugins/words";
 
 /** 记录栏里那一行。 */
 export function stateLine(v: ImportView): string {
   switch (v.state) {
-    case "listing":
-      return `${v.kind === "file" ? "在读，读出" : "在列，列出"} ${v.preview.new + v.preview.stored + v.preview.trashed} 条`;
+    case "listing": {
+      const count = v.preview.new + v.preview.stored + v.preview.trashed;
+      return v.kind === "file" ? t("imports.state.listingFile", { count }) : t("imports.state.listingSource", { count });
+    }
     case "ready":
-      return `${v.kind === "file" ? "读完了" : "列完了"}，等你看一眼 · 新的 ${v.preview.new} 条`;
+      return v.kind === "file" ? t("imports.state.readyFile", { count: v.preview.new }) : t("imports.state.readySource", { count: v.preview.new });
     case "taking":
-      return `收下了 ${v.taken} 条 · 在收`;
+      return t("imports.state.taking", { count: v.taken });
     case "held":
-      return `收下了 ${v.taken} 条 · 停着`;
+      return t("imports.state.held", { count: v.taken });
     default:
-      return `收下了 ${v.taken} 条${v.notStored > 0 ? `，${v.notStored} 条内容没取到` : ""}`;
+      return v.notStored > 0 ? t("imports.state.doneMissing", { count: v.taken, missing: v.notStored }) : t("imports.state.done", { count: v.taken });
   }
 }
 
@@ -25,24 +28,24 @@ export function waitingText(
   visitor?: VisitorIdentity["state"],
   now = new Date(),
 ): string {
-  const at = w.until ? timeText(w.until, now) : null;
-  const on = platform ? `${platform}的` : "平台的";
+  const time = w.until ? timeText(w.until, now) : null;
   switch (w.code) {
     case "pacing":
-      return at ? `按${on}节奏，下一条大概 ${at}` : `按${on}节奏，隔一会儿收下一条`;
+      if (time) return platform ? t("imports.waiting.pacingAt", { platform, time }) : t("imports.waiting.pacingAtAny", { time });
+      return platform ? t("imports.waiting.pacing", { platform }) : t("imports.waiting.pacingAny");
     case "daily-limit":
-      return at ? `今天批量的次数用完了，${at} 接着收` : "今天批量的次数用完了，明天接着收";
+      return time ? t("imports.waiting.dailyAt", { time }) : t("imports.waiting.daily");
     case "held":
-      return "你让这个插件先别试；在「获取插件」里点「现在再试」就接着收";
+      return t("imports.waiting.held");
     case "batch-off":
-      return "这个平台不做批量导入";
+      return t("imports.waiting.batchOff");
     case "login-required":
-      return `要重新登录${platform ?? ""}：登录好了点「接着导入」`;
+      return platform ? t("imports.waiting.login", { platform }) : t("imports.waiting.loginAny");
     case "visitor-required":
-      return `${visitorText(visitor)}；好了点「接着导入」`;
+      return t("imports.waiting.visitor", { visitor: visitorText(visitor) });
     default: {
       const why = w.hint ?? w.code;
-      return at ? `${why} · ${at} 自己再试` : `${why} · 等你点「接着导入」`;
+      return time ? t("imports.waiting.otherAt", { why, time }) : t("imports.waiting.other", { why });
     }
   }
 }

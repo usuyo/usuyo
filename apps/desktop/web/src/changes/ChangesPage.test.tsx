@@ -44,11 +44,11 @@ const sample = () => createMockChanges(false).changes();
 
 it("accepts one change of a proposal, or all of what is still open", async () => {
   const sent = serve(await sample());
-  const [first] = await screen.findAllByRole("button", { name: "接受这处" });
+  const [first] = await screen.findAllByRole("button", { name: "接受" });
   if (!first) throw new Error("no proposal");
   fireEvent.click(first);
   await waitFor(() => expect(sent).toContainEqual({ path: "/api/changes/b-draft-topic/accept", body: { ops: ["o1"] } }));
-  fireEvent.click(screen.getByRole("button", { name: "还没定的都接受" }));
+  fireEvent.click(screen.getByRole("button", { name: "接受其余更改" }));
   await waitFor(() => expect(sent).toContainEqual({ path: "/api/changes/b-draft-topic/accept", body: {} }));
 });
 
@@ -56,15 +56,15 @@ it("asks once before undoing a batch that touches what you wrote", async () => {
   const sent = serve(await sample());
   const batch = (await screen.findAllByRole("article")).find((a) => a.textContent?.includes("Codex"));
   if (!batch) throw new Error("no batch");
-  fireEvent.click(within(batch).getByRole("button", { name: "撤销这一批" }));
-  expect(within(batch).getByText(/你后来放进了主题「咖啡」/)).toBeTruthy();
+  fireEvent.click(within(batch).getByRole("button", { name: "撤销这批更改" }));
+  expect(within(batch).getByText(/你后来将其中的「这周的豆子」添加到了主题「咖啡」/)).toBeTruthy();
   expect(sent).toHaveLength(0);
-  fireEvent.click(within(batch).getByRole("button", { name: "一起撤" }));
+  fireEvent.click(within(batch).getByRole("button", { name: "全部撤销" }));
   await waitFor(() => expect(sent.map((s) => s.path)).toEqual(["/api/changes/b-agent-take/undo"]));
 });
 
 it("says one calm sentence when the daemon keeps no change log yet", async () => {
   serve(null);
-  expect(await screen.findByText(/这台电脑上的 usuyo 内核还没有改动记录/)).toBeTruthy();
-  expect(screen.queryByRole("radiogroup", { name: "看谁做的" })).toBeNull();
+  expect(await screen.findByText(/此版本的 usuyo 尚未提供更改记录/)).toBeTruthy();
+  expect(screen.queryByRole("radiogroup", { name: "显示" })).toBeNull();
 });

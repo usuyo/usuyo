@@ -4,6 +4,7 @@
 //! `adb devices` 会让 adb 起它自己的服务（5037 端口），之后留在后台，所以只有你点「找一下连着的手机」
 //! 时才跑它（[`look`]）；看这一页不起任何程序。宿主自己管的 adb 服务（协议 §7）还没做。
 
+use crate::words::Lang;
 use std::ffi::OsStr;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -101,6 +102,7 @@ pub(crate) async fn android(
     dirs: &[PathBuf],
     server: SocketAddr,
     limit: Duration,
+    lang: Lang,
 ) -> crate::Result<PhoneAndroid> {
     let Some(adb) = find(path_var, dirs) else {
         return Ok(PhoneAndroid {
@@ -118,7 +120,7 @@ pub(crate) async fn android(
         }
         Err(e) => return Err(crate::Error::Task(e.to_string())),
     };
-    Ok(found(&adb, version, listed))
+    Ok(found(&adb, version, listed, lang))
 }
 
 /// 「找一下连着的手机」：跑一次 `adb devices -l`。adb 的服务没在跑时它会起来，之后留在后台。
@@ -126,6 +128,7 @@ pub(crate) async fn look(
     path_var: Option<&OsStr>,
     dirs: &[PathBuf],
     limit: Duration,
+    lang: Lang,
 ) -> crate::Result<PhoneAndroid> {
     let adb = find(path_var, dirs).ok_or(super::PhoneError::NoAdb)?;
     let version = read_version(&adb, limit).await?;
@@ -137,6 +140,7 @@ pub(crate) async fn look(
         &adb,
         version,
         Some(devices(&String::from_utf8_lossy(&d.stdout))),
+        lang,
     ))
 }
 
@@ -146,7 +150,12 @@ async fn read_version(adb: &Path, limit: Duration) -> crate::Result<String> {
 }
 
 /// `listed` 是在跑的服务报的设备；`None` 是服务没在跑。
-fn found(adb: &Path, version: String, listed: Option<Vec<AndroidDevice>>) -> PhoneAndroid {
+fn found(
+    adb: &Path,
+    version: String,
+    listed: Option<Vec<AndroidDevice>>,
+    lang: Lang,
+) -> PhoneAndroid {
     let running = listed.is_some();
     PhoneAndroid {
         adb: Some(AdbFound {
@@ -155,16 +164,14 @@ fn found(adb: &Path, version: String, listed: Option<Vec<AndroidDevice>>) -> Pho
             running,
         }),
         devices: listed.unwrap_or_default(),
-        step: running.then(|| stop_step(adb)),
+        step: running.then(|| stop_step(adb, lang)),
     }
 }
 
 /// adb 的服务在后台跑着：怎么停掉它。
-pub(crate) fn stop_step(adb: &Path) -> DriverStep {
+pub(crate) fn stop_step(adb: &Path, lang: Lang) -> DriverStep {
     DriverStep {
-        text:
-            "adb 的服务在这台电脑的后台跑着，会一直留着，usuyo 不去停它。要停掉它，在「终端」里跑："
-                .into(),
+        text: crate::words::STEP_ADB_STOP.pick(lang).into(),
         commands: vec![format!("{} kill-server", super::driver::quoted(adb))],
     }
 }

@@ -12,6 +12,7 @@ export function createMockSettings(trash: { days(): number | null; setDays(days:
     network: { mode: "system", fakeIp: true },
     transforms: { auto: true },
     window: { systemTitleBar: false },
+    language: "system",
     logs: "~/Library/Application Support/usuyo/logs/daemon.log",
   };
   const snapshot = (): SettingsView => ({ ...view, network: { ...view.network }, transforms: { ...view.transforms }, window: { ...view.window }, trashDays: trash.days() });
@@ -24,11 +25,12 @@ export function createMockSettings(trash: { days(): number | null; setDays(days:
       await wait(60);
       if (patch.trashDays !== undefined) trash.setDays(patch.trashDays);
       if (patch.network) {
-        if (patch.network.mode === "custom" && !/^(https?|socks5):\/\/\S+$/.test(patch.network.proxy ?? "")) throw new Error("invalid-args: 代理地址");
+        if (patch.network.mode === "custom" && !/^(https?|socks5):\/\/\S+$/.test(patch.network.proxy ?? "")) throw new Error("invalid-args: proxy address");
         view.network = { ...patch.network, fakeIp: view.network.fakeIp };
       }
       if (patch.transforms) view.transforms = { ...patch.transforms };
       if (patch.window) view.window = { ...patch.window };
+      if (patch.language) view.language = patch.language;
       return snapshot();
     },
     async releaseHeld() {

@@ -27,6 +27,7 @@ mod transform;
 mod trash;
 mod vault;
 pub mod view;
+mod words;
 
 pub use engine::{Engine, EngineConfig, Links, RetryPolicy, Via};
 pub use error::{Error, Result};
@@ -39,11 +40,12 @@ pub use models::{ModelError, ModelState};
 pub use owner_only::write_private;
 pub use phone::{Asset, Downloads, DriverAction, PhoneConfig, PhoneError, Release};
 pub use settings::{
-    NetworkMode, NetworkPatch, SettingsPatch, TransformsPatch, proxy_setting, remember_library,
-    transforms_auto,
+    Language, NetworkMode, NetworkPatch, SettingsPatch, TransformsPatch, language, proxy_setting,
+    remember_library, transforms_auto,
 };
 pub use share_text::{link_count, link_in};
 pub use transform::{Power, PowerSource, SystemPower};
 pub use trash::{ClockGuard, Expiry};
 pub use usuyo_plugin::{CallLimits, ProxySetting, TransformLimits, Vault};
 pub use vault::{FileVault, system_vault};
+pub use words::{Lang, Said, Words};

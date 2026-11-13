@@ -6,9 +6,10 @@ use crate::content::Content;
 use crate::engine::Links;
 use crate::transcripts::{Spot, TextLayer, Transcript, remark_of};
 use crate::view::{Comment, Facet, FacetSource, Frame, ImageRef, Position, Segment, SourceBy};
+use crate::words::Lang;
 
 /// 一条的几面：画面、图、原文、口播（平台的在前，机器的新的在前）、图里的字、画面上的字、评论。
-pub(crate) fn facets(id: &str, c: &Content, links: &Links) -> Vec<Facet> {
+pub(crate) fn facets(id: &str, c: &Content, links: &Links, lang: Lang) -> Vec<Facet> {
     let mut out = Vec::new();
     if let Some(v) = &c.video {
         let mut url = links.url(id, "video");
@@ -42,7 +43,7 @@ pub(crate) fn facets(id: &str, c: &Content, links: &Links) -> Vec<Facet> {
                 .as_ref()
                 .filter(|k| k.still)
                 .and_then(|_| remark_of("static-picture"))
-                .map(str::to_owned),
+                .map(|w| w.pick(lang).to_owned()),
         });
     }
     let primary = c.primary.as_deref().unwrap_or_default();
@@ -69,7 +70,7 @@ pub(crate) fn facets(id: &str, c: &Content, links: &Links) -> Vec<Facet> {
                 .duplicate_images
                 .then(|| remark_of("duplicate-images"))
                 .flatten()
-                .map(str::to_owned),
+                .map(|w| w.pick(lang).to_owned()),
         });
     }
     if let Some((_, paras)) = &c.text {
@@ -85,7 +86,7 @@ pub(crate) fn facets(id: &str, c: &Content, links: &Links) -> Vec<Facet> {
         });
     }
     for t in &c.transcripts {
-        out.push(transcript_facet(id, t, links));
+        out.push(transcript_facet(id, t, links, lang));
     }
     if let Some((snapshot, comments)) = &c.comments {
         out.push(Facet::Comments {
@@ -103,7 +104,7 @@ pub(crate) fn facets(id: &str, c: &Content, links: &Links) -> Vec<Facet> {
     out
 }
 
-fn transcript_facet(id: &str, t: &Transcript, links: &Links) -> Facet {
+fn transcript_facet(id: &str, t: &Transcript, links: &Links, lang: Lang) -> Facet {
     let source = match &t.machine {
         Some(m) => FacetSource {
             by: SourceBy::Machine,
@@ -138,7 +139,7 @@ fn transcript_facet(id: &str, t: &Transcript, links: &Links) -> Facet {
             position: Some(position(&p.spot, Some((links, id)))),
         })
         .collect();
-    let remark = t.remark.map(str::to_owned);
+    let remark = t.remark.map(|w| w.pick(lang).to_owned());
     match t.layer {
         TextLayer::Asr => Facet::Asr {
             key,

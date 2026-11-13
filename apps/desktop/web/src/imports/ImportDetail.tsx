@@ -5,6 +5,7 @@ import { Checkbox, ToggleButton, ToggleButtonGroup } from "react-aria-components
 import type { ImportEntry, ImportView, VisitorIdentity } from "../api/endpoints";
 import { useImport, useImportChange, useImportEntries, usePlugins, useVisitors } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
+import { rich, t } from "../i18n";
 import { dayText } from "../item/format";
 import { timeText } from "../plugins/words";
 import { Button } from "../ui/Button";
@@ -26,19 +27,24 @@ export function ImportDetail({ id, onGone }: { id: string; onGone: () => void })
   const platform = plugin?.platforms[0]?.name;
   const methodName = plugin?.methods.find((m) => m.id === v.method)?.name ?? v.method;
   const visitor = visitors.data?.find((x) => plugin?.visitors.includes(x.site))?.state;
+  const pluginName = plugin?.name ?? v.pluginId ?? "";
   const from =
     v.kind === "delivered"
-      ? `交进来的${v.client ? ` · ${v.client}` : ""}`
+      ? v.client
+        ? t("imports.detail.deliveredFrom", { client: v.client })
+        : t("imports.detail.delivered")
       : v.kind === "file" && v.file
-        ? `${v.file.reader} · 读「${v.file.name}」`
-        : `${plugin?.name ?? v.pluginId ?? ""}${methodName ? ` · ${methodName}` : ""} · 从插件列出来的`;
+        ? t("imports.detail.file", { reader: v.file.reader, file: v.file.name })
+        : methodName
+          ? t("imports.detail.plugin", { plugin: pluginName, method: methodName })
+          : pluginName;
 
   return (
     <div className="animate-fade">
       <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
         <h2 className="m-0 max-w-full min-w-0 truncate text-section font-semibold text-text">{v.title}</h2>
         <span className="mono text-tag text-faint">
-          {from} · {dayText(v.createdAt)}
+          {t("imports.detail.meta", { from, day: dayText(v.createdAt) })}
         </span>
       </div>
       {v.state === "listing" ? <Listing v={v} visitor={visitor} /> : null}
@@ -56,19 +62,19 @@ function Listing({ v, visitor }: { v: ImportView; visitor: VisitorIdentity["stat
     <>
       {v.kind === "file" ? (
         <>
-          <p className="m-0 mt-5 text-title font-semibold text-text">在读：读出 {n} 条</p>
-          <p className="m-0 mt-1 text-note text-sub">在这台电脑上读这个文件的副本，不连平台；读完给你看一眼，你点了才收。</p>
+          <p className="m-0 mt-5 text-title font-semibold text-text">{t("imports.detail.listingFile", { count: n })}</p>
+          <p className="m-0 mt-1 text-note text-sub">{t("imports.detail.listingFileNote")}</p>
         </>
       ) : (
         <>
-          <p className="m-0 mt-5 text-title font-semibold text-text">在列：列了 {v.pages} 页，{n} 条</p>
-          <p className="m-0 mt-1 text-note text-sub">按平台的节奏一页页列，列完给你看一眼，你点了才收。</p>
+          <p className="m-0 mt-5 text-title font-semibold text-text">{t("imports.detail.listingSource", { pages: t("imports.detail.pages", { count: v.pages }), count: n })}</p>
+          <p className="m-0 mt-1 text-note text-sub">{t("imports.detail.listingSourceNote")}</p>
         </>
       )}
       {v.waiting ? <p className="m-0 mt-1 text-small text-sub">{waitingText(v.waiting, undefined, visitor)}</p> : null}
-      <Group v={v} standing="new" title="新的" note="资料库里还没有" />
-      <Group v={v} standing="stored" title="已经存着的" note="不动" />
-      <Group v={v} standing="trashed" title="在回收站里的" note="你删过的" />
+      <Group v={v} standing="new" title={t("imports.group.newTitle")} note={t("imports.group.newNote")} />
+      <Group v={v} standing="stored" title={t("imports.group.storedTitle")} note={t("imports.group.storedNote")} />
+      <Group v={v} standing="trashed" title={t("imports.group.trashedTitle")} note={t("imports.group.trashedNote")} />
     </>
   );
 }
@@ -101,36 +107,48 @@ function Ready({ v, platform }: { v: ImportView; platform: string | undefined })
     <>
       <div className="mt-5 flex flex-wrap items-start gap-x-4 gap-y-3">
         <div className="min-w-[240px] flex-1">
-          <p className="m-0 text-title font-semibold text-text">{v.kind === "file" ? "读完了" : "列完了"}：{v.preview.new + v.preview.stored + v.preview.trashed} 条</p>
-          <p className="m-0 mt-1 text-note text-sub">
-            {total > 0
-              ? `这次会收下${takeNew > 0 ? `新的 ${takeNew} 条` : ""}${takeNew > 0 && bringBack > 0 ? "，" : ""}${bringBack > 0 ? `从回收站拿回 ${bringBack} 条` : ""}。`
-              : "这次一条都不收。"}
-            {v.preview.stored > 0 ? `已经存着的 ${v.preview.stored} 条不动。` : ""}
+          <p className="m-0 text-title font-semibold text-text">
+            {t(v.kind === "file" ? "imports.detail.readyFile" : "imports.detail.readySource", { count: v.preview.new + v.preview.stored + v.preview.trashed })}
           </p>
+          <p className="m-0 mt-1 text-note text-sub">{willText(takeNew, bringBack, v.preview.stored)}</p>
           <p className="m-0 mt-1 text-small text-sub">
             {v.kind === "file"
-              ? "收的时候一条条来：文件里有的从副本里取，只有链接的照平台的节奏去取；不用守着，随时能停。"
-              : `收的时候照${platform ? `${platform}的` : "平台的"}节奏一条条来，不用守着；随时能停。`}
+              ? t("imports.detail.takeNoteFile")
+              : platform
+                ? t("imports.detail.takeNotePlatform", { platform })
+                : t("imports.detail.takeNote")}
           </p>
         </div>
         <Button variant="soft" size="md" isDisabled={change.isPending || total === 0} onPress={confirm}>
-          {total > 0 ? `开始收下 ${total} 条` : "没有要收的"}
+          {total > 0 ? t("imports.detail.start", { count: total }) : t("imports.detail.nothing")}
         </Button>
       </div>
       {change.error ? <ErrorLine error={change.error} className="mt-2" /> : null}
-      <Group v={v} standing="new" title="新的" note="资料库里还没有" choice={{ pick: picks.new, set: set("new") }} />
+      <Group v={v} standing="new" title={t("imports.group.newTitle")} note={t("imports.group.newNote")} choice={{ pick: picks.new, set: set("new") }} />
       <Group
         v={v}
         standing="trashed"
-        title="你删过的"
-        note="在回收站里；收下就从回收站拿回来，不想要就点「全不收」"
+        title={t("imports.group.deletedTitle")}
+        note={t("imports.group.deletedNote")}
         choice={{ pick: picks.trashed, set: set("trashed") }}
       />
-      <Group v={v} standing="stored" title="已经存着的" note="已经存着，这次不动" />
-      <Group v={v} standing="unresolved" title="认不出的" note="插件认不出这些链接是哪一条，不收" />
+      <Group v={v} standing="stored" title={t("imports.group.storedTitle")} note={t("imports.group.storedReadyNote")} />
+      <Group v={v} standing="unresolved" title={t("imports.group.unresolvedTitle")} note={t("imports.group.unresolvedNote")} />
     </>
   );
+}
+
+/** 这次会添加的那一句，和已保存不动的那一句。 */
+function willText(takeNew: number, bringBack: number, stored: number): string {
+  const will =
+    takeNew > 0 && bringBack > 0
+      ? t("imports.detail.willBoth", { new: takeNew, back: bringBack })
+      : takeNew > 0
+        ? t("imports.detail.willNew", { count: takeNew })
+        : bringBack > 0
+          ? t("imports.detail.willBack", { count: bringBack })
+          : t("imports.detail.willNone");
+  return stored > 0 ? t("imports.detail.twoSentences", { first: will, second: t("imports.detail.storedKept", { count: stored }) }) : will;
 }
 
 /** 按节奏收、停着、收完：只说收下了几条、为什么在等、下一条大概什么时候、哪些没存下。 */
@@ -140,25 +158,23 @@ function Running({ v, platform, visitor }: { v: ImportView; platform: string | u
     <>
       <div className="mt-5 flex flex-wrap items-start gap-x-4 gap-y-3">
         <div className="min-w-[200px] flex-1">
-          <p className="m-0 text-big font-semibold text-text">
-            收下了 <span className="mono">{v.taken}</span> 条
-          </p>
+          <p className="m-0 text-big font-semibold text-text">{rich("imports.detail.taken", { count: v.taken, n: <span className="mono" /> })}</p>
           <div className="mt-1.5 flex flex-col gap-0.5 text-note text-sub">
-            {v.state === "done" ? <span>这次的都收完了。</span> : null}
-            {v.state === "held" ? <span>停着。点「接着导入」从停下的地方接着收。</span> : null}
+            {v.state === "done" ? <span>{t("imports.detail.done")}</span> : null}
+            {v.state === "held" ? <span>{t("imports.detail.held")}</span> : null}
             {v.state === "taking" && v.waiting ? <span>{waitingText(v.waiting, platform, visitor)}</span> : null}
-            {v.state === "taking" && !v.waiting && v.nextAt ? <span>下一条大概 {timeText(v.nextAt)}</span> : null}
-            {v.skipped > 0 ? <span>{v.skipped} 条轮到时已经在回收站里、或者是私密的，没收。</span> : null}
+            {v.state === "taking" && !v.waiting && v.nextAt ? <span>{t("imports.detail.nextAt", { time: timeText(v.nextAt) })}</span> : null}
+            {v.skipped > 0 ? <span>{t("imports.detail.skipped", { count: v.skipped })}</span> : null}
           </div>
         </div>
         {v.state === "taking" ? (
           <Button variant="outline" size="md" isDisabled={change.isPending} onPress={() => change.mutate({ kind: "hold" })}>
-            先停下
+            {t("imports.detail.pause")}
           </Button>
         ) : null}
         {v.state === "held" ? (
           <Button variant="soft" size="md" isDisabled={change.isPending} onPress={() => change.mutate({ kind: "resume" })}>
-            接着导入
+            {t("imports.detail.resume")}
           </Button>
         ) : null}
       </div>
@@ -176,7 +192,7 @@ function Taken({ v }: { v: ImportView }) {
   if (taken.length === 0) return null;
   return (
     <section className="mt-7">
-      <h3 className="m-0 text-body font-semibold text-text">最近收下的</h3>
+      <h3 className="m-0 text-body font-semibold text-text">{t("imports.detail.recent")}</h3>
       <ul className="m-0 mt-2 flex list-none flex-col border-t border-border p-0">
         {taken.map((e) => (
           <EntryRow key={e.seq} e={e} />
@@ -189,14 +205,14 @@ function Taken({ v }: { v: ImportView }) {
 function EntryRow({ e, tick }: { e: ImportEntry; tick?: { on: boolean; set: (on: boolean) => void } }) {
   // 从文件导入时，只在文件里的那几条没有链接：只写标题，不写主机。
   const host = e.url === undefined ? "" : URL.canParse(e.url) ? new URL(e.url).host : e.url;
-  const name = e.title || e.url || "没有标题的一条";
+  const name = e.title || e.url || t("imports.detail.untitled");
   if (tick) {
     return (
       <li className="border-b border-border">
         <Checkbox
           isSelected={tick.on}
           onChange={tick.set}
-          aria-label={`收下 ${name}`}
+          aria-label={t("imports.detail.addOne", { name })}
           className="group press -mx-2 flex cursor-pointer items-center gap-3 rounded-btn px-2 py-2 outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent data-[hovered]:bg-chip/60"
         >
           <Tick />
@@ -239,10 +255,7 @@ function Tick() {
   );
 }
 
-const WHOLE = [
-  { id: "take", text: "全收" },
-  { id: "skip", text: "全不收" },
-] as const;
+const WHOLE = ["take", "skip"] as const;
 
 /** 预览里的一组。有 `choice` 的那组可以挑：收起时整组全收或全不收，展开以后逐条勾。 */
 function Group({
@@ -284,12 +297,12 @@ function Group({
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
         <h3 className="m-0 text-body font-semibold text-text">{title}</h3>
         <span className="mono text-tag text-faint">
-          {pick ? `收 ${picked(pick, shown)} / ${shown} 条` : `${shown} 条`}
+          {pick ? t("imports.group.picked", { picked: picked(pick, shown), count: shown }) : t("imports.group.count", { count: shown })}
         </span>
         {choice && pick ? (
           <div className="ml-auto flex items-center gap-1.5">
             <ToggleButtonGroup
-              aria-label={`${title}：整组`}
+              aria-label={t("imports.group.wholeLabel", { title })}
               selectionMode="single"
               disallowEmptySelection
               selectedKeys={whole}
@@ -299,18 +312,18 @@ function Group({
               }}
               className="flex gap-0.5 rounded-sm border border-border2 p-[2px]"
             >
-              {WHOLE.map(({ id, text }) => (
+              {WHOLE.map((id) => (
                 <ToggleButton
                   key={id}
                   id={id}
                   className="press h-[22px] cursor-pointer rounded-[5px] border-0 bg-transparent px-2 text-small text-sub outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent data-[selected]:bg-chip data-[selected]:font-medium data-[selected]:text-text"
                 >
-                  {text}
+                  {id === "take" ? t("imports.group.takeAll") : t("imports.group.takeNone")}
                 </ToggleButton>
               ))}
             </ToggleButtonGroup>
             <Button variant="quiet" size="xs" aria-expanded={open} onPress={() => setOpen(!open)}>
-              {open ? "收起" : "逐条挑"}
+              {open ? t("common.showLess") : t("imports.group.pickEach")}
             </Button>
           </div>
         ) : null}
@@ -323,9 +336,9 @@ function Group({
       </ul>
       {list.length < shown ? (
         <div className="mt-1.5 flex flex-wrap items-center gap-x-3 text-small text-faint">
-          <span>{pick && open ? `列出了其中 ${list.length} 条，没列出的跟着整组` : `列出了其中 ${list.length} 条`}</span>
+          <span>{pick && open ? t("imports.group.shownPicking", { count: list.length }) : t("imports.group.shown", { count: list.length })}</span>
           <Button variant="quiet" size="xs" onPress={() => setLimit(limit + MORE)}>
-            再看 {Math.min(MORE, shown - list.length)} 条
+            {t("imports.group.more", { count: Math.min(MORE, shown - list.length) })}
           </Button>
         </div>
       ) : null}
@@ -345,18 +358,18 @@ function Discard({ id, done, onGone }: { id: string; done: boolean; onGone: () =
       {asking ? (
         <>
           <span className="text-small text-sub">
-            {done ? "去掉这条导入记录？收下的条目都留着。" : "不要这次导入了？清单和还没收的去掉，已经收下的留着。"}
+            {done ? t("imports.discard.confirmDone") : t("imports.discard.confirmActive")}
           </span>
           <Button variant="outline" size="xs" isDisabled={change.isPending} onPress={() => change.mutate({ kind: "delete" }, { onSuccess: onGone })}>
-            {done ? "去掉" : "不要了"}
+            {done ? t("imports.discard.remove") : t("imports.discard.discard")}
           </Button>
           <Button variant="quiet" size="xs" onPress={() => setAsking(false)}>
-            算了
+            {t("common.cancel")}
           </Button>
         </>
       ) : (
         <Button variant="quiet" size="xs" onPress={() => setAsking(true)}>
-          {done ? "去掉这条记录" : "不要这次导入了"}
+          {done ? t("imports.discard.removeRecord") : t("imports.discard.discardImport")}
         </Button>
       )}
       {change.error ? <ErrorLine error={change.error} /> : null}

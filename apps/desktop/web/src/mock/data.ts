@@ -58,7 +58,8 @@ export interface RawItem {
   same?: boolean;
   comments?: [string, string, number?][];
   note?: string;
-  link?: { missing: string };
+  /** 内核说的那一句：简体中文、英文。 */
+  link?: { missing: [string, string] };
 }
 
 export const RAW_ITEMS: RawItem[] = [
@@ -833,6 +834,6 @@ export const RAW_ITEMS: RawItem[] = [
     at: "11-09",
     kind: "video",
     scene: "mountain",
-    link: { missing: "视频没存下来：平台没提供原文件" },
+    link: { missing: ["视频未保存：平台未提供原始文件", "The video wasn't saved: the platform didn't provide the original file"] },
   },
 ];

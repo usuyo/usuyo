@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-Hans">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -12,6 +12,12 @@
         var pref = JSON.parse(localStorage.getItem("usuyo-ui") || "{}").state || {};
         var theme = pref.theme === "dark" || pref.theme === "light" ? pref.theme : matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
         document.documentElement.dataset.theme = theme;
+      } catch (e) {}
+      // 语言也先定好（src/i18n/locale.ts 的同一条规则），读屏和断行第一帧就对；之后由 RootLayout 接手。
+      try {
+        var lang = localStorage.getItem("usuyo.language");
+        if (lang !== "zh-Hans" && lang !== "en") lang = (navigator.languages[0] || navigator.language).toLowerCase().indexOf("zh") === 0 ? "zh-Hans" : "en";
+        document.documentElement.lang = lang;
       } catch (e) {}
     </script>
   </head>

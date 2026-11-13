@@ -35,7 +35,7 @@ pub(crate) async fn reveal(path: &Path) -> Result<()> {
         .await
         .map_err(|_| {
             Error::Task(format!("revealing {} timed out", path.display()))
-                .hinted("文件管理器没有回话")
+                .hinted(crate::words::REVEAL_NO_ANSWER.said())
         })?
         .map_err(|e| Error::io(path, e))?;
     // 资源管理器选中了文件也回 1，它的退出码说明不了什么。
@@ -47,6 +47,6 @@ pub(crate) async fn reveal(path: &Path) -> Result<()> {
             path.display(),
             status.code()
         ))
-        .hinted("没能在文件管理器里显示它"))
+        .hinted(crate::words::REVEAL_FAILED.said()))
     }
 }

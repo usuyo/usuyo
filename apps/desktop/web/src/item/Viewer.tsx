@@ -7,7 +7,8 @@ import { useReducedMotion } from "../motion/clock";
 import { Button } from "../ui/Button";
 import { MonoLabel } from "../ui/Chip";
 import { FlashLine, useFlash } from "../ui/Flash";
-import { clock, facetOf, imageName, keepText, type MediaKeep } from "./format";
+import { t } from "../i18n";
+import { clock, facetOf, imageName, keepText, sentences, type MediaKeep } from "./format";
 import { PAGE } from "../plugins/words";
 import type { Player } from "./usePlayer";
 
@@ -48,7 +49,7 @@ export function Viewer({
   let size: { width: number; height: number } | undefined;
   if (video && player.still) {
     src = player.still;
-    alt = `${clock(player.t)} 的画面`;
+    alt = t("item.viewer.frameAt", { time: clock(player.t) });
   } else if (picked) {
     src = picked.url;
     alt = imageName(picked.key, keys);
@@ -56,12 +57,12 @@ export function Viewer({
   } else if (video) {
     if (poster && !player.playing && player.t === 0) {
       src = poster.url;
-      alt = "封面";
+      alt = imageName("cover");
       size = poster;
     } else {
       const frame = [...video.frames].reverse().find((f) => f.sec <= player.t + 0.01) ?? video.frames[0];
       src = frame?.url;
-      alt = `${clock(player.t)} 的画面`;
+      alt = t("item.viewer.frameAt", { time: clock(player.t) });
     }
   } else if (images) {
     const im = images.images.find((x) => x.key === player.image) ?? images.images[0];
@@ -79,7 +80,7 @@ export function Viewer({
   return (
     <div>
       <section
-        aria-label="画面"
+        aria-label={t("item.viewer.landmark")}
         className="relative aspect-video w-full overflow-hidden rounded-card border border-border bg-card2 [container-type:size]"
       >
         {video?.url && player.canPlay && !player.still && !picked ? (
@@ -97,17 +98,17 @@ export function Viewer({
 
         {video || images ? (
           <div className="pointer-events-none absolute top-3 right-3 flex h-7 items-center gap-2 rounded-full border border-border bg-hud px-3">
-            <MonoLabel>{video ? `画面 · ${clock(video.durationSec)}` : `画面 · ${images?.images.length ?? 0} 张`}</MonoLabel>
+            <MonoLabel>{video ? t("item.viewer.video", { duration: clock(video.durationSec) }) : t("item.viewer.images", { count: images?.images.length ?? 0 })}</MonoLabel>
             {remark ? <span className="text-small text-label">{remark}</span> : null}
           </div>
         ) : null}
 
         {player.canPlay ? (
           <AriaButton
-            aria-label="播放"
+            aria-label={t("item.viewer.play")}
             onPress={() => {
               player.toggle();
-              flash.show(`从 ${clock(player.t >= (video?.durationSec ?? 0) - 0.1 ? 0 : player.t)} 播`);
+              flash.show(t("item.viewer.playingFrom", { time: clock(player.t >= (video?.durationSec ?? 0) - 0.1 ? 0 : player.t) }));
             }}
             className={`absolute top-1/2 left-1/2 -mt-7 -ml-7 flex size-14 cursor-pointer items-center justify-center rounded-full border border-border2 bg-hud pl-[3px] text-text outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent ${player.playing ? "pointer-events-none scale-[0.92] opacity-0 duration-[140ms]" : "scale-100 opacity-100 duration-200"} transition-[opacity,scale] ease-out ${reduced ? "scale-100" : ""}`}
           >
@@ -117,9 +118,9 @@ export function Viewer({
 
         {textOnly ? (
           <div className="absolute inset-x-0 bottom-0 animate-rise border-t border-border bg-hud px-5 py-4">
-            <div className="text-body font-medium text-text">{keep.gone ? "视频和封面已经从回收站清掉了" : "视频和封面在回收站里"}</div>
+            <div className="text-body font-medium text-text">{keep.gone ? t("item.viewer.mediaGone") : t("item.viewer.mediaInTrash")}</div>
             <div className="mt-0.5 text-small text-sub">
-              {keep.gone ? "口播文字、图里的字和画面缩略图都还在" : `${keepText(keep.days)}；口播文字、图里的字和画面缩略图都还在`}
+              {keep.gone ? t("item.viewer.textKept") : sentences(keepText(keep.days), t("item.viewer.textKept"))}
             </div>
           </div>
         ) : null}
@@ -129,10 +130,10 @@ export function Viewer({
             {item.missing ? (
               <>
                 <div className="text-note font-medium text-warn">{item.missing}</div>
-                <div className="mt-1 text-small text-sub">原帖还在的话，可以再试一次</div>
+                <div className="mt-1 text-small text-sub">{t("item.viewer.retryHint")}</div>
                 <Button variant="soft" size="md" className="mt-3.5 px-4" onPress={onRetry}>
                   <RefreshCw size={14} aria-hidden="true" />
-                  <span>重试</span>
+                  <span>{t("common.retry")}</span>
                 </Button>
                 <Link
                   to="/plugins/$platform"
@@ -144,8 +145,8 @@ export function Viewer({
               </>
             ) : (
               <>
-                <div className="text-body font-medium text-text">正在取内容</div>
-                <div className="mt-1 text-small text-sub">取到以后这里是视频或图，口播会转成文字</div>
+                <div className="text-body font-medium text-text">{t("item.viewer.fetching")}</div>
+                <div className="mt-1 text-small text-sub">{t("item.viewer.fetchingSub")}</div>
               </>
             )}
           </div>
@@ -201,17 +202,17 @@ function Timeline({
   const started = player.playing || player.t > 0;
   const jump = (sec: number) => {
     player.seek(sec);
-    onJump(player.canPlay ? `从 ${clock(sec)} 播` : gone ? `视频已经清掉了，停在 ${clock(sec)}` : `视频在回收站里，恢复以后从 ${clock(sec)} 播`);
+    onJump(player.canPlay ? t("item.viewer.playingFrom", { time: clock(sec) }) : gone ? t("item.viewer.stoppedGone", { time: clock(sec) }) : t("item.viewer.stoppedInTrash", { time: clock(sec) }));
   };
   return (
     <div className="mt-2 flex h-ctl items-center gap-3">
-      <Button variant="outline" size="md" square aria-label={!player.canPlay ? "视频不在，不能播" : player.playing ? "暂停" : "播放"} onPress={player.toggle} isDisabled={!player.canPlay}>
+      <Button variant="outline" size="md" square aria-label={!player.canPlay ? t("item.viewer.videoUnavailable") : player.playing ? t("item.viewer.pause") : t("item.viewer.play")} onPress={player.toggle} isDisabled={!player.canPlay}>
         {player.playing ? <Pause size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}
       </Button>
       <div
         role="slider"
         tabIndex={0}
-        aria-label="时间轴：点一下跳到那一秒，左右方向键前后 5 秒"
+        aria-label={t("item.viewer.timeline")}
         aria-valuemin={0}
         aria-valuemax={Math.round(dur)}
         aria-valuenow={Math.round(player.t)}
@@ -263,10 +264,10 @@ function Strip({ images, player }: { images: ImageFacet; player: Player }) {
   };
   return (
     <div className="mt-2 flex h-ctl items-center gap-2">
-      <Button variant="outline" size="md" square aria-label="上一张" onPress={() => go(index - 1)} isDisabled={list.length < 2}>
+      <Button variant="outline" size="md" square aria-label={t("item.viewer.previousImage")} onPress={() => go(index - 1)} isDisabled={list.length < 2}>
         <ChevronLeft size={16} aria-hidden="true" />
       </Button>
-      <div role="group" aria-label="几张图" className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto">
+      <div role="group" aria-label={t("item.viewer.imageList")} className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto">
         {list.map((im, i) => (
           <AriaButton
             key={im.key}
@@ -282,7 +283,7 @@ function Strip({ images, player }: { images: ImageFacet; player: Player }) {
       <span className="mono w-14 shrink-0 text-right text-tag text-sub">
         {index + 1} / {list.length}
       </span>
-      <Button variant="outline" size="md" square aria-label="下一张" onPress={() => go(index + 1)} isDisabled={list.length < 2}>
+      <Button variant="outline" size="md" square aria-label={t("item.viewer.nextImage")} onPress={() => go(index + 1)} isDisabled={list.length < 2}>
         <ChevronRight size={16} aria-hidden="true" />
       </Button>
     </div>

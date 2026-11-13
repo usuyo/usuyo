@@ -1,27 +1,27 @@
 use std::path::PathBuf;
 
-/// 索引 crate 的统一错误。
+/// 索引 crate 的统一错误。文字是英文，只进日志和 `detail`；给人看的话由上层按码配（SPEC §0.3）。
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("目录不是 usuyo 索引且不为空：{0}")]
+    #[error("not a usuyo index and not empty: {0}")]
     ForeignDirectory(PathBuf),
-    #[error("索引正被另一个进程写入")]
+    #[error("the index is being written by another process")]
     Busy,
-    #[error("搜索词为空，或没有可搜的文字")]
+    #[error("the query is empty or has nothing searchable")]
     EmptyQuery,
-    #[error("搜索词太长：最多 {max_terms} 个词、每个词 {max_chars} 个字符")]
+    #[error("the query is too long: at most {max_terms} terms of {max_chars} characters each")]
     QueryTooLong { max_terms: usize, max_chars: usize },
-    #[error("翻页游标无效")]
+    #[error("invalid cursor")]
     BadCursor,
-    #[error("层名 {0:?} 不可用：空，或是内部保留名")]
+    #[error("layer name {0:?} is empty or reserved")]
     InvalidLayer(String),
-    #[error("读写索引目录失败：{0}")]
+    #[error("index directory: {0}")]
     Io(#[from] std::io::Error),
-    #[error("索引标记文件无法读写：{0}")]
+    #[error("index stamp file: {0}")]
     Stamp(#[from] serde_json::Error),
-    #[error("打开索引目录失败：{0}")]
+    #[error("opening the index directory: {0}")]
     OpenDirectory(#[from] tantivy::directory::error::OpenDirectoryError),
-    #[error("索引引擎出错：{0}")]
+    #[error("index engine: {0}")]
     Engine(#[from] tantivy::TantivyError),
 }
 

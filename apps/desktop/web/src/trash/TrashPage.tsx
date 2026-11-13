@@ -4,11 +4,12 @@ import type { TrashEntry } from "../api/endpoints";
 import { useItemChange, usePurge, useSettings, useTrash } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
 import { Rail } from "../frame/Rail";
+import { t } from "../i18n";
 import { Button } from "../ui/Button";
 import { HeldNotice } from "./HeldNotice";
 import { askText, clearsText, doneText, introText, trashedText, whatText } from "./words";
 
-/** 回收站：删掉的整条和只留文字移出来的媒体，各自拿回来或立即清除。 */
+/** 废纸篓：删除的条目和仅保留文字时移出的媒体，各自恢复或立即删除。 */
 export function TrashPage() {
   const trash = useTrash();
   // 到期检查被时钟守卫拦下时，设置里有 `trashHeld`；这一页也放那一块。
@@ -19,13 +20,13 @@ export function TrashPage() {
 
   return (
     <div className="relative h-full overflow-hidden bg-bg">
-      <Rail label="主导航" />
+      <Rail label={t("common.nav.main")} />
       <main className="absolute inset-y-0 right-0 left-rail overflow-y-auto">
         <div className="px-gutter pt-7 pb-10">
           <header className="max-w-[760px]">
-            <h1 className="m-0 text-title font-semibold text-text">回收站</h1>
+            <h1 className="m-0 text-title font-semibold text-text">{t("trash.title")}</h1>
             {trash.data ? <p className="m-0 mt-1 text-note text-sub">{introText(trash.data.trashDays)}</p> : null}
-            <p className="m-0 mt-0.5 text-small text-faint">再收下同一条链接，它会从这里回到地图上。</p>
+            <p className="m-0 mt-0.5 text-small text-faint">{t("trash.addAgain")}</p>
           </header>
           {trash.error ? <ErrorLine error={trash.error} className="mt-4" /> : null}
           {settings.data ? (
@@ -42,13 +43,13 @@ export function TrashPage() {
           </div>
           {trash.data && entries.length === 0 ? (
             <div className="animate-rise pt-20 text-center">
-              <div className="text-body text-label">回收站里没有东西。</div>
+              <div className="text-body text-label">{t("trash.empty")}</div>
               <div className="mt-1 text-note text-sub">
-                {trash.data.trashDays === null ? "删掉的东西会先放在这里。" : `删掉的东西会先在这里放 ${trash.data.trashDays} 天。`}
+                {trash.data.trashDays === null ? t("trash.emptyForever") : t("trash.emptyDays", { count: trash.data.trashDays })}
               </div>
             </div>
           ) : (
-            <ul aria-label="回收站里的东西" className="m-0 mt-2 list-none border-t border-border p-0">
+            <ul aria-label={t("trash.listLabel")} className="m-0 mt-2 list-none border-t border-border p-0">
               {entries.map((e) => (
                 <TrashRow key={e.id} entry={e} onDone={say} />
               ))}
@@ -90,10 +91,10 @@ function TrashRow({ entry, onDone }: { entry: TrashEntry; onDone: (text: string)
               isDisabled={busy}
               onPress={() => purge.mutate(entry.id, { onSuccess: () => onDone(doneText(entry, "purge")) })}
             >
-              清除，不能恢复
+              {t("trash.confirmDelete")}
             </Button>
             <Button size="sm" isDisabled={busy} onPress={() => setAsking(false)}>
-              算了
+              {t("common.cancel")}
             </Button>
           </div>
         </div>
@@ -107,16 +108,16 @@ function TrashRow({ entry, onDone }: { entry: TrashEntry; onDone: (text: string)
             <Button
               size="sm"
               isDisabled={busy}
-              aria-label={`${media ? "拿回图和视频：" : "拿回来："}「${entry.title}」`}
+              aria-label={t(media ? "trash.restoreMediaLabel" : "trash.restoreLabel", { title: entry.title })}
               onPress={() =>
                 restore.mutate({ kind: media ? "restore-media" : "restore" }, { onSuccess: () => onDone(doneText(entry, "restore")) })
               }
             >
               <RotateCcw size={14} aria-hidden="true" />
-              <span>{media ? "拿回图和视频" : "拿回来"}</span>
+              <span>{media ? t("trash.restoreMedia") : t("trash.restore")}</span>
             </Button>
-            <Button size="sm" isDisabled={busy} aria-label={`立即清除「${entry.title}」`} onPress={() => setAsking(true)}>
-              立即清除
+            <Button size="sm" isDisabled={busy} aria-label={t("trash.deleteNowLabel", { title: entry.title })} onPress={() => setAsking(true)}>
+              {t("trash.deleteNow")}
             </Button>
           </div>
         </div>

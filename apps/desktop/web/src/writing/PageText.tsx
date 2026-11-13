@@ -2,6 +2,7 @@ import { PenLine, X } from "lucide-react";
 import { useState } from "react";
 import { Label, TextArea, TextField } from "react-aria-components";
 import type { Citation, PageBlock, PagePatch, WrittenPage } from "../api/endpoints";
+import { t } from "../i18n";
 import { Button } from "../ui/Button";
 import { CitationSlip } from "./Quote";
 import { pageAfter, type PageEdit } from "./words";
@@ -34,18 +35,18 @@ export function PageText({
       {page.blocks.length === 0 && editing === undefined ? <p className="m-0 text-body text-sub">{empty}</p> : null}
       {page.blocks.map((b) =>
         editing === b.id ? (
-          <Editor key={b.id} initial={b.text} label={b.kind === "heading" ? "改这个小标题" : "改这段"} busy={busy} onSave={(text) => apply({ kind: "text", id: b.id, text })} onCancel={() => setEditing(undefined)} />
+          <Editor key={b.id} initial={b.text} label={b.kind === "heading" ? t("writing.page.editHeading") : t("writing.page.editParagraph")} busy={busy} onSave={(text) => apply({ kind: "text", id: b.id, text })} onCancel={() => setEditing(undefined)} />
         ) : (
           <Block key={b.id} block={b} cites={cites} busy={busy} onEdit={() => setEditing(b.id)} onUncite={(label) => apply({ kind: "uncite", id: b.id, label })} />
         ),
       )}
       {editing === null ? (
-        <Editor initial="" label="写一段" busy={busy} onSave={(text) => apply({ kind: "text", id: null, text })} onCancel={() => setEditing(undefined)} />
+        <Editor initial="" label={t("writing.page.newParagraph")} busy={busy} onSave={(text) => apply({ kind: "text", id: null, text })} onCancel={() => setEditing(undefined)} />
       ) : (
         <div>
           <Button variant="outline" size="sm" isDisabled={busy} onPress={() => setEditing(null)}>
             <PenLine size={14} aria-hidden="true" />
-            写一段
+            {t("writing.page.addParagraph")}
           </Button>
         </div>
       )}
@@ -75,7 +76,7 @@ function Block({
       {block.text === "" ? (
         <div className="flex justify-end">
           <Button variant="ghost" size="xs" isDisabled={busy} className="opacity-0 group-hover/block:opacity-100 data-[focus-visible]:opacity-100" onPress={onEdit}>
-            在这处引用前写一句
+            {t("writing.page.addBeforeQuote")}
           </Button>
         </div>
       ) : (
@@ -92,7 +93,7 @@ function Block({
             className="opacity-0 group-hover/block:opacity-100 data-[focus-visible]:opacity-100"
             onPress={onEdit}
           >
-            改这段
+            {t("writing.page.edit")}
           </Button>
         </div>
       )}
@@ -108,7 +109,7 @@ function Block({
                   size="xs"
                   square
                   isDisabled={busy}
-                  aria-label={`从这一段拿掉「${c.quote}」`}
+                  aria-label={t("writing.page.removeQuote", { quote: c.quote })}
                   className="opacity-0 group-hover:opacity-100 data-[focus-visible]:opacity-100"
                   onPress={() => onUncite(c.label)}
                 >
@@ -140,12 +141,12 @@ function Editor({ initial, label, busy, onSave, onCancel }: { initial: string; l
       </TextField>
       <div className="flex items-center gap-2">
         <Button variant="soft" size="sm" isDisabled={busy} onPress={() => onSave(text)}>
-          记下
+          {t("writing.page.save")}
         </Button>
         <Button variant="quiet" size="sm" onPress={onCancel}>
-          不改了
+          {t("common.cancel")}
         </Button>
-        <span className="text-small text-faint">⌘ 回车记下，Esc 不改</span>
+        <span className="text-small text-faint">{t("writing.page.keys")}</span>
       </div>
     </div>
   );

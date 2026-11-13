@@ -33,6 +33,7 @@ use crate::clients::{Client, ClientKind};
 use crate::guard::{self, Caller, Gate};
 use crate::handshake;
 use crate::problem::Problem;
+use crate::words;
 
 /// 请求体上限：这里的请求都是几个短字段。
 const BODY_LIMIT: usize = 64 << 10;
@@ -208,6 +209,10 @@ pub(crate) fn build(engine: Engine, gate: Arc<Gate>, origins: &[String]) -> Rout
         ))
         .layer(cors)
         .layer(middleware::from_fn_with_state(gate, guard::check))
+        .layer(middleware::from_fn_with_state(
+            state.engine.clone(),
+            crate::problem::speak,
+        ))
         .with_state(state)
 }
 
@@ -225,7 +230,7 @@ async fn upload_deadline(req: Request, next: middleware::Next) -> Response {
     match tokio::time::timeout(UPLOAD_TIMEOUT, next.run(req)).await {
         Ok(res) => res,
         Err(_) => Problem::new("timeout", "upload took too long")
-            .with_hint("交文件用的时间太长了，没交成")
+            .with_hint(words::UPLOAD_TOO_SLOW.said())
             .into_response(),
     }
 }
@@ -622,8 +627,9 @@ async fn plugin_sources(
     Path((owner, repo)): Path<(String, String)>,
     q: Result<Query<SourcesQuery>, QueryRejection>,
 ) -> ApiResult<Vec<SourceView>> {
-    let Query(q) =
-        q.map_err(|e| Problem::new("invalid-args", e.body_text()).with_hint("要说明是哪一种方法"))?;
+    let Query(q) = q.map_err(|e| {
+        Problem::new("invalid-args", e.body_text()).with_hint(words::NAME_THE_METHOD.said())
+    })?;
     let link = q.link.as_deref().map(parse_link).transpose()?;
     Ok(Json(
         s.engine
@@ -635,16 +641,13 @@ async fn plugin_sources(
 /// 你给的一条链接（或带链接的分享文字，取第一条，[`usuyo_core::link_in`]）：带主机的 http(s)，
 /// 不带用户名密码，至多 4096 字节。原因里不写链接本身。
 fn parse_link(text: &str) -> Result<url::Url, Problem> {
-    let more = if usuyo_core::link_count(text) > 1 {
-        "（只看第一条链接）"
+    let hint = if usuyo_core::link_count(text) > 1 {
+        words::BAD_LINK_FIRST
     } else {
-        ""
+        words::BAD_LINK
     };
-    let bad = |why: &str| {
-        Problem::new("invalid-args", format!("link: {why}")).with_hint(format!(
-            "这不是一条能用的链接：要 http 或 https 开头、有网站、不带用户名和密码{more}"
-        ))
-    };
+    let bad =
+        |why: &str| Problem::new("invalid-args", format!("link: {why}")).with_hint(hint.said());
     let u = usuyo_core::link_in(text).ok_or_else(|| bad("no http(s) link with a host"))?;
     if u.as_str().len() > 4096 {
         return Err(bad("too long"));
@@ -849,7 +852,7 @@ async fn start_import(
     State(s): State<AppState>,
     req: Result<Json<StartImportRequest>, JsonRejection>,
 ) -> ApiResult<ImportView> {
-    let req = body(req).map_err(|p| p.with_hint("开始导入的请求不对：要插件、方法和来源"))?;
+    let req = body(req).map_err(|p| p.with_hint(words::BAD_IMPORT_REQUEST.said()))?;
     Ok(Json(
         blocking(move || {
             s.engine
@@ -884,8 +887,9 @@ async fn import_entries(
     Path(id): Path<String>,
     q: Result<Query<EntriesQuery>, QueryRejection>,
 ) -> ApiResult<Vec<ImportEntryView>> {
-    let Query(q) =
-        q.map_err(|e| Problem::new("invalid-args", e.body_text()).with_hint("翻预览的参数不对"))?;
+    let Query(q) = q.map_err(|e| {
+        Problem::new("invalid-args", e.body_text()).with_hint(words::BAD_PREVIEW_QUERY.said())
+    })?;
     Ok(Json(
         blocking(move || {
             s.engine
@@ -901,8 +905,7 @@ async fn confirm_import(
     Path(id): Path<String>,
     req: Result<Json<ImportChoice>, JsonRejection>,
 ) -> ApiResult<ImportView> {
-    let choice =
-        body(req).map_err(|p| p.with_hint("确认的请求不对：要说新的和回收站里的各收不收"))?;
+    let choice = body(req).map_err(|p| p.with_hint(words::BAD_CONFIRM_REQUEST.said()))?;
     Ok(Json(
         blocking(move || s.engine.confirm_import(&id, &choice)).await?,
     ))
@@ -1011,7 +1014,7 @@ async fn hand_over(
         Caller::Deliver(_) => {
             return Err(
                 Problem::new("forbidden", "only extension tokens hand over content")
-                    .with_hint("只有浏览器扩展和脚本的令牌能交已取到的内容"),
+                    .with_hint(words::ONLY_EXTENSIONS_HAND_OVER.said()),
             );
         }
         _ => None,
@@ -1032,7 +1035,7 @@ fn file_query(
     q: Result<Query<FileImportQuery>, QueryRejection>,
 ) -> Result<Query<FileImportQuery>, Problem> {
     q.map_err(|e| {
-        Problem::new("invalid-args", e.body_text()).with_hint("要说明用哪种方法读、文件叫什么")
+        Problem::new("invalid-args", e.body_text()).with_hint(words::BAD_FILE_QUERY.said())
     })
 }
 
@@ -1057,19 +1060,22 @@ async fn receive_file(
     let mut total: u64 = 0;
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.map_err(|e| {
-            Problem::new("invalid-args", format!("reading the body: {e}")).with_hint("文件没交完整")
+            Problem::new("invalid-args", format!("reading the body: {e}"))
+                .with_hint(words::FILE_INCOMPLETE.said())
         })?;
         total = total.saturating_add(chunk.len() as u64);
         if total > max {
             return Err(
                 Problem::new("too-large", format!("the file is larger than {max} bytes"))
-                    .with_hint(format!("文件太大了，最多 {} MiB", max >> 20)),
+                    .with_hint(words::FILE_TOO_LARGE.with(&[("max", &(max >> 20))])),
             );
         }
         file.write_all(&chunk).await.map_err(internal)?;
     }
     if total == 0 {
-        return Err(Problem::new("invalid-args", "the file is empty").with_hint("文件是空的"));
+        return Err(
+            Problem::new("invalid-args", "the file is empty").with_hint(words::FILE_EMPTY.said())
+        );
     }
     file.sync_all().await.map_err(internal)?;
     drop(file);
@@ -1164,7 +1170,7 @@ async fn batch(
     for (i, l) in req.links.into_iter().enumerate() {
         let bad = |why: &str| {
             Problem::new("invalid-args", format!("links[{i}]: {why}"))
-                .with_hint(format!("第 {} 条不是能用的链接", i + 1))
+                .with_hint(words::BAD_LINK_AT.with(&[("n", &(i + 1))]))
         };
         let url = usuyo_core::link_in(&l.url).ok_or_else(|| bad("not an http(s) link"))?;
         if !url.username().is_empty() || url.password().is_some() {

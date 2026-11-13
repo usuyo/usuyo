@@ -155,6 +155,8 @@ fn open(root: &std::path::Path, cli: &Cli) -> Result<Engine> {
     config.plugin_settings = machine::plugin_settings(root)?;
     config.transforms_auto = usuyo_core::transforms_auto(root)?;
     config.proxy = usuyo_core::proxy_setting(root)?;
+    // 设置的语言是「跟随系统」时用系统的首选语言。
+    config.system_language = usuyo_core::Lang::from_system(sys_locale::get_locale().as_deref());
     // 登录的 cookie 和密钥：macOS、Windows 进系统钥匙串，别的系统是按机器目录里 0600 的文件。
     config.vault = usuyo_core::system_vault(root);
     // 手机那一页只在 macOS 上管（iPhone 镜像那条路要它）。

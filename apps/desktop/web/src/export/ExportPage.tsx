@@ -7,6 +7,7 @@ import type { ExportView } from "../api/endpoints";
 import { useExportFolder, useExportNow, useExportView } from "../api/hooks";
 import { ErrorLine, NotServedLine } from "../components/ErrorLine";
 import { Rail } from "../frame/Rail";
+import { rich, t } from "../i18n";
 import { dayText } from "../item/format";
 import { hm } from "../changes/words";
 import { Button } from "../ui/Button";
@@ -20,12 +21,12 @@ export function ExportPage() {
   const missing = isNotServed(view.error);
   return (
     <div className="relative h-full overflow-hidden bg-bg">
-      <Rail label="主导航" />
+      <Rail label={t("common.nav.main")} />
       <main className="@container absolute inset-y-0 right-0 left-rail overflow-y-auto px-6 pt-7 pb-16 lg:px-gutter">
         {missing ? (
           <>
-            <h1 className="m-0 text-title font-semibold text-text">导出</h1>
-            <NotServedLine className="mt-4">这台电脑上的 usuyo 内核还不能导出；以后在这里把条目、主题页和成稿写成 Obsidian 的笔记，你在那边改的下次导出前读回来。</NotServedLine>
+            <h1 className="m-0 text-title font-semibold text-text">{t("export.title")}</h1>
+            <NotServedLine className="mt-4">{t("export.notServed")}</NotServedLine>
           </>
         ) : view.error ? (
           <ErrorLine error={view.error} />
@@ -49,12 +50,12 @@ function ExportBody({ view }: { view: ExportView }) {
     <>
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 max-w-[640px]">
-          <h1 className="m-0 text-title font-semibold text-text">导出到 {name}</h1>
-          <p className="m-0 mt-1 text-note text-sub">把条目、主题页和成稿写成 {name} 里的笔记。只在你点的时候导出；你在那边改的，导出前先读回来。</p>
+          <h1 className="m-0 text-title font-semibold text-text">{t("export.titleTo", { name })}</h1>
+          <p className="m-0 mt-1 text-note text-sub">{t("export.intro", { name })}</p>
         </div>
         <Button variant="soft" size="md" isDisabled={view.folder === null || run.isPending} onPress={() => run.mutate(undefined, { onSuccess: (r) => setShown(r.id) })}>
           <FolderOutput size={15} aria-hidden="true" />
-          {run.isPending ? "在导出……" : view.runs.length > 0 ? "再导出一次" : "现在导出"}
+          {run.isPending ? t("export.exporting") : view.runs.length > 0 ? t("export.exportAgain") : t("export.exportNow")}
         </Button>
       </header>
       {run.error ? <ErrorLine error={run.error} className="mt-3" /> : null}
@@ -65,7 +66,7 @@ function ExportBody({ view }: { view: ExportView }) {
 
           <section aria-labelledby="export-where-h">
             <h2 id="export-where-h" className="m-0 text-section font-semibold text-text">
-              导到哪
+              {t("export.whereTitle")}
             </h2>
             {view.folder !== null && !editing ? (
               <div className="mt-2.5 flex flex-wrap items-center gap-2">
@@ -73,14 +74,14 @@ function ExportBody({ view }: { view: ExportView }) {
                   {view.folder}
                 </code>
                 <Button variant="outline" size="sm" onPress={() => setEditing(true)}>
-                  换一个文件夹
+                  {t("export.changeFolder")}
                 </Button>
               </div>
             ) : (
-              <TextField value={folder} onChange={setFolder} aria-label="导到哪个文件夹" className="mt-2.5 flex flex-wrap items-center gap-2">
-                <Label className="sr-only-text">导到哪个文件夹</Label>
+              <TextField value={folder} onChange={setFolder} aria-label={t("export.folderLabel")} className="mt-2.5 flex flex-wrap items-center gap-2">
+                <Label className="sr-only-text">{t("export.folderLabel")}</Label>
                 <Input
-                  placeholder={`${name} 库里的一个文件夹，例如 ~/Documents/笔记库/usuyo`}
+                  placeholder={t("export.folderPlaceholder", { name })}
                   className="mono h-ctl-sm min-w-0 flex-1 rounded-input border border-border2 bg-transparent px-3 text-tag text-text outline-none focus:border-label"
                 />
                 <Button
@@ -89,27 +90,27 @@ function ExportBody({ view }: { view: ExportView }) {
                   isDisabled={folder.trim() === "" || folderChange.isPending}
                   onPress={() => folderChange.mutate(folder, { onSuccess: () => setEditing(false) })}
                 >
-                  用这个文件夹
+                  {t("export.useFolder")}
                 </Button>
                 {view.folder !== null ? (
                   <Button variant="quiet" size="sm" onPress={() => setEditing(false)}>
-                    算了
+                    {t("common.cancel")}
                   </Button>
                 ) : null}
               </TextField>
             )}
             {folderChange.error ? <ErrorLine error={folderChange.error} className="mt-2" /> : null}
             <p className="m-0 mt-2 text-small text-sub">
-              usuyo 只写这个文件夹，库里别的笔记不碰，. 开头的文件夹不看。这个位置只在这台电脑上，不跟着同步；一个库最好只让一台电脑导出。
+              {t("export.whereNote")}
             </p>
           </section>
 
           <section aria-labelledby="export-what-h">
             <h2 id="export-what-h" className="m-0 text-section font-semibold text-text">
-              会写出什么
+              {t("export.whatTitle")}
             </h2>
             <p className="m-0 mt-1.5 text-note text-label">{willText(view.will)}</p>
-            <p className="m-0 mt-1 text-small text-sub">读回的是你在那边改的：笔记、记一句、标签、主题页和成稿的正文。标题、划线和机器转出来的字不读回，下次照 usuyo 重写。</p>
+            <p className="m-0 mt-1 text-small text-sub">{t("export.readBackNote", { name })}</p>
             <div className="mt-4">
               <NoteShape sample={view.sample} name={name} />
             </div>
@@ -118,16 +119,14 @@ function ExportBody({ view }: { view: ExportView }) {
 
         <aside aria-labelledby="export-runs-h" className="min-w-0">
           <h2 id="export-runs-h" className="m-0 text-section font-semibold text-text">
-            导出记录
+            {t("export.runsTitle")}
           </h2>
           <p className="m-0 mt-0.5 text-small text-sub">
-            每次导出留一条。读回的改动另外记在
-            <Link to="/changes" className="mx-0.5 text-label underline decoration-border2 underline-offset-4 hover:text-text">
-              改动记录
-            </Link>
-            里。
+            {rich("export.runsNote", {
+              link: <Link to="/changes" className="mx-0.5 text-label underline decoration-border2 underline-offset-4 hover:text-text" />,
+            })}
           </p>
-          {view.runs.length === 0 ? <p className="m-0 mt-3 text-note text-sub">还没导出过。</p> : null}
+          {view.runs.length === 0 ? <p className="m-0 mt-3 text-note text-sub">{t("export.noRuns")}</p> : null}
           <ul className="m-0 mt-3 flex list-none flex-col border-t border-border p-0">
             {view.runs.map((r) => (
               <li key={r.id} className="border-b border-border">

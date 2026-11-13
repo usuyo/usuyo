@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { ChangeActor, ChangeBatch, ChangeOp } from "../api/endpoints";
 import { useChangeBatch } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
+import { t } from "../i18n";
 import { Button } from "../ui/Button";
 import { actorText, hm, opText, stateText } from "./words";
 
@@ -15,16 +16,16 @@ function ActorIcon({ by }: { by: ChangeActor }) {
 function Diff({ op }: { op: ChangeOp }) {
   if (op.before === undefined && op.after === undefined) return null;
   return (
-    <dl className="m-0 mt-1.5 grid grid-cols-[2.5rem_minmax(0,1fr)] gap-x-2 gap-y-1 text-note">
+    <dl className="m-0 mt-1.5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-1 text-note">
       {op.before !== undefined ? (
         <>
-          <dt className="mono text-tag leading-5 text-faint">之前</dt>
-          <dd className="m-0 text-sub select-text">{op.before === "" ? "（没有）" : op.before}</dd>
+          <dt className="mono text-tag leading-5 text-faint">{t("changes.before")}</dt>
+          <dd className="m-0 text-sub select-text">{op.before === "" ? t("changes.none") : op.before}</dd>
         </>
       ) : null}
       {op.after !== undefined && op.op !== "add-to-topic" ? (
         <>
-          <dt className="mono text-tag leading-5 text-faint">之后</dt>
+          <dt className="mono text-tag leading-5 text-faint">{t("changes.after")}</dt>
           <dd className="m-0 text-text select-text">{op.after}</dd>
         </>
       ) : null}
@@ -32,7 +33,6 @@ function Diff({ op }: { op: ChangeOp }) {
   );
 }
 
-const DECISION_TEXT: Record<NonNullable<ChangeOp["decision"]>, string> = { open: "", accepted: "接受了", declined: "不要了" };
 
 /**
  * 一批改动：谁、几点、经什么、做了哪几处。提议用虚线框着，一处处或整批接受、不要；生效了的整批撤销，撤销过的能重做。
@@ -45,14 +45,14 @@ export function BatchCard({ batch }: { batch: ChangeBatch }) {
   const quiet = batch.state === "undone" || batch.state === "declined";
   return (
     <article
-      aria-label={`${hm(batch.at)} ${actorText(batch.by)}`}
+      aria-label={t("changes.batchLabel", { time: hm(batch.at), actor: actorText(batch.by) })}
       className={`rounded-card border px-4 pt-3 pb-3 ${proposed ? "border-dashed border-border2" : "border-border"} ${quiet ? "bg-transparent" : "bg-card"}`}
     >
       <header className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
         <span className="mono text-tag text-faint">{hm(batch.at)}</span>
         <ActorIcon by={batch.by} />
         <span className="text-note font-medium text-text">{actorText(batch.by)}</span>
-        <span className="text-small text-sub">{batch.by.device}　{batch.via}</span>
+        <span className="text-small text-sub">{t("changes.meta", { device: batch.by.device, via: batch.via })}</span>
         <span className={`ml-auto text-small ${proposed ? "text-label" : "text-faint"}`}>{stateText(batch)}</span>
       </header>
       <ul className={`m-0 mt-2 flex list-none flex-col gap-2.5 p-0 ${quiet ? "opacity-60" : ""}`}>
@@ -63,14 +63,14 @@ export function BatchCard({ batch }: { batch: ChangeBatch }) {
               {o.decision === "open" ? (
                 <span className="flex gap-1.5">
                   <Button variant="outline" size="xs" isDisabled={act.isPending} onPress={() => act.mutate({ kind: "accept", ops: [o.id] })}>
-                    接受这处
+                    {t("changes.accept")}
                   </Button>
                   <Button variant="ghost" size="xs" isDisabled={act.isPending} onPress={() => act.mutate({ kind: "decline", ops: [o.id] })}>
-                    不要这处
+                    {t("changes.decline")}
                   </Button>
                 </span>
               ) : o.decision ? (
-                <span className="text-small text-faint">{DECISION_TEXT[o.decision]}</span>
+                <span className="text-small text-faint">{o.decision === "accepted" ? t("changes.accepted") : t("changes.declined")}</span>
               ) : null}
             </div>
             <Diff op={o} />
@@ -81,10 +81,10 @@ export function BatchCard({ batch }: { batch: ChangeBatch }) {
         <div role="status" className="mt-3 flex flex-wrap items-center gap-2 rounded-btn bg-chip/60 px-3 py-2">
           <span className="text-note text-text">{batch.undoNote}</span>
           <Button variant="strong" size="xs" isDisabled={act.isPending} onPress={() => act.mutate({ kind: "undo" }, { onSuccess: () => setAsking(false) })}>
-            一起撤
+            {t("changes.undoAll")}
           </Button>
           <Button variant="quiet" size="xs" onPress={() => setAsking(false)}>
-            先不撤
+            {t("common.cancel")}
           </Button>
         </div>
       ) : null}
@@ -92,20 +92,20 @@ export function BatchCard({ batch }: { batch: ChangeBatch }) {
         {proposed ? (
           <>
             <Button variant="soft" size="xs" isDisabled={act.isPending} onPress={() => act.mutate({ kind: "accept" })}>
-              还没定的都接受
+              {t("changes.acceptRest")}
             </Button>
             <Button variant="ghost" size="xs" isDisabled={act.isPending} onPress={() => act.mutate({ kind: "decline" })}>
-              还没定的都不要
+              {t("changes.declineRest")}
             </Button>
-            <span className="text-small text-faint">一处处定也行；放着不定，它一直在这里。</span>
+            <span className="text-small text-faint">{t("changes.restNote")}</span>
           </>
         ) : batch.state === "applied" ? (
           <Button variant="ghost" size="xs" isDisabled={act.isPending || asking} onPress={() => (batch.undoNote ? setAsking(true) : act.mutate({ kind: "undo" }))}>
-            撤销这一批
+            {t("changes.undoBatch")}
           </Button>
         ) : batch.state === "undone" ? (
           <Button variant="ghost" size="xs" isDisabled={act.isPending} onPress={() => act.mutate({ kind: "redo" })}>
-            重做这一批
+            {t("changes.redoBatch")}
           </Button>
         ) : null}
       </footer>

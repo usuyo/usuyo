@@ -18,6 +18,6 @@ describe("ErrorLine", () => {
 
   it("falls back to the calm default", () => {
     render(<ErrorLine error={new DaemonUnreachableError(new Error("x"))} />);
-    expect(screen.getByRole("status").textContent).toBe("内核没在运行");
+    expect(screen.getByRole("status").textContent).toBe("usuyo 服务未运行。重新打开 usuyo 后再试。");
   });
 });

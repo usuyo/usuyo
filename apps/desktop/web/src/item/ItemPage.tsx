@@ -11,7 +11,8 @@ import { Button } from "../ui/Button";
 import { PlatformChip, SectionLabel } from "../ui/Chip";
 import { FlashLine, useFlash } from "../ui/Flash";
 import { FacetColumn } from "./FacetColumn";
-import { dayText, facetOf, GONE_TEXT, keepText, STORED_TEXT, type MediaKeep } from "./format";
+import { t } from "../i18n";
+import { dayText, facetOf, goneText, keepText, sentences, STORED_TEXT, type MediaKeep } from "./format";
 import { ItemActions, ItemMeta } from "./ItemDetails";
 import { NoteBlock } from "./NoteBlock";
 import { usePlayer } from "./usePlayer";
@@ -25,29 +26,29 @@ export function ItemPage() {
   const jump = route.useSearch();
   const item = useItem(id);
   const topics = useTopics();
-  const followed = topics.data?.filter((t) => t.followed) ?? [];
+  const followed = topics.data?.filter((x) => x.followed) ?? [];
   const error = item.error ?? topics.error;
   return (
     <div className="relative h-full overflow-hidden bg-bg">
-      <Rail label="主导航">
+      <Rail label={t("common.nav.main")}>
         <Link
           to="/"
           className="press mt-[22px] flex h-ctl items-center gap-2.5 rounded-btn px-2.5 text-body text-label no-underline hover:bg-chip/60"
         >
           <MapIcon size={16} aria-hidden="true" />
-          <span>地图</span>
+          <span>{t("common.map")}</span>
         </Link>
-        <SectionLabel className="mt-[22px]">关注的主题</SectionLabel>
+        <SectionLabel className="mt-[22px]">{t("common.followedTopics")}</SectionLabel>
         <div className="mt-1.5 flex flex-col gap-0.5">
-          {followed.map((t) => (
+          {followed.map((topic) => (
             <Link
-              key={t.id}
+              key={topic.id}
               to="/topics/$id"
-              params={{ id: t.id }}
+              params={{ id: topic.id }}
               className="press flex h-ctl items-center gap-2.5 rounded-btn px-2.5 text-body text-label no-underline hover:bg-chip"
             >
               <span className="size-[7px] shrink-0 rounded-full bg-accent" aria-hidden="true" />
-              <span>{t.name}</span>
+              <span>{topic.name}</span>
             </Link>
           ))}
         </div>
@@ -59,11 +60,11 @@ export function ItemPage() {
           className="press -ml-2 inline-flex h-ctl-sm items-center gap-2 rounded-btn pr-3 pl-2 text-note text-sub no-underline hover:text-text"
         >
           <ArrowLeft size={16} aria-hidden="true" />
-          <span>回到地图</span>
+          <span>{t("common.backToMap")}</span>
         </Link>
         {isGone(item.error) ? (
           <p role="status" className="m-0 mt-4 text-small text-sub">
-            {GONE_TEXT}
+            {goneText()}
           </p>
         ) : error ? (
           <ErrorLine error={error} className="mt-4" />
@@ -127,20 +128,20 @@ function ItemBody({ item, topics, jump }: { item: Item; topics: Topic[]; jump: I
           <h1 className="m-0 mt-2 text-title font-semibold text-text">{item.title}</h1>
           {trashed ? (
             <div role="status" className="flex min-h-7 animate-rise flex-wrap items-center gap-3 text-note text-text">
-              <span>
-                这条移进了回收站（{dayText(item.trashedAt ?? "")}），{keepText(keep.days)}
-              </span>
+              <span>{sentences(t("item.page.trashed", { day: dayText(item.trashedAt ?? "") }), keepText(keep.days))}</span>
               <Button variant="soft" size="sm" className="-my-1" onPress={() => change.mutate({ kind: "restore" })}>
-                恢复这条
+                {t("item.page.restore")}
               </Button>
             </div>
           ) : (
             <p className="m-0 mt-1 text-note text-sub">
-              {dayText(item.takenAt)}收下　·　
+              {t("item.page.added", { day: dayText(item.takenAt) })} ·{" "}
               {item.stored === "link"
-                ? `只有链接${item.missing ? "" : "，正在取内容"}`
+                ? item.missing
+                  ? STORED_TEXT.link
+                  : t("item.page.linkFetching")
                 : item.stored === "text-only" && keep.gone
-                  ? "只留文字，视频和封面已经清掉了"
+                  ? t("item.page.textOnlyGone")
                   : STORED_TEXT[item.stored]}
             </p>
           )}
@@ -152,12 +153,12 @@ function ItemBody({ item, topics, jump }: { item: Item; topics: Topic[]; jump: I
             isDisabled={webUrl(item.url) === null}
             onPress={() => {
               void openExternal(item.url).then((opened) => {
-                if (opened) open.show("在浏览器里打开了原帖");
+                if (opened) open.show(t("item.page.opened"));
               });
             }}
           >
             <ExternalLink size={14} aria-hidden="true" />
-            <span>打开原帖</span>
+            <span>{t("item.page.openInBrowser")}</span>
           </Button>
           <FlashLine flash={open} className="text-tag whitespace-nowrap text-sub" />
         </div>
@@ -176,7 +177,7 @@ function ItemBody({ item, topics, jump }: { item: Item; topics: Topic[]; jump: I
             <ItemActions item={item} keep={keep} />
           </div>
         </div>
-        <section aria-label="这一条的文字" className="flex min-w-0 flex-col gap-5">
+        <section aria-label={t("item.page.landmark")} className="flex min-w-0 flex-col gap-5">
           <FacetColumn item={item} player={player} keep={keep} />
           <NoteBlock item={item} />
         </section>

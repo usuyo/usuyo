@@ -1,6 +1,8 @@
 // 内核接口的路径和类型，都在这一个文件里。接口还没定稿，改动只落在这里；Rust 那边照这里的形状做。
 // 层名和位置照 docs/spec/library.md §1.2 的引用：asr、ocr、text、image、video、comments；时间是秒，图片用 imageKey。
 
+import type { LanguageChoice } from "../i18n/locale";
+
 export const DEFAULT_API_BASE = "http://127.0.0.1:47615";
 
 /** 开发服务器上代理到内核的路径：vite.config.ts 在服务端带上令牌，前端走同源。 */
@@ -1307,6 +1309,8 @@ export interface SettingsView {
   transforms: { auto: boolean };
   /** `systemTitleBar`：主窗口用系统标题栏（默认不用，只在 macOS 上去得掉）。桌面壳开窗口时读，下次打开 usuyo 时生效。 */
   window: { systemTitleBar: boolean };
+  /** `language`：界面和内核给的话用哪种语言，`system` 跟随系统（按机器的设置，改了马上生效）。 */
+  language: LanguageChoice;
   /** 内核的日志在哪（按机器目录的 `logs/daemon.log`）。 */
   logs: string;
 }
@@ -1316,4 +1320,5 @@ export interface SettingsPatch {
   network?: NetworkSetting;
   transforms?: { auto: boolean };
   window?: { systemTitleBar: boolean };
+  language?: LanguageChoice;
 }

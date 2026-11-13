@@ -60,18 +60,18 @@ it("lists every quotation's source at the end, in the order they are read", asyn
   const rows = within(sources).getAllByRole("listitem");
   expect(rows).toHaveLength(4);
   expect(rows[0]?.textContent).toContain("「粉 20 克，水 300 克，就是 1:15」");
-  expect(rows[0]?.textContent).toContain("口播 00:31");
+  expect(rows[0]?.textContent).toContain("转写 00:31");
 });
 
 it("quotes a sentence found by search into the draft with its position", async () => {
   const sent = serve(await sample(), "/drafts/d-pour");
-  fireEvent.change(await screen.findByPlaceholderText("搜口播、图里的字、作者写的"), { target: { value: "92" } });
-  fireEvent.click(await screen.findByRole("button", { name: "把「92 度最平衡，甜感出来了」引进来" }));
+  fireEvent.change(await screen.findByPlaceholderText("搜索转写、图中文字、正文"), { target: { value: "92" } });
+  fireEvent.click(await screen.findByRole("button", { name: "引用「92 度最平衡，甜感出来了」" }));
   await waitFor(() => expect(sent.find((s) => s.path.endsWith("/drafts/d-pour/cite"))?.body).toEqual({ segment: { itemId: "c5", layer: "asr", text: "92 度最平衡，甜感出来了", position: HIT.position } }));
 });
 
 it("says one calm sentence on both pages when the daemon has no drafts", async () => {
   serve(null, "/drafts");
-  expect(await screen.findByText(/这台电脑上的 usuyo 内核还没有成稿/)).toBeTruthy();
-  expect(screen.queryByRole("button", { name: "写一篇" })).toBeNull();
+  expect(await screen.findByText(/此版本的 usuyo 尚未提供文稿/)).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "新建文稿" })).toBeNull();
 });

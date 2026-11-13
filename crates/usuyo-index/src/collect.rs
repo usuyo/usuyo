@@ -56,7 +56,7 @@ impl Collector for ItemCollector {
         let column = segment
             .fast_fields()
             .str("item_id")
-            .map_err(|e| TantivyError::InternalError(format!("item_id 快速字段：{e}")))?;
+            .map_err(|e| TantivyError::InternalError(format!("item_id fast field: {e}")))?;
         Ok(ItemSegmentCollector {
             segment_ord,
             column,
@@ -116,8 +116,8 @@ impl SegmentCollector for ItemSegmentCollector {
             let mut id = String::new();
             match column.ord_to_str(ord, &mut id) {
                 Ok(true) => {}
-                Ok(false) => return Err(format!("item_id 序号 {ord} 查不到")),
-                Err(e) => return Err(format!("读 item_id 失败：{e}")),
+                Ok(false) => return Err(format!("item_id ordinal {ord} not found")),
+                Err(e) => return Err(format!("reading item_id: {e}")),
             }
             items.insert(id, acc);
         }

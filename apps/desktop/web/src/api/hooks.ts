@@ -640,6 +640,8 @@ export function useChangeSettings() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (patch: SettingsPatch) => call((s) => s.changeSettings(patch)),
+    // 一个早发出的读还没回来时，别让它在改好以后盖掉新的设置（比如刚换的语言）。
+    onMutate: () => queryClient.cancelQueries({ queryKey: queryKeys.settings }),
     onSuccess: (view, patch) => {
       queryClient.setQueryData(queryKeys.settings, view);
       if ("trashDays" in patch) void queryClient.invalidateQueries({ queryKey: queryKeys.trash });

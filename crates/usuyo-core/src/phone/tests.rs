@@ -15,6 +15,7 @@ use super::listener;
 use super::serve::{self, Window};
 use crate::models::{ModelError, Net};
 use crate::view::{DeviceState, GrantState, Mirroring};
+use crate::words::Lang;
 
 #[derive(Clone)]
 enum Reply {
@@ -221,37 +222,37 @@ async fn every_failed_install_leaves_nothing_and_says_one_sentence() {
             "/good.tar.gz",
             pack.clone(),
             Some(&zeros),
-            "下载下来的包和钉住的 SHA256 对不上，已经丢掉了，没有放进这台电脑。",
+            "下载的安装包与固定的 SHA256 不一致，已丢弃。这台电脑上没有放入任何文件。",
         ),
         (
             "/gone.tar.gz",
             pack.clone(),
             None,
-            "官方 release 上没有这一版的包，什么都没放进这台电脑。",
+            "官方发布中没有这一版的安装包。这台电脑上没有放入任何文件。",
         ),
         (
             "/broken.tar.gz",
             pack.clone(),
             None,
-            "网络不通，或者下载断了，什么都没放进这台电脑。",
+            "网络连接失败，或下载中断。这台电脑上没有放入任何文件。",
         ),
         (
             "/slow.tar.gz",
             pack.clone(),
             None,
-            "网络不通，或者下载断了，什么都没放进这台电脑。",
+            "网络连接失败，或下载中断。这台电脑上没有放入任何文件。",
         ),
         (
             "/extra.tar.gz",
             extra.clone(),
             None,
-            "下载下来的包里不是要的那个程序，已经丢掉了，没有放进这台电脑。",
+            "下载的安装包中没有所需的程序，已丢弃。这台电脑上没有放入任何文件。",
         ),
         (
             "/empty.tar.gz",
             empty.clone(),
             None,
-            "下载下来的包里不是要的那个程序，已经丢掉了，没有放进这台电脑。",
+            "下载的安装包中没有所需的程序，已丢弃。这台电脑上没有放入任何文件。",
         ),
     ];
     for (path, bytes, sha, sentence) in cases {
@@ -270,7 +271,7 @@ async fn every_failed_install_leaves_nothing_and_says_one_sentence() {
             a.sha256 = s.to_owned();
         }
         let e = driver::install(&net(), &dir, &r, &a).await.unwrap_err();
-        assert_eq!(driver::hint(&e), sentence, "{path}: {e}");
+        assert_eq!(driver::hint(&e).zh, sentence, "{path}: {e}");
         assert_eq!(
             driver::installed(&dir, "mirroir-mcp").as_deref(),
             Some("0.46.0"),
@@ -285,24 +286,25 @@ async fn every_failed_install_leaves_nothing_and_says_one_sentence() {
 fn the_other_failure_sentences() {
     let refused = InstallError::Download(ModelError::Refused("proxy".into()));
     assert_eq!(
-        driver::hint(&refused),
-        "连不到 GitHub（看看设置里的代理），什么都没放进这台电脑。"
+        driver::hint(&refused).zh,
+        "无法连接 GitHub。检查设置中的代理。这台电脑上没有放入任何文件。"
     );
     let io = InstallError::Io {
         path: "/x".into(),
         source: std::io::Error::other("full"),
     };
     assert_eq!(
-        driver::hint(&io),
-        "存不进这台电脑的驱动目录，什么都没留下。"
+        driver::hint(&io).zh,
+        "无法存储到这台电脑的驱动文件夹。没有留下任何文件。"
     );
 }
 
 #[test]
 fn the_steps_quote_the_program_path() {
-    let s = driver::register_step(Path::new(
-        "/Users/a/Library/Application Support/usuyo/drivers/mirroir-mcp/mirroir-mcp",
-    ));
+    let s = driver::register_step(
+        Path::new("/Users/a/Library/Application Support/usuyo/drivers/mirroir-mcp/mirroir-mcp"),
+        Lang::ZhHans,
+    );
     assert_eq!(
         s.commands,
         [
@@ -312,11 +314,11 @@ fn the_steps_quote_the_program_path() {
     );
     assert!(s.text.contains("钥匙串"));
     assert_eq!(
-        driver::renew_step(Path::new("/d/it's")).commands[0],
+        driver::renew_step(Path::new("/d/it's"), Lang::En).commands[0],
         r"'/d/it'\''s' install-agent"
     );
     assert_eq!(
-        driver::stop_step().commands,
+        driver::stop_step(Lang::ZhHans).commands,
         ["launchctl bootout gui/$(id -u)/dev.mirroir.serve"]
     );
 }
@@ -521,10 +523,15 @@ async fn the_real_lsof_names_the_other_end_of_our_connection() {
 
 #[test]
 fn the_adb_stop_step_quotes_the_path() {
-    let s = adb::stop_step(Path::new("/Users/a/Library/Android/sdk/platform-tools/adb"));
+    let s = adb::stop_step(
+        Path::new("/Users/a/Library/Android/sdk/platform-tools/adb"),
+        Lang::ZhHans,
+    );
     assert_eq!(
         s.commands,
         ["'/Users/a/Library/Android/sdk/platform-tools/adb' kill-server"]
     );
     assert!(s.text.contains("后台"));
+    let en = adb::stop_step(Path::new("/adb"), Lang::En);
+    assert!(en.text.contains("run this in Terminal"), "{}", en.text);
 }

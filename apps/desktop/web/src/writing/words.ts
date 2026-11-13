@@ -1,5 +1,7 @@
 // 引用和原话的几句话：在哪一层的哪一处、怎么跳回去、找回得怎样。主题页和成稿共用。
 import type { Citation, FacetLayer, PageBlock, PagePatch, Position } from "../api/endpoints";
+import { t } from "../i18n";
+import { formatDay } from "../i18n/format";
 import { LAYER_NAME, positionText } from "../item/format";
 import type { ItemSearch } from "../router";
 
@@ -20,21 +22,22 @@ export function jumpOf(position?: Position): ItemSearch {
 export function foundText(c: Citation): string | null {
   switch (c.found) {
     case "changed":
-      return c.now ? `这一处现在写成：「${c.now}」` : "这一处的字和当时不一样了";
+      return c.now ? t("writing.found.changedTo", { now: c.now }) : t("writing.found.changed");
     case "missing":
-      return "原文里找不到这句了，这是当时抄下的";
+      return t("writing.found.missing");
     case "gone":
-      return "来源已删掉，这是当时抄下的";
+      return t("writing.found.gone");
     default:
       return null;
   }
 }
 
-/** 引用下面那一行出处：标题、作者、日期，日期写成「8 月 14 日」，不是今年的带上年份。 */
+/** 引用下面那一行出处：标题、作者、日期，日期按语言写（「8月14日」「Aug 14」），不是今年的带上年份。 */
 export function citeSource(c: Pick<Citation, "title" | "author" | "date">, now = new Date()): string {
-  const [y, m, d] = c.date.split("-").map(Number);
-  const day = y === now.getFullYear() ? `${m} 月 ${d} 日` : `${y} 年 ${m} 月 ${d} 日`;
-  return [c.title, c.author, day].filter((x) => x !== undefined && x !== "").join("　");
+  const [y = 0, m = 1, d = 1] = c.date.split("-").map(Number);
+  // 只有日期：按本地的那一天写，不经时区换算。
+  const day = formatDay(new Date(y, m - 1, d).toISOString(), now);
+  return [c.title, c.author, day].filter((x) => x !== undefined && x !== "").join(" · ");
 }
 
 /** 页上的一处改动：改一段的字（`id` 是 null 时在页尾写新的一段），或从一段里拿掉一处引用。 */

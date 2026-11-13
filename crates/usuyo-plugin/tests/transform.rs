@@ -155,7 +155,7 @@ fn fixture(script: Script<'_>, tune: impl FnOnce(&mut TransformLimits)) -> Fixtu
         work_dir: tmp.path().join("library/.usuyo/tmp"),
         cache_dir: tmp.path().join("cache"),
         models_dir: tmp.path().join("models"),
-        locale: "zh-CN".into(),
+        locale: usuyo_plugin::Locale::new("zh-Hans"),
         limits,
     };
     Fixture {
@@ -989,7 +989,7 @@ async fn the_kit_loop_speaks_the_same_protocol() {
             work_dir: tmp.path().join("library/.usuyo/tmp"),
             cache_dir: tmp.path().join("cache"),
             models_dir: tmp.path().join("models"),
-            locale: "zh-CN".into(),
+            locale: usuyo_plugin::Locale::new("zh-Hans"),
             limits: TransformLimits {
                 describe: Duration::from_secs(30),
                 stuck: Duration::from_secs(10),

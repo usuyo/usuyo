@@ -1,5 +1,6 @@
 import { Button as AriaButton } from "react-aria-components";
 import type { Segment } from "../api/endpoints";
+import { t } from "../i18n";
 import type { CopyFacet } from "./faces";
 import { imageName } from "./format";
 import type { Player } from "./usePlayer";
@@ -21,7 +22,7 @@ export function ImageText({ copy, player, keys }: { copy: CopyFacet; player: Pla
           {key ? (
             <AriaButton
               onPress={() => player.showImage(key)}
-              aria-label={`看${imageName(key, keys)}`}
+              aria-label={t("item.column.showImage", { image: imageName(key, keys) })}
               aria-current={player.image === key}
               className={`mono h-ctl-tight w-14 shrink-0 cursor-pointer rounded-sm border-0 bg-transparent px-2 text-left text-tag outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent data-[hovered]:text-text ${player.image === key ? "text-text" : "text-faint"}`}
             >
@@ -47,7 +48,7 @@ export function ImageText({ copy, player, keys }: { copy: CopyFacet; player: Pla
                   onPress={() => player.go(pos)}
                   onHoverChange={(h) => player.setPeek(h ? pos : null)}
                   onFocusChange={(f) => player.setPeek(f ? pos : null)}
-                  aria-label={`在${imageName(pos.imageKey, keys)} 上框出「${s.text}」`}
+                  aria-label={t("item.column.showImageText", { image: imageName(pos.imageKey, keys), text: s.text })}
                   className={`w-full cursor-pointer rounded-sm border-0 px-1 py-[5px] text-left font-sans text-body outline-none select-text data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent data-[hovered]:bg-chip/60 ${on ? "bg-card2 text-text" : "bg-transparent text-label"}`}
                 >
                   {s.text}

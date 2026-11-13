@@ -4,6 +4,7 @@
 //! 令牌只交给握手核得上的那个（[`usuyo_api::handshake`]）：端口上是别的程序时，不把它当内核，
 //! 也不在占着的端口上再起一个，直接告诉用户。内核重启过（令牌换了），前端再要时重新找、重新核对。
 
+use crate::words::{self, Lang};
 use std::fs::{File, OpenOptions};
 use std::net::{Ipv4Addr, SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
@@ -105,7 +106,7 @@ impl Daemon {
         while ready.is_none() {
             let left = deadline.saturating_duration_since(Instant::now());
             if left.is_zero() {
-                return Err("usuyo 的后台没有按时启动".into());
+                return Err(words::DAEMON_LATE.pick(Lang::of(&self.root)).into());
             }
             ready = self
                 .changed
@@ -122,7 +123,7 @@ impl Daemon {
             eprintln!("usuyo: cannot reach the daemon: {e:#}");
             match e.downcast_ref::<Plain>() {
                 Some(p) => p.0.clone(),
-                None => "没能连上 usuyo 的后台".into(),
+                None => words::DAEMON_UNREACHABLE.pick(Lang::of(&self.root)).into(),
             }
         })
     }
@@ -140,13 +141,13 @@ impl Daemon {
             _ => match find(root, self.port)? {
                 Found::Daemon(c) => return Ok(c),
                 Found::OtherPort(p) => {
-                    return Err(Plain(format!(
-                        "已经有一个 usuyo 的后台在端口 {p} 上，窗口只能连端口 {}",
-                        self.port
-                    ))
+                    return Err(Plain(
+                        words::DAEMON_OTHER_PORT
+                            .fill(Lang::of(root), &[("port", &p), ("expected", &self.port)]),
+                    )
                     .into());
                 }
-                Found::Stranger => return Err(port_taken(self.port).into()),
+                Found::Stranger => return Err(port_taken(self.port, Lang::of(root)).into()),
                 Found::Nothing => spawn(root, &self.plugins, self.port)?,
             },
         };
@@ -154,10 +155,10 @@ impl Daemon {
         loop {
             if let Some(status) = child.try_wait()? {
                 eprintln!("usuyo: the daemon exited ({status})");
-                return Err(Plain(format!(
-                    "usuyo 的后台没能启动，详情在 {}",
-                    log_path(root).display()
-                ))
+                return Err(Plain(
+                    words::DAEMON_EXITED
+                        .fill(Lang::of(root), &[("log", &log_path(root).display())]),
+                )
                 .into());
             }
             // 自己的还没写好令牌时，握手核不上是正常的，接着等。
@@ -167,7 +168,7 @@ impl Daemon {
             }
             if started.elapsed() > START_TIMEOUT {
                 stop_child(child);
-                return Err(Plain("usuyo 的后台没有按时启动".into()).into());
+                return Err(Plain(words::DAEMON_LATE.pick(Lang::of(root)).into()).into());
             }
             std::thread::sleep(Duration::from_millis(100));
         }
@@ -194,8 +195,8 @@ fn port() -> u16 {
     PORT
 }
 
-fn port_taken(port: u16) -> Plain {
-    Plain(format!("端口 {port} 被别的程序占着，usuyo 的后台没能启动"))
+fn port_taken(port: u16, lang: Lang) -> Plain {
+    Plain(words::PORT_TAKEN.fill(lang, &[("port", &port)]))
 }
 
 fn stop_child(mut child: Child) {
@@ -453,12 +454,18 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let (port, seen) = impostor();
         register(root.path(), port, "secret-token-for-this-test");
+        // 话照设置的语言；不写会跟随这台机器的系统语言
+        std::fs::write(
+            root.path().join("settings.json"),
+            r#"{"language": "zh-Hans"}"#,
+        )
+        .unwrap();
         let d = Daemon::at(root.path().to_owned(), root.path().join("plugins"), port);
         d.start();
         let err = d.connection().unwrap_err();
         assert_eq!(
             err,
-            format!("端口 {port} 被别的程序占着，usuyo 的后台没能启动")
+            format!("端口 {port} 已被其他程序占用，usuyo 服务未能启动。")
         );
         assert!(lock(&d.owned).is_none(), "no second daemon was started");
         assert!(!root.path().join("logs").exists(), "spawn never ran");
@@ -493,8 +500,8 @@ mod tests {
         assert!(!seen.contains(token), "{seen}");
         assert!(!seen.contains("authorization"), "{seen}");
         assert_eq!(
-            port_taken(PORT).to_string(),
-            "端口 47615 被别的程序占着，usuyo 的后台没能启动"
+            port_taken(PORT, Lang::ZhHans).to_string(),
+            "端口 47615 已被其他程序占用，usuyo 服务未能启动。"
         );
     }
 

@@ -361,7 +361,7 @@ async fn gives_up_and_says_why() {
     engine.run_due().await.unwrap();
     let v = engine.item(&t.id, &Links::default()).unwrap();
     assert_eq!(v.stored, Stored::Link);
-    assert_eq!(v.missing.as_deref(), Some("取不到内容：原帖删了"));
+    assert_eq!(v.missing.as_deref(), Some("无法获取内容：原帖删了"));
 }
 
 #[tokio::test]
@@ -476,7 +476,7 @@ async fn partial_fetch_is_not_complete() {
     assert_eq!(v.stored, Stored::Partial);
     assert_eq!(
         v.missing.as_deref(),
-        Some("有些没存下来（有 2 张图没下载下来）")
+        Some("部分内容未保存（有 2 张图没下载下来）")
     );
 
     // 一张图都没取到：宿主自己从 missing 看出来
@@ -707,7 +707,7 @@ echo '{"ok": false, "error": {"code": "blocked", "message": "captcha", "hint": "
         .unwrap();
     engine.run_due().await.unwrap();
     let v = engine.item(&t.id, &Links::default()).unwrap();
-    assert_eq!(v.missing.as_deref(), Some("取不到内容：要验证码"));
+    assert_eq!(v.missing.as_deref(), Some("无法获取内容：要验证码"));
     let calls = std::fs::read_to_string(f.machine().join("cache/plugins/fake/web/calls")).unwrap();
     assert_eq!(calls.lines().count(), 1);
     let db = rusqlite::Connection::open(machine_dir(&f).join("jobs.db")).unwrap();

@@ -1,14 +1,14 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-Hans">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
-    <title>usuyo 登录</title>
+    <title>usuyo</title>
     <link rel="icon" href="data:," />
   </head>
   <body>
-    <!-- 登录窗口上面那一条（src-tauri/src/login.rs）：说这是哪个站点的窗口，没声明 cookie 的站点放「登录好了」。 -->
+    <!-- 登录窗口上面那一条（src-tauri/src/login.rs）：说这是哪个站点的窗口，没声明 cookie 的站点放「完成登录」。字由 src/shell/loginBar.ts 按语言填。 -->
     <div class="flex h-full items-center gap-3 border-b border-border bg-rail px-4">
       <p id="say" role="status" class="m-0 min-w-0 flex-1 text-small text-sub"></p>
       <button
@@ -16,9 +16,7 @@
         type="button"
         hidden
         class="press h-ctl-xs shrink-0 cursor-pointer rounded-sm border border-border2 bg-chip px-3 text-small font-medium text-text"
-      >
-        登录好了
-      </button>
+      ></button>
     </div>
     <script type="module" src="/src/shell/loginBar.ts"></script>
   </body>

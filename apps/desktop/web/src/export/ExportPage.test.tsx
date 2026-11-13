@@ -38,27 +38,27 @@ function serve(view: ExportView | null) {
 
 it("shows what the last export read back, kept from both sides and left alone", async () => {
   serve(await createMockExports(false).exportView());
-  expect(await screen.findByText("两边都改过的")).toBeTruthy();
+  expect(await screen.findByText("两边都有更改")).toBeTruthy();
   expect(screen.getByText("冰手冲：热水 150，冰 100，研磨细一档，冰块用纯净水冻。")).toBeTruthy();
-  expect(screen.getByText("开头的属性写坏了，读不出来")).toBeTruthy();
+  expect(screen.getByText("开头的属性格式有误，无法读取")).toBeTruthy();
 });
 
 it("exports only when you press it", async () => {
   const sent = serve(await createMockExports(false).exportView());
-  await screen.findByText("两边都改过的");
+  await screen.findByText("两边都有更改");
   expect(sent).toEqual([]);
-  fireEvent.click(screen.getByRole("button", { name: "再导出一次" }));
+  fireEvent.click(screen.getByRole("button", { name: "再次导出" }));
   await waitFor(() => expect(sent).toEqual(["POST /api/export/runs"]));
 });
 
 it("cannot export before a folder is chosen", async () => {
   serve(await createMockExports(true).exportView());
-  expect((await screen.findByRole("button", { name: "现在导出" })).hasAttribute("disabled")).toBe(true);
-  expect(screen.getByRole("textbox", { name: /导到哪个文件夹/ })).toBeTruthy();
+  expect((await screen.findByRole("button", { name: "导出" })).hasAttribute("disabled")).toBe(true);
+  expect(screen.getByRole("textbox", { name: /导出文件夹/ })).toBeTruthy();
 });
 
 it("says one calm sentence when the daemon cannot export yet", async () => {
   serve(null);
-  expect(await screen.findByText(/这台电脑上的 usuyo 内核还不能导出/)).toBeTruthy();
-  expect(screen.queryByRole("button", { name: "现在导出" })).toBeNull();
+  expect(await screen.findByText(/此版本的 usuyo 尚不能导出/)).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "导出" })).toBeNull();
 });

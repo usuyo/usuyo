@@ -21,7 +21,7 @@ it("shows one calm line when the daemon is not running", async () => {
     </QueryClientProvider>,
   );
 
-  expect((await screen.findAllByText("内核没在运行")).length).toBeGreaterThan(0);
+  expect((await screen.findAllByText("usuyo 服务未运行。重新打开 usuyo 后再试。")).length).toBeGreaterThan(0);
   expect(screen.queryByText(/error/i)).toBeNull();
 });
 

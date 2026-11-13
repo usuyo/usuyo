@@ -22,6 +22,7 @@ import { PLATFORMS, RAW_ITEMS, TOPICS, type RawItem } from "./data";
 import { dotPicture, PICTURE_SIZE, SCENES } from "./pictures";
 import { createMockSettings } from "./settings";
 import { createMockTransforms } from "./transforms";
+import { said } from "./said";
 
 const PAGE_W = 1440;
 const PAGE_H = 900;
@@ -102,7 +103,7 @@ function buildFacets(raw: RawItem): Facet[] {
       snapshotId,
       durationSec: dur,
       frames,
-      ...(raw.same ? { remark: "画面几乎不动" } : {}),
+      ...(raw.same ? { remark: said("画面几乎不变", "The picture barely changes") } : {}),
     });
     // 封面和内核一样放在图那一面里，画面拿第一张当封面。
     facets.push({ layer: "image", key: "image", images: [{ key: "cover", url: pic("cover"), ...PICTURE_SIZE }] });
@@ -112,7 +113,7 @@ function buildFacets(raw: RawItem): Facet[] {
       url: pic(i),
       ...PICTURE_SIZE,
     }));
-    facets.push({ layer: "image", key: "image", images, ...(raw.same ? { remark: "有几张图是同一张" } : {}) });
+    facets.push({ layer: "image", key: "image", images, ...(raw.same ? { remark: said("其中几张图片相同", "Some images are the same") } : {}) });
   }
   const timed = (rows: [number, string][], next?: [number, string][]): Segment[] =>
     rows.map(([sec, text], i) => {
@@ -136,7 +137,7 @@ function buildFacets(raw: RawItem): Facet[] {
       key: `asr:${r.runId}`,
       source: { by: "machine", tool: MOCK_TOOLS.asr, plugin: MOCK_BY.asr, ...r, lang: "zh" },
       segments: timed(raw.asr ?? []),
-      ...(raw.silent ? { remark: "没听到人说话" } : {}),
+      ...(raw.silent ? { remark: said("没有检测到语音", "No speech detected") } : {}),
     });
   }
   const onImages = raw.ocr?.filter((o): o is [string, string] => typeof o[0] === "string") ?? [];
@@ -227,7 +228,7 @@ function toItem(raw: RawItem): { item: Item; withheld: Facet[] } {
     topicIds: [...raw.topics],
     url: `${platform.host}${raw.p === "bili" ? "BV1" : ""}${raw.id}us${Math.floor(r01(raw.id) * 1e6)}`,
     stored: raw.link ? "link" : "complete",
-    ...(raw.link ? { missing: raw.link.missing } : {}),
+    ...(raw.link ? { missing: said(...raw.link.missing) } : {}),
     ...(raw.note ? { note: raw.note } : {}),
     facets: all.filter((f) => !waiting.has(f.layer)),
     pending: raw.pending ?? [],
@@ -276,7 +277,7 @@ const PLATFORM_RULES: [RegExp, Platform][] = [
 function parseShare(input: string): { url: string; title: string; platform: Platform } {
   const url = /https?:\/\/\S+/i.exec(input)?.[0] ?? "";
   const host = url.replace(/^https?:\/\//i, "").split("/")[0]?.replace(/^www\./i, "") ?? "";
-  const platform = PLATFORM_RULES.find(([re]) => re.test(host))?.[1] ?? { id: "web", name: url ? "网页" : "一段文字" };
+  const platform = PLATFORM_RULES.find(([re]) => re.test(host))?.[1] ?? { id: "web", name: url ? said("网页", "Web") : said("文字", "Text") };
   const before = url ? input.slice(0, input.indexOf(url)) : input;
   let title = before.replace(/[【】]/g, "").replace(/-哔哩哔哩.*$/, "").trim() || host || input.trim();
   if (title.length > 40) title = `${title.slice(0, 40)}…`;
@@ -420,7 +421,7 @@ export function createMockLibrary(empty: boolean): Library & Transforms & Settin
         takenAt: item.takenAt,
       }));
       // 样例里有一条在 usuyo 外被改坏了，读不了：地图上不摆它，设置的诊断里列出来。
-      return empty ? { regions, points } : { regions, points, unreadable: [{ id: "0193e9a4-5c1d-7b2e-9f30-8a7b6c5d4e3f", reason: "manifest.json 读不了：第 14 行少了一个逗号" }] };
+      return empty ? { regions, points } : { regions, points, unreadable: [{ id: "0193e9a4-5c1d-7b2e-9f30-8a7b6c5d4e3f", reason: said("无法读取 manifest.json：第 14 行缺少一个逗号", "Couldn't read manifest.json: a comma is missing on line 14") }] };
     },
     topics: async () => topics.map((t) => ({ ...t })),
     async createTopic(name) {
@@ -457,7 +458,7 @@ export function createMockLibrary(empty: boolean): Library & Transforms & Settin
       await wait(120);
       const share =
         body.kind === "file"
-          ? { url: "", title: body.input.split(/[\\/]/).pop() ?? body.input, platform: { id: "file", name: "文件" } }
+          ? { url: "", title: body.input.split(/[\\/]/).pop() ?? body.input, platform: { id: "file", name: said("文件", "File") } }
           : parseShare(body.input);
       const seen = [...entries.values()].find(
         (e) => (share.url !== "" && e.item.url === share.url) || body.input.includes(e.item.title),

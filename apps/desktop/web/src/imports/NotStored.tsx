@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { ImportView } from "../api/endpoints";
 import { useNotStored } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
+import { t } from "../i18n";
 import { STORED_TEXT } from "../item/format";
 import { Button } from "../ui/Button";
 
@@ -15,9 +16,9 @@ export function NotStored({ v }: { v: ImportView }) {
   return (
     <section className="mt-6 rounded-card border border-border bg-card px-4 py-3.5">
       <div className="flex items-center gap-3">
-        <p className="m-0 min-w-0 flex-1 text-note text-label">{v.notStored} 条收下了，但内容没存下来：留着链接，能回头再取。</p>
+        <p className="m-0 min-w-0 flex-1 text-note text-label">{t("imports.notStored.line", { count: v.notStored })}</p>
         <Button variant="quiet" size="xs" onPress={() => setOpen(!open)} aria-expanded={open}>
-          {open ? "收起" : "看是哪几条"}
+          {open ? t("common.showLess") : t("imports.notStored.show")}
         </Button>
       </div>
       {open ? <Reasons v={v} /> : null}
@@ -28,7 +29,7 @@ export function NotStored({ v }: { v: ImportView }) {
 function Reasons({ v }: { v: ImportView }) {
   const items = useNotStored(v.id, v.taken, LOOK_AT);
   if (items.error) return <ErrorLine error={items.error} className="mt-2" />;
-  if (!items.data) return <p className="m-0 mt-2 text-small text-faint">在找……</p>;
+  if (!items.data) return <p className="m-0 mt-2 text-small text-faint">{t("imports.notStored.finding")}</p>;
   return (
     <ul className="m-0 mt-2 flex list-none flex-col p-0">
       {items.data.map((it) => (

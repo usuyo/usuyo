@@ -27,6 +27,7 @@ use crate::view::{
     Event, ImportEntryView, ImportFileView, ImportKind, ImportState, ImportView, PreviewCounts,
     SourceView, Waiting,
 };
+use crate::words::{self, Said};
 use crate::{Error, Result};
 
 /// 确认导入时你挑的：两组各一个整组的选择，`except` 是和自己那组选得不一样的条目（`seq`）。
@@ -68,7 +69,7 @@ pub struct DeliveredLink {
 pub(crate) struct Wait {
     pub until: Option<i64>,
     pub code: String,
-    pub hint: Option<String>,
+    pub hint: Option<Said>,
 }
 
 fn ts(ms: i64) -> String {
@@ -90,7 +91,7 @@ impl Engine {
         self.list_method(&plugin, method)?;
         if source.trim().is_empty() || source.len() > 512 {
             return Err(Error::InvalidArgs("source is empty or too long".into())
-                .hinted("来源是空的，或者太长了"));
+                .hinted(words::SOURCE_EMPTY.said()));
         }
         self.batch_allowed(&plugin)?;
         let title = match title.trim() {
@@ -145,10 +146,8 @@ impl Engine {
             method: None,
             source: None,
             client: client.map(str::to_owned),
-            title: match name.trim() {
-                "" => "交进来的一批".to_owned(),
-                n => n.chars().take(200).collect(),
-            },
+            // 没起名的照语言叫（看的时候按当时的语言给）
+            title: name.trim().chars().take(200).collect(),
             action: action.map(str::to_owned),
             created_at: now_ms(),
             cursor: None,
@@ -211,7 +210,8 @@ impl Engine {
         if let Some(s) = standing
             && !matches!(s, "new" | "stored" | "trashed" | "unresolved")
         {
-            return Err(Error::InvalidArgs(format!("no standing `{s}`")).hinted("预览里没有这一组"));
+            return Err(Error::InvalidArgs(format!("no standing `{s}`"))
+                .hinted(words::NO_SUCH_GROUP.said()));
         }
         Ok(self
             .inner
@@ -237,12 +237,12 @@ impl Engine {
         let row = self.import_row(id)?;
         if !row.listed {
             return Err(Error::InvalidArgs("this import is still listing".into())
-                .hinted("还在列，列完才能确认"));
+                .hinted(words::STILL_LISTING.said()));
         }
         if row.confirmed_at.is_some() {
             return Err(
                 Error::InvalidArgs("this import is already confirmed".into())
-                    .hinted("这次导入已经确认过了"),
+                    .hinted(words::ALREADY_CONFIRMED.said()),
             );
         }
         let now = now_ms();
@@ -272,7 +272,7 @@ impl Engine {
             return Err(Error::InvalidArgs(
                 "`except` names entries that are neither new nor in the trash".into(),
             )
-            .hinted("挑出来的条目里有既不是新的、也不在回收站里的"));
+            .hinted(words::PICK_NOT_ALLOWED.said()));
         }
         // 挑了回收站里的，轮到时就拿回来；一条都没挑，轮到时已经进了回收站的照旧不收。
         let also_trashed = wanted.iter().any(|e| e.standing == "trashed");
@@ -337,7 +337,7 @@ impl Engine {
             return Err(Error::UnsupportedInput(format!(
                 "{plugin_id} {method} does not start from a link"
             ))
-            .hinted(format!("{}不从链接开始列", m.name)));
+            .hinted(words::NO_LINK_START.with(&[("method", &m.name)])));
         }
         let platform = pace_scope(&plugin);
         let host = &self.inner.host;
@@ -356,10 +356,7 @@ impl Engine {
                     "this platform is pacing calls; try again after {}",
                     ts(at)
                 ))
-                .hinted(format!(
-                    "这个平台要隔一会儿再调，{}以后再试",
-                    pace::local_time(at)
-                )));
+                .hinted(words::PACING_WAIT.with_said(&[("time", &pace::local_time(at))])));
             }
         };
         let link_host = link.and_then(|l| l.host_str());
@@ -384,7 +381,7 @@ impl Engine {
                     "{} has no method `{method}` that lists what you saved",
                     plugin.id()
                 ))
-                .hinted(format!("{}没有能列出你存过的这种方法", plugin.header.name))
+                .hinted(words::NO_LIST_METHOD.with(&[("plugin", &plugin.header.name)]))
             })?;
         let enabled = self
             .inner
@@ -403,8 +400,10 @@ impl Engine {
         .next()
         {
             return Err(
-                Error::UnsupportedInput(format!("{} {method}: {}", plugin.id(), b.code))
-                    .hinted(format!("{}：{}", m.name, b.hint)),
+                Error::UnsupportedInput(format!("{} {method}: {}", plugin.id(), b.code)).hinted(
+                    words::METHOD_BLOCKED
+                        .with_said(&[("method", &Said::plain(&m.name)), ("why", &b.hint)]),
+                ),
             );
         }
         Ok(m.clone())
@@ -507,7 +506,7 @@ impl Engine {
             return Err(Error::UnsupportedInput(
                 "this platform takes items one at a time (pacing.batch: false)".into(),
             )
-            .hinted("这个平台只能一条条收下，不做导入"));
+            .hinted(words::BATCH_OFF.said()));
         }
         Ok(())
     }
@@ -534,14 +533,17 @@ impl Engine {
                 if let Some(code) = &r.stop_code {
                     waiting = Some(Waiting {
                         code: code.clone(),
-                        hint: r.stop_hint.clone(),
+                        hint: r
+                            .stop_hint
+                            .as_deref()
+                            .map(|h| self.say(&Said::from_stored(h))),
                         until: r.wait_until.map(ts),
                     });
                 } else if let Some(w) = self.listing_wait(&r, now)? {
                     next_at = w.until.map(ts);
                     waiting = Some(Waiting {
                         code: w.code,
-                        hint: w.hint,
+                        hint: w.hint.map(|h| self.say(&h)),
                         until: w.until.map(ts),
                     });
                 }
@@ -553,7 +555,7 @@ impl Engine {
                             next_at = w.until.map(ts);
                             waiting = Some(Waiting {
                                 code: w.code,
-                                hint: w.hint,
+                                hint: w.hint.map(|h| self.say(&h)),
                                 until: w.until.map(ts),
                             });
                         }
@@ -580,7 +582,11 @@ impl Engine {
                     .map(|p| p.header.name.clone())
                     .unwrap_or_default(),
             }),
-            title: r.title,
+            title: if r.title.is_empty() && r.kind == "delivered" {
+                words::DELIVERED_BATCH.pick(self.lang()).to_owned()
+            } else {
+                r.title
+            },
             plugin_id: r.plugin,
             method: r.method,
             source: r.source,
@@ -689,8 +695,10 @@ impl Engine {
                 Ok(next) => next,
                 Err(e) => {
                     tracing::warn!(import = %r.id, error = %e, "import stopped");
-                    let hint = e.hint().map_or_else(|| e.to_string(), str::to_owned);
-                    self.inner.jobs.import_stop(&r.id, e.code(), Some(&hint))?;
+                    let hint = e.hint().unwrap_or_else(|| Said::plain(e.to_string()));
+                    self.inner
+                        .jobs
+                        .import_stop(&r.id, e.code(), Some(&hint.to_stored()))?;
                     None
                 }
             };
@@ -717,8 +725,10 @@ impl Engine {
         let Err(e) = self.list_method(&plugin, method) else {
             return Ok(false);
         };
-        let hint = e.hint().map_or_else(|| e.to_string(), str::to_owned);
-        self.inner.jobs.import_stop(&r.id, e.code(), Some(&hint))?;
+        let hint = e.hint().unwrap_or_else(|| Said::plain(e.to_string()));
+        self.inner
+            .jobs
+            .import_stop(&r.id, e.code(), Some(&hint.to_stored()))?;
         Ok(true)
     }
 
@@ -731,7 +741,11 @@ impl Engine {
             .and_then(|p| self.inner.host.plugin(p))
             .cloned()
         else {
-            jobs.import_stop(&r.id, "unsupported-input", Some("这个插件不在了"))?;
+            jobs.import_stop(
+                &r.id,
+                "unsupported-input",
+                Some(&words::PLUGIN_GONE.said().to_stored()),
+            )?;
             return Ok(None);
         };
         let scope = pace_scope(&plugin);
@@ -745,7 +759,11 @@ impl Engine {
         if let Some(copy) = &input_file
             && !copy.is_file()
         {
-            jobs.import_stop(&r.id, "dependency-missing", Some("交进来的文件不在了"))?;
+            jobs.import_stop(
+                &r.id,
+                "dependency-missing",
+                Some(&words::SENT_FILE_GONE.said().to_stored()),
+            )?;
             return Ok(None);
         }
         let request = ListRequest {
@@ -806,7 +824,9 @@ impl Engine {
                 }
                 // 读文件的没给中文的一句时说读不了这个文件；别的照旧回插件的原话
                 let fallback = match input_file {
-                    Some(_) => format!("{}读不了这个文件", plugin.header.name),
+                    Some(_) => words::CANT_READ_FILE
+                        .with(&[("plugin", &plugin.header.name)])
+                        .to_stored(),
                     None => failure.message.clone(),
                 };
                 jobs.import_stop(
@@ -897,10 +917,7 @@ impl Engine {
                         "{} {method} listed an entry with only a `ref`, but its `fetch` does not take `ref`",
                         plugin.id()
                     ))
-                    .hinted(format!(
-                        "{}列出的条目里有只能回到它取、它又取不了的，插件要改",
-                        plugin.header.name
-                    )));
+                    .hinted(words::UNFETCHABLE_ENTRIES.with(&[("plugin", &plugin.header.name)])));
                 }
                 (None, Some(identity)) => ready.push((identity, entry)),
                 (None, None) => {
@@ -1035,7 +1052,7 @@ pub(crate) fn pause_wait(p: &crate::jobs::PauseRow) -> Wait {
         Wait {
             until: p.until,
             code: p.code.clone().unwrap_or_else(|| "paused".into()),
-            hint: p.hint.clone(),
+            hint: p.hint.as_deref().map(Said::from_stored),
         }
     }
 }
@@ -1065,7 +1082,7 @@ impl Engine {
                 Err(e) => Some(Wait {
                     until: None,
                     code: e.code().into(),
-                    hint: e.hint().map(str::to_owned),
+                    hint: e.hint(),
                 }),
             });
         }

@@ -5,6 +5,8 @@ import { DropZone, FileTrigger, Radio, RadioGroup, Text } from "react-aria-compo
 import type { FileReader } from "../api/endpoints";
 import { useFileReaders, useImportFile } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
+import { rich, t } from "../i18n";
+import { formatList } from "../i18n/format";
 import { sizeText } from "../item/faces";
 import { Button } from "../ui/Button";
 import { acceptOf } from "./words";
@@ -38,15 +40,15 @@ export function FileImport({ onStarted, initial }: { onStarted: (id: string) => 
   return (
     <section aria-labelledby="file-import-h">
       <h2 id="file-import-h" className="m-0 text-section font-semibold text-text">
-        别的工具导出的文件
+        {t("imports.file.title")}
       </h2>
-      <p className="m-0 mt-1 text-small text-sub">平台官方给的归档、书签工具和阅读器导出的清单。存的是一份副本，原文件不动；先读出来给你看，你点了才收。</p>
+      <p className="m-0 mt-1 text-small text-sub">{t("imports.file.note")}</p>
       {readers.error ? <ErrorLine error={readers.error} className="mt-3" /> : null}
-      {readers.data && list.length === 0 ? <p className="m-0 mt-3 text-note text-sub">装着的插件里还没有能读文件的。</p> : null}
+      {readers.data && list.length === 0 ? <p className="m-0 mt-3 text-note text-sub">{t("imports.file.noReaders")}</p> : null}
       {reader ? (
         <>
           <RadioGroup
-            aria-label="用哪种方法读"
+            aria-label={t("imports.file.readerLabel")}
             value={reader.id}
             isDisabled={send.isPending}
             onChange={(id) => {
@@ -61,7 +63,7 @@ export function FileImport({ onStarted, initial }: { onStarted: (id: string) => 
             ))}
           </RadioGroup>
           <DropZone
-            aria-label="把文件拖到这里"
+            aria-label={t("imports.file.dropLabel")}
             isDisabled={send.isPending}
             onDrop={(e) => {
               const item = e.items.find((i) => i.kind === "file");
@@ -76,11 +78,11 @@ export function FileImport({ onStarted, initial }: { onStarted: (id: string) => 
                 <FileTrigger acceptedFileTypes={acceptOf(reader.patterns)} onSelect={(files) => hand(files?.[0])}>
                   <Button variant="outline" size="sm">
                     <FileUp size={14} aria-hidden="true" />
-                    选一个文件
+                    {t("imports.file.choose")}
                   </Button>
                 </FileTrigger>
                 <Text slot="label" className="min-w-0 flex-1 text-note text-sub">
-                  或者把文件拖到这里，选好就交给{reader.plugin}的{reader.name}读。
+                  {t("imports.file.dropNote", { plugin: reader.plugin, reader: reader.name })}
                 </Text>
               </div>
             )}
@@ -88,18 +90,16 @@ export function FileImport({ onStarted, initial }: { onStarted: (id: string) => 
           {file && !send.isPending && (send.error || send.isSuccess) ? (
             <p className="m-0 mt-2 text-small text-sub">
               <span className="mono text-tag text-faint">{file.name}</span>
-              {isStopped(send.error) ? " · 停下了，交了一半的没有留下" : ""}
+              {isStopped(send.error) ? <span className="ml-2">{t("imports.file.stopped")}</span> : null}
             </p>
           ) : null}
           {send.error && !isStopped(send.error) ? <ErrorLine error={send.error} className="mt-1" /> : null}
         </>
       ) : null}
       <p className="m-0 mt-3 text-small text-sub">
-        别的格式，可以去
-        <Link to="/plugins" className="mx-0.5 text-label underline decoration-border2 underline-offset-4 hover:text-text">
-          获取插件
-        </Link>
-        找读它的插件。
+        {rich("imports.file.otherFormats", {
+          link: <Link to="/plugins" className="mx-0.5 text-label underline decoration-border2 underline-offset-4 hover:text-text" />,
+        })}
       </p>
     </section>
   );
@@ -113,7 +113,7 @@ function Sending({ file, sent, reader, onStop }: { file: File; sent: number; rea
       <div className="min-w-0 flex-[1_1_260px]">
         <div className="mono truncate text-tag text-text">{file.name}</div>
         <div role="status" className="mt-0.5 text-small text-sub">
-          {whole ? `交完了 ${sizeText(file.size)}，在等${reader.name}读第一页……` : `交了 ${sizeText(sent)}，一共 ${sizeText(file.size)}`}
+          {whole ? t("imports.file.sentAll", { size: sizeText(file.size), reader: reader.name }) : t("imports.file.sent", { sent: sizeText(sent), total: sizeText(file.size) })}
         </div>
         <div aria-hidden="true" className="mt-2 h-0.5 overflow-hidden rounded-full bg-chip">
           <div
@@ -123,7 +123,7 @@ function Sending({ file, sent, reader, onStop }: { file: File; sent: number; rea
         </div>
       </div>
       <Button variant="outline" size="sm" onPress={onStop}>
-        停下
+        {t("imports.file.stop")}
       </Button>
     </div>
   );
@@ -138,9 +138,9 @@ function ReaderCard({ reader }: { reader: FileReader }) {
       <div className="text-body font-medium text-text">{reader.name}</div>
       <div className="text-small text-sub">{reader.plugin}</div>
       <div className="mt-1.5 text-small text-label">{reader.reads}</div>
-      {reader.lists.length > 0 ? <div className="mt-1 text-small text-sub">读得出：{reader.lists.join("、")}</div> : null}
+      {reader.lists.length > 0 ? <div className="mt-1 text-small text-sub">{t("imports.file.reads", { list: formatList(reader.lists) })}</div> : null}
       {reader.patterns.length > 0 ? <div className="mono mt-1 text-tag text-faint">{reader.patterns.join("  ")}</div> : null}
-      {reader.note ? <div className="mt-1 text-small text-faint">记下的：{reader.note}</div> : null}
+      {reader.note ? <div className="mt-1 text-small text-faint">{t("imports.file.noted", { note: reader.note })}</div> : null}
     </Radio>
   );
 }

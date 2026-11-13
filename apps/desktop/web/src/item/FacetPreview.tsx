@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import type { Facet, Item, Segment } from "../api/endpoints";
 import { MonoLabel } from "../ui/Chip";
+import { t } from "../i18n";
 import { sourceText } from "./faces";
 import { clock, LAYER_NAME, positionText } from "./format";
 
@@ -11,7 +12,7 @@ export function FacetPreview({ item }: { item: Item }) {
   if (item.facets.length === 0) {
     return (
       <p className="m-0 mt-[18px] text-body text-sub">
-        {item.missing ?? "取到内容以后，这里会有口播和图里的字。"}
+        {item.missing ?? t("item.preview.empty")}
       </p>
     );
   }
@@ -37,17 +38,17 @@ function countText(f: Facet): string {
     case "video":
       return clock(f.durationSec);
     case "image":
-      return `${f.images.length} 张`;
+      return t("item.preview.images", { count: f.images.length });
     case "comments":
-      return `${f.comments.length} 条`;
+      return t("item.preview.comments", { count: f.comments.length });
     default:
-      return `${f.segments.length} 段`;
+      return t("item.face.lines", { count: f.segments.length });
   }
 }
 
 function FacetBody({ facet, item }: { facet: Facet; item: Item }) {
   if (facet.layer === "video" || facet.layer === "image") {
-    const pics = facet.layer === "video" ? facet.frames.map((fr) => ({ k: `${fr.sec}`, url: fr.url, at: clock(fr.sec) })) : facet.images.map((im, i) => ({ k: im.key, url: im.url, at: `图 ${i + 1}` }));
+    const pics = facet.layer === "video" ? facet.frames.map((fr) => ({ k: `${fr.sec}`, url: fr.url, at: clock(fr.sec) })) : facet.images.map((im, i) => ({ k: im.key, url: im.url, at: t("item.image.numbered", { n: i + 1 }) }));
     return (
       <div className="mt-2 flex gap-1.5">
         {pics.slice(0, 4).map((p) => (
@@ -61,11 +62,11 @@ function FacetBody({ facet, item }: { facet: Facet; item: Item }) {
       <ul className="m-0 mt-1.5 flex list-none flex-col gap-1 p-0">
         {facet.comments.slice(0, 2).map((c) => (
           <li key={`${c.author}${c.text}`} className="text-body text-label">
-            <span className="text-small text-faint">{c.author}　</span>
+            <span className="mr-2 text-small text-faint">{c.author}</span>
             {c.text}
           </li>
         ))}
-        <More item={item} rest={facet.comments.length - 2} unit="条" />
+        <More item={item} rest={facet.comments.length - 2} kind="comments" />
       </ul>
     );
   }
@@ -81,16 +82,16 @@ function Lines({ segments, item }: { segments: Segment[]; item: Item }) {
           <span className="text-body text-label">{s.text}</span>
         </div>
       ))}
-      <More item={item} rest={segments.length - LINES} unit="段" />
+      <More item={item} rest={segments.length - LINES} kind="lines" />
     </div>
   );
 }
 
-function More({ item, rest, unit }: { item: Item; rest: number; unit: string }) {
+function More({ item, rest, kind }: { item: Item; rest: number; kind: "comments" | "lines" }) {
   if (rest <= 0) return null;
   return (
     <Link to="/items/$id" params={{ id: item.id }} className="w-fit text-small text-sub underline decoration-border2 underline-offset-4 hover:text-text">
-      还有 {rest} {unit}，在条目页看
+      {kind === "comments" ? t("item.preview.moreComments", { count: rest }) : t("item.preview.moreLines", { count: rest })}
     </Link>
   );
 }

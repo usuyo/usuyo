@@ -3,6 +3,7 @@ import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { FetchMethod, FetchPlugin, FileReader, PluginsView, SiteLogin, VisitorIdentity } from "../api/endpoints";
+import { setLanguageChoice, t } from "../i18n";
 import { method } from "../mock/platforms";
 import { createAppRouter } from "../router";
 // 路由是用到才载入这一页的；先载入，免得第一次转译的时间算进等页面出现的那一秒里。
@@ -111,6 +112,27 @@ it("lists platforms on the left with one quiet line and opens the first one at /
   expect(within(nav).getByRole("link", { name: /B站/ }).getAttribute("href")).toBe("/plugins/bilibili");
 });
 
+it("writes the platform page in English when English is chosen, with plurals and the daemon's numbers", async () => {
+  setLanguageChoice("en");
+  const visitor = method({ id: "visitor", name: "visitor-api", access: "public-web", account: { kind: "visitor", sites: ["www.bilibili.com"], where: "Bilibili" }, gets: { fetch: ["text"] } });
+  serve(
+    { plugins: [bili([guest, session, visitor], { upstream: [{ name: "yutto", license: "GPL-3.0" }] })], notLoaded: [] },
+    [SITE],
+    [{ site: "www.bilibili.com", name: "Bilibili", url: "https://www.bilibili.com/", cookies: [], domains: [], state: "missing", plugins: ["usuyo-fetch/bilibili"] }],
+    "/plugins/bilibili",
+  );
+  const nav = await screen.findByRole("navigation", { name: "Platforms" });
+  expect(await within(nav).findByText(/^Automatic · /)).toBeTruthy();
+  expect(screen.getByText(/^Fetched by the B站 plugin\./)).toBeTruthy();
+  expect(screen.getByRole("region", { name: "Add Link" })).toBeTruthy();
+  const pacing = screen.getByRole("region", { name: "Request Rate" });
+  expect(within(pacing).getByText("At least 5 seconds between requests; daily import limit: 500.")).toBeTruthy();
+  const about = screen.getByRole("region", { name: "About" });
+  expect(within(about).getByText("Uses: yutto (GPL-3.0)")).toBeTruthy();
+  const accounts = screen.getByRole("region", { name: "Accounts & Visitor Identities" });
+  expect(within(accounts).getByRole("button", { name: "Get Visitor Identity" })).toBeTruthy();
+});
+
 it("explains 自动 in the daemon's order, with the unbuilt one disabled and parts as 补上 lines", async () => {
   serve({ plugins: [bili([guest, session, signed, video, unbuilt])], notLoaded: [] }, [SITE], [], "/plugins/bilibili");
   const card = await screen.findByRole("region", { name: "添加链接" });
@@ -202,7 +224,7 @@ it("steps for a list that starts from a link: the link field right here", async 
   serve({ plugins: [bili([guest, pub])], notLoaded: [] }, [SITE], [], "/plugins/bilibili");
   const steps = await screen.findByRole("list", { name: "公开收藏夹的步骤" });
   expect(within(steps).getByText("收藏夹或个人空间的链接")).toBeTruthy();
-  expect(within(steps).getByRole("button", { name: "看看有什么" })).toBeTruthy();
+  expect(within(steps).getByRole("button", { name: t("imports.picker.find") })).toBeTruthy();
 });
 
 it("steps for a browser script: where the file is, reveal and copy, an inline token, the page from the script, 交给 usuyo", async () => {
@@ -219,7 +241,7 @@ it("steps for a browser script: where the file is, reveal and copy, an inline to
   expect(within(steps).getByText("/m/plugins/usuyo-fetch/bilibili/0.1.0/userscript/a.user.js")).toBeTruthy();
   expect(await within(steps).findByText(/打开你的「收藏夹」「稍后再看」页面/)).toBeTruthy();
   expect(within(steps).getByText("https://space.bilibili.com/*/favlist*")).toBeTruthy();
-  fireEvent.click(within(steps).getByRole("button", { name: "在访达中显示" }));
+  fireEvent.click(within(steps).getByRole("button", { name: t("plugins.script.reveal") }));
   await waitFor(() => expect(served.revealed).toEqual(["/api/plugins/usuyo-fetch/bilibili/methods/userscript/script/reveal"]));
   fireEvent.click(within(steps).getByRole("button", { name: "生成令牌" }));
   expect(await within(steps).findByText("t1.secret")).toBeTruthy();
@@ -243,7 +265,7 @@ it("steps for a file reader: how to get the file, then 选文件 with this reade
 it("steps for a phone method point to the phone page", async () => {
   const phone = method({ id: "iphone", name: "iPhone", access: "vision-ui", account: { kind: "own-phone", where: "小红书" }, gets: { list: ["收藏"] } });
   serve({ plugins: [bili([phone], { id: "usuyo-fetch/xiaohongshu", name: "小红书", platforms: [{ id: "xiaohongshu", name: "小红书" }], sites: [] })], notLoaded: [] }, [], [], "/plugins/xiaohongshu");
-  const steps = await screen.findByRole("list", { name: "iPhone的步骤" });
+  const steps = await screen.findByRole("list", { name: "iPhone 的步骤" });
   expect(within(steps).getByRole("link", { name: "前往「手机」页面" }).getAttribute("href")).toBe("/phone");
 });
 
@@ -282,7 +304,7 @@ it("names the other platforms a multi-platform method's one switch moves, and of
     sites: [],
   };
   serve({ plugins: [bili([guest]), ytdlp], notLoaded: [] }, [SITE], [], "/plugins/bilibili");
-  expect(await screen.findByText(/的开关同时作用于YouTube/)).toBeTruthy();
+  expect(await screen.findByText(/的开关同时作用于 YouTube/)).toBeTruthy();
   cleanup();
 
   serve({ plugins: [bili([guest, unbuilt])], notLoaded: [] }, [SITE], [], "/plugins/bilibili");

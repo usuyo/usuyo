@@ -1,8 +1,26 @@
 //! 出错时回 RFC 9457 的 problem+json（SPEC §0.3）。
 
+use axum::extract::{Request, State};
 use axum::http::{HeaderValue, StatusCode, header};
+use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use serde::Serialize;
+use usuyo_core::{Engine, Lang, Said};
+
+tokio::task_local! {
+    /// 这次请求的 `hint` 用哪种语言：请求进来时照内核设置的语言定（[`speak`]）。
+    static LANG: Lang;
+}
+
+/// 最外层的一道：这次请求里写出的 `hint` 都用内核现在的语言。
+pub(crate) async fn speak(State(engine): State<Engine>, req: Request, next: Next) -> Response {
+    LANG.scope(engine.lang(), next.run(req)).await
+}
+
+/// 不在请求里（测试直接转换）时用简体中文。
+fn lang() -> Lang {
+    LANG.try_with(|l| *l).unwrap_or_default()
+}
 
 /// 一个错误：码、状态、给人看的一句话；`type`、`title`、`instance` 在写出时补上。
 #[derive(Debug, Clone)]
@@ -11,8 +29,8 @@ pub struct Problem {
     pub status: u16,
     pub detail: String,
     pub plugin: Option<String>,
-    /// 给人看的一句中文，界面照它显示；`detail` 是给日志的原因。
-    pub hint: Option<String>,
+    /// 给人看的一句，两种语言都在，写出时照这次请求的语言挑；`detail` 是给日志的原因。
+    pub hint: Option<Said>,
 }
 
 #[derive(Serialize)]
@@ -43,9 +61,9 @@ impl Problem {
         }
     }
 
-    /// 配上一句给人看的中文。
-    pub fn with_hint(mut self, hint: impl Into<String>) -> Problem {
-        self.hint = Some(hint.into());
+    /// 配上一句给人看的话（`words.rs` 里的一句）。
+    pub fn with_hint(mut self, hint: Said) -> Problem {
+        self.hint = Some(hint);
         self
     }
 
@@ -68,13 +86,13 @@ impl From<usuyo_core::Error> for Problem {
         if code == "internal" {
             tracing::error!(error = %e, "request failed");
         }
-        // 插件报的错照旧把它的一句话放进 `detail`；内核自己配的中文只进 `hint`，`detail` 留英文给日志。
+        // 插件报的错照旧把它的一句话放进 `detail`；内核自己配的话只进 `hint`，`detail` 留英文给日志。
         let detail = match &e {
             usuyo_core::Error::Hinted { .. } => e.to_string(),
-            _ => e.hint().map_or_else(|| e.to_string(), str::to_owned),
+            _ => e.hint().map_or_else(|| e.to_string(), |h| h.en),
         };
         let mut p = Problem::new(code, detail);
-        p.hint = e.hint().map(str::to_owned);
+        p.hint = e.hint();
         // 插件报的错一律 502、带插件 id，免得平台的 login-required 像令牌不对。
         if let Some(plugin) = e.plugin() {
             p.status = 502;
@@ -97,7 +115,7 @@ impl IntoResponse for Problem {
             code: self.code,
             retryable,
             plugin: self.plugin.as_deref(),
-            hint: self.hint.as_deref(),
+            hint: self.hint.as_ref().map(|h| h.pick(lang())),
         };
         let body = serde_json::to_vec(&wire).unwrap_or_default();
         let mut res = (status, body).into_response();

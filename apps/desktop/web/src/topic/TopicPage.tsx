@@ -13,6 +13,7 @@ import { PageText } from "../writing/PageText";
 import { Angles } from "./Angles";
 import { Matching, Members } from "./Matching";
 import { Threads } from "./Threads";
+import { rich, t } from "../i18n";
 
 const route = getRouteApi("/topics/$id");
 
@@ -24,28 +25,28 @@ export function TopicPage() {
   const { id } = route.useParams();
   const page = useTopicPage(id);
   const topics = useTopics();
-  const followed = topics.data?.filter((t) => t.followed) ?? [];
+  const followed = topics.data?.filter((x) => x.followed) ?? [];
   return (
     <div className="relative h-full overflow-hidden bg-bg">
-      <Rail label="主导航">
+      <Rail label={t("common.nav.main")}>
         <Link
           to="/"
           className="press mt-[22px] flex h-ctl items-center gap-2.5 rounded-btn px-2.5 text-body text-label no-underline hover:bg-chip/60"
         >
           <MapIcon size={16} aria-hidden="true" />
-          <span>地图</span>
+          <span>{t("common.map")}</span>
         </Link>
-        <SectionLabel className="mt-[22px]">关注的主题</SectionLabel>
+        <SectionLabel className="mt-[22px]">{t("common.followedTopics")}</SectionLabel>
         <div className="mt-1.5 flex flex-col gap-0.5">
-          {followed.map((t) => (
+          {followed.map((topic) => (
             <Link
-              key={t.id}
+              key={topic.id}
               to="/topics/$id"
-              params={{ id: t.id }}
-              className={`press flex h-ctl items-center gap-2.5 rounded-btn px-2.5 text-body no-underline hover:bg-chip ${t.id === id ? "bg-chip text-text" : "text-label"}`}
+              params={{ id: topic.id }}
+              className={`press flex h-ctl items-center gap-2.5 rounded-btn px-2.5 text-body no-underline hover:bg-chip ${topic.id === id ? "bg-chip text-text" : "text-label"}`}
             >
               <span className="size-[7px] shrink-0 rounded-full bg-accent" aria-hidden="true" />
-              <span>{t.name}</span>
+              <span>{topic.name}</span>
             </Link>
           ))}
         </div>
@@ -56,10 +57,10 @@ export function TopicPage() {
           className="press -ml-2 inline-flex h-ctl-sm items-center gap-2 rounded-btn pr-3 pl-2 text-note text-sub no-underline hover:text-text"
         >
           <ArrowLeft size={16} aria-hidden="true" />
-          <span>回到地图</span>
+          <span>{t("common.backToMap")}</span>
         </Link>
         {isNotServed(page.error) ? (
-          <NotServedLine className="mt-4">这台电脑上的 usuyo 内核还没有主题页；主题的名字和关注在地图上照常用，你写的那一页以后在这里写。</NotServedLine>
+          <NotServedLine className="mt-4">{t("topic.notServed")}</NotServedLine>
         ) : page.error ? (
           <ErrorLine error={page.error} className="mt-4" />
         ) : null}
@@ -97,7 +98,7 @@ function TopicBody({ page }: { page: TopicView }) {
         <div className="min-w-0">
           <h1 className="m-0 text-title font-semibold text-text">{page.name}</h1>
           <p className="m-0 mt-1 text-note text-sub">
-            这一页是普通 Markdown，存在 <span className="mono text-tag text-label select-text">{page.page.file}</span>
+            {rich("topic.file", { path: page.page.file, file: <span className="mono text-tag text-label select-text" /> })}
           </p>
         </div>
         <Button
@@ -116,31 +117,31 @@ function TopicBody({ page }: { page: TopicView }) {
           {page.followed ? (
             <>
               <span className="size-[7px] rounded-full bg-accent" aria-hidden="true" />
-              关注着，地图上这一片一直清楚
+              {t("topic.following")}
             </>
           ) : (
-            "关注这个主题"
+            t("topic.follow")
           )}
         </Button>
       </header>
       {change.error ? <ErrorLine error={change.error} className="mt-3" /> : null}
 
       <div className="mt-7 grid items-start gap-x-12 gap-y-10 @[880px]:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-        <Section id="topic-page-h" title="这一页" sub="你写的字，每段带着它引的原话；点原话回到那一秒、那张图。">
+        <Section id="topic-page-h" title={t("topic.sections.page")} sub={t("topic.sections.pageSub")}>
           <PageText
             page={page.page}
             busy={busy}
-            empty="这一页还空着。从旁边机器挑的线头、下面的角度里引一段原话进来，或者先写一段。"
+            empty={t("topic.sections.pageEmpty")}
             onEdit={(patch) => change.mutate({ kind: "page", patch })}
           />
         </Section>
-        <Section id="topic-threads-h" title="旁边的线头" sub="机器按相近拼的几组原话，不起名，也不替你总结。引进来的才是你的。">
-          <Threads threads={page.threads} busy={busy || dismiss.isPending} onCite={cite} onDismiss={(t) => dismiss.mutate(t)} />
+        <Section id="topic-threads-h" title={t("topic.sections.threads")} sub={t("topic.sections.threadsSub")}>
+          <Threads threads={page.threads} busy={busy || dismiss.isPending} onCite={cite} onDismiss={(threadId) => dismiss.mutate(threadId)} />
         </Section>
       </div>
 
       <div className="mt-12 border-t border-border pt-7">
-        <Section id="topic-angles-h" title="几个角度" sub="同一些段，换个问题读一遍；不同的问题并排放，哪一个都不替换原话。">
+        <Section id="topic-angles-h" title={t("topic.sections.angles")} sub={t("topic.sections.anglesSub")}>
           <Angles
             angles={page.angles}
             busy={busy}
@@ -156,10 +157,10 @@ function TopicBody({ page }: { page: TopicView }) {
       </div>
 
       <div className="mt-12 grid items-start gap-x-12 gap-y-10 border-t border-border pt-7 @[880px]:grid-cols-2">
-        <Section id="topic-members-h" title="成员" sub="你放进来的。命中的不会自己变成成员。">
+        <Section id="topic-members-h" title={t("topic.sections.members")} sub={t("topic.sections.membersSub")}>
           <Members page={page} busy={busy} onMember={member} />
         </Section>
-        <Section id="topic-match-h" title="怎么算命中" sub="先按关键词；相似度要你自己打开。">
+        <Section id="topic-match-h" title={t("topic.sections.match")} sub={t("topic.sections.matchSub")}>
           <Matching page={page} busy={busy} onMatch={(match) => change.mutate({ kind: "match", match })} onMember={member} />
         </Section>
       </div>

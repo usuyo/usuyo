@@ -2,6 +2,7 @@
 // 两个是 usuyo 自带的（builtin/），两个是装上的别人的插件，好在条目页上「换一个转」。
 import type { Facet, Item, ModelDownload, Pending, Segment, TransformJob, TransformPlugin, TransformRequest, TransformsView } from "../api/endpoints";
 import type { Transforms } from "../api/source";
+import { said } from "./said";
 
 const MB = 1_000_000;
 
@@ -54,7 +55,7 @@ function basePlugins(): TransformPlugin[] {
       jobs: ["ocr", "frames"],
       models: [{ name: "pp-ocrv6-small", size: 16 * MB, license: "Apache-2.0", state: "absent" }],
       health: "unavailable",
-      hint: "这台电脑上缺 onnxruntime，插件没能启动",
+      hint: said("这台电脑上缺少 onnxruntime，插件无法启动", "onnxruntime is missing on this computer, so the plugin can't start"),
     },
   ];
 }
@@ -145,7 +146,7 @@ export function createMockTransforms(items: MockItems, empty: boolean): Transfor
       // 和内核一样：声明的模型还没下时插件报 `unavailable`，只写「要先下载模型」。
       const view = (p: TransformPlugin): TransformPlugin => {
         const copy = { ...p, models: p.models.map((m) => ({ ...m })) };
-        return p.health === "ok" && p.models.some((m) => m.state !== "present") ? { ...copy, health: "unavailable", hint: "要先下载模型" } : copy;
+        return p.health === "ok" && p.models.some((m) => m.state !== "present") ? { ...copy, health: "unavailable", hint: said("需要先下载模型", "Download the model first") } : copy;
       };
       return { plugins: plugins.map(view), auto: true };
     },

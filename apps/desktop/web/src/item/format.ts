@@ -1,3 +1,5 @@
+import { t } from "../i18n";
+import { formatDay, formatList } from "../i18n/format";
 import type { Facet, FacetLayer, Item, Position, SearchHit, Stored } from "../api/endpoints";
 
 /** 只留文字的条目，移出去的视频和图现在在哪：还在回收站里（留几天），还是已经清掉了。 */
@@ -21,12 +23,12 @@ export function clock(sec: number): string {
 
 /** 图片 key 给人看的名字：p2 是「图 2」，cover 是「封面」。 */
 export function imageName(key: string, keys: string[] = []): string {
-  if (key === "cover") return "封面";
+  if (key === "cover") return t("item.image.cover");
   // 内核的图片 key 是内容的哈希，给人看时按它在这一条里的先后叫「图 N」。
   const at = keys.indexOf(key);
-  if (at >= 0) return `图 ${at + 1}`;
+  if (at >= 0) return t("item.image.numbered", { n: at + 1 });
   const n = /^p(\d+)$/.exec(key)?.[1];
-  return n ? `图 ${n}` : key;
+  return n ? t("item.image.numbered", { n }) : key;
 }
 
 export function positionText(p: Position): string {
@@ -34,62 +36,96 @@ export function positionText(p: Position): string {
   return imageName(p.imageKey);
 }
 
+/** 每一层在界面上的名字；按当前语言现取（取值时才读语言文件）。 */
 export const LAYER_NAME: Record<FacetLayer | SearchHit["layer"], string> = {
-  asr: "口播",
-  ocr: "图里的字",
-  frames: "画面上的字",
-  text: "作者写的",
-  image: "画面",
-  video: "画面",
-  comments: "评论",
-  note: "记一句",
-  title: "标题",
-  author: "作者",
+  get asr() {
+    return t("item.layer.asr");
+  },
+  get ocr() {
+    return t("item.layer.ocr");
+  },
+  get frames() {
+    return t("item.layer.frames");
+  },
+  get text() {
+    return t("item.layer.text");
+  },
+  get image() {
+    return t("item.layer.image");
+  },
+  get video() {
+    return t("item.layer.video");
+  },
+  get comments() {
+    return t("item.layer.comments");
+  },
+  get note() {
+    return t("item.layer.note");
+  },
+  get title() {
+    return t("item.layer.title");
+  },
+  get author() {
+    return t("item.layer.author");
+  },
 };
 
-/** 回收站留几天：「30 天内能恢复」「一直能恢复」；还没取到回收站的设置时只说能恢复。 */
+/** 回收站留几天，一整句：「30 天内可以恢复。」「可随时恢复。」；还没取到回收站的设置时只说可以恢复。 */
 export function keepText(trashDays: number | null | undefined): string {
-  if (trashDays === undefined) return "能恢复";
-  return trashDays === null ? "一直能恢复" : `${trashDays} 天内能恢复`;
+  if (trashDays === undefined) return t("item.keep.unknown");
+  return trashDays === null ? t("item.keep.forever") : t("item.keep.days", { count: trashDays });
 }
 
+/** 两句接在一起：中文直接接，英文中间空一格。 */
+export function sentences(first: string, second: string): string {
+  return t("item.twoSentences", { first, second });
+}
+
+/** 「11月13日」「Nov 13」，不是今年的带年份（`i18n/format.ts`）。 */
 export function dayText(iso: string): string {
-  const d = new Date(iso);
-  return `${d.getMonth() + 1} 月 ${d.getDate()} 日`;
+  return formatDay(iso);
 }
 
 export const STORED_TEXT: Record<Stored, string> = {
-  complete: "都存好了",
-  partial: "存下了一部分",
-  link: "只有链接",
-  "text-only": "只留文字",
+  get complete() {
+    return t("item.stored.complete");
+  },
+  get partial() {
+    return t("item.stored.partial");
+  },
+  get link() {
+    return t("item.stored.link");
+  },
+  get "text-only"() {
+    return t("item.stored.textOnly");
+  },
 };
 
-/** 「存下了」那一行：有哪些就写哪些。 */
+/** 「已保存」那一行：有哪些就写哪些。 */
 export function savedText(item: Item, keep: MediaKeep): string {
-  if (item.stored === "link") return "只有链接。";
+  if (item.stored === "link") return t("item.saved.linkOnly");
   const parts: string[] = [];
   for (const f of item.facets) {
     if (f.layer === "video") {
-      parts.push(item.stored === "text-only" ? "画面缩略图" : "视频");
-    } else if (f.layer === "image") parts.push(`${f.images.length} 张图`);
+      parts.push(item.stored === "text-only" ? t("item.saved.thumbnails") : t("item.saved.video"));
+    } else if (f.layer === "image") parts.push(t("item.saved.images", { count: f.images.length }));
     else if (f.layer === "asr") {
       // 空的一份（没听到人说话）不算存下了口播。
-      if (f.segments.length > 0) parts.push(f.source.by === "platform" ? "字幕" : "口播文字");
+      if (f.segments.length > 0) parts.push(f.source.by === "platform" ? t("item.saved.subtitles") : t("item.saved.transcript"));
     }
-    else if (f.layer === "ocr") parts.push("图里的字");
-    else if (f.layer === "frames") parts.push("画面上的字");
-    else if (f.layer === "text") parts.push("作者写的字");
-    else parts.push(`${f.comments.length} 条评论`);
+    else if (f.layer === "ocr") parts.push(t("item.saved.ocr"));
+    else if (f.layer === "frames") parts.push(t("item.saved.frames"));
+    else if (f.layer === "text") parts.push(t("item.saved.text"));
+    else parts.push(t("item.saved.comments", { count: f.comments.length }));
   }
   // 同一层有几份（字幕和机器转的）只写一次。
-  const list = [...new Set(parts)].join("、");
+  const list = formatList([...new Set(parts)]);
   if (item.stored === "text-only") {
-    return keep.gone ? `${list}。视频和封面已经从回收站清掉了` : `${list}。视频和封面在回收站，${keepText(keep.days)}`;
+    return keep.gone ? t("item.saved.textOnlyGone", { list }) : sentences(t("item.saved.textOnly", { list }), keepText(keep.days));
   }
   // 缺了什么写在后面的 `missing` 里。
-  if (item.stored === "partial") return `${list}。`;
-  return `${list} — 都存好了`;
+  if (item.stored === "partial") return t("item.saved.partial", { list });
+  return t("item.saved.complete", { list });
 }
 
 export function facetOf<L extends FacetLayer>(item: Item, layer: L): Extract<Facet, { layer: L }> | undefined {
@@ -108,4 +144,6 @@ export function snippetParts(hit: SearchHit): { pre: string; mid: string; post: 
 }
 
 /** 开着的这一条从资料库里没了（回收站里到期、或清掉了）：条目页和地图旁的详情都说这句。 */
-export const GONE_TEXT = "这一条已经不在资料库里了。";
+export function goneText(): string {
+  return t("item.gone");
+}

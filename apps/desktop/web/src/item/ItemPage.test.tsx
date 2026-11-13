@@ -3,6 +3,7 @@ import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { Item, TransformsView, TrashView } from "../api/endpoints";
+import { setLanguageChoice } from "../i18n";
 import { createMockLibrary } from "../mock/library";
 import { createAppRouter } from "../router";
 // 路由是用到才载入这一页的；先载入，免得第一次转译的时间算进等页面出现的那一秒里。
@@ -55,9 +56,9 @@ it("says the video and cover were cleared from the trash and offers no way to re
   const item = await createMockLibrary(false).item("w3");
   expect(item.stored).toBe("text-only");
   serve(item, { trashDays: 30, entries: [] });
-  expect(await screen.findByText("视频和封面已经从回收站清掉了")).toBeTruthy();
+  expect(await screen.findByText("视频和封面已从回收站中删除")).toBeTruthy();
   expect(screen.queryByRole("button", { name: /恢复视频和封面/ })).toBeNull();
-  expect(screen.getByText("只留文字，视频和封面已经清掉了", { exact: false })).toBeTruthy();
+  expect(screen.getByText("仅保留文字，视频和封面已删除", { exact: false })).toBeTruthy();
 });
 
 it("uses the library's trash days instead of a fixed thirty", async () => {
@@ -66,9 +67,22 @@ it("uses the library's trash days instead of a fixed thirty", async () => {
     trashDays: 7,
     entries: [{ id: "t1", reason: "keep-text", itemId: "w3", title: item.title, platform: item.platform, trashedAt: "2026-11-01T12:00:00.000Z" }],
   });
-  expect(await screen.findByText("7 天内能恢复；口播文字、图里的字和画面缩略图都还在")).toBeTruthy();
-  expect(screen.getByRole("button", { name: /恢复视频和封面/ })).toBeTruthy();
+  expect(await screen.findByText("7 天内可以恢复。转写、图中文字和画面缩略图仍然保留。")).toBeTruthy();
+  expect(screen.getByRole("button", { name: /^恢复视频和封面/ })).toBeTruthy();
   expect(screen.queryByText(/30 天/)).toBeNull();
+});
+
+it("speaks English when English is chosen, with plurals and the platform's trash", async () => {
+  setLanguageChoice("en");
+  const item = await createMockLibrary(false).item("w3");
+  serve(item, {
+    trashDays: 1,
+    entries: [{ id: "t1", reason: "keep-text", itemId: "w3", title: item.title, platform: item.platform, trashedAt: "2026-11-01T12:00:00.000Z" }],
+  });
+  expect(await screen.findByText("Can be restored for 1 day. The transcript, text in images, and video thumbnails are kept.")).toBeTruthy();
+  expect(screen.getByText("The video and cover are in the Trash")).toBeTruthy();
+  expect(screen.getByRole("button", { name: /^Restore Video and Cover/ })).toBeTruthy();
+  expect(screen.getByRole("button", { name: /Open in Browser/ })).toBeTruthy();
 });
 
 it("asks once on open for what is still to come, and offers redo with the default and with another plugin", async () => {
@@ -76,11 +90,11 @@ it("asks once on open for what is still to come, and offers redo with the defaul
   const posted = serve(item, { trashDays: 30, entries: [] });
   expect(await screen.findByRole("slider")).toBeTruthy();
   await waitFor(() => expect(posted).toContainEqual({ path: `/api/items/${item.id}/transform`, body: { jobs: "pending" } }));
-  fireEvent.click(await screen.findByRole("button", { name: "再转一次画面上的字，或换一个转" }));
-  fireEvent.click(await screen.findByRole("menuitem", { name: /^换成「PP-OCR 认字」转一份/ }));
+  fireEvent.click(await screen.findByRole("button", { name: "重新处理画面中文字，或改用其他插件" }));
+  fireEvent.click(await screen.findByRole("menuitem", { name: /^改用「PP-OCR 认字」识别/ }));
   await waitFor(() => expect(posted).toContainEqual({ path: `/api/items/${item.id}/transform`, body: { job: "frames", plugin: "lin/ocr-ppocr" } }));
-  fireEvent.click(screen.getByRole("button", { name: "再转一次画面，或换一个转" }));
-  fireEvent.click(await screen.findByRole("menuitem", { name: /^重新取关键帧/ }));
+  fireEvent.click(screen.getByRole("button", { name: "重新处理视频，或改用其他插件" }));
+  fireEvent.click(await screen.findByRole("menuitem", { name: /^重新提取关键帧/ }));
   await waitFor(() => expect(posted).toContainEqual({ path: `/api/items/${item.id}/transform`, body: { job: "keyframes" } }));
   expect(posted.filter((p) => JSON.stringify(p.body) === '{"jobs":"pending"}')).toHaveLength(1);
 });
@@ -93,9 +107,9 @@ it("redoes the copy on show with the plugin that made it, not the first plugin w
     facets: base.facets.map((f) => (f.layer === "frames" ? { ...f, source: { ...f.source, plugin: "lin/ocr-ppocr", tool: "PP-OCR" } } : f)),
   };
   const posted = serve(item, { trashDays: 30, entries: [] });
-  fireEvent.click(await screen.findByRole("button", { name: "再转一次画面上的字，或换一个转" }));
-  expect(await screen.findByRole("menuitem", { name: /^换成「图里的字」转一份/ })).toBeTruthy();
-  fireEvent.click(screen.getByRole("menuitem", { name: /^再转一次/ }));
+  fireEvent.click(await screen.findByRole("button", { name: "重新处理画面中文字，或改用其他插件" }));
+  expect(await screen.findByRole("menuitem", { name: /^改用「图里的字」识别/ })).toBeTruthy();
+  fireEvent.click(screen.getByRole("menuitem", { name: /^重新识别/ }));
   await waitFor(() => expect(posted).toContainEqual({ path: `/api/items/${item.id}/transform`, body: { job: "frames", plugin: "lin/ocr-ppocr" } }));
 });
 
@@ -104,11 +118,11 @@ it("says a face needs a model with its name, size and licence, and tries again b
   const model = { plugin: "builtin/asr-sherpa", name: "sense-voice-int8-2024-07-17", size: 163_002_883, license: "FunASR Model Open Source License" };
   const item: Item = { ...base, pending: [{ layer: "asr", state: "needs-model", model }, { layer: "video", state: "failed", hint: "画面读不出来" }] };
   const posted = serve(item, { trashDays: 30, entries: [] });
-  expect(await screen.findByText("转口播要先下载 sense-voice-int8-2024-07-17 模型，约 163 MB，只下一次。")).toBeTruthy();
+  expect(await screen.findByText("转写需要先下载 sense-voice-int8-2024-07-17 模型（163 MB），只需下载一次。")).toBeTruthy();
   expect(screen.getByText("许可：FunASR Model Open Source License")).toBeTruthy();
   expect(screen.getByRole("button", { name: "下载" })).toBeTruthy();
-  expect(screen.getByText("画面没转出来：画面读不出来")).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "再试" }));
+  expect(screen.getByText("无法处理视频：画面读不出来")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "重试" }));
   await waitFor(() => expect(posted.filter((p) => JSON.stringify(p.body) === '{"jobs":"pending"}')).toHaveLength(2));
 });
 
@@ -118,8 +132,8 @@ it("does not call the media cleared while the whole text-only item sits in the t
     trashDays: 30,
     entries: [{ id: "t2", reason: "delete", itemId: "w3", title: item.title, platform: item.platform, trashedAt: "2026-11-10T12:00:00.000Z" }],
   });
-  expect(await screen.findByText("视频和封面在回收站里")).toBeTruthy();
-  expect(screen.queryByText(/已经从回收站清掉了/)).toBeNull();
+  expect(await screen.findByText("视频和封面在回收站中")).toBeTruthy();
+  expect(screen.queryByText(/已从回收站中删除/)).toBeNull();
 });
 
 it("opens at the second a quotation points back to", async () => {

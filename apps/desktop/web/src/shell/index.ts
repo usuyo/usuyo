@@ -59,7 +59,7 @@ export async function openExternal(url: string): Promise<boolean> {
     await openUrl(safe);
     return true;
   } catch (error) {
-    console.warn("usuyo: 没能打开原帖", error);
+    console.warn("usuyo: could not open the original page", error);
     return false;
   }
 }

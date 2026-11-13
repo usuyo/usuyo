@@ -6,8 +6,9 @@ import { dayText } from "../item/format";
 import { clearLoginData, openLogin } from "../shell";
 import { Button } from "../ui/Button";
 import { CardRow } from "../ui/Card";
-import { LOGIN_STATE, PAGE } from "./words";
-
+import { t } from "../i18n";
+import { formatList } from "../i18n/format";
+import { LOGIN_STATE } from "./words";
 
 /** 开壳的登录窗口：在 usuyo 给这个站点单独开的窗口里，你自己登录，和你日常用的浏览器分开。 */
 function useLogin(site: SiteLogin) {
@@ -16,9 +17,9 @@ function useLogin(site: SiteLogin) {
     setSay(null);
     try {
       const opened = await openLogin(site.site);
-      setSay(opened ? PAGE.loginOpened : PAGE.loginAppOnly);
+      setSay(opened ? t("plugins.accounts.loginOpened") : t("plugins.accounts.loginAppOnly"));
     } catch (error) {
-      setSay(typeof error === "string" ? error : PAGE.loginFailed);
+      setSay(typeof error === "string" ? error : t("plugins.accounts.loginFailed"));
     }
   }
   return { login, say, setSay };
@@ -38,7 +39,7 @@ export function SiteLoginButton({ site }: { site: SiteLogin }) {
   return (
     <div className="min-w-0">
       <Button variant="soft" size="sm" onPress={() => void login()} isDisabled={!site.loginUrl}>
-        {site.login === "present" ? PAGE.relogin : PAGE.login}
+        {site.login === "present" ? t("plugins.accounts.relogin") : t("plugins.accounts.login")}
       </Button>
       <Say text={say} />
     </div>
@@ -55,31 +56,31 @@ export function SiteLoginRow({ site, users }: { site: SiteLogin; users?: string[
     setSay(null);
     forget.mutate(site.site, {
       onSuccess: () => {
-        clearLoginData(site.site).catch((error: unknown) => setSay(typeof error === "string" ? error : PAGE.loginClearFailed));
+        clearLoginData(site.site).catch((error: unknown) => setSay(typeof error === "string" ? error : t("plugins.accounts.loginClearFailed")));
       },
     });
   }
 
   return (
     <CardRow
-      title={PAGE.siteTitle(site.name)}
+      title={t("plugins.accounts.siteTitle", { name: site.name })}
       sub={
         <>
           <span className={site.login === "expired" ? "text-warn" : logged ? "text-label" : "text-sub"}>{LOGIN_STATE[site.login]}</span>
-          {site.capturedAt ? PAGE.siteSaved(dayText(site.capturedAt)) : ""}
-          {users && users.length > 0 ? PAGE.users(users.join("、")) : ""}
+          {site.capturedAt ? ` · ${t("plugins.accounts.siteSaved", { day: dayText(site.capturedAt) })}` : ""}
+          {users && users.length > 0 ? ` · ${t("plugins.accounts.users", { names: formatList(users) })}` : ""}
           <span className="mono ml-2 text-tag text-faint">{site.site}</span>
-          {!site.loginUrl ? <span className="block">{PAGE.siteNoLoginUrl}</span> : null}
+          {!site.loginUrl ? <span className="block">{t("plugins.accounts.siteNoLoginUrl")}</span> : null}
         </>
       }
       control={
         <>
           <Button variant={logged ? "outline" : "soft"} size="sm" onPress={() => void login()} isDisabled={!site.loginUrl}>
-            {logged ? PAGE.relogin : PAGE.login}
+            {logged ? t("plugins.accounts.relogin") : t("plugins.accounts.login")}
           </Button>
           {site.login !== "missing" ? (
             <Button variant="quiet" size="sm" onPress={logout} isDisabled={forget.isPending}>
-              {PAGE.logout}
+              {t("plugins.accounts.logout")}
             </Button>
           ) : null}
         </>
