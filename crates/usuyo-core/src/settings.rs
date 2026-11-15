@@ -311,7 +311,7 @@ impl Engine {
             write(root, &map)?;
         }
         if let Some(p) = proxy {
-            self.inner.host.set_proxy(p.clone());
+            self.loaded().host.set_proxy(p.clone());
             self.transforms().models.set_route(p);
             self.emit(crate::view::Event::PluginsUpdated);
         }

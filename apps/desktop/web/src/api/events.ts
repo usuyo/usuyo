@@ -30,6 +30,9 @@ export function applyEvent(queryClient: QueryClient, e: DaemonEvent): void {
     case "phone-updated":
       refresh(queryKeys.phone);
       return;
+    case "catalog-updated":
+      refresh(queryKeys.catalog);
+      return;
     case "import-updated":
       // 列了一页、收下了一条：这一次、记录栏和预览里的条目都重拉。
       refresh(queryKeys.imports);
@@ -94,10 +97,10 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<DaemonEvent["type"]>([
   "import-updated",
 ]);
 
-/** 只看刷新要用的 `type` 和 `id`；别的字段照 endpoints.ts。`plugins-updated`、`transforms-updated`、`phone-updated` 不带 id。 */
+/** 只看刷新要用的 `type` 和 `id`；别的字段照 endpoints.ts。`plugins-updated`、`transforms-updated`、`phone-updated`、`catalog-updated` 不带 id。 */
 export function isDaemonEvent(v: unknown): v is DaemonEvent {
   if (typeof v !== "object" || v === null || !("type" in v) || typeof v.type !== "string") return false;
-  if (v.type === "plugins-updated" || v.type === "transforms-updated" || v.type === "phone-updated") return true;
+  if (v.type === "plugins-updated" || v.type === "transforms-updated" || v.type === "phone-updated" || v.type === "catalog-updated") return true;
   return EVENT_TYPES.has(v.type) && "id" in v && typeof v.id === "string";
 }
 

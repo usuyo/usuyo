@@ -50,7 +50,16 @@ jobs:
     uses: "usuyo/plugin-kit/.github/workflows/release.yml@<完整 commit SHA>"
 ```
 
-所有 action 和可复用工作流都按完整 commit SHA 引用，由 Dependabot 升级。`usuyo-fetch` 是引用这个工作流，还是复制一份放进自己组织，见 [§8.8](#88-获取方式组织的仓库结构) 和 [§13](open.md#13-待定) 第 13 项。
+所有 action 和可复用工作流都按完整 commit SHA 引用，由 Dependabot 升级。
+
+**11-13 代码（`usuyo-fetch` 的做法，用户 2026-11-13 定订阅源以后）**：`usuyo-fetch` 不引用 plugin-kit，可复用工作流放在它自己的索引仓库 `usuyo-fetch/index` 的 `.github/workflows/release-plugin.yml`（[§13](open.md#13-待定) 第 13 项照这个定了）。每个插件仓库只有一个 `.github/workflows/release.yml`：推 `v*` 的 tag 时 `uses: usuyo-fetch/index/.github/workflows/release-plugin.yml@main`（索引仓库推上去以后改成完整 SHA）。工作流做的事：
+
+1. 核对 tag 等于 `v` 加清单的 `version`，从 `run.command` 读出程序名（`${PLUGIN_DIR}/<名字>`），从 `methods[].script` 读出脚本文件。
+2. 编四个目标：`macos-arm64`（`aarch64-apple-darwin`）、`macos-x86_64`（在同一台 arm 的 macOS 机器上交叉编 `x86_64-apple-darwin`）、`linux-x86_64`（`x86_64-unknown-linux-gnu`）、`windows-x86_64`（`x86_64-pc-windows-msvc`）。Rust 用机器上的 rustup，不用第三方 action。`cargo build` 不带 `--locked`：仓库里的锁文件记的是本机替换后的路径（[§8.11](#811-插件对-usuyo-的依赖)），cargo 只重新锁那两个 usuyo 的包。
+3. 每个目标打一个包：`<repo>_<version>_<target>.tar.gz`（Windows 是 `.zip`），平铺：`usuyo-plugin.yaml`、程序（Windows 带 `.exe`）、脚本文件照清单里的相对路径。
+4. 先建草稿 release，传上四个包、`usuyo-plugin.yaml` 和 `SHA256SUMS`（`sha256sum` 的格式，覆盖所有资产），再发布。
+
+还没做：来源证明（`provenance.sigstore.json`）、清单里补 `install`、Dependabot。
 
 不用这个工作流的（GoReleaser 或手工发版），用 `usuyo plugin pack --version 0.3.1 dist/*`：校验源清单、算 sha256，写出补好 `install` 的 `usuyo-plugin.yaml`，由作者自己连同资产上传。
 
@@ -69,6 +78,8 @@ jobs:
 5. 读 GitHub App 写在 tag 提交上的 check run，显示「校验通过 / 没通过 / 没有校验」（[ADR-003 §6](../decisions/ADR-003-plugins.md#6-分发与校验)）。只认 `app.id` 等于 usuyo GitHub App 的 check run，客户端内置这个 id：任何人都能用 Actions 的 `GITHUB_TOKEN` 或自己的 App 写一个同名、结论为 success 的 check run。官方组织的插件没通过就拒装；读不到 check run 时（App 还没跑完、被限额挡住）推迟这次更新，下次检查时再读，不安装。第三方插件读不到时显示「没有校验」；没通过时只标出，安装前多一步确认。
 6. 展示权限，用户同意后安装（[§8.5](#85-添加来源更新与权限扩大)）。权限页列出每个站点的 `site`、`credential` 和 `domains`，以及每个密钥设置会被注入到哪个 `inject.host`。
 
+**11-13 代码**：从订阅源装和更新只做了这几步：sha256 和大小照索引核对（[§8.10](#810-订阅源与索引11-13-代码)），包里的清单 `id`、`version` 要和索引一样；数字仓库 id、屏蔽清单、来源证明、check run、权限页都还没做。
+
 分工：sha256 防下载途中被换；immutable releases 防发布后被换；来源证明说明资产是这个仓库在这个 tag 上由哪个工作流构建的，替代自己管签名密钥（Mihon 用 store 的签名指纹，[02 §15.7](../research/02-adapter-ecosystems.md#157-适配器源信任与治理)）；GitHub App 的 check run 说明清单和契约测试过没过。界面上把 [PRD §8.1](../PRD.md#711-设置) 里的「显示签名指纹」换成「由 `<owner>/<repo>` 的发版工作流构建」。
 
 GitHub App 的检查加三条：`env` 里有凭据类变量判失败；`access` 或 `login` 比上一版高时写进检查结果，供更新说明显示；被包装工具里有发帖、点赞、私信一类命令时只作提示。App 不执行插件，具体分工见 [§10](plugin-kit.md#10-契约测试与-plugin-kit)。
@@ -85,8 +96,8 @@ GitHub App 的检查加三条：`env` 里有凭据类变量判失败；`access` 
 | 用户添加的单个仓库 | 用户输入 `owner/repo` | 第三方 · 未经 usuyo 审核 |
 
 - 随安装包预装两类不含任何平台知识的获取插件（[PRD 7.2](../PRD.md#72-获取插件)）：通用网页获取（只做 `public-web`、不登录、没有站点专用规则，`network.hosts` 写 `"*"`，宿主代理照样挡住内网和云元数据地址），和读别的工具导出文件的导入（Netscape HTML 书签、Pocket、Omnivore、Readwise、Instapaper、Wallabag、Obsidian Web Clipper、flomo 一类，`network: none`）。它们的源码在官方组织，`id` 用 `builtin/` 前缀，跟着客户端一起发版和更新。平台官方导出包（抖音个人信息下载、Google Takeout、X 归档一类）的导入插件仍放 `usuyo-fetch`。
-- 除了这两类，客户端不预置任何获取来源，`usuyo-fetch` 也要用户手动添加，代码里不对它特殊处理；对它的要求和别的用户来源一样，靠添加时固定的签发者（[§8.3](#83-校验与来源证明) 第 4 步）。
-- 浏览第三方插件靠 GitHub 搜索 topic `usuyo-plugin`，客户端里给一个打开搜索结果的链接，不做商店。
+- **11-13 改了（用户 2026-11-13 定）**：来源换成「订阅源」：一个放着 `index.json` 的 GitHub 仓库，客户端读它，不再按组织列仓库（[§8.10](#810-订阅源与索引11-13-代码)）。守护进程默认带 `usuyo-fetch/index` 这一个订阅源，用户可以去掉，也可以按仓库地址添加别的；代码里除了这个默认值，不对它特殊处理。上表「用户添加的组织」「单个仓库」两种由订阅源代替。
+- 「获取插件」页就是订阅源里的插件和装着的插件合在一起的目录（卡片或列表、搜索、按平台和状态筛选，点开一个是它的详情）；GitHub 上按 topic 找插件的链接不再放。
 - 每个平台的插件列表显示：名字、`access`、会用到哪个账号（`sites[].name`，没有就写「不用账号」）、来源标签、校验结果、来源证明、最近一次失败的原因。
 
 插件列表里 `access` 显示一句白话，英文标识放进详情：official-export「读你导出的文件」，public-web「不登录，读公开页面」，vision-ui「看屏幕，替你点 App」，browser-session「在登录着的浏览器页面里读」，session-api「带你的登录信息直接请求平台」，private-api「模仿平台客户端发请求」，client-hook「读取或改动平台客户端本身」。
@@ -100,6 +111,8 @@ GitHub App 的检查加三条：`env` 里有凭据类变量判失败；`access` 
   - **扩大了权限**的，这个版本先停用，等用户重新同意，不静默更新。按集合和已装版本比，出现已装版本没有的值就算：`fs` 多了占位符；`network` 从 `none` 变 `allowlist`，或多了主机（包括 `"*"`）；`exec` 多了程序（包括 `requires.runtime` 新增的名字）；`env` 多了变量；`gpu` 从关到开；`devices` 多了项；`sites` 的 (`site`, `credential`, `domains`) 三元组里出现新值，例如多了站点、已有站点加了 `domains`、`credential` 从 `cookies` 改成 `browser-profile`；`settings` 里多了 `secret: true` 的键，或已有密钥的 `inject.host`、`inject.header` 改了。这几种改动都会把凭据或密钥交到新的地方：在「复用日常浏览器」下，多一项 `domains` 等于宿主替插件从日常浏览器多读一批 cookie；`browser-profile` 交出的是整个可写的资料目录。这是防经自动更新下发恶意代码的安全规则。
   - **调高了 `access` 或 `login`**、新增了 `unfavorite` 的，照常更新，只在更新说明里标出；`unfavorite` 仍默认关。
 - **只从来源更新**：插件只从安装它的那个仓库更新（Mihon v0.21 的做法）。仓库改名、转移或被别人重新注册时怎么办，见 [§8.3](#83-校验与来源证明) 第 0 步。
+
+**11-13 代码**：更新只在你点「更新到 x」时做，没有自动更新；添加订阅源时的确认（[附录 A.4](#a4-添加第三方来源时的确认)）和权限扩大的比对还没做。不降级：只有索引里的版本高于装着的才算有更新。
 
 自动更新默认开，不自动降级；用户可以在插件详情里手动回到上一版。声明带版本号：已添加的来源不重新确认；声明有实质变化时，只在下一次添加新来源时确认新版，并在应用的更新说明里写一句。
 
@@ -139,6 +152,8 @@ GitHub App 的检查加三条：`env` 里有凭据类变量判失败；`access` 
 - 组织列表缓存 24 小时；清单按版本缓存，immutable release 的同一版本永不过期；检查更新最多每 6 小时一次，另有手动刷新。
 - 可选：用户在设置里填一个只读公开仓库的 GitHub 令牌，限额升到每小时 5000 次。不要求登录 GitHub。
 
+**11-13 代码**：客户端不调 GitHub API。读索引走 `raw.githubusercontent.com`（不计 API 次数，带 ETag），下载安装包走 release 的下载地址；调 API 的只有索引仓库里定时跑的生成脚本（用 Actions 自带的令牌）。上表按组织列仓库、按版本读清单、读 check run 的几行是旧做法，没做。
+
 <a id="88-获取方式组织的仓库结构"></a>
 ### 8.8 获取方式组织的仓库结构
 
@@ -147,7 +162,7 @@ GitHub App 的检查加三条：`env` 里有凭据类变量判失败；`access` 
 | 方面 | 每个插件一个仓库 | 一个大仓库 |
 |---|---|---|
 | 下架粒度 | 投诉或律师函只影响那一个仓库 | 一个插件被投诉，处理对象是整个仓库；GitHub 的 DMCA 流程给所有者改动的机会，改不了就禁用仓库（细节待核实） |
-| 发现与发布 | 客户端按 topic 列仓库、读各自的最新 release，不要索引文件 | 要按插件打 tag，还要一份索引告诉客户端有哪些插件，这正是 ADR-003 放弃的东西 |
+| 发现与发布 | 每个仓库自己发 release；有哪些插件、最新版本和包由索引仓库的定时任务汇总成 `index.json`（11-13 起，[§8.10](#810-订阅源与索引11-13-代码)），作者不用改索引 | 要按插件打 tag，还要一份索引告诉客户端有哪些插件 |
 | 共享代码 | 平台中立的放进 plugin-kit；同一平台不同取法之间的少量重复可以接受 | 放 `lib/` 里直接共享，Keiyoushi 的 `lib-multisrc` |
 | CI | 每个仓库一行引用 plugin-kit 的可复用工作流；组织级规则统一保护分支和 tag；升级靠 Dependabot 批量提 PR | 一处配置；但每次改动要做路径过滤，一个插件的构建坏了会挡住别的插件 |
 | 维护权限 | 每个仓库一个 team，可以单独交给某个维护者 | 要靠 CODEOWNERS 细分 |
@@ -169,7 +184,7 @@ GitHub App 的检查加三条：`env` 里有凭据类变量判失败；`access` 
 - [ ] 成员必须开双重验证；基础权限只读；只有 owner 能建仓库、转入仓库、改可见性。
 - [ ] 组织级规则：`main` 禁止强推和删除、合并要走 PR；`v*` tag 只有发版的人能建，不能删也不能移。
 - [ ] 组织级打开 immutable releases。
-- [ ] Actions：只允许 GitHub 官方的 action 和发版用的可复用工作流（`usuyo/plugin-kit` 的，或按 [§13](open.md#13-待定) 第 13 项复制进 `usuyo-fetch/.github` 的），按完整 SHA 引用；`GITHUB_TOKEN` 默认只读；只有发版工作流拿 `contents: write`、`id-token: write`、`attestations: write`。
+- [ ] Actions：只允许 GitHub 官方的 action、`oven-sh/setup-bun`（索引的生成脚本用）和发版用的可复用工作流（`usuyo-fetch` 是 `usuyo-fetch/index` 里的那个），按完整 SHA 引用；`GITHUB_TOKEN` 默认只读；只有发版工作流拿 `contents: write`、`id-token: write`、`attestations: write`。
 - [ ] 谁能发版：每个仓库一个 team，名单和清单的 `maintainers` 一致；能推 `v*` tag 的就是这个 team 加 owner。维护者多于一人后，发版用的 environment 要求另一人批准。
 - [ ] 装上 usuyo 的 GitHub App（公开的 App，只读和写 check run，不执行插件）。
 - [ ] 打开 secret scanning、push protection 和 Dependabot。
@@ -177,6 +192,47 @@ GitHub App 的检查加三条：`env` 里有凭据类变量判失败；`access` 
 - [ ] 两个组织的 owner 目前是同一个人，隔离只到组织和仓库这一层（[06 §17.4](../research/06-platform-access-and-account-risk.md#174-fork-与许可证)）。声明里凡是说谁在维护的句子，都按组织的实际成员如实写（[附录 A](#附录-a-声明模板)）。
 
 `usuyo-fetch` 不用用户的域名：不放文档、不用 `$id`、不链个人主页，README 只链官方仓库里的协议文档；插件清单照样引用官方 schema。
+
+<a id="810-订阅源与索引11-13-代码"></a>
+### 8.10 订阅源与索引（11-13 代码）
+
+**订阅源**是一个 GitHub 仓库，默认分支根上有 `index.json`。客户端读 `https://raw.githubusercontent.com/<owner>/<repo>/HEAD/index.json`（`HEAD` 就是默认分支，不调 API）。第一个是 `usuyo-fetch/index`。
+
+**`index.json`**（schema 在 `usuyo-fetch/index` 的 `schema/index.schema.json`）：
+
+```json
+{
+  "format": 1,
+  "generatedAt": "2026-11-13T00:00:00.000Z",
+  "platforms": {"bilibili": {"zh-Hans": "B站", "en": "Bilibili"}},
+  "plugins": [{
+    "id": "usuyo-fetch/bilibili", "kind": "fetch",
+    "name": {"zh-Hans": "B站", "en": "Bilibili"},
+    "description": {"zh-Hans": "…", "en": "…"},
+    "platforms": ["bilibili"],
+    "repository": "https://github.com/usuyo-fetch/bilibili", "license": "MIT",
+    "methods": [{"id": "view", "name": {"zh-Hans": "公开接口", "en": "Public API"}, "built": true,
+                 "access": "public-web", "login": "none", "account": "none"}],
+    "release": {"version": "0.1.0", "tag": "v0.1.0", "publishedAt": "…", "url": "…",
+                "assets": [{"target": "macos-arm64", "name": "bilibili_0.1.0_macos-arm64.tar.gz",
+                            "url": "https://github.com/usuyo-fetch/bilibili/releases/download/v0.1.0/bilibili_0.1.0_macos-arm64.tar.gz",
+                            "size": 3400000, "sha256": "<64 位小写十六进制>"}]}
+  }]
+}
+```
+
+- 名字和说明按语言给：`zh-Hans` 取自清单，`en` 取自索引仓库的 `i18n/en.json`；缺 `en` 时客户端用 `zh-Hans`。还没发过 release 的插件 `release` 是 `null`，目录里写「尚未发布」，装不了。
+- **生成**：`scripts/build-index.ts`（bun，YAML 用内置的 `Bun.YAML`，没有别的依赖）。CI 里列出组织的仓库（GitHub API，Actions 自带的令牌），每个仓库取最新 release：有就读 release 里的 `usuyo-plugin.yaml`，sha256 取自 `SHA256SUMS`，大小取自 release 的资产列表，tag 要等于 `v<version>`；没有 release（404）就读默认分支上的清单，`release` 写 `null`；默认分支上没有清单的仓库不是插件，跳过。`--local <目录>` 读旁边的插件文件夹、不联网，第一份 `index.json` 就这样生成。只有内容变了才换 `generatedAt`。`.github/workflows/update-index.yml` 每 6 小时和手动触发时跑一次，变了就提交。
+- **客户端读索引**：订阅源记在按机器的 `settings.json` 的 `pluginSources`（地址的数组，没写时是守护进程给的默认，[按机器的目录](../spec/machine.md#按机器的目录)）。地址认 `owner/repo`、`github.com/owner/repo`、`https://github.com/owner/repo(.git)`，存成小写的 `owner/repo`。守护进程起来时读一次、之后每 6 小时一次，也可以在页面上刷新；带上次的 ETag，最多 4 MiB，走按机器的 `network.proxy`，只连公网、只走 https，连接 15 秒、60 秒没字节算断。读到的索引连同 ETag 存在 `cache/sources/`，启动时先用它。查一遍再用：`format` 是 1，`id` 是小写的 `owner/repo`、不是 `builtin/`、不重复，每个包的 `sha256` 是 64 位十六进制，大小在 1 字节到 256 MiB 之间，地址是 https；不合格整个索引不用，错误记在订阅源上，上次读到的照用。几个订阅源列了同一个插件时，按订阅源的顺序取第一个。
+- **装**：取这台电脑目标的那个包，下进 `plugins/.staging/`，大小和 sha256 都要和索引一样；解开（只许普通文件和文件夹、普通的相对路径，不许占用安装记录的名字，最多 10000 项、512 MiB）；包里的清单读得出、合规，`id`、`version` 和索引一样；`run.command` 指的程序和 `methods[].script` 指的脚本每一段都是普通的名字，解开链接以后还在插件文件夹里，程序设成可执行；写上安装记录 `.usuyo-install.json`（`{source, version, asset, sha256, installedAt}`），整个改名成 `plugins/<owner>/<repo>/<version>/`，再重新找一遍插件换上，不重启。哪一步不成都不留下东西，原因写在插件上。
+- **更新**：只从安装记录里的那个订阅源、只往高的版本；新版本放好以后关掉这个插件的常驻进程，删掉旧版本的文件夹。**删除**：关掉常驻进程，删掉 `plugins/<owner>/<repo>/`。已经存下的条目不受影响。
+- **开发版本**：同一个 id 下有一个版本文件夹没有安装记录（`just dev-plugins` 放的、手放的），或者插件不在按机器的插件目录里、id 是 `builtin/` 的，都算开发版本：订阅源不覆盖、不更新、不删它。`just dev-plugins` 盖过从订阅源装的那一版时去掉它的安装记录。
+- **开发开关**：守护进程带 `USUYO_DEV_LOOPBACK_SOURCES=1` 时，订阅源和安装包只连本机回环地址、可以是明文 http，地址可以写 `http://127.0.0.1:<端口>/<路径>`（索引在 `<路径>/index.json`）；这时连不上 GitHub。只给对着本机的假订阅源测试用。
+
+<a id="811-插件对-usuyo-的依赖"></a>
+### 8.11 插件对 usuyo 的依赖
+
+插件仓库的 `Cargo.toml` 依赖 `usuyo-plugin-kit`（和测试用的 `usuyo-plugin`），写成 `git = "https://github.com/usuyo/usuyo"` 钉 `rev`。开发时 `usuyo-fetch/.cargo/config.toml`（在 `usuyo-fetch/` 这一层，不进任何插件仓库）用 `[patch."https://github.com/usuyo/usuyo"]` 换成旁边的 `../usuyo/crates/…`：在插件文件夹里跑 cargo 就生效，`just dev-plugins` 从主仓库跑，用 `--config` 带上它。锁文件记的是替换后的路径形式，所以 CI 不带 `--locked`。主仓库还没公开时，CI 取不到这个 git 依赖，发版跑不通。
 
 <a id="附录-a-声明模板"></a>
 ## 附录 A. 声明模板
@@ -208,7 +264,7 @@ usuyo 是在你自己电脑上运行的开源软件，用来做个人备份、�
 
 这里每个仓库是一个平台上的一种取法，用来把你自己存下的内容做个人备份、离线阅读和注意力整理。
 
-- 本组织和 usuyo 官方组织 usuyo 是两个独立的组织，仓库、发版和下架各自处理。usuyo 客户端不预置这里的任何插件；要用的话，在 usuyo 的设置里手动添加组织名 `usuyo-fetch`。
+- 本组织和 usuyo 官方组织 usuyo 是两个独立的组织，仓库、发版和下架各自处理。usuyo 客户端默认订阅本组织的索引仓库 `usuyo-fetch/index`，只列出插件，不预装；装哪个由你在「获取插件」页选。不想看到这些插件，可以在「获取插件」页去掉这个订阅源。
 - 每个插件的清单写明获取层级（access）、要不要登录（login），以及会用到哪个站点的账号。挑哪个、用哪个账号由你决定；平台对账号的限制和相关的法律后果由你自己承担。已知情况见 [调研 06 第 16 节](https://github.com/usuyo/usuyo/blob/main/docs/research/06-platform-access-and-account-risk.md#16-账号风险的证据)。
 - 插件只读取你自己有权查看的内容。没有默认开启的写操作；包装别的工具时去掉了发帖、点赞、私信一类命令。
 - 本组织不托管任何平台内容，release 里只有插件程序和清单。

@@ -273,7 +273,7 @@ impl Engine {
             return seen;
         }
         let result = self
-            .inner
+            .loaded()
             .host
             .health(plugin, &CallOptions::default())
             .await
@@ -304,7 +304,7 @@ impl Engine {
         url: &url::Url,
         platform: &str,
     ) -> Result<(Vec<Candidate>, Option<CallFailure>)> {
-        let host = &self.inner.host;
+        let host = &self.loaded().host;
         let sites = host.sites()?;
         let visitors = host.visitors()?;
         let mut ranked = Vec::new();
@@ -407,8 +407,8 @@ impl Engine {
         method_id: &str,
         enabled: Option<bool>,
     ) -> Result<PluginView> {
-        let plugin = self
-            .inner
+        let loaded = self.loaded();
+        let plugin = loaded
             .host
             .plugin(plugin_id)
             .ok_or_else(|| Error::NotFound(format!("plugin {plugin_id}")))?;

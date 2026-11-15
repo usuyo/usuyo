@@ -9,9 +9,10 @@ import { rich, t } from "../i18n";
 import { formatList } from "../i18n/format";
 import { JOB_TEXT } from "./words";
 
-/** 「转写与识别」那一栏：装着的转换插件，各做哪几样；模型的大小、许可，下载和删掉。 */
-export function TransformsPanel() {
+/** 「转写与识别」那一栏：装着的转换插件，各做哪几样；模型的大小、许可，下载和删掉。`only` 时只放这一个插件（插件详情里）。 */
+export function TransformsPanel({ only }: { only?: string } = {}) {
   const transforms = useTransforms();
+  const shown = transforms.data?.plugins.filter((p) => only === undefined || p.id === only) ?? [];
   return (
     <section aria-label={t("plugins.transforms.title")} className="min-w-0 animate-fade">
       <h2 className="m-0 text-name font-semibold text-text">{t("plugins.transforms.title")}</h2>
@@ -25,7 +26,7 @@ export function TransformsPanel() {
             })}
           </p>
           <div className="mt-5 grid gap-3 @2xl:grid-cols-2">
-            {transforms.data.plugins.map((p) => (
+            {shown.map((p) => (
               <TransformCard key={p.id} plugin={p} />
             ))}
           </div>

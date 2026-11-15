@@ -22,9 +22,10 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::services::ServeFile;
 use tower_http::set_header::SetResponseHeaderLayer;
 use usuyo_core::view::{
-    FileReaderView, ImportEntryView, ImportView, ItemView, MapView, PhoneDryRun, PhoneView,
-    PluginView, PluginsView, SearchHit, SettingsPane, SettingsView, SiteView, SourceView,
-    TakeResponse, Topic, TransformsView, TrashView, VisitorView,
+    CatalogPlugin, CatalogView, FileReaderView, ImportEntryView, ImportView, ItemView, MapView,
+    PhoneDryRun, PhoneView, PluginSourceView, PluginView, PluginsView, SearchHit, SettingsPane,
+    SettingsView, SiteView, SourceView, TakeResponse, Topic, TransformsView, TrashView,
+    VisitorView,
 };
 use usuyo_core::{DeliveredLink, DriverAction, Engine, ImportChoice, Links, SettingsPatch, Via};
 use usuyo_plugin::protocol::StorageState;
@@ -121,6 +122,18 @@ pub(crate) fn build(engine: Engine, gate: Arc<Gate>, origins: &[String]) -> Rout
         .route("/reindex", post(reindex))
         .route("/media/{id}/{*layer}", get(media))
         .route("/plugins", get(plugins))
+        .route("/catalog", get(catalog))
+        .route(
+            "/catalog/{owner}/{repo}",
+            get(catalog_plugin).delete(catalog_remove),
+        )
+        .route("/catalog/{owner}/{repo}/install", post(catalog_install))
+        .route("/catalog/{owner}/{repo}/update", post(catalog_update))
+        .route(
+            "/plugin-sources",
+            get(source_list).post(source_add).delete(source_remove),
+        )
+        .route("/plugin-sources/refresh", post(source_refresh))
         .route("/plugins/{owner}/{repo}/try-now", post(plugin_try_now))
         .route("/plugins/{owner}/{repo}/hold", post(plugin_hold))
         .route(
@@ -605,6 +618,94 @@ async fn reindex(State(s): State<AppState>) -> ApiResult<serde_json::Value> {
 // —— 获取插件和登录站点 ——
 
 /// 插件 id 是 `owner/repo`，路径里拆成两段。
+/// 插件目录：订阅源里的和装着的合在一起。
+async fn catalog(State(s): State<AppState>) -> ApiResult<CatalogView> {
+    Ok(Json(blocking(move || Ok(s.engine.plugin_catalog())).await?))
+}
+
+async fn catalog_plugin(
+    State(s): State<AppState>,
+    Path((owner, repo)): Path<(String, String)>,
+) -> ApiResult<CatalogPlugin> {
+    Ok(Json(
+        blocking(move || s.engine.catalog_plugin(&plugin_id(&owner, &repo))).await?,
+    ))
+}
+
+/// 开始安装：202，进展经 `catalog-updated` 事件，重新拉 `/catalog`。
+async fn catalog_install(
+    State(s): State<AppState>,
+    Path((owner, repo)): Path<(String, String)>,
+) -> Result<(StatusCode, Json<CatalogPlugin>), Problem> {
+    let p = s.engine.install_plugin(&plugin_id(&owner, &repo))?;
+    Ok((StatusCode::ACCEPTED, Json(p)))
+}
+
+/// 开始更新：同上。
+async fn catalog_update(
+    State(s): State<AppState>,
+    Path((owner, repo)): Path<(String, String)>,
+) -> Result<(StatusCode, Json<CatalogPlugin>), Problem> {
+    let p = s.engine.update_plugin(&plugin_id(&owner, &repo))?;
+    Ok((StatusCode::ACCEPTED, Json(p)))
+}
+
+/// 删掉一个从订阅源装的插件，回删掉以后的目录。
+async fn catalog_remove(
+    State(s): State<AppState>,
+    Path((owner, repo)): Path<(String, String)>,
+) -> ApiResult<CatalogView> {
+    Ok(Json(
+        s.engine.remove_plugin(&plugin_id(&owner, &repo)).await?,
+    ))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SourceAddress {
+    address: String,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+struct SourceRefresh {
+    #[serde(default)]
+    address: Option<String>,
+}
+
+async fn source_list(State(s): State<AppState>) -> ApiResult<Vec<PluginSourceView>> {
+    Ok(Json(s.engine.source_list()))
+}
+
+/// 添加一个订阅源并读一次它的索引；读不成也留着，错误记在它上面。
+async fn source_add(
+    State(s): State<AppState>,
+    req: Result<Json<SourceAddress>, JsonRejection>,
+) -> ApiResult<Vec<PluginSourceView>> {
+    let SourceAddress { address } = body(req)?;
+    Ok(Json(s.engine.add_plugin_source(&address).await?))
+}
+
+async fn source_remove(
+    State(s): State<AppState>,
+    q: Result<Query<SourceAddress>, QueryRejection>,
+) -> ApiResult<Vec<PluginSourceView>> {
+    let Query(SourceAddress { address }) =
+        q.map_err(|e| Problem::new("invalid-args", e.body_text()))?;
+    Ok(Json(s.engine.remove_plugin_source(&address).await?))
+}
+
+/// 刷新一个订阅源（带 `address`）或全部，等读完。
+async fn source_refresh(
+    State(s): State<AppState>,
+    req: Result<Json<SourceRefresh>, JsonRejection>,
+) -> ApiResult<Vec<PluginSourceView>> {
+    let SourceRefresh { address } = body(req)?;
+    Ok(Json(
+        s.engine.refresh_plugin_sources(address.as_deref()).await?,
+    ))
+}
+
 fn plugin_id(owner: &str, repo: &str) -> String {
     format!("{owner}/{repo}")
 }

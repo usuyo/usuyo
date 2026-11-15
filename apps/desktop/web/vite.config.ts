@@ -10,8 +10,8 @@ import type { Plugin } from "vite";
 import { defineConfig } from "vitest/config";
 import { prove } from "./proxy/proof.ts";
 
-// 端口固定：src-tauri/tauri.conf.json 的 devUrl 指向它。
-const DEV_PORT = 5173;
+// 端口固定：src-tauri/tauri.conf.json 的 devUrl 指向它。`USUYO_DEV_PORT` 只给另起一个开发服务器（不开窗口）的验证用。
+const DEV_PORT = Number(process.env.USUYO_DEV_PORT ?? "5173");
 const DAEMON_PORT = Number(process.env.USUYO_PORT ?? "47615");
 const DAEMON = `http://127.0.0.1:${DAEMON_PORT}`;
 // 和 src/api/endpoints.ts 的 DEV_PROXY_PATH、client.ts 的 PROXY_UNREACHABLE_HEADER 一致。

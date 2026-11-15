@@ -477,6 +477,93 @@ pub(crate) const STEP_ADB_STOP: Words = w(
     "The adb server runs in the background on this computer and keeps running; usuyo doesn't stop it. To stop it, run this in Terminal:",
 );
 
+// —— 订阅源和从订阅源装插件 ——
+
+pub(crate) const SOURCE_ADDRESS: Words = w(
+    "不是可用的订阅源地址。请输入 owner/repo 或 https://github.com/owner/repo。",
+    "This is not a usable source address. Enter owner/repo or https://github.com/owner/repo.",
+);
+pub(crate) const SOURCE_EXISTS: Words = w(
+    "这个订阅源已经添加过。",
+    "This source has already been added.",
+);
+pub(crate) const SOURCE_UNKNOWN: Words = w("没有这个订阅源。", "There is no such source.");
+pub(crate) const SOURCE_NOT_FOUND: Words = w(
+    "找不到这个仓库里的 index.json。检查地址，或确认仓库是公开的。",
+    "index.json was not found in this repository. Check the address, or make sure the repository is public.",
+);
+pub(crate) const SOURCE_NETWORK: Words = w(
+    "无法读取订阅源。检查网络连接后重试。",
+    "Can't read the source. Check the network connection and try again.",
+);
+pub(crate) const SOURCE_REFUSED: Words = w("无法连接这个地址。", "This address can't be reached.");
+pub(crate) const SOURCE_TOO_LARGE: Words = w(
+    "订阅源的 index.json 超过 4 MB，没有读取。",
+    "The source's index.json is larger than 4 MB and was not read.",
+);
+pub(crate) const SOURCE_FORMAT: Words = w(
+    "订阅源的 index.json 格式不正确：{reason}",
+    "The source's index.json is not in the expected format: {reason}",
+);
+pub(crate) const PLUGIN_NOT_IN_SOURCE: Words = w(
+    "订阅源里没有这个插件。",
+    "This plugin is not in any source.",
+);
+pub(crate) const PLUGIN_NOT_RELEASED: Words = w(
+    "这个插件还没有发布的版本。",
+    "This plugin has no published release yet.",
+);
+pub(crate) const PLUGIN_NO_ASSET: Words = w(
+    "这一版没有适用于这台电脑（{target}）的安装包。",
+    "This release has no package for this computer ({target}).",
+);
+pub(crate) const PLUGIN_DEVELOPMENT: Words = w(
+    "这个插件是用 just dev-plugins 安装的开发版本，不从订阅源更新或删除。",
+    "This plugin was installed for development with just dev-plugins. It is not updated or removed from a source.",
+);
+pub(crate) const PLUGIN_OTHER_SOURCE: Words = w(
+    "这个插件是从「{source}」安装的，只从那里更新。",
+    "This plugin was installed from “{source}” and is updated only from there.",
+);
+pub(crate) const PLUGIN_BUILTIN: Words = w(
+    "这个插件随 usuyo 提供，不从订阅源安装或删除。",
+    "This plugin comes with usuyo. It is not installed or removed from a source.",
+);
+pub(crate) const PLUGIN_ALREADY: Words =
+    w("这个插件已经安装。", "This plugin is already installed.");
+pub(crate) const PLUGIN_NOT_INSTALLED: Words =
+    w("这个插件没有安装。", "This plugin is not installed.");
+pub(crate) const PLUGIN_UP_TO_DATE: Words = w(
+    "已安装订阅源里最新的版本。",
+    "The latest version in the source is installed.",
+);
+pub(crate) const PLUGIN_BUSY: Words = w(
+    "这个插件正在安装、更新或删除。",
+    "This plugin is being installed, updated, or removed.",
+);
+pub(crate) const INSTALL_NETWORK: Words = w(
+    "无法下载安装包。检查网络连接后重试。",
+    "Can't download the package. Check the network connection and try again.",
+);
+pub(crate) const INSTALL_NOT_ON_RELEASE: Words = w(
+    "发布页上找不到这个安装包。订阅源刷新后再试。",
+    "The package was not found on the release page. Refresh the source and try again.",
+);
+pub(crate) const INSTALL_MISMATCH: Words = w(
+    "下载的安装包和订阅源记录的大小或校验值不一致，没有安装。",
+    "The downloaded package does not match the size or checksum recorded in the source. Nothing was installed.",
+);
+pub(crate) const INSTALL_ARCHIVE: Words = w(
+    "安装包里有不允许的内容，没有安装。",
+    "The package contains entries that are not allowed. Nothing was installed.",
+);
+pub(crate) const INSTALL_MANIFEST: Words = w(
+    "安装包里的插件清单和订阅源记录的不一致，没有安装。",
+    "The plugin manifest in the package does not match the source. Nothing was installed.",
+);
+pub(crate) const INSTALL_IO: Words =
+    w("无法写入插件文件夹。", "Can't write to the plugins folder.");
+
 #[cfg(test)]
 mod tests {
     use super::*;

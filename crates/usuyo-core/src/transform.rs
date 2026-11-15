@@ -86,8 +86,10 @@ impl PowerSource for SystemPower {
 /// 引擎里转换那一路的东西。
 pub(crate) struct Transforms {
     /// 发现的顺序；同一种活有几个插件能做时，默认用最先的那个。
-    plugins: Vec<TransformPlugin>,
-    resident: HashMap<String, ResidentTransform>,
+    plugins: std::sync::RwLock<Arc<Vec<TransformPlugin>>>,
+    /// 插件 id → 它的常驻进程。换插件时（[`Transforms::set_plugins`]）变了的先关掉。
+    resident: std::sync::RwLock<HashMap<String, Arc<ResidentTransform>>>,
+    config: usuyo_plugin::TransformConfig,
     pub models: Models,
     /// 按机器的 `settings.json` 里的 `transforms.auto`；设置页改了马上换。
     auto: AtomicBool,
@@ -128,13 +130,14 @@ impl Transforms {
             .map(|p| {
                 (
                     p.id().to_string(),
-                    ResidentTransform::new(p.clone(), s.config.clone()),
+                    Arc::new(ResidentTransform::new(p.clone(), s.config.clone())),
                 )
             })
             .collect();
         Ok(Transforms {
-            plugins: s.plugins,
-            resident,
+            plugins: std::sync::RwLock::new(Arc::new(s.plugins)),
+            resident: std::sync::RwLock::new(resident),
+            config: s.config,
             models: s.models,
             auto: AtomicBool::new(s.auto),
             power: s.power,
@@ -158,27 +161,84 @@ impl Transforms {
         }
     }
 
+    /// 这一刻装着的转换插件，发现的顺序。
+    pub(crate) fn plugins(&self) -> Arc<Vec<TransformPlugin>> {
+        Arc::clone(&self.plugins.read().unwrap_or_else(PoisonError::into_inner))
+    }
+
+    /// 换上一组新的转换插件：没变的（同一个 id、同一个目录）留着它的进程，变了的和不在了的先关掉进程。
+    pub(crate) async fn set_plugins(&self, next: Vec<TransformPlugin>) {
+        let stale: Vec<Arc<ResidentTransform>> = {
+            let old = self.plugins();
+            let resident = self.resident.read().unwrap_or_else(PoisonError::into_inner);
+            old.iter()
+                .filter(|p| !next.iter().any(|n| n.id() == p.id() && n.dir == p.dir))
+                .filter_map(|p| resident.get(p.id().as_str()).cloned())
+                .collect()
+        };
+        for r in &stale {
+            r.shutdown().await;
+        }
+        let old = self.plugins();
+        let mut resident = self
+            .resident
+            .write()
+            .unwrap_or_else(PoisonError::into_inner);
+        let mut map = HashMap::new();
+        for p in &next {
+            let kept = old
+                .iter()
+                .any(|o| o.id() == p.id() && o.dir == p.dir)
+                .then(|| resident.get(p.id().as_str()).cloned())
+                .flatten();
+            let r = kept.unwrap_or_else(|| {
+                Arc::new(ResidentTransform::new(p.clone(), self.config.clone()))
+            });
+            map.insert(p.id().to_string(), r);
+        }
+        *resident = map;
+        *self.plugins.write().unwrap_or_else(PoisonError::into_inner) = Arc::new(next);
+    }
+
+    /// 关掉一个插件的常驻进程（更新、删除它之前）。没起着就什么都不做。
+    pub(crate) async fn stop_plugin(&self, id: &str) {
+        let r = self
+            .resident
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(id)
+            .cloned();
+        if let Some(r) = r {
+            r.shutdown().await;
+        }
+    }
+
     /// 能做这一样的插件：给了 id 就只看它。
-    fn plugin_for(&self, job: TransformJobKind, id: Option<&str>) -> Option<&TransformPlugin> {
+    fn plugin_for(&self, job: TransformJobKind, id: Option<&str>) -> Option<TransformPlugin> {
         let (produce, eats) = needs_of(job);
-        self.plugins
+        self.plugins()
             .iter()
             .filter(|p| id.is_none_or(|id| p.id().as_str() == id))
             .find(|p| {
                 p.spec.produces.contains(&produce) && p.spec.consumes.iter().any(|c| c.kind == eats)
             })
+            .cloned()
     }
 
     /// 做中间一步（`probe`、`audio:pcm16k`）的插件。
-    fn helper(&self, produce: Produce) -> Option<&TransformPlugin> {
-        self.plugins
+    fn helper(&self, produce: Produce) -> Option<TransformPlugin> {
+        self.plugins()
             .iter()
             .find(|p| p.spec.produces.contains(&produce))
+            .cloned()
     }
 
-    fn resident(&self, plugin: &TransformPlugin) -> Result<&ResidentTransform> {
+    fn resident(&self, plugin: &TransformPlugin) -> Result<Arc<ResidentTransform>> {
         self.resident
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
             .get(plugin.id().as_str())
+            .cloned()
             .ok_or_else(|| Error::NotFound(format!("transform plugin {}", plugin.id())))
     }
 
@@ -797,7 +857,7 @@ impl Engine {
     fn resume_present_models(&self) -> Result<()> {
         let t = self.transforms();
         for name in self.inner.jobs.waited_models()? {
-            let here = t.plugins.iter().any(|p| {
+            let here = t.plugins().iter().any(|p| {
                 p.spec
                     .models
                     .iter()
@@ -927,6 +987,7 @@ impl Engine {
                 row.job,
             ));
         };
+        let plugin = &plugin;
         let options = t.options(plugin, row)?;
         let m = &item.manifest;
         let run_item = RunItem {
@@ -1026,6 +1087,7 @@ impl Engine {
                         TransformJobKind::Play,
                     ));
                 };
+                let media = &media;
                 let call = Call {
                     plugin: media,
                     want: Produce::AudioPcm16k,
@@ -1184,6 +1246,7 @@ impl Engine {
                 TransformJobKind::Play,
             )));
         };
+        let prober = &prober;
         let call = Call {
             plugin: prober,
             want: Produce::Probe,
@@ -1504,9 +1567,10 @@ impl Engine {
     fn model_spec(&self, plugin: &str, name: &str) -> Result<(TransformPlugin, ModelSpec)> {
         let p = self
             .transforms()
-            .plugins
+            .plugins()
             .iter()
             .find(|p| p.id().as_str() == plugin)
+            .cloned()
             .ok_or_else(|| Error::NotFound(format!("transform plugin {plugin}")))?;
         let spec = p
             .spec
@@ -1527,7 +1591,7 @@ impl Engine {
         let lang = self.lang();
         // 几个插件同时问，一个起得慢不拖住别的。
         let asks: Vec<_> = t
-            .plugins
+            .plugins()
             .iter()
             .map(|p| {
                 let (this, p) = (self.clone(), p.clone());
@@ -1535,7 +1599,7 @@ impl Engine {
             })
             .collect();
         let mut plugins = Vec::new();
-        for (p, ask) in t.plugins.iter().zip(asks) {
+        for (p, ask) in t.plugins().iter().zip(asks) {
             let answer = ask
                 .await
                 .map_err(|e| Error::Task(e.to_string()))
@@ -1679,7 +1743,7 @@ impl Engine {
                 TransformState::Waiting => {
                     match r.wait.as_deref().and_then(|w| w.strip_prefix("model:")) {
                         Some(name) => {
-                            model = t.plugins.iter().find_map(|p| {
+                            model = t.plugins().iter().find_map(|p| {
                                 let m = p.spec.models.iter().find(|m| m.name == name)?;
                                 Some(PendingModel {
                                     plugin: p.id().to_string(),
@@ -1728,7 +1792,15 @@ impl Engine {
         if let Some((_, token)) = self.transforms().running().as_ref() {
             token.cancel();
         }
-        for r in self.transforms().resident.values() {
+        let all: Vec<Arc<ResidentTransform>> = self
+            .transforms()
+            .resident
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .values()
+            .cloned()
+            .collect();
+        for r in all {
             r.shutdown().await;
         }
     }

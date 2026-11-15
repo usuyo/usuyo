@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import type { FetchMethod, FetchPlugin, FileReader, PluginsView, SiteLogin, VisitorIdentity } from "../api/endpoints";
+import type { CatalogView, FetchMethod, FetchPlugin, FileReader, PluginsView, SiteLogin, VisitorIdentity } from "../api/endpoints";
 import { setLanguageChoice, t } from "../i18n";
 import { method } from "../mock/platforms";
 import { createAppRouter } from "../router";
@@ -45,6 +45,7 @@ function serve(view: Omit<PluginsView, "failureLog">, sites: SiteLogin[], visito
       }
       if (path.endsWith("/deliver-tokens")) return Promise.resolve(Response.json([]));
       if (path.endsWith("/plugins")) return Promise.resolve(Response.json({ ...view, failureLog: "/m/logs/fetch-failures.jsonl" }));
+      if (path.endsWith("/catalog")) return Promise.resolve(Response.json(catalogOf(view.plugins)));
       if (path.endsWith("/sites")) return Promise.resolve(Response.json(sites));
       if (path.endsWith("/visitors")) return Promise.resolve(Response.json(visitors));
       if (path.endsWith("/file-readers")) return Promise.resolve(Response.json(readers));
@@ -59,6 +60,24 @@ function serve(view: Omit<PluginsView, "failureLog">, sites: SiteLogin[], visito
     </QueryClientProvider>,
   );
   return served;
+}
+
+/** 装着的获取插件在目录里的样子：开发时装的，不在订阅源里。 */
+function catalogOf(plugins: FetchPlugin[]): CatalogView {
+  return {
+    target: "macos-arm64",
+    sources: [],
+    plugins: plugins.map((p) => ({
+      id: p.id,
+      kind: "fetch",
+      name: p.name,
+      platforms: p.platforms,
+      methods: [],
+      installed: { version: p.version, origin: "development", dir: `/m/plugins/${p.id}/${p.version}` },
+      update: false,
+      blocked: { code: "development", hint: "这个插件是用 just dev-plugins 安装的开发版本，不从订阅源更新或删除。" },
+    })),
+  };
 }
 
 const SITE: SiteLogin = { site: "www.bilibili.com", name: "B站", loginUrl: "https://passport.bilibili.com/login", cookies: ["SESSDATA"], domains: [], login: "missing", plugins: ["usuyo-fetch/bilibili"] };
@@ -99,17 +118,20 @@ async function choose(label: string, option: string) {
   fireEvent.click(await screen.findByRole("option", { name: new RegExp(`^${option}`) }));
 }
 
-it("says how plugins get installed today when none are", async () => {
+it("says so when no source lists a plugin and none are installed", async () => {
   serve({ plugins: [], notLoaded: [] }, []);
-  expect(await screen.findByText("just dev-plugins")).toBeTruthy();
+  expect(await screen.findByText("订阅源中还没有插件，这台电脑上也没有安装插件。")).toBeTruthy();
 });
 
-it("lists platforms on the left with one quiet line and opens the first one at /plugins", async () => {
+it("lists installed plugins as cards that open the plugin's detail, and the old platform address lands there", async () => {
   serve({ plugins: [bili([guest, session, signed])], notLoaded: [] }, [SITE]);
-  const nav = await screen.findByRole("navigation", { name: "平台" });
-  expect(await within(nav).findByText("自动 · 访客接口")).toBeTruthy();
+  const card = await screen.findByRole("link", { name: "B站" });
+  expect(card.getAttribute("href")).toBe("/plugins/usuyo-fetch/bilibili");
+  expect(within(card).getByText("开发版本 0.1.0")).toBeTruthy();
+  cleanup();
+  serve({ plugins: [bili([guest, session, signed])], notLoaded: [] }, [SITE], [], "/plugins/bilibili");
   expect(await screen.findByRole("region", { name: "B站" })).toBeTruthy();
-  expect(within(nav).getByRole("link", { name: /B站/ }).getAttribute("href")).toBe("/plugins/bilibili");
+  expect(screen.getAllByRole("link", { name: "获取插件" }).every((a) => a.getAttribute("href") === "/plugins")).toBe(true);
 });
 
 it("writes the platform page in English when English is chosen, with plurals and the daemon's numbers", async () => {
@@ -121,9 +143,9 @@ it("writes the platform page in English when English is chosen, with plurals and
     [{ site: "www.bilibili.com", name: "Bilibili", url: "https://www.bilibili.com/", cookies: [], domains: [], state: "missing", plugins: ["usuyo-fetch/bilibili"] }],
     "/plugins/bilibili",
   );
-  const nav = await screen.findByRole("navigation", { name: "Platforms" });
-  expect(await within(nav).findByText(/^Automatic · /)).toBeTruthy();
-  expect(screen.getByText(/^Fetched by the B站 plugin\./)).toBeTruthy();
+  expect(await screen.findByText(/^Fetched by the B站 plugin\./)).toBeTruthy();
+  expect(screen.getAllByRole("link", { name: "Fetch Plugins" }).length).toBeGreaterThan(0);
+  expect(screen.getByText("Development 0.1.0")).toBeTruthy();
   expect(screen.getByRole("region", { name: "Add Link" })).toBeTruthy();
   const pacing = screen.getByRole("region", { name: "Request Rate" });
   expect(within(pacing).getByText("At least 5 seconds between requests; daily import limit: 500.")).toBeTruthy();

@@ -896,6 +896,8 @@ pub enum Event {
     TransformsUpdated,
     /// 手机那一页的事变了：驱动开始装、装好、没装上、卸掉，剪贴板试出了结果。重新拉 `/phone`。
     PhoneUpdated,
+    /// 订阅源读到了新索引、加了或删了一个，插件开始装、在下、装好、没装上、删掉了。重新拉 `/catalog`。
+    CatalogUpdated,
 }
 
 // —— 手机（`endpoints.ts` 的 `PhoneView`、`PhoneDryRun`）——
@@ -1151,4 +1153,155 @@ mod tests {
             json!({"type": "item-removed", "id": "a"})
         );
     }
+}
+
+// —— 订阅源和插件目录（`endpoints.ts` 的 `Catalog`、`PluginSource`、`CatalogPlugin`）——
+
+/// 一个订阅源：一个放着 `index.json` 的仓库。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginSourceView {
+    /// 添加时的地址：`owner/repo`，开发开关打开时也可以是本机的 `http://127.0.0.1:<端口>/…`。
+    pub address: String,
+    /// 读索引的地址。
+    pub index_url: String,
+    /// 随 usuyo 带的那一个（没改过设置时就有它）。
+    pub default: bool,
+    /// 上次读到索引（或服务器回「没变」）的时间。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refreshed_at: Option<String>,
+    /// 索引里有几个插件；还没读到过就没有。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plugins: Option<usize>,
+    pub refreshing: bool,
+    /// 上次没读成：一句话。读到过的索引照用。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogView {
+    /// 这台电脑的目标（`macos-arm64` 一类）；不在四个目标里就没有。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
+    pub sources: Vec<PluginSourceView>,
+    pub plugins: Vec<CatalogPlugin>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogPlatform {
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogMethod {
+    pub id: String,
+    pub name: String,
+    pub built: bool,
+    pub access: String,
+    pub login: String,
+    pub account: String,
+}
+
+/// 来源里最新的那一版。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogRelease {
+    pub version: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub published_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    /// 这台电脑用的那个包；没有就是这一版没给这台电脑编。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub asset: Option<CatalogAsset>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogAsset {
+    pub name: String,
+    pub size: u64,
+}
+
+/// 装着的那一版从哪来。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum InstallOrigin {
+    /// 从订阅源装的（插件目录里有安装记录）。
+    Source,
+    /// `just dev-plugins` 或手放进来的：订阅源不更新、不删它。
+    Development,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogInstalled {
+    pub version: String,
+    pub origin: InstallOrigin,
+    /// 从哪个订阅源装的。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    pub dir: String,
+}
+
+/// 正在做的一件事。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogAction {
+    /// `install`、`update`、`remove`。
+    pub kind: String,
+    /// `downloading`、`verifying`、`unpacking`、`loading`、`removing`。
+    pub phase: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub received: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total: Option<u64>,
+}
+
+/// 为什么装不了、更新不了、删不了。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogBlocked {
+    /// `no-release`、`no-asset`、`development`、`other-source`、`builtin`。
+    pub code: String,
+    pub hint: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogPlugin {
+    pub id: String,
+    /// `fetch`、`transform`、`export`。
+    pub kind: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub platforms: Vec<CatalogPlatform>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repository: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub license: Option<String>,
+    pub methods: Vec<CatalogMethod>,
+    /// 列着它的订阅源；不在任何订阅源里的（随 usuyo 带的、开发时装的）没有。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latest: Option<CatalogRelease>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub installed: Option<CatalogInstalled>,
+    /// 订阅源里有比装着的新的一版，而且能装。
+    pub update: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub action: Option<CatalogAction>,
+    /// 上一次安装、更新、删除没成：一句话。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failure: Option<String>,
+    /// 装不了或更新不了的原因（有 `installed` 时说的是更新和删除）。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blocked: Option<CatalogBlocked>,
 }

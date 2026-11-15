@@ -31,6 +31,7 @@ export const queryKeys = {
   exportView: ["export"] as const,
   drafts: ["drafts"] as const,
   phone: ["phone"] as const,
+  catalog: ["catalog"] as const,
   draft: (id: string) => ["drafts", id] as const,
 };
 
@@ -724,4 +725,59 @@ export function usePhoneAction() {
 /** 演练一次：结果只在这一次的回答里，不进缓存。 */
 export function useDryRun() {
   return useMutation({ mutationFn: () => call((s) => s.dryRun()) });
+}
+
+/** 插件目录：订阅源里的和装着的合在一起。有插件在装、在删时隔一会儿重拉：事件流断了也看得到进展。 */
+export function useCatalog() {
+  return useQuery({
+    queryKey: queryKeys.catalog,
+    queryFn: () => call((s) => s.catalog()),
+    refetchInterval: (q) => (q.state.data?.plugins.some((p) => p.action) || q.state.data?.sources.some((s) => s.refreshing) ? 1000 : false),
+  });
+}
+
+export type CatalogChange = { kind: "install" | "update" | "remove"; id: string };
+
+/** 安装、更新、删除一个插件。装好以后插件列表和转写与识别也变了。 */
+export function useCatalogChange() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (c: CatalogChange) =>
+      call<unknown>((s) => {
+        switch (c.kind) {
+          case "install":
+            return s.installPlugin(c.id);
+          case "update":
+            return s.updatePlugin(c.id);
+          default:
+            return s.removePlugin(c.id);
+        }
+      }),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.catalog });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.plugins });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.transforms });
+    },
+  });
+}
+
+export type SourceChange = { kind: "add" | "remove"; address: string } | { kind: "refresh"; address?: string };
+
+/** 添加、去掉、刷新订阅源。 */
+export function useSourceChange() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (c: SourceChange) =>
+      call((s) => {
+        switch (c.kind) {
+          case "add":
+            return s.addSource(c.address);
+          case "remove":
+            return s.removeSource(c.address);
+          default:
+            return s.refreshSources(c.address);
+        }
+      }),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: queryKeys.catalog }),
+  });
 }

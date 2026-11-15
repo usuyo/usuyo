@@ -33,6 +33,7 @@
 | `plugins-updated` | 插件的暂停变了（被限流或拦住、「现在再试」「先别试」）、开关了一种方法、站点的登录、访客身份、密钥设置、设置里的 `network` 变了 | 无 |
 | `transforms-updated` | 模型开始下、下好了、没下成、删掉了；设置里的 `transforms.auto` 变了 | 无 |
 | `phone-updated` | 手机的驱动开始装、装好、没装上、卸掉；剪贴板试出了结果。授权、镜像、adb 的变化不发，窗口回到前面时和页面看得见时隔一会儿重拉 | 无 |
+| `catalog-updated` | 订阅源开始读、读到了新索引或没读成，加了或去掉一个订阅源；插件开始装、下载每过 2%、在校验、解开、载入、装好、没装上、删掉了。装好、删掉以后插件换上了，另发 `plugins-updated`、`transforms-updated` | 无 |
 
 - **错误**：照 [§0.3](conventions.md#03-错误模型)：`application/problem+json`，字段 `type`（`urn:usuyo:problem:<code>`）、`title`、`status`、`detail`、`instance`（`urn:uuid:<随机>`）、`code`、`retryable`、`hint?`；插件报的另带 `plugin`，一律 502。`hint` 是给人看的一句话，照设置的语言（下「设置」的 `language`）写：插件给了就是它的（插件照 `USUYO_LOCALE` 写）；内核自己报的，列来源、开始导入、翻预览、确认、从文件导入、交内容这几条的 400、422（还有找不到读文件的插件的 404、文件太大的 413）都带，这时 `detail` 是英文，留给日志。内核自己的句子两种语言都在各 crate 的 `words.rs` 里，写出 problem+json 时照这次请求进来时的语言挑；错误码不翻译。视图里内核写的话（`blockers[].hint`、`pauses[].hint`、`pending[].hint`、`remark`、`missing`、模型和驱动的 `hint`、`driver.step.text`）同样照这个语言；`jobs.db` 里宿主自己记下的原因两种语言都存，换了语言，读出来就是新的。可重试的带 `Retry-After: 5`。没有的路径 404 `not-found`，方法不对 405 `invalid-args`。
 - **上限**：请求体 64 KiB，超了 413 `too-large`；握手 256 字节；登录和访客身份的 cookie 256 KiB；`/v1/batches` 4 MiB；交文件 `POST /file-imports` 16 GiB、`POST /v1/file-imports` 256 MiB（内核边收边数，超了 413 带 `hint`，写了一半的副本去掉）；每个请求 30 秒，超了 504 `timeout`，列来源（`GET /plugins/{owner}/{repo}/sources`）120 秒，交文件 30 分钟；搜索 `limit` 默认 50，限在 1 到 200。
@@ -85,6 +86,7 @@
 | `POST /transforms/{owner}/{repo}/models/{name}/remove` | 删掉这个模型，204；正在下回 409 `conflict`。插件的进程在后台关掉，之后要它的转换等模型 |
 | `GET /settings`；`PATCH /settings` | 见下「设置」 |
 | `GET /phone` 和 `/phone/…` 七条 | 见下「手机」 |
+| `GET /catalog`、`/catalog/{owner}/{repo}…`、`/plugin-sources…` | 见下「插件目录和订阅源」 |
 | `GET /v1/ping` | 投递：`{name: "usuyo", version, protocol: 1, client}`，`client` 是投递令牌的名字，主令牌是 `null` |
 | `POST /v1/deliver` | 投递：见下 |
 | `POST /v1/batches` | 投递：见下 |
@@ -101,6 +103,18 @@
 - `PATCH /settings`，`{trashDays?, network?: {mode, proxy?}, transforms?: {auto}, window?: {systemTitleBar}, language?}`，给了的几项才改，改好回整份，马上生效。`trashDays` 取 30、90 或 `null`，记一次资料库的 `set-setting`；`network` 写进按机器的 `settings.json` 的 `network.proxy`（`system`、`direct` 或代理地址，`custom` 才带 `proxy`，地址是 `http://`、`socks5://`、`socks5h://`，有主机、没有路径），之后的插件调用和模型下载照它走；`transforms.auto` 关上时自动排的转换（没在跑的）都删掉，打开时照启动那样补排；`window.systemTitleBar` 只写进文件，桌面壳下次开窗口时读（[按机器的目录](machine.md#按机器的目录)）；`language` 马上生效：之后的 `hint` 和视图里的话照新的语言，之后起的插件进程拿到新的 `USUYO_LOCALE`（已经在跑的转换插件进程留着起来时的那个，闲下来关掉、下次再起时才换），桌面壳的话（连不上服务、登录窗口）每次现读这个文件。不认识的字段、不合的值回 400 `invalid-args`，原因里不写代理地址。`settings.json` 里别的键原样留着；这个文件只有自己能读（0600，先写同样 0600 的临时文件再改名），读回来的代理地址不带密码，交回一个不带密码、别处一样的地址时留着存着的密码。
 
 守护进程另有四条，不在 `endpoints.ts` 的 `paths` 里：`POST /handshake`（上面）；`POST /reindex`，命令行用，回 `{items, unreadable}`；`GET /media/<itemId>/<层>`，地址由 `ItemView` 给；`GET /events` 在 `paths` 里，但不走 30 秒的时限。
+
+<a id="插件目录和订阅源"></a>
+**插件目录和订阅源**（[协议 §8.10](../protocol/distribution.md#810-订阅源与索引11-13-代码)）：
+- `GET /catalog` 回 `CatalogView` `{target?, sources, plugins}`。`target` 是这台电脑的目标（`macos-arm64`、`macos-x86_64`、`linux-x86_64`、`windows-x86_64`，别的没有）。`plugins` 是订阅源里的（按订阅源的顺序，同一个 id 取第一个）和装着的合在一起，后面是只装着、不在订阅源里的（随 usuyo 带的、开发时装的）。每项 `{id, kind, name, description?, platforms: [{id, name}], repository?, license?, methods: [{id, name, built, access, login, account}], source?, latest?: {version, publishedAt?, url?, asset?: {name, size}}, installed?: {version, origin, source?, dir}, update, action?: {kind, phase, received?, total?}, failure?, blocked?: {code, hint}}`：名字、说明、方法名照设置的语言（索引没有这种语言时用简体中文），平台名先照索引的 `platforms`，再照装着的插件；`latest.asset` 是这台电脑用的包；`installed.origin` 是 `source`（从订阅源装的）或 `development`；`update` 是订阅源里有更高的版本而且能装；`action.kind` 是 `install`、`update`、`remove`，`phase` 是 `downloading`（带 `received`、`total` 字节）、`verifying`、`unpacking`、`loading`、`removing`；`failure` 是上一次没成的一句话；`blocked.code` 是 `no-release`、`no-asset`、`development`、`other-source`、`builtin`。
+- `GET /catalog/{owner}/{repo}` 回一项，没有 404（带 `hint`）。
+- `POST /catalog/{owner}/{repo}/install`：202 回那一项（`action` 已经是 `downloading`），在后台下载、核对、解开、载入，进展发 `catalog-updated`。已经装着 409 `conflict`；有 `blocked`（没发布、没有这台电脑的包、开发版本、随 usuyo 带的）409，带 `hint`；正在做别的 409。
+- `POST /catalog/{owner}/{repo}/update`：同上，只在 `update` 为真时；没装 409，已是最新 409，安装记录里的订阅源不在了 404。
+- `DELETE /catalog/{owner}/{repo}`：删掉从订阅源装的这个插件，回删掉以后的 `CatalogView`；开发版本和随 usuyo 带的 409。
+- `GET /plugin-sources` 回订阅源的数组，每项 `{address, indexUrl, default, refreshedAt?, plugins?, refreshing, error?}`：`default` 是守护进程默认带的那个，`plugins` 是上次读到的索引里有几个插件，`error` 是上次没读成的一句话（上次读到的照用）。
+- `POST /plugin-sources`，`{address}`：添加（写进按机器的 `settings.json` 的 `pluginSources`）并读一次，回数组；地址认不出 400，已经有了 409，都带 `hint`。读不成也留着，错误在 `error`。
+- `DELETE /plugin-sources?address=`：去掉，回数组；从它装的插件留着，只是不再从它更新。不在 404。
+- `POST /plugin-sources/refresh`，`{address?}`：刷新一个或全部，等读完（每个最多一分钟）回数组。
 
 <a id="手机"></a>
 **手机**（[手机那条路 §12](../platforms/phone.md#12-手机页做到的11-12-代码)）：只在 macOS 上的守护进程有，别处回 404 `not-found`（`hint`「此版本的 usuyo 服务不支持手机。」）。

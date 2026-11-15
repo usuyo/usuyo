@@ -598,7 +598,7 @@ impl Engine {
         let p = self.phone()?;
         let texts = p.service().await?.screen_texts().await?;
         let dirs: Vec<PathBuf> = self
-            .inner
+            .loaded()
             .host
             .plugins()
             .iter()

@@ -124,8 +124,8 @@ const SCRIPT_LIMIT: u64 = 4 << 20;
 impl Engine {
     /// 一种交链接的方法的脚本文件：只认装着的清单写了的、解开链接以后还在那个插件文件夹里的。
     fn method_script(&self, plugin_id: &str, method_id: &str) -> Result<std::path::PathBuf> {
-        let plugin = self
-            .inner
+        let loaded = self.loaded();
+        let plugin = loaded
             .host
             .plugin(plugin_id)
             .ok_or_else(|| Error::NotFound(format!("plugin {plugin_id}")))?;
@@ -171,7 +171,7 @@ impl Engine {
     /// 装着的获取插件和没加载的。各插件的本机检查过期了的先问一遍（同时问，不带凭据、不碰平台）。
     pub async fn plugins(&self) -> Result<PluginsView> {
         let mut asking = tokio::task::JoinSet::new();
-        for p in self.inner.host.plugins() {
+        for p in self.loaded().host.plugins() {
             let (this, p) = (self.clone(), p.clone());
             asking.spawn(async move {
                 this.fetch_health(&p).await;
@@ -182,11 +182,11 @@ impl Engine {
         tokio::task::spawn_blocking(move || {
             let now = now_ms();
             let mut plugins = Vec::new();
-            for p in this.inner.host.plugins() {
+            for p in this.loaded().host.plugins() {
                 plugins.push(this.plugin_view(p, now)?);
             }
             let not_loaded = this
-                .inner
+                .loaded()
                 .rejected
                 .iter()
                 .map(|(dir, reason)| NotLoaded {
@@ -211,7 +211,7 @@ impl Engine {
 
     /// 一个插件的样子。本机检查用缓存里的（没问过的不算挡）；只读本机文件，不碰钥匙串。
     pub(crate) fn plugin_view(&self, p: &FetchPlugin, now: i64) -> Result<PluginView> {
-        let host = &self.inner.host;
+        let host = &self.loaded().host;
         let lang = self.lang();
         let filled = host.secrets_set(p.id())?;
         let pauses = self.inner.jobs.pauses_of(p.id().as_str(), now)?;
@@ -224,7 +224,7 @@ impl Engine {
             .platforms
             .iter()
             .filter_map(|pl| {
-                self.inner.pacing.get(pl.as_str()).map(|x| PacingView {
+                self.loaded().pacing.get(pl.as_str()).map(|x| PacingView {
                     platform: pl.as_str().to_owned(),
                     batch: x.batch,
                     interval_sec: x.interval.as_secs(),
@@ -387,10 +387,11 @@ impl Engine {
         })
     }
 
-    fn plugin_ref(&self, id: &str) -> Result<&FetchPlugin> {
-        self.inner
+    fn plugin_ref(&self, id: &str) -> Result<FetchPlugin> {
+        self.loaded()
             .host
             .plugin(id)
+            .cloned()
             .ok_or_else(|| Error::NotFound(format!("plugin {id}")))
     }
 
@@ -409,7 +410,7 @@ impl Engine {
         self.inner.wake.notify_one();
         self.inner.imports_wake.notify_one();
         self.emit(Event::PluginsUpdated);
-        self.plugin_view(p, now_ms())
+        self.plugin_view(&p, now_ms())
     }
 
     /// 「先别试」：到你点「现在再试」为止，哪儿都不调它；别的插件照常。
@@ -417,13 +418,13 @@ impl Engine {
         let p = self.plugin_ref(id)?;
         self.inner.jobs.hold(id)?;
         self.emit(Event::PluginsUpdated);
-        self.plugin_view(p, now_ms())
+        self.plugin_view(&p, now_ms())
     }
 
     /// 登录站点和登录状态。只读本机的索引，不碰钥匙串。
     pub fn sites(&self) -> Result<Vec<SiteView>> {
         Ok(self
-            .inner
+            .loaded()
             .host
             .sites()?
             .into_iter()
@@ -433,7 +434,7 @@ impl Engine {
 
     /// 存下登录窗口读出的 cookie：只留属于这个站点的，存进钥匙串。会阻塞（钥匙串可能弹窗）。
     pub fn save_site(&self, site: &str, state: &StorageState) -> Result<SiteView> {
-        let d = self.inner.host.save_site(site, state)?;
+        let d = self.loaded().host.save_site(site, state)?;
         self.inner.wake.notify_one();
         self.inner.imports_wake.notify_one();
         self.emit(Event::PluginsUpdated);
@@ -442,7 +443,7 @@ impl Engine {
 
     /// 忘掉一个站点的登录。会阻塞。
     pub fn forget_site(&self, site: &str) -> Result<()> {
-        self.inner.host.forget_site(site)?;
+        self.loaded().host.forget_site(site)?;
         self.emit(Event::PluginsUpdated);
         Ok(())
     }
@@ -450,7 +451,7 @@ impl Engine {
     /// 访客身份和有没有存着。只读本机的索引，不碰钥匙串。
     pub fn visitors(&self) -> Result<Vec<VisitorView>> {
         Ok(self
-            .inner
+            .loaded()
             .host
             .visitors()?
             .into_iter()
@@ -460,7 +461,7 @@ impl Engine {
 
     /// 存下访客窗口读出的 cookie：只留属于这个访客身份的，存进钥匙串。会阻塞。
     pub fn save_visitor(&self, site: &str, state: &StorageState) -> Result<VisitorView> {
-        let d = self.inner.host.save_visitor(site, state)?;
+        let d = self.loaded().host.save_visitor(site, state)?;
         self.inner.wake.notify_one();
         self.inner.imports_wake.notify_one();
         self.emit(Event::PluginsUpdated);
@@ -469,7 +470,7 @@ impl Engine {
 
     /// 去掉一个访客身份。同一主机的账号不动。会阻塞。
     pub fn forget_visitor(&self, site: &str) -> Result<()> {
-        self.inner.host.forget_visitor(site)?;
+        self.loaded().host.forget_visitor(site)?;
         self.emit(Event::PluginsUpdated);
         Ok(())
     }
@@ -477,8 +478,8 @@ impl Engine {
     /// 填一个插件的密钥设置（空的就是去掉），存进钥匙串。会阻塞。
     pub fn set_plugin_secret(&self, id: &str, key: &str, value: &str) -> Result<PluginView> {
         let p = self.plugin_ref(id)?;
-        self.inner.host.set_secret(p, key, value)?;
+        self.loaded().host.set_secret(&p, key, value)?;
         self.emit(Event::PluginsUpdated);
-        self.plugin_view(p, now_ms())
+        self.plugin_view(&p, now_ms())
     }
 }

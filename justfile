@@ -90,8 +90,14 @@ dev-plugins fetch="../usuyo-fetch":
       echo "跳过 builtin/ocr-vision：只在 macOS 上有"
     fi
     # 旁边 usuyo-fetch/ 里每个有 usuyo-plugin.yaml 的文件夹都装；可执行文件名取自清单的 run.command，
-    # 编不过的跳过、说一声，别的照装。这些插件共用一个编译目录（usuyo-fetch/.target）：依赖只编一遍
+    # 编不过的跳过、说一声，别的照装。这些插件共用一个编译目录（usuyo-fetch/.target）：依赖只编一遍。
+    # 插件的 Cargo.toml 钉的是 git 上的 usuyo；usuyo-fetch/.cargo/config.toml 把它换成旁边这个工作区，
+    # cargo 只从当前目录往上找配置，所以这里用 --config 把它带上。
+    # 开发时装的不带安装记录（.usuyo-install.json）：订阅源不更新、不删它；盖过从订阅源装的那一版时把记录去掉。
     shared="$(cd "{{fetch}}" && pwd)/.target"
+    override="$(cd "{{fetch}}" && pwd)/.cargo/config.toml"
+    config=()
+    if [ -f "$override" ]; then config=(--config "$override"); fi
     for manifest in "{{fetch}}"/*/usuyo-plugin.yaml; do
       [ -f "$manifest" ] || continue
       src=$(dirname "$manifest")
@@ -102,12 +108,13 @@ dev-plugins fetch="../usuyo-fetch":
         echo "跳过 $src：清单里读不出 id、version 或 run.command 里的可执行文件"
         continue
       fi
-      if ! CARGO_TARGET_DIR="$shared" cargo build --release --locked --offline --manifest-path "$src/Cargo.toml" --bin "$bin"; then
+      if ! CARGO_TARGET_DIR="$shared" cargo build ${config[@]+"${config[@]}"} --release --locked --offline --manifest-path "$src/Cargo.toml" --bin "$bin"; then
         echo "跳过 $src：编不过"
         continue
       fi
       dest="$root/$id/$version"
       mkdir -p "$dest"
+      if [ -f "$dest/.usuyo-install.json" ]; then trash "$dest/.usuyo-install.json"; fi
       cp "$manifest" "$dest/usuyo-plugin.yaml"
       cp "$shared/release/$bin" "$dest/$bin"
       # 交链接的方法写了的脚本文件（methods[].script，插件文件夹里的相对路径）照原位放在清单旁边

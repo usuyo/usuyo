@@ -3801,6 +3801,7 @@ dependencies = [
  "idna",
  "percent-encoding",
  "serde",
+ "serde_derive",
 ]
 
 [[package]]
@@ -3875,6 +3876,7 @@ dependencies = [
  "reqwest",
  "rusqlite",
  "rustls",
+ "semver",
  "serde",
  "serde_json",
  "sha2",

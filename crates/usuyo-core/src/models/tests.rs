@@ -439,18 +439,18 @@ fn unpacking_stops_at_the_size_cap() {
     h.set_cksum();
     b.append(&h, big.as_slice()).unwrap();
     std::fs::write(&archive, b.into_inner().unwrap().finish().unwrap()).unwrap();
-    let mut out = Unpacked {
-        root: tmp.path().join("out"),
-        total: 0,
-        cap: 1 << 20,
-        files: Vec::new(),
-        entries: 0,
-    };
-    std::fs::create_dir(&out.root).unwrap();
-    let r = untar(
-        &mut out,
-        flate2::read::GzDecoder::new(std::fs::File::open(&archive).unwrap()),
+    let root = tmp.path().join("out");
+    std::fs::create_dir(&root).unwrap();
+    let mut out = crate::unpack::Unpacked::new(
+        &root,
+        crate::unpack::Limits {
+            entries: MAX_ENTRIES,
+            bytes: 1 << 20,
+            reserved: "model.json",
+        },
     );
+    let r = crate::unpack::unpack(&mut out, &archive, crate::unpack::Format::TarGz)
+        .map_err(ModelError::from);
     assert!(matches!(r, Err(ModelError::Archive(_))), "{r:?}");
 }
 
@@ -481,14 +481,17 @@ fn zip_entries_are_checked_too() {
     let run = |path: &Path| {
         let root = tmp.path().join(format!("out-{}", usuyo_library::uuid7()));
         std::fs::create_dir(&root).unwrap();
-        let mut out = Unpacked {
-            root,
-            total: 0,
-            cap: 1 << 20,
-            files: Vec::new(),
-            entries: 0,
-        };
-        unzip(&mut out, std::fs::File::open(path).unwrap()).map(|()| out.files)
+        let mut out = crate::unpack::Unpacked::new(
+            &root,
+            crate::unpack::Limits {
+                entries: MAX_ENTRIES,
+                bytes: 1 << 20,
+                reserved: "model.json",
+            },
+        );
+        crate::unpack::unpack(&mut out, path, crate::unpack::Format::Zip)
+            .map(|()| out.into_files())
+            .map_err(ModelError::from)
     };
     let files = run(&good).unwrap();
     assert_eq!(files.len(), 1);

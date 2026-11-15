@@ -91,7 +91,8 @@ const takeRoute = createRoute({
   component: lazyRouteComponent(() => import("./capture/CapturePage"), "CapturePage"),
 });
 
-// 获取插件：每个平台一页（`/plugins/<平台 id>`），「变成文字」是 `/plugins/text`；`/plugins` 开第一个平台。
+// 获取插件：`/plugins` 是插件目录（订阅源里的和装着的），`/plugins/<owner>/<repo>` 是一个插件的详情，
+// `/plugins/text` 是所有转写与识别插件和模型；以前一个平台一页的 `/plugins/<平台 id>` 换到管它的插件的详情。
 const pluginsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/plugins",
@@ -101,7 +102,7 @@ const pluginsRoute = createRoute({
 const pluginsIndexRoute = createRoute({
   getParentRoute: () => pluginsRoute,
   path: "/",
-  component: lazyRouteComponent(() => import("./plugins/PluginsPage"), "FirstPlatform"),
+  component: lazyRouteComponent(() => import("./plugins/Browser"), "BrowserRoute"),
 });
 
 const pluginsTextRoute = createRoute({
@@ -114,6 +115,18 @@ const platformRoute = createRoute({
   getParentRoute: () => pluginsRoute,
   path: "$platform",
   component: lazyRouteComponent(() => import("./plugins/PluginsPage"), "PlatformRoute"),
+});
+
+export interface PluginSearch {
+  /** 管几个平台的插件：设置照哪个平台显示。 */
+  platform?: string;
+}
+
+const pluginDetailRoute = createRoute({
+  getParentRoute: () => pluginsRoute,
+  path: "$owner/$repo",
+  validateSearch: (search: Record<string, unknown>): PluginSearch => (typeof search.platform === "string" && search.platform !== "" ? { platform: search.platform } : {}),
+  component: lazyRouteComponent(() => import("./plugins/PluginDetail"), "PluginDetailRoute"),
 });
 
 export interface ImportSearch {
@@ -173,7 +186,7 @@ const laterRoute = createRoute({
   component: LaterPage,
 });
 
-const routeTree = rootRoute.addChildren([homeRoute, searchRoute, itemRoute, topicRoute, draftsRoute, draftRoute, followRoute, changesRoute, exportRoute, takeRoute, pluginsRoute.addChildren([pluginsIndexRoute, pluginsTextRoute, platformRoute]), phoneRoute, importRoute, trashRoute, settingsRoute, laterRoute]);
+const routeTree = rootRoute.addChildren([homeRoute, searchRoute, itemRoute, topicRoute, draftsRoute, draftRoute, followRoute, changesRoute, exportRoute, takeRoute, pluginsRoute.addChildren([pluginsIndexRoute, pluginsTextRoute, platformRoute, pluginDetailRoute]), phoneRoute, importRoute, trashRoute, settingsRoute, laterRoute]);
 
 export function createAppRouter(history?: Parameters<typeof createRouter>[0]["history"]) {
   return createRouter({ routeTree, history });

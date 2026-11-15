@@ -87,6 +87,10 @@ pub struct EngineConfig {
     pub proxy: ProxySetting,
     /// 手机那一页读什么、跑什么；`None`（默认）时 `/phone…` 回 `not-found`。守护进程换成 [`PhoneConfig::system`]。
     pub phone: Option<crate::PhoneConfig>,
+    /// 设置里没写 `pluginSources` 时的订阅源。默认没有；守护进程给 `usuyo-fetch/index`。
+    pub default_sources: Vec<String>,
+    /// 开发开关（`USUYO_DEV_LOOPBACK_SOURCES=1`）：订阅源和安装包只连本机回环地址，可以是明文 http。
+    pub dev_loopback_sources: bool,
 }
 
 impl EngineConfig {
@@ -111,6 +115,8 @@ impl EngineConfig {
             transform_limits: TransformLimits::default(),
             proxy: ProxySetting::System,
             phone: None,
+            default_sources: Vec::new(),
+            dev_loopback_sources: false,
         }
     }
 }
@@ -181,18 +187,110 @@ impl Links {
     }
 }
 
-pub(crate) struct Inner {
-    pub library: Mutex<Library>,
-    pub index: SearchIndex,
-    pub jobs: Jobs,
+/// 这一刻装着的插件：从来源装上、更新、删掉一个以后整份换掉（[`Engine::reload_plugins`]），不重启。
+/// 正在跑的调用拿着它开始时的那一份，跑完为止。
+pub(crate) struct Loaded {
     pub host: PluginHost,
     /// 平台 id → 显示名，取自装着的获取插件。
     pub platforms: BTreeMap<String, String>,
     /// 平台 id → 合起来的节奏。
     pub pacing: BTreeMap<String, Pacing>,
-    pub locks: PlatformLocks,
     /// 没加载的插件：目录和原因。
     pub rejected: Vec<(PathBuf, String)>,
+    /// 装着的导出插件（只列出来）。
+    pub other: Vec<usuyo_plugin::InstalledPlugin>,
+}
+
+/// 照顺序找各个插件目录：同一个插件 id 先找到的算。
+pub(crate) struct Found {
+    pub fetch: Vec<usuyo_plugin::FetchPlugin>,
+    pub transform: Vec<usuyo_plugin::TransformPlugin>,
+    pub other: Vec<usuyo_plugin::InstalledPlugin>,
+    pub rejected: Vec<(PathBuf, String)>,
+}
+
+pub(crate) fn find_plugins(roots: &[PathBuf]) -> Result<Found> {
+    let mut out = Found {
+        fetch: Vec::new(),
+        transform: Vec::new(),
+        other: Vec::new(),
+        rejected: Vec::new(),
+    };
+    for root in roots.iter().filter(|r| r.is_dir()) {
+        let found = discover(root)?;
+        for r in &found.rejected {
+            tracing::warn!(dir = %r.dir.display(), error = %r.error, "plugin not loaded");
+            out.rejected.push((r.dir.clone(), r.error.to_string()));
+        }
+        for p in found.fetch {
+            if !out.fetch.iter().any(|q| q.id() == p.id()) {
+                out.fetch.push(p);
+            }
+        }
+        for p in found.transform {
+            if !out.transform.iter().any(|q| q.id() == p.id()) {
+                out.transform.push(p);
+            }
+        }
+        for p in found.other {
+            if !out
+                .other
+                .iter()
+                .any(|q| q.manifest.header.id == p.manifest.header.id)
+            {
+                out.other.push(p);
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// 平台插件的名字优先，通用网页插件的排后。管几个平台的插件（yt-dlp 一类）的名字不是哪个平台的名字：
+/// 只有它管的平台照平台 id 叫。
+fn platform_names(plugins: &[usuyo_plugin::FetchPlugin]) -> BTreeMap<String, String> {
+    let mut platforms = BTreeMap::new();
+    for p in plugins
+        .iter()
+        .filter(|p| !p.spec.is_web() && p.spec.platforms.len() == 1)
+        .chain(plugins.iter().filter(|p| p.spec.is_web()))
+    {
+        for platform in &p.spec.platforms {
+            platforms
+                .entry(platform.as_str().to_owned())
+                .or_insert_with(|| p.header.name.clone());
+        }
+    }
+    platforms
+}
+
+impl Loaded {
+    fn new(
+        host: PluginHost,
+        rejected: Vec<(PathBuf, String)>,
+        other: Vec<usuyo_plugin::InstalledPlugin>,
+    ) -> Loaded {
+        Loaded {
+            platforms: platform_names(host.plugins()),
+            pacing: crate::pace::combine(host.plugins()),
+            host,
+            rejected,
+            other,
+        }
+    }
+}
+
+pub(crate) struct Inner {
+    pub library: Mutex<Library>,
+    pub index: SearchIndex,
+    pub jobs: Jobs,
+    pub loaded: std::sync::RwLock<Arc<Loaded>>,
+    /// 装插件的目录，按顺序找（[`EngineConfig::plugin_roots`]）。
+    pub plugin_roots: Vec<PathBuf>,
+    pub locks: PlatformLocks,
+    /// 订阅源和它们的索引。
+    pub catalog: crate::catalog::Catalog,
+    /// 正在装、更新、删除的插件，上一次没成的。
+    pub actions: crate::plugin_install::Actions,
     pub events: broadcast::Sender<Event>,
     pub wake: Notify,
     /// 有导入要列、要认身份时叫醒导入的那一路。
@@ -240,45 +338,23 @@ impl Engine {
         let index = SearchIndex::open_or_create(&machine_dir.join("index"))?;
         let jobs = Jobs::open(&machine_dir.join("jobs.db"), crate::fetch::now_ms())?;
 
-        let mut plugins: Vec<usuyo_plugin::FetchPlugin> = Vec::new();
-        let mut transform_plugins: Vec<usuyo_plugin::TransformPlugin> = Vec::new();
-        let mut rejected = Vec::new();
-        for root in config.plugin_roots.iter().filter(|r| r.is_dir()) {
-            let found = discover(root)?;
-            for r in &found.rejected {
-                tracing::warn!(dir = %r.dir.display(), error = %r.error, "plugin not loaded");
-                rejected.push((r.dir.clone(), r.error.to_string()));
-            }
-            for p in found.fetch {
-                if !plugins.iter().any(|q| q.id() == p.id()) {
-                    plugins.push(p);
-                }
-            }
-            for p in found.transform {
-                if !transform_plugins.iter().any(|q| q.id() == p.id()) {
-                    transform_plugins.push(p);
-                }
-            }
-        }
-        let mut platforms = BTreeMap::new();
-        // 平台插件的名字优先，通用网页插件的排后。管几个平台的插件（yt-dlp 一类）的名字不是哪个平台的名字：
-        // 只有它管的平台照平台 id 叫。
-        for p in plugins
-            .iter()
-            .filter(|p| !p.spec.is_web() && p.spec.platforms.len() == 1)
-            .chain(plugins.iter().filter(|p| p.spec.is_web()))
-        {
-            for platform in &p.spec.platforms {
-                platforms
-                    .entry(platform.as_str().to_owned())
-                    .or_insert_with(|| p.header.name.clone());
-            }
-        }
-        let pacing = crate::pace::combine(&plugins);
+        Engine::sweep_staging(&config.machine_root)?;
+        let found = find_plugins(&config.plugin_roots)?;
         let lang = crate::settings::language(&config.machine_root)?.resolve(config.system_language);
         let locale = usuyo_plugin::Locale::new(lang.tag());
         // 下模型和下手机的驱动共用一份：设置里换了代理，两边一起换。
         let net = Net::system(config.proxy.clone())?;
+        let catalog_net = if config.dev_loopback_sources {
+            Net::loopback(std::time::Duration::from_secs(60))?
+        } else {
+            net.clone()
+        };
+        let catalog = crate::catalog::Catalog::new(
+            &config.machine_root,
+            catalog_net,
+            config.dev_loopback_sources,
+            config.default_sources,
+        )?;
         let phone = config
             .phone
             .map(|c| crate::phone::Phone::new(c, &net).map(Arc::new))
@@ -286,7 +362,7 @@ impl Engine {
         // 插件的输出目录要和资料库在同一个文件系统上，移进 raw/ 才是改名。
         let work_dir = library.root().join(".usuyo/tmp");
         let transforms = Transforms::new(TransformSetup {
-            plugins: transform_plugins,
+            plugins: found.transform,
             config: TransformConfig {
                 work_dir: work_dir.clone(),
                 cache_dir: config.machine_root.join("cache/plugins"),
@@ -307,7 +383,7 @@ impl Engine {
                 locale: locale.clone(),
                 limits: config.limits,
             },
-            plugins,
+            found.fetch,
         )
         .with_settings(config.plugin_settings)
         .with_proxy(config.proxy.clone())
@@ -320,11 +396,15 @@ impl Engine {
                 library: Mutex::new(library),
                 index,
                 jobs,
-                host,
-                platforms,
-                pacing,
+                loaded: std::sync::RwLock::new(Arc::new(Loaded::new(
+                    host,
+                    found.rejected,
+                    found.other,
+                ))),
+                plugin_roots: config.plugin_roots,
                 locks: PlatformLocks::default(),
-                rejected,
+                catalog,
+                actions: crate::plugin_install::Actions::default(),
                 events,
                 wake: Notify::new(),
                 imports_wake: Notify::new(),
@@ -361,9 +441,39 @@ impl Engine {
         self.lib().root().to_owned()
     }
 
+    /// 这一刻装着的插件。
+    pub(crate) fn loaded(&self) -> Arc<Loaded> {
+        Arc::clone(
+            &self
+                .inner
+                .loaded
+                .read()
+                .unwrap_or_else(PoisonError::into_inner),
+        )
+    }
+
+    /// 重新找一遍插件目录，换上新的一份：获取插件、平台名、节奏、没加载的；转换插件换掉变了的常驻进程。
+    pub(crate) async fn reload_plugins(&self) -> Result<()> {
+        let roots = self.inner.plugin_roots.clone();
+        let found = tokio::task::spawn_blocking(move || find_plugins(&roots))
+            .await
+            .map_err(|e| Error::Task(e.to_string()))??;
+        self.transforms().set_plugins(found.transform).await;
+        let host = self.loaded().host.with_plugins(found.fetch);
+        let next = Arc::new(Loaded::new(host, found.rejected, found.other));
+        *self
+            .inner
+            .loaded
+            .write()
+            .unwrap_or_else(PoisonError::into_inner) = next;
+        self.emit(Event::PluginsUpdated);
+        self.emit(Event::TransformsUpdated);
+        Ok(())
+    }
+
     /// 已加载的获取插件 id。
     pub fn plugin_ids(&self) -> Vec<String> {
-        self.inner
+        self.loaded()
             .host
             .plugins()
             .iter()
@@ -406,7 +516,7 @@ impl Engine {
 
     pub(crate) fn platform(&self, id: &str) -> Platform {
         let name = self
-            .inner
+            .loaded()
             .platforms
             .get(id)
             .cloned()

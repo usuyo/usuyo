@@ -252,7 +252,12 @@ fn sorted_dirs(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
     let mut dirs = Vec::new();
     for entry in std::fs::read_dir(dir)? {
         let entry = entry?;
-        if entry.file_type()?.is_dir() {
+        // 点开头的是宿主自己的暂存（安装时的 `.staging/`），不是插件
+        let hidden = entry
+            .file_name()
+            .to_str()
+            .is_some_and(|n| n.starts_with('.'));
+        if !hidden && entry.file_type()?.is_dir() {
             dirs.push(entry.path());
         }
     }
@@ -373,6 +378,23 @@ impl PluginHost {
             settings: BTreeMap::new(),
             logins,
             proxy: std::sync::RwLock::new(ProxySetting::Direct),
+        }
+    }
+
+    /// 同样的配置、设置、凭据和代理，换一组插件：从来源装上、更新、删掉一个插件以后不重启就换上。
+    /// 调用方：`usuyo-core` 的 `Engine::reload_plugins`。
+    pub fn with_plugins(&self, plugins: Vec<FetchPlugin>) -> PluginHost {
+        PluginHost {
+            config: self.config.clone(),
+            plugins,
+            settings: self.settings.clone(),
+            logins: Arc::clone(&self.logins),
+            proxy: std::sync::RwLock::new(
+                self.proxy
+                    .read()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .clone(),
+            ),
         }
     }
 

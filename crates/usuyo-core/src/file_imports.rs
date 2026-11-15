@@ -105,7 +105,7 @@ impl Engine {
     /// 装着的、能读文件的方法（`GET /file-readers`），照插件和清单的顺序。
     pub fn file_readers(&self) -> Vec<FileReaderView> {
         let mut out = Vec::new();
-        for p in self.inner.host.plugins() {
+        for p in self.loaded().host.plugins() {
             for m in p.spec.methods.iter().filter(|m| reads_files(m)) {
                 let Some(list) = &m.capabilities.list else {
                     continue;
@@ -184,7 +184,7 @@ impl Engine {
         client: Option<&str>,
     ) -> Result<ImportView> {
         let reader = self
-            .inner
+            .loaded()
             .host
             .plugin(&upload.plugin)
             .map(|p| p.header.name.clone())
@@ -238,7 +238,7 @@ impl Engine {
     }
 
     fn reader_plugin(&self, id: &str) -> Result<FetchPlugin> {
-        self.inner.host.plugin(id).cloned().ok_or_else(|| {
+        self.loaded().host.plugin(id).cloned().ok_or_else(|| {
             Error::NotFound(format!("plugin {id}")).hinted(words::NOT_INSTALLED.said())
         })
     }

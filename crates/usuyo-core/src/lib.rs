@@ -2,6 +2,7 @@
 //!
 //! 接口（HTTP、命令行）只经 [`Engine`]；返回的视图形状照前端的 `endpoints.ts`。
 
+mod catalog;
 mod content;
 mod engine;
 mod error;
@@ -18,6 +19,7 @@ mod models;
 mod owner_only;
 mod pace;
 mod phone;
+mod plugin_install;
 mod registry;
 mod reveal;
 mod settings;
@@ -25,6 +27,7 @@ mod share_text;
 mod transcripts;
 mod transform;
 mod trash;
+mod unpack;
 mod vault;
 pub mod view;
 mod words;

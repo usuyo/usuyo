@@ -197,6 +197,20 @@ export const paths = {
    * 那种方法关着或用不上回 422 `unsupported-input`。
    */
   fileImports: "/file-imports",
+
+  // —— 订阅源和插件目录（「获取插件」页，协议 §8.4）——
+  /** GET `CatalogView`：订阅源里的插件和装着的插件合在一起。 */
+  catalog: "/catalog",
+  /** GET 一个 `CatalogPlugin`；DELETE 删掉从订阅源装的它，回删掉以后的 `CatalogView`。 */
+  catalogPlugin: (id: string) => `/catalog/${pluginPath(id)}`,
+  /** POST：开始安装，202 回 `CatalogPlugin`；进展经 `catalog-updated`。 */
+  catalogInstall: (id: string) => `/catalog/${pluginPath(id)}/install`,
+  /** POST：开始从装它的订阅源更新，同上。 */
+  catalogUpdate: (id: string) => `/catalog/${pluginPath(id)}/update`,
+  /** GET `CatalogSource[]`；POST `{address}` 添加并读一次；DELETE `?address=` 去掉。 */
+  catalogSources: "/plugin-sources",
+  /** POST `{address?}`：刷新一个或全部订阅源，等读完，回 `CatalogSource[]`。 */
+  catalogSourcesRefresh: "/plugin-sources/refresh",
 } as const;
 
 /**
@@ -244,6 +258,8 @@ export type PlatformEvent =
   | { type: "plugins-updated" }
   /** 模型开始下、下好了、没下成、删掉了，或设置里的 `transforms.auto` 变了。重新拉 `paths.transforms`、`paths.settings`。 */
   | { type: "transforms-updated" }
+  /** 订阅源读到了新索引、加了或删了一个，插件开始装、在下、装好、没装上、删掉了。重新拉 `paths.catalog`。 */
+  | { type: "catalog-updated" }
   /** 手机那一页的事变了：mirroir 开始装、装好、没装上、卸掉，剪贴板试出了结果。重新拉 `paths.phone`。授权、镜像、adb 在 usuyo 外面变，不发这一条：页面看得见时自己隔一会儿重拉。 */
   | { type: "phone-updated" };
 
@@ -1321,4 +1337,83 @@ export interface SettingsPatch {
   transforms?: { auto: boolean };
   window?: { systemTitleBar: boolean };
   language?: LanguageChoice;
+}
+
+// —— 订阅源和插件目录 ——
+
+/** 一个订阅源：一个放着 `index.json` 的仓库。 */
+export interface CatalogSource {
+  /** `owner/repo`；开发开关打开时也可以是本机的 `http://127.0.0.1:<端口>/…`。 */
+  address: string;
+  indexUrl: string;
+  /** 随 usuyo 带的那一个。 */
+  default: boolean;
+  /** 上次读到索引的时间（RFC 3339）。 */
+  refreshedAt?: string;
+  /** 索引里有几个插件；还没读到过就没有。 */
+  plugins?: number;
+  refreshing: boolean;
+  /** 上次没读成：一句话。读到过的索引照用。 */
+  error?: string;
+}
+
+export interface CatalogMethod {
+  id: string;
+  name: string;
+  built: boolean;
+  access: string;
+  login: string;
+  account: string;
+}
+
+export interface CatalogRelease {
+  version: string;
+  publishedAt?: string;
+  url?: string;
+  /** 这台电脑用的包；没有就是这一版没给这台电脑编。 */
+  asset?: { name: string; size: number };
+}
+
+export interface CatalogInstalled {
+  version: string;
+  /** `source`：从订阅源装的；`development`：just dev-plugins 或手放进来的，订阅源不更新、不删它。 */
+  origin: "source" | "development";
+  source?: string;
+  dir: string;
+}
+
+export interface CatalogAction {
+  kind: "install" | "update" | "remove";
+  phase: "downloading" | "verifying" | "unpacking" | "loading" | "removing";
+  received?: number;
+  total?: number;
+}
+
+export interface CatalogPlugin {
+  id: string;
+  kind: "fetch" | "transform" | "export";
+  name: string;
+  description?: string;
+  platforms: { id: string; name: string }[];
+  repository?: string;
+  license?: string;
+  methods: CatalogMethod[];
+  /** 列着它的订阅源。 */
+  source?: string;
+  latest?: CatalogRelease;
+  installed?: CatalogInstalled;
+  /** 订阅源里有更新的一版，而且能装。 */
+  update: boolean;
+  action?: CatalogAction;
+  /** 上一次安装、更新、删除没成：一句话。 */
+  failure?: string;
+  /** 装不了、更新不了的原因。 */
+  blocked?: { code: "no-release" | "no-asset" | "development" | "other-source" | "builtin"; hint: string };
+}
+
+export interface CatalogView {
+  /** 这台电脑的目标（`macos-arm64` 一类）。 */
+  target?: string;
+  sources: CatalogSource[];
+  plugins: CatalogPlugin[];
 }

@@ -168,7 +168,7 @@ async fn fetch(
         Err(e) => return Err(io(part)(e)),
     }
     tracing::info!(from = %redact(&url), "downloading the phone driver");
-    net.download(&url, part, asset.size).await?;
+    net.download(&url, part, asset.size, &|_| {}).await?;
     let p = part.to_owned();
     let got = tokio::task::spawn_blocking(move || hash_file(&p))
         .await

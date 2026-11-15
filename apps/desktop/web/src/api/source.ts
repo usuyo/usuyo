@@ -45,6 +45,9 @@ import {
   type ChangesView,
   type ExportRun,
   type ExportView,
+  type CatalogPlugin,
+  type CatalogSource,
+  type CatalogView,
   type PhoneDryRun,
   type PhoneView,
   type SettingsPane,
@@ -189,8 +192,19 @@ export interface Phone {
   lookForAndroid(): Promise<PhoneView>;
 }
 
+/** 「获取插件」页的插件目录和订阅源（协议 §8.4）。 */
+export interface Catalog {
+  catalog(): Promise<CatalogView>;
+  installPlugin(id: string): Promise<CatalogPlugin>;
+  updatePlugin(id: string): Promise<CatalogPlugin>;
+  removePlugin(id: string): Promise<CatalogView>;
+  addSource(address: string): Promise<CatalogSource[]>;
+  removeSource(address: string): Promise<CatalogSource[]>;
+  refreshSources(address?: string): Promise<CatalogSource[]>;
+}
+
 /** 内核和样例库都实现的全部读写。 */
-export type Source = Library & Platforms & Transforms & Settings & Topics & Drafts & Follows & Changes & Exports & Phone;
+export type Source = Library & Platforms & Transforms & Settings & Topics & Drafts & Follows & Changes & Exports & Phone & Catalog;
 
 const itemRequest = (path: string, method?: "POST") => request<Item>(path, method ? { method } : {});
 
@@ -306,6 +320,15 @@ const daemon: Source = {
   transform: (itemId, body) => request<void>(paths.itemTransform(itemId), { method: "POST", body }).then(() => undefined),
   downloadModel: (pluginId, name) => request<ModelDownload>(paths.modelDownload(pluginId, name), { method: "POST" }),
   removeModel: (pluginId, name) => request<void>(paths.modelRemove(pluginId, name), { method: "POST" }).then(() => undefined),
+
+  catalog: () => request<CatalogView>(paths.catalog),
+  installPlugin: (id) => request<CatalogPlugin>(paths.catalogInstall(id), { method: "POST" }),
+  updatePlugin: (id) => request<CatalogPlugin>(paths.catalogUpdate(id), { method: "POST" }),
+  removePlugin: (id) => request<CatalogView>(paths.catalogPlugin(id), { method: "DELETE" }),
+  addSource: (address) => request<CatalogSource[]>(paths.catalogSources, { method: "POST", body: { address } }),
+  removeSource: (address) => request<CatalogSource[]>(paths.catalogSources, { method: "DELETE", query: { address } }),
+  // 刷新要等每个订阅源读完（每个最多一分钟）
+  refreshSources: (address) => request<CatalogSource[]>(paths.catalogSourcesRefresh, { method: "POST", body: address === undefined ? {} : { address }, timeoutMs: 75_000 }),
 };
 
 // 样例库只在 VITE_USUYO_MOCK=1 或开发服务器里用；生产构建里这两个条件都是常量 false，样例库不进包。
@@ -327,9 +350,9 @@ export function usingMockLibrary(): boolean {
 }
 
 function mock(): Promise<Source> {
-  mockLibrary ??= Promise.all([import("../mock/library"), import("../mock/platforms"), import("../mock/pages"), import("../mock/follows"), import("../mock/changes"), import("../mock/exports"), import("../mock/phone")]).then(([l, p, w, f, c, e, ph]) => {
+  mockLibrary ??= Promise.all([import("../mock/library"), import("../mock/platforms"), import("../mock/pages"), import("../mock/follows"), import("../mock/changes"), import("../mock/exports"), import("../mock/phone"), import("../mock/catalog")]).then(([l, p, w, f, c, e, ph, cat]) => {
     const library = l.createMockLibrary(MOCK_EMPTY);
-    return { ...library, ...p.createMockPlatforms(MOCK_NO_PLUGINS), ...w.createMockPages(library, MOCK_EMPTY), ...f.createMockFollows(library, MOCK_EMPTY), ...c.createMockChanges(MOCK_EMPTY), ...e.createMockExports(MOCK_EMPTY), ...ph.createMockPhone(MOCK_PARAM) };
+    return { ...library, ...p.createMockPlatforms(MOCK_NO_PLUGINS), ...w.createMockPages(library, MOCK_EMPTY), ...f.createMockFollows(library, MOCK_EMPTY), ...c.createMockChanges(MOCK_EMPTY), ...e.createMockExports(MOCK_EMPTY), ...ph.createMockPhone(MOCK_PARAM), ...cat.createMockCatalog(MOCK_NO_PLUGINS) };
   });
   return mockLibrary;
 }

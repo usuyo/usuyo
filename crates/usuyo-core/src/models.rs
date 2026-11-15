@@ -11,7 +11,7 @@
 
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
@@ -209,26 +209,12 @@ impl Net {
         ))
     }
 
-    /// 把 `url` 下到 `part`：`part` 里已有的当成前面那一段，用 Range 接着下；服务器不认 Range 就从头来。
-    /// 中途断了 `part` 留着，下次接着；多出清单大小的整个删掉。
-    pub(crate) async fn download(
+    /// 发一个 GET，一跳一跳地跟跳转（每一跳先查地址，只连查过的地址），回第一个不是跳转的回答。
+    async fn send(
         &self,
         url: &Url,
-        part: &Path,
-        size: u64,
-    ) -> Result<(), ModelError> {
-        let mut have = match tokio::fs::metadata(part).await {
-            Ok(m) => m.len(),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => 0,
-            Err(e) => return Err(io(part)(e)),
-        };
-        if have > size {
-            tokio::fs::remove_file(part).await.map_err(io(part))?;
-            have = 0;
-        }
-        if have == size {
-            return Ok(());
-        }
+        headers: &[(reqwest::header::HeaderName, String)],
+    ) -> Result<reqwest::Response, ModelError> {
         let (policy, proxy) = self.policy().await?;
         let mut url = url.clone();
         for _ in 0..=MAX_REDIRECTS {
@@ -237,7 +223,8 @@ impl Net {
             }
             let vet_url = url.clone();
             let connect = self.connect;
-            let addrs = tokio::task::spawn_blocking(move || policy.vet(&vet_url, connect))
+            let vet_policy = policy;
+            let addrs = tokio::task::spawn_blocking(move || vet_policy.vet(&vet_url, connect))
                 .await
                 .map_err(|e| ModelError::Task(e.to_string()))?
                 .map_err(|e| ModelError::Refused(e.to_string()))?;
@@ -271,89 +258,167 @@ impl Net {
             let mut request = client
                 .get(url.as_str())
                 .header(reqwest::header::ACCEPT_ENCODING, "identity");
-            if have > 0 {
-                request = request.header(reqwest::header::RANGE, format!("bytes={have}-"));
+            for (name, value) in headers {
+                request = request.header(name, value);
             }
-            let mut response = tokio::time::timeout(self.stall, request.send())
+            let response = tokio::time::timeout(self.stall, request.send())
                 .await
                 .map_err(|_| ModelError::Stall(self.stall))?
                 .map_err(|e| ModelError::Network(e.without_url().to_string()))?;
-            let status = response.status().as_u16();
-            if matches!(status, 301 | 302 | 303 | 307 | 308) {
-                let next = response
+            if matches!(response.status().as_u16(), 301 | 302 | 303 | 307 | 308) {
+                url = response
                     .headers()
                     .get(reqwest::header::LOCATION)
                     .and_then(|l| l.to_str().ok())
                     .and_then(|l| url.join(l).ok())
                     .ok_or_else(|| ModelError::Network("redirect without a location".into()))?;
-                url = next;
                 continue;
             }
-            let append = match status {
-                206 if have > 0 => {
-                    let range = response
-                        .headers()
-                        .get(reqwest::header::CONTENT_RANGE)
-                        .and_then(|v| v.to_str().ok())
-                        .unwrap_or_default();
-                    if !range_continues(range, have, size) {
-                        return Err(ModelError::Network(format!(
-                            "unexpected content range `{range}`"
-                        )));
-                    }
-                    true
-                }
-                200 => {
-                    have = 0;
-                    false
-                }
-                other => return Err(ModelError::Status(other)),
-            };
-            if response
-                .content_length()
-                .is_some_and(|len| have.saturating_add(len) > size)
-            {
-                return Err(ModelError::TooLarge(size));
-            }
-            let mut file = tokio::fs::OpenOptions::new()
-                .create(true)
-                .write(true)
-                .append(append)
-                .truncate(!append)
-                .open(part)
-                .await
-                .map_err(io(part))?;
-            loop {
-                let chunk = tokio::time::timeout(self.stall, response.chunk())
-                    .await
-                    .map_err(|_| ModelError::Stall(self.stall))?;
-                let bytes = match chunk {
-                    Ok(Some(b)) => b,
-                    Ok(None) => break,
-                    Err(e) => {
-                        file.flush().await.map_err(io(part))?;
-                        return Err(ModelError::Network(e.without_url().to_string()));
-                    }
-                };
-                let len = bytes.len() as u64;
-                if have.saturating_add(len) > size {
-                    drop(file);
-                    tokio::fs::remove_file(part).await.map_err(io(part))?;
-                    return Err(ModelError::TooLarge(size));
-                }
-                file.write_all(&bytes).await.map_err(io(part))?;
-                have += len;
-            }
-            file.flush().await.map_err(io(part))?;
-            file.sync_all().await.map_err(io(part))?;
-            return if have == size {
-                Ok(())
-            } else {
-                Err(ModelError::Short { got: have, size })
-            };
+            return Ok(response);
         }
         Err(ModelError::TooManyRedirects)
     }
+
+    /// 取一个小文件（来源的索引）放进内存：最多 `limit` 字节；带上次的 `etag` 时服务器可以回 304。
+    pub(crate) async fn get_small(
+        &self,
+        url: &Url,
+        limit: u64,
+        etag: Option<&str>,
+    ) -> Result<Small, ModelError> {
+        let headers: Vec<_> = etag
+            .map(|e| (reqwest::header::IF_NONE_MATCH, e.to_owned()))
+            .into_iter()
+            .collect();
+        let mut response = self.send(url, &headers).await?;
+        match response.status().as_u16() {
+            304 => return Ok(Small::NotModified),
+            200 => {}
+            other => return Err(ModelError::Status(other)),
+        }
+        if response.content_length().is_some_and(|len| len > limit) {
+            return Err(ModelError::TooLarge(limit));
+        }
+        let etag = response
+            .headers()
+            .get(reqwest::header::ETAG)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_owned);
+        let mut body = Vec::new();
+        loop {
+            let chunk = tokio::time::timeout(self.stall, response.chunk())
+                .await
+                .map_err(|_| ModelError::Stall(self.stall))?
+                .map_err(|e| ModelError::Network(e.without_url().to_string()))?;
+            let Some(bytes) = chunk else { break };
+            if body.len() as u64 + bytes.len() as u64 > limit {
+                return Err(ModelError::TooLarge(limit));
+            }
+            body.extend_from_slice(&bytes);
+        }
+        Ok(Small::Body { bytes: body, etag })
+    }
+
+    /// 把 `url` 下到 `part`：`part` 里已有的当成前面那一段，用 Range 接着下；服务器不认 Range 就从头来。
+    /// 中途断了 `part` 留着，下次接着；多出清单大小的整个删掉。每收到一段，`progress` 拿到已有的字节数。
+    pub(crate) async fn download(
+        &self,
+        url: &Url,
+        part: &Path,
+        size: u64,
+        progress: &(dyn Fn(u64) + Send + Sync),
+    ) -> Result<(), ModelError> {
+        let mut have = match tokio::fs::metadata(part).await {
+            Ok(m) => m.len(),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => 0,
+            Err(e) => return Err(io(part)(e)),
+        };
+        if have > size {
+            tokio::fs::remove_file(part).await.map_err(io(part))?;
+            have = 0;
+        }
+        if have == size {
+            return Ok(());
+        }
+        let headers: Vec<_> = (have > 0)
+            .then(|| (reqwest::header::RANGE, format!("bytes={have}-")))
+            .into_iter()
+            .collect();
+        let mut response = self.send(url, &headers).await?;
+        let append = match response.status().as_u16() {
+            206 if have > 0 => {
+                let range = response
+                    .headers()
+                    .get(reqwest::header::CONTENT_RANGE)
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or_default();
+                if !range_continues(range, have, size) {
+                    return Err(ModelError::Network(format!(
+                        "unexpected content range `{range}`"
+                    )));
+                }
+                true
+            }
+            200 => {
+                have = 0;
+                false
+            }
+            other => return Err(ModelError::Status(other)),
+        };
+        if response
+            .content_length()
+            .is_some_and(|len| have.saturating_add(len) > size)
+        {
+            return Err(ModelError::TooLarge(size));
+        }
+        let mut file = tokio::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(append)
+            .truncate(!append)
+            .open(part)
+            .await
+            .map_err(io(part))?;
+        progress(have);
+        loop {
+            let chunk = tokio::time::timeout(self.stall, response.chunk())
+                .await
+                .map_err(|_| ModelError::Stall(self.stall))?;
+            let bytes = match chunk {
+                Ok(Some(b)) => b,
+                Ok(None) => break,
+                Err(e) => {
+                    file.flush().await.map_err(io(part))?;
+                    return Err(ModelError::Network(e.without_url().to_string()));
+                }
+            };
+            let len = bytes.len() as u64;
+            if have.saturating_add(len) > size {
+                drop(file);
+                tokio::fs::remove_file(part).await.map_err(io(part))?;
+                return Err(ModelError::TooLarge(size));
+            }
+            file.write_all(&bytes).await.map_err(io(part))?;
+            have += len;
+            progress(have);
+        }
+        file.flush().await.map_err(io(part))?;
+        file.sync_all().await.map_err(io(part))?;
+        if have == size {
+            Ok(())
+        } else {
+            Err(ModelError::Short { got: have, size })
+        }
+    }
+}
+
+/// [`Net::get_small`] 的回答。
+pub(crate) enum Small {
+    NotModified,
+    Body {
+        bytes: Vec<u8>,
+        etag: Option<String>,
+    },
 }
 
 /// 日志里只写主机和路径，不写查询串。
@@ -500,7 +565,7 @@ impl Models {
                 last = Some(ModelError::Url(source.clone()));
                 continue;
             };
-            if let Err(e) = self.net.download(&url, &part, spec.size).await {
+            if let Err(e) = self.net.download(&url, &part, spec.size, &|_| {}).await {
                 tracing::warn!(model = %spec.name, from = %redact(&url), error = %e, "model download did not finish");
                 last = Some(e);
                 continue;
@@ -601,90 +666,6 @@ fn file_name(url: &Url, name: &str) -> String {
         .map_or_else(|| name.to_owned(), str::to_owned)
 }
 
-/// 解开的文件写到哪、写了多少。只会建普通文件和文件夹。
-struct Unpacked {
-    root: PathBuf,
-    total: u64,
-    cap: u64,
-    files: Vec<ModelFile>,
-    entries: usize,
-}
-
-impl Unpacked {
-    /// 压缩包里的路径：只许普通的相对路径（没有根、盘符、`.`、`..`），不许 `model.json` 占顶层。
-    fn checked(&mut self, rel: &Path) -> Result<PathBuf, ModelError> {
-        self.entries += 1;
-        if self.entries > MAX_ENTRIES {
-            return Err(archive(format!("more than {MAX_ENTRIES} entries")));
-        }
-        let mut out = PathBuf::new();
-        for c in rel.components() {
-            match c {
-                Component::Normal(part) if part.to_str().is_some() => out.push(part),
-                _ => {
-                    return Err(archive(format!(
-                        "entry `{}` is not a plain relative path",
-                        rel.display()
-                    )));
-                }
-            }
-        }
-        if out.as_os_str().is_empty() || out == Path::new("model.json") {
-            return Err(archive(format!("entry `{}` is not allowed", rel.display())));
-        }
-        Ok(out)
-    }
-
-    fn dir(&mut self, rel: &Path) -> Result<(), ModelError> {
-        let rel = self.checked(rel)?;
-        let path = self.root.join(rel);
-        std::fs::create_dir_all(&path).map_err(io(&path))
-    }
-
-    fn file(&mut self, rel: &Path, mut reader: impl Read) -> Result<(), ModelError> {
-        let rel = self.checked(rel)?;
-        let path = self.root.join(&rel);
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(io(parent))?;
-        }
-        let mut f = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)
-            .map_err(io(&path))?;
-        let mut h = Sha256::new();
-        let mut size = 0u64;
-        let mut buf = vec![0u8; 1 << 16];
-        loop {
-            let n = reader
-                .read(&mut buf)
-                .map_err(|e| archive(format!("reading `{}`: {e}", rel.display())))?;
-            if n == 0 {
-                break;
-            }
-            self.total += n as u64;
-            if self.total > self.cap {
-                return Err(archive(format!("unpacks to more than {} bytes", self.cap)));
-            }
-            f.write_all(&buf[..n]).map_err(io(&path))?;
-            h.update(&buf[..n]);
-            size += n as u64;
-        }
-        f.sync_all().map_err(io(&path))?;
-        let path_text = rel
-            .components()
-            .filter_map(|c| c.as_os_str().to_str())
-            .collect::<Vec<_>>()
-            .join("/");
-        self.files.push(ModelFile {
-            path: path_text,
-            size,
-            sha256: hex(&h.finalize()),
-        });
-        Ok(())
-    }
-}
-
 /// 解进 `<dir>/.<名字>.unpack-<UUIDv7>/`，写好 `model.json`，再整个改名成 `<dir>/<名字>/`。
 /// 出错时暂存的文件夹删掉，`<名字>/` 不动。
 fn unpack(archive_path: &Path, dir: &Path, spec: &ModelSpec, file: &str) -> Result<(), ModelError> {
@@ -715,33 +696,39 @@ fn unpack_into(
     spec: &ModelSpec,
     file: &str,
 ) -> Result<(), ModelError> {
-    let mut out = Unpacked {
-        root: stage.to_owned(),
-        total: 0,
-        cap: unpacked_cap(spec.size),
-        files: Vec::new(),
-        entries: 0,
-    };
-    let open = || std::fs::File::open(archive_path).map_err(io(archive_path));
+    use crate::unpack::{Format, Limits, Unpacked, unpack};
+    let mut out = Unpacked::new(
+        stage,
+        Limits {
+            entries: MAX_ENTRIES,
+            bytes: unpacked_cap(spec.size),
+            reserved: "model.json",
+        },
+    );
     match spec.format {
-        ModelFormat::File => out.file(Path::new(file), open()?)?,
-        ModelFormat::TarBz2 => untar(
-            &mut out,
-            bzip2::read::BzDecoder::new(std::io::BufReader::new(open()?)),
+        ModelFormat::File => out.file(
+            Path::new(file),
+            0,
+            std::fs::File::open(archive_path).map_err(io(archive_path))?,
         )?,
-        ModelFormat::TarGz => untar(
-            &mut out,
-            flate2::read::GzDecoder::new(std::io::BufReader::new(open()?)),
-        )?,
-        ModelFormat::Zip => unzip(&mut out, open()?)?,
+        ModelFormat::TarBz2 => unpack(&mut out, archive_path, Format::TarBz2)?,
+        ModelFormat::TarGz => unpack(&mut out, archive_path, Format::TarGz)?,
+        ModelFormat::Zip => unpack(&mut out, archive_path, Format::Zip)?,
     }
-    out.files.sort_by(|a, b| a.path.cmp(&b.path));
     let record = ModelRecord {
         name: spec.name.clone(),
         sha256: spec.sha256.clone(),
         size: spec.size,
         license: spec.license.clone(),
-        files: out.files,
+        files: out
+            .into_files()
+            .into_iter()
+            .map(|f| ModelFile {
+                path: f.path,
+                size: f.size,
+                sha256: f.sha256,
+            })
+            .collect(),
     };
     let path = stage.join("model.json");
     let mut bytes =
@@ -752,53 +739,13 @@ fn unpack_into(
     f.sync_all().map_err(io(&path))
 }
 
-/// tar：只收普通文件和文件夹；链接、设备、管道都拒。GNU 长名和 pax 头由 `tar` 自己并进下一项。
-fn untar(out: &mut Unpacked, reader: impl Read) -> Result<(), ModelError> {
-    use tar::EntryType;
-    let mut ar = tar::Archive::new(reader);
-    let bad = |e: std::io::Error| archive(format!("tar: {e}"));
-    for entry in ar.entries().map_err(bad)? {
-        let entry = entry.map_err(bad)?;
-        let kind = entry.header().entry_type();
-        let path = entry.path().map_err(bad)?.into_owned();
-        match kind {
-            EntryType::Regular | EntryType::Continuous => out.file(&path, entry)?,
-            EntryType::Directory => out.dir(&path)?,
-            EntryType::XGlobalHeader => {}
-            other => {
-                return Err(archive(format!(
-                    "entry `{}` is a {other:?}, not a file or folder",
-                    path.display()
-                )));
-            }
+impl From<crate::unpack::UnpackError> for ModelError {
+    fn from(e: crate::unpack::UnpackError) -> ModelError {
+        match e {
+            crate::unpack::UnpackError::Archive(m) => ModelError::Archive(m),
+            crate::unpack::UnpackError::Io { path, source } => ModelError::Io { path, source },
         }
     }
-    Ok(())
-}
-
-/// zip：同 tar，按 unix 模式认出符号链接和特殊文件。
-fn unzip(out: &mut Unpacked, file: std::fs::File) -> Result<(), ModelError> {
-    let bad = |e: zip::result::ZipError| archive(format!("zip: {e}"));
-    let mut ar = zip::ZipArchive::new(file).map_err(bad)?;
-    for i in 0..ar.len() {
-        let entry = ar.by_index(i).map_err(bad)?;
-        let name = entry.name().map_err(bad)?.into_owned();
-        let special = entry
-            .unix_mode()
-            .is_some_and(|m| !matches!(m & 0o170000, 0 | 0o100000 | 0o040000));
-        if entry.is_symlink() || special {
-            return Err(archive(format!("entry `{name}` is not a file or folder")));
-        }
-        let path = entry
-            .enclosed_name()
-            .ok_or_else(|| archive(format!("entry `{name}` is not a plain relative path")))?;
-        if entry.is_dir() {
-            out.dir(&path)?;
-        } else {
-            out.file(&path, entry)?;
-        }
-    }
-    Ok(())
 }
 
 #[cfg(test)]

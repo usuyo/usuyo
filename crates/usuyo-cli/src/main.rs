@@ -155,6 +155,11 @@ fn open(root: &std::path::Path, cli: &Cli) -> Result<Engine> {
     config.plugin_settings = machine::plugin_settings(root)?;
     config.transforms_auto = usuyo_core::transforms_auto(root)?;
     config.proxy = usuyo_core::proxy_setting(root)?;
+    // 插件的订阅源：设置里没写时是获取插件组织的索引仓库。
+    config.default_sources = vec!["usuyo-fetch/index".into()];
+    // 开发开关：订阅源和安装包只连本机回环地址（对着本机的假订阅源测试），连不上 GitHub。
+    config.dev_loopback_sources =
+        std::env::var_os("USUYO_DEV_LOOPBACK_SOURCES").is_some_and(|v| v == "1");
     // 设置的语言是「跟随系统」时用系统的首选语言。
     config.system_language = usuyo_core::Lang::from_system(sys_locale::get_locale().as_deref());
     // 登录的 cookie 和密钥：macOS、Windows 进系统钥匙串，别的系统是按机器目录里 0600 的文件。

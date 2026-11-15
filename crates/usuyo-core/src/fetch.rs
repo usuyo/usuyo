@@ -73,7 +73,7 @@ impl Engine {
         &self,
         url: &url::Url,
     ) -> Result<(usuyo_contract::Identity, String)> {
-        let host = &self.inner.host;
+        let host = &self.loaded().host;
         for plugin in host.candidates(url) {
             match host
                 .canonicalize(plugin, url, &CallOptions::default())
@@ -155,7 +155,8 @@ impl Engine {
             self.run_imports(),
             self.run_inbox(),
             self.run_expiry(),
-            self.run_transforms()
+            self.run_transforms(),
+            self.run_sources()
         );
     }
 
@@ -361,7 +362,7 @@ impl Engine {
                 platform_called = true;
             }
             let result = self
-                .inner
+                .loaded()
                 .host
                 .fetch(plugin, request, &CallOptions::default())
                 .await;
@@ -508,8 +509,7 @@ impl Engine {
         let plugin = imp
             .plugin
             .as_deref()
-            .and_then(|p| self.inner.host.plugin(p))
-            .cloned();
+            .and_then(|p| self.loaded().host.plugin(p).cloned());
         Ok(Some(RefFetch {
             plugin,
             plugin_id: imp.plugin.clone().unwrap_or_default(),
@@ -548,7 +548,7 @@ impl Engine {
                     input_file: input.clone(),
                 };
                 let result = self
-                    .inner
+                    .loaded()
                     .host
                     .fetch(plugin, request, &CallOptions::default())
                     .await;
@@ -606,7 +606,8 @@ impl Engine {
 
     /// 同一条里接着调下一种方法之前照节奏等：要等的超过 [`PACE_BETWEEN_MAX`] 就不等了，回 `false`。
     async fn pace_between_calls(&self, platform: &str, batch: bool) -> Result<bool> {
-        let pacing = self.inner.pacing.get(platform);
+        let loaded = self.loaded();
+        let pacing = loaded.pacing.get(platform);
         let Some(at) = pace::ready_at(pacing, &self.inner.jobs, platform, batch, now_ms())? else {
             return Ok(true);
         };

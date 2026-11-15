@@ -340,7 +340,7 @@ impl Engine {
             .hinted(words::NO_LINK_START.with(&[("method", &m.name)])));
         }
         let platform = pace_scope(&plugin);
-        let host = &self.inner.host;
+        let host = &self.loaded().host;
         let r = match self
             .paced(
                 &platform,
@@ -388,7 +388,7 @@ impl Engine {
             .methods
             .enabled_on(plugin, m, &pace_scope(plugin));
         let health = self.inner.methods.health_seen(plugin.id().as_str());
-        let host = &self.inner.host;
+        let host = &self.loaded().host;
         if let Some(b) = blockers(
             m,
             enabled,
@@ -466,7 +466,8 @@ impl Engine {
     ) -> Result<std::result::Result<T, i64>> {
         let lock = self.inner.locks.get(platform);
         let _guard = lock.lock().await;
-        let pacing = self.inner.pacing.get(platform);
+        let loaded = self.loaded();
+        let pacing = loaded.pacing.get(platform);
         if let Some(at) = pace::ready_at(pacing, &self.inner.jobs, platform, batch, now_ms())? {
             let wait = Duration::from_millis(u64::try_from(at - now_ms()).unwrap_or(0));
             if wait > max_wait {
@@ -482,7 +483,7 @@ impl Engine {
     }
 
     fn fetch_plugin(&self, id: &str) -> Result<FetchPlugin> {
-        self.inner
+        self.loaded()
             .host
             .plugin(id)
             .cloned()
@@ -497,11 +498,12 @@ impl Engine {
     }
 
     fn batch_allowed(&self, plugin: &FetchPlugin) -> Result<()> {
-        let off = plugin
-            .spec
-            .platforms
-            .iter()
-            .any(|p| self.inner.pacing.get(p.as_str()).is_some_and(|x| !x.batch));
+        let off = plugin.spec.platforms.iter().any(|p| {
+            self.loaded()
+                .pacing
+                .get(p.as_str())
+                .is_some_and(|x| !x.batch)
+        });
         if off {
             return Err(Error::UnsupportedInput(
                 "this platform takes items one at a time (pacing.batch: false)".into(),
@@ -578,7 +580,7 @@ impl Engine {
                 reader: r
                     .plugin
                     .as_deref()
-                    .and_then(|p| self.inner.host.plugin(p))
+                    .and_then(|p| self.loaded().host.plugin(p).cloned())
                     .map(|p| p.header.name.clone())
                     .unwrap_or_default(),
             }),
@@ -616,9 +618,14 @@ impl Engine {
                 hint: None,
             }));
         }
-        let Some(plugin) = r.plugin.as_deref().and_then(|p| self.inner.host.plugin(p)) else {
+        let Some(plugin) = r
+            .plugin
+            .as_deref()
+            .and_then(|p| self.loaded().host.plugin(p).cloned())
+        else {
             return Ok(None);
         };
+        let plugin = &plugin;
         let scope = pace_scope(plugin);
         let method = r.method.as_deref().unwrap_or_default();
         if let Some(p) = self
@@ -631,7 +638,8 @@ impl Engine {
         if r.kind == "file" {
             return Ok(None);
         }
-        let pacing = self.inner.pacing.get(scope.as_str());
+        let loaded = self.loaded();
+        let pacing = loaded.pacing.get(scope.as_str());
         match pace::ready_at(pacing, &self.inner.jobs, &scope, true, now)? {
             Some(at) => Ok(Some(Wait {
                 until: Some(at),
@@ -716,8 +724,7 @@ impl Engine {
         let Some(plugin) = r
             .plugin
             .as_deref()
-            .and_then(|p| self.inner.host.plugin(p))
-            .cloned()
+            .and_then(|p| self.loaded().host.plugin(p).cloned())
         else {
             return Ok(false);
         };
@@ -738,8 +745,7 @@ impl Engine {
         let Some(plugin) = r
             .plugin
             .as_deref()
-            .and_then(|p| self.inner.host.plugin(p))
-            .cloned()
+            .and_then(|p| self.loaded().host.plugin(p).cloned())
         else {
             jobs.import_stop(
                 &r.id,
@@ -773,7 +779,7 @@ impl Engine {
             since: None,
             input_file: input_file.clone(),
         };
-        let host = &self.inner.host;
+        let host = &self.loaded().host;
         let opts = CallOptions::default();
         let call = host.list(&plugin, request, &opts);
         let paced = if input_file.is_some() {
@@ -788,7 +794,7 @@ impl Engine {
                     &r.id,
                     at,
                     false,
-                    &pace_code(self.inner.pacing.get(scope.as_str()), jobs, &scope)?,
+                    &pace_code(self.loaded().pacing.get(scope.as_str()), jobs, &scope)?,
                     None,
                 )?;
                 return Ok(Some(at));
@@ -851,7 +857,8 @@ impl Engine {
         if input_file.is_some() {
             return Ok(Some(now_ms()));
         }
-        let pacing = self.inner.pacing.get(scope.as_str());
+        let loaded = self.loaded();
+        let pacing = loaded.pacing.get(scope.as_str());
         Ok(pace::ready_at(pacing, jobs, &scope, true, now_ms())?.or(Some(now_ms())))
     }
 
@@ -1088,7 +1095,8 @@ impl Engine {
         }
         let platform = platform_of(&job.item_id);
         let batch = job.import_id.is_some();
-        let pacing = self.inner.pacing.get(platform);
+        let loaded = self.loaded();
+        let pacing = loaded.pacing.get(platform);
         if batch && pacing.is_some_and(|p| !p.batch) {
             return Ok(Some(Wait {
                 until: None,
@@ -1110,20 +1118,16 @@ impl Engine {
             return Ok(None);
         };
         let mut found: Option<Wait> = None;
-        let fetching = self
-            .inner
-            .host
-            .candidates(&url)
-            .into_iter()
-            .flat_map(|plugin| {
-                plugin
-                    .spec
-                    .methods
-                    .iter()
-                    .filter(|m| m.callable() && m.capabilities.fetch.is_some())
-                    .filter(|m| self.inner.methods.enabled_on(plugin, m, platform))
-                    .map(move |m| (plugin, m))
-            });
+        let loaded = self.loaded();
+        let fetching = loaded.host.candidates(&url).into_iter().flat_map(|plugin| {
+            plugin
+                .spec
+                .methods
+                .iter()
+                .filter(|m| m.callable() && m.capabilities.fetch.is_some())
+                .filter(|m| self.inner.methods.enabled_on(plugin, m, platform))
+                .map(move |m| (plugin, m))
+        });
         for (plugin, method) in fetching {
             let scope = if plugin.spec.is_web() {
                 url.host_str().unwrap_or_default()
