@@ -23,8 +23,8 @@
 | `license` | 字符串 | 是 | 插件自身的 SPDX 许可证 | `MIT` |
 | `homepage` | URL | 否 | 默认是仓库主页 | `https://github.com/someone/usuyo-fetch-douyin` |
 | `maintainers` | 字符串数组 | 是 | 维护者的 GitHub 登录名，至少一个；不经本人同意不写别人（RSSHub 的规则，[02 §15.1](../research/02-adapter-ecosystems.md#151-声明与匹配)） | `[someone]` |
-| `upstream` | 对象数组 | 否 | 被包装或 fork 的上游，只写出处和许可证：`name`、`url`、`license`、`paid`（收费服务时为 `true`）；版本约束只写在 `requires.runtime` | 见下 |
-| `requires.runtime` | 字符串数组 | 否 | 要用户自己装的运行时和外部程序，写成「名字加版本约束」；宿主安装前列出来，并检查能不能找到、版本对不对（[§2.13](#213-运行时解析)） | `["chrome>=136", "yt-dlp>=2026.10"]` |
+| `upstream` | 对象数组 | 否 | 参考、fork 或包装的上游，只写出处和许可证：`name`、`url`、`license`、`paid`（收费服务时为 `true`）；版本约束只写在 `requires.runtime` | 见下 |
+| `requires.runtime` | 字符串数组 | 否 | 要用户自己装的运行时和外部程序，写成「名字加版本约束」；宿主安装前列出来，并检查能不能找到、版本对不对（[§2.13](#213-运行时解析)） | `["chrome>=136", "python>=3.12"]` |
 | `settings` | 对象数组 | 否 | 插件设置，见 [§2.11](#211-插件设置-settings) | |
 | `permissions` | 对象 | 是 | 权限声明，见 [§2.7](#27-权限-permissions) | |
 | `install` | 对象 | 发版时生成 | 各平台 release 资产与 sha256，见 [§2.8](#28-安装与启动) | |
@@ -32,9 +32,9 @@
 
 ```yaml
 upstream:
-  - name: yt-dlp
-    url: https://github.com/yt-dlp/yt-dlp
-    license: Unlicense
+  - name: parse-video
+    url: https://github.com/wujunwei928/parse-video
+    license: MIT
 ```
 
 <a id="23-获取插件的字段"></a>
@@ -152,7 +152,7 @@ run:
 | `sites` | `account: in-usuyo` 又做了时必填 | 用到顶层 `sites` 里的哪几个。宿主只把这几个站点的凭据交给这种方法。只有 `account: in-usuyo` 的方法写得了登录站点；`own-phone`、`own-app` 的只能写 `credential: app` 的站点（宿主什么都不交，插件在 `health` 里报登录）；`login: none` 的不写；一种方法最多一个 `browser-profile` 站点 | `[www.bilibili.com]` |
 | `visitors` | `account: visitor` 又做了时必填 | 用到顶层 `visitors` 里的哪几个；和 `login` 无关 | `[www.xiaohongshu.com]` |
 | `perPlatform` | 否 | 多平台插件里某个平台走的路不同时，按平台覆盖这种方法的 `access`、`login`、`sites` | `{bilibili: {access: private-api, login: optional}}` |
-| `drives` | 否 | 驱动哪一样：`iphone`（经 iPhone 镜像）、`android`（经 adb）配 `account: own-phone`，`desktop-app`（这台电脑上一个客户端的窗口）配 `account: own-app`；别的配法不合格。手机页照它说要哪种手机，只列写了 `iphone`、`android` 的方法；不写也合格，只是不上手机页，所以驱动手机的方法要写上 | `iphone` |
+| `drives` | 否 | 驱动哪一样：`iphone`（经 iPhone 镜像）、`android`（经 adb）配 `account: own-phone`，`desktop-app`（这台电脑上一个客户端的窗口）配 `account: own-app`；别的配法不合格。手机连接页照它说要哪种手机，只列写了 `iphone`、`android` 的方法；不写也合格，只是不上手机连接页，所以驱动手机的方法要写上 | `iphone` |
 | `interaction` | 否，默认 `background` | 这次调用用户看不看得见：`background` 只读，不弹菜单、不改剪贴板、不抢焦点、不动指针、不占手机屏幕；`foreground` 是上面任何一样会发生。宿主只拿它排程和加锁（[§3.1](fetch.md#31-运行器与节奏)），不拦、不弹确认 | `foreground` |
 | `delivers` | 否 | `links`：这种方法不在插件进程里跑（浏览器脚本、扩展），由它把链接交给本机接口（[§5](delivery.md#5-投递接口)）。这时不能写 `capabilities` | `links` |
 | `script` | 否 | 只给写了 `delivers` 的方法：它的脚本文件（油猴脚本一类）在插件文件夹里的相对路径，每一段都是普通的名字，不以 `/` 开头，没有 `.`、`..`、`\`。安装时和清单放在一起；获取插件页照它说在哪、能「在访达里显示」「复制脚本」。宿主只读插件文件夹里面的这个文件，解开链接以后跑到外面的不认 | `userscript/usuyo-x-saved.user.js` |
@@ -462,11 +462,11 @@ permissions:
 ```yaml
 settings:
   - key: endpoint
-    label: XHS-Downloader 服务地址
+    label: 本机服务地址
     type: string
-    default: http://127.0.0.1:5556
-  - key: xhs-token
-    label: XHS-Downloader 访问令牌
+    default: http://127.0.0.1:8080
+  - key: service-token
+    label: 本机服务的访问令牌
     type: string
     secret: true
 ```
@@ -478,9 +478,9 @@ settings:
 
 `requires.runtime` 和 `exec` 里写的是名字，宿主负责把名字变成这台电脑上的程序。三类插件都一样。
 
-- **运行时表。** plugin-kit 维护一张表：名字 → 各系统上的可执行文件名和常见安装位置、取版本的命令和正则、版本怎么比较（semver、日期版本、只比主版本号）。例如 `chrome` 在 macOS 上是 `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`，版本靠 `--version` 取；`yt-dlp>=2026.10` 按日期版本比较。表外的名字只检查能不能找到，不检查版本。
+- **运行时表。** plugin-kit 维护一张表：名字 → 各系统上的可执行文件名和常见安装位置、取版本的命令和正则、版本怎么比较（semver、日期版本、只比主版本号）。例如 `chrome` 在 macOS 上是 `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`，版本靠 `--version` 取；`ffmpeg>=7.1` 按 semver 比较，日期版本的工具（例如 `2026.10` 这种写法）按日期比较。表外的名字只检查能不能找到，不检查版本。
 - **查找顺序。** 用户在设置里给这个名字指定的路径 → 用户登录 shell 的 `PATH` → `/opt/homebrew/bin`、`/usr/local/bin`、`~/.local/bin` → 表里的常见安装位置。由 launchd 或 Finder 启动的 usuyo，`PATH` 里没有 Homebrew 的目录，所以不能只看自己进程的 `PATH`。
 - **按名字调用。** 每个进程开始时，宿主建 `${TMP}/bin/`（常驻进程建在它的暂存目录下），为每个名字放一个指向解析结果的符号链接或转发脚本，并把这个目录放在 `PATH` 最前。插件和被包装的工具一律按声明的名字调用，不自己找路径。
-- **管整个进程树。** `exec` 管插件和它所有子孙进程：yt-dlp 合并音视频要起 ffmpeg、解 YouTube 要起 deno，这两个也要在 `requires.runtime` 或 `exec` 里。
-- **自动放行只读。** 解析出的程序、它带 shebang 时的解释器（Homebrew 装的 yt-dlp 是 Python 脚本），以及它们的安装目录，宿主自动放行只读和执行，不用写进 `fs.read`。
+- **管整个进程树。** `exec` 管插件和它所有子孙进程：被包装的工具再起的程序（例如合并音视频时起的 ffmpeg）也要在 `requires.runtime` 或 `exec` 里。
+- **自动放行只读。** 解析出的程序、它带 shebang 时的解释器（Homebrew 装的不少命令行工具是 Python 脚本），以及它们的安装目录，宿主自动放行只读和执行，不用写进 `fs.read`。
 - **找不到或版本不对**时，宿主不调用插件，在插件那一行列出缺的东西，和 `dependency-missing` 的 `needs` 用同样的写法（[§3.3](fetch.md#33-信封与错误码)）。

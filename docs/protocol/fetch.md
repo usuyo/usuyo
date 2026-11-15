@@ -68,13 +68,13 @@
 | `USUYO_SECRETS` | 插件声明了 `secret: true` 的设置、且用户填了值时，和 `login` 无关 | 一个 0600 的临时文件，内容只有 `{"<key>": "<value>"}`，调用结束即删 |
 | `USUYO_INPUT` | 导入调用（[§3.9](#39-从文件导入)） | `${INPUT}`，导入文件的副本 |
 | `USUYO_CREDENTIALS` | 这次的方法 `login` 不是 `none`、列了站点、且用户已登录时（[§2.4](manifest.md#24-access-与-login)）；只有这种方法列了的站点 | 凭据 JSON 文件路径（[§6](credentials.md#6-凭据)） |
-| `USUYO_COOKIES_TXT` | 同上，`credential: cookies` | 同一批 cookie 的 Netscape 格式文件，给 yt-dlp 一类工具的 `--cookies` 用；可写，调用结束后丢弃 |
+| `USUYO_COOKIES_TXT` | 同上，`credential: cookies` | 同一批 cookie 的 Netscape 格式文件，给读 cookies.txt 的工具用；可写，调用结束后丢弃 |
 | `USUYO_VISITOR` | 这次的方法列了 `visitors`、且存着那份访客身份时，和 `login` 无关（[§2.5.1](manifest.md#251-访客身份-visitors)） | 访客身份的 JSON 文件路径，形状和 `USUYO_CREDENTIALS` 一样，`source` 是 `visitor-window`、没有 localStorage；0600，调用结束即删 |
 | `USUYO_BROWSER_PROFILE` | `credential: browser-profile` | `${PROFILE}` |
 | `USUYO_PROVIDER` | 能力的 `provider` 不是 `none`、用户配了模型时（[§4.3](transform-export.md#43-模型与密钥由宿主代发)） | 这次调用的代发参数，JSON 文件路径，内容是 `{baseUrl, token, model}` |
 | `ADB_SERVER_SOCKET` | 声明了 `devices: [adb]` | 宿主管的 adb 服务，`tcp:127.0.0.1:<端口>`（[§7](isolation.md#7-权限与隔离)）；adb 认这个变量 |
 | `ANDROID_SERIAL` | 同上 | 用户选定的那台设备的序列号；adb 认这个变量 |
-| `HOME` | 总是 | `${HOME}`（[§2.7](manifest.md#27-权限-permissions)），不指向用户主目录：被包装的工具不会读到用户自己的配置，例如 yt-dlp 配置里的 `--cookies-from-browser` |
+| `HOME` | 总是 | `${HOME}`（[§2.7](manifest.md#27-权限-permissions)），不指向用户主目录：被包装的工具不会读到用户自己的配置，例如配置里写的「从浏览器读 cookie」 |
 | `XDG_CONFIG_HOME`、`XDG_CACHE_HOME` | 总是 | `${HOME}/.config`、`${CACHE}` |
 | `TMPDIR`、`TMP`、`TEMP` | 总是 | `${TMP}` |
 | `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` | 有网络权限时 | 指向宿主的本机代理，见下面的「网络出口」 |
@@ -134,7 +134,7 @@
 | `retryAfter` | 否 | `rate-limited` 时多少秒后再试 |
 | `site` | 否 | 和哪个登录站点有关 |
 | `reason` | 否 | `not-found` 的细分：`deleted`、`private`、`paid`、`region`、`link-expired` |
-| `needs` | `dependency-missing` 必填 | 缺的东西一次列全，例如 `["runtime:yt-dlp", "setting:endpoint", "device:ios-device"]`。不叫 `missing`，免得和 fetch 输出里「缺的输出」混在一起 |
+| `needs` | `dependency-missing` 必填 | 缺的东西一次列全，例如 `["runtime:ffmpeg", "setting:endpoint", "device:ios-device"]`。不叫 `missing`，免得和 fetch 输出里「缺的输出」混在一起 |
 | `detail` | 否 | 平台原样回答的开头，至多 4096 字节，可以多行；接口改了、状态码不对、回答读不出时带上，给修插件的人看。宿主洗掉凭据后只记进失败日志（[§2.3.1](manifest.md#231-方法-methods)） |
 
 `needs` 的每一项是「前缀:值」：
@@ -387,7 +387,7 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip" --method
   "login": [{"site": "www.douyin.com", "state": "verified"}],
   "checks": [
     {"name": "chrome", "ok": true, "message": "找到 Chrome"},
-    {"name": "yt-dlp", "ok": false, "message": "没找到 yt-dlp", "methods": ["ytdlp"]}
+    {"name": "ffmpeg", "ok": false, "message": "没找到 ffmpeg", "methods": ["video"]}
   ]
 }
 ```

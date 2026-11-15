@@ -1,65 +1,67 @@
 <a id="9-适配现有工具"></a>
 ## 9. 适配现有工具
 
+本节写给第三方插件作者：协议允许插件包装用户自己装的工具。`usuyo-fetch` 组织里的平台插件都是自己写的实现，别的项目只当参考，不包装、不调用别人的工具，也不读别人工具的输出文件（用户 11-13，[回答表](../answers.md)）；[§9.1](#91-包装命令行)、[§9.2](#92-包装本机-http-服务) 的例子用的是虚构的工具名。
+
 上游只有 HTTP 接口或 MCP 的，插件里写一层薄的命令行转接，对宿主仍是 [§3](fetch.md#3-获取插件协议) 的子命令。本节的清单片段只列和包装方式有关的字段，完整清单照 [§2](manifest.md#2-清单) 补齐。
 
 <a id="91-包装命令行"></a>
 ### 9.1 包装命令行
 
-例子：不登录取 YouTube 单条，包装用户自装的 yt-dlp。按 [06 §17.3](../research/06-platform-access-and-account-risk.md#173-首批自己适配的插件)，yt-dlp 在 YouTube 上记 `private-api`，不传 cookie 就没有账号风险。
+例子：不登录取一个视频站的单条，包装用户自装的命令行下载工具 `exampledl`（虚构的名字）。不传 cookie，就没有账号风险。
 
 ```yaml
-id: someone/usuyo-fetch-youtube
+id: someone/usuyo-fetch-example
 kind: fetch
-platforms: [youtube]
-match: ["www.youtube.com/watch*", "youtu.be/*", "www.youtube.com/shorts/*"]
+platforms: [example]
+match: ["www.example.com/watch*"]
 methods:
-  - id: ytdlp
-    name: yt-dlp
-    access: private-api
+  - id: exampledl
+    name: exampledl
+    access: public-web
     login: none
     account: none
     capabilities:
       fetch:
         outputs: [text, media:video, subtitle, meta]
 requires:
-  runtime: ["yt-dlp>=2026.10", "deno>=2", "ffmpeg"]
+  runtime: ["exampledl>=2026.10", "ffmpeg"]
 permissions:
   fs:
     write: ["${OUT}"]
   network:
     mode: allowlist
-    hosts: ["*.youtube.com", "*.googlevideo.com", "*.ytimg.com", "youtu.be"]
+    hosts: ["*.example.com"]
 ```
 
-`exec` 没写，缺省等于 `requires.runtime` 里的 yt-dlp、deno、ffmpeg（[§2.7](manifest.md#27-权限-permissions)）：yt-dlp 解 YouTube 要起 deno，B站、YouTube 的高画质音视频分开下，要 ffmpeg 合并。
+`exec` 没写，缺省等于 `requires.runtime` 里的 exampledl、ffmpeg（[§2.7](manifest.md#27-权限-permissions)）：画面和声音分开下的站点要 ffmpeg 合并。
 
-插件的 `fetch` 只调一次 yt-dlp，同一条内容不向平台解析两遍：
+插件的 `fetch` 只调一次工具，同一条内容不向平台解析两遍：
 
 ```
-yt-dlp --ignore-config --no-playlist --no-progress --write-info-json --write-subs --sub-langs "zh.*,en.*" -o "$OUT/media/%(id)s.%(ext)s" -- "$URL"
+exampledl --ignore-config --no-playlist --write-info-json --write-subs -o "$OUT/media/%(id)s.%(ext)s" -- "$URL"
 ```
 
-- `--ignore-config`：私有 `HOME` 挡不住 `/etc/yt-dlp.conf` 这类系统级配置，要显式不读。
+- 不读工具自己的配置文件：私有 `HOME` 挡不住 `/etc` 下的系统级配置，要显式关掉。
 - `--`：链接前加上，免得以 `-` 开头的链接被当成选项（[06 §3](../research/06-platform-access-and-account-risk.md#3-用户点名的项目) 引的 hypit #452）。
-- 元数据从写出的 `.info.json` 读：填 `identity`、`title`、`author`、`publishedAt`，`media` 列出视频和字幕，`evidence.upstream` 写 yt-dlp 的版本。
-- 不要用 `--cookies-from-browser`；这个插件是 `login: none`。有登录的插件用 `--cookies "$USUYO_COOKIES_TXT"`。
-- yt-dlp 自己的输出不要转到插件的 stdout；要进度就解析它的输出，转成 `@usuyo` 的 `progress` 事件。下大视频时在能力里把 `timeout` 设长（[§3.4](fetch.md#34-超时与取消)）。
+- 元数据从工具写出的 JSON 读：填 `identity`、`title`、`author`、`publishedAt`，`media` 列出视频和字幕，`evidence.upstream` 写工具的版本。
+- `login: none` 的插件不让工具从浏览器读 cookie；有登录的插件把 `USUYO_COOKIES_TXT` 交给工具。
+- 工具自己的输出不要转到插件的 stdout；要进度就解析它的输出，转成 `@usuyo` 的 `progress` 事件。下大视频时在能力里把 `timeout` 设长（[§3.4](fetch.md#34-超时与取消)）。
 
-另一种做法是把上游当库编进插件：parse-video 是 Go、MIT，可以直接调它的 `parser.ParseVideoShareUrl` 做抖音的 `public-web` 单条；不给它设 cookie，设了它会改调自算签名的接口（[06 §1.3](../research/06-platform-access-and-account-risk.md#13-混合路径视觉层拿链接公开页面取内容)）。
+另一种做法是在许可证允许时把上游当库编进插件（[§9.6](#96-许可证)）。
 
 <a id="92-包装本机-http-服务"></a>
 ### 9.2 包装本机 HTTP 服务
 
-例子：小红书单条，调用户自己跑的 XHS-Downloader 服务（它用 `python main.py api` 启动，文档在 `http://127.0.0.1:5556/docs`，接口 `POST /xhs/detail`，要 `Authorization: Bearer` 令牌）。XHS-Downloader 是 GPL-3.0，只能用户自装，插件经 HTTP 调用。
+例子：调用户自己跑的本机服务 `example-server`（虚构的名字）：接口 `POST /detail`，要 `Authorization: Bearer` 令牌。许可证不许随插件分发的上游，只能这样由用户自装、插件经 HTTP 调用（[§9.6](#96-许可证)）。
 
 ```yaml
 settings:
-  - {key: endpoint, label: XHS-Downloader 服务地址, type: string, default: "http://127.0.0.1:5556"}
-  - {key: xhs-token, label: XHS-Downloader 访问令牌, type: string, secret: true}
+  - {key: endpoint, label: 本机服务地址, type: string, default: "http://127.0.0.1:8080"}
+  - {key: service-token, label: 本机服务的访问令牌, type: string, secret: true}
 methods:
-  - id: xhs-downloader
-    name: XHS-Downloader
+  - id: example-server
+    name: example-server
     access: public-web
     login: none
     account: none
@@ -69,15 +71,15 @@ methods:
 permissions:
   network:
     mode: allowlist
-    hosts: ["${setting.endpoint}", "*.xhscdn.com"]
+    hosts: ["${setting.endpoint}", "*.example-cdn.com"]
   fs:
     write: ["${OUT}"]
 ```
 
-- `fetch` 把链接（带 `xsec_token` 的原链接，[§3.6](fetch.md#36-fetch-与输出目录)）交给服务，请求体固定写 `download: false`（不让服务下载）和 `check_record: false`（它默认是 `true`，会跳过有下载记录的作品）。拿到元数据和文件地址后，由插件自己把文件写进 `--out`。
+- `fetch` 把链接（原链接，[§3.6](fetch.md#36-fetch-与输出目录)）交给服务，只让它回元数据和文件地址、不让它自己下载；拿到地址后由插件自己把文件写进 `--out`。
 - 访问令牌是 `secret: true` 的设置，经 `USUYO_SECRETS` 传入，插件按 `Authorization: Bearer` 带上；它不是平台账号凭据，所以 `login: none` 也拿得到（[§2.11](manifest.md#211-插件设置-settings)）。
-- XHS-Downloader 在请求的 `cookie` 参数缺省时用自己配置文件里的 cookie，传空字符串多半也会退回配置文件（推断，待核实）。所以插件 README 和服务连不上时的 `hint` 都写明「请清空 XHS-Downloader 配置里的 cookie」，否则插件声明的 `login: none` 和实际不符。
-- 图片和视频地址在小红书的 CDN 上，例子里的 `*.xhscdn.com` 是示例，实际用到哪些主机待核实，照 `usuyo plugin try` 打印的被拦主机补（[§3.2](fetch.md#32-调用约定)）。
+- 服务会自己带上它配置里的 cookie 时，插件 README 和服务连不上时的 `hint` 都写明要清空那份 cookie，否则插件声明的 `login: none` 和实际不符。
+- 文件在平台的 CDN 上，例子里的 `*.example-cdn.com` 是示例，实际用到哪些主机照 `usuyo plugin try` 打印的被拦主机补（[§3.2](fetch.md#32-调用约定)）。
 
 <a id="93-包装-mcp-服务"></a>
 ### 9.3 包装 MCP 服务
@@ -95,7 +97,7 @@ permissions:
 <a id="94-浏览器扩展与油猴脚本"></a>
 ### 9.4 浏览器扩展与油猴脚本
 
-在用户自己的浏览器里跑的工具（xhs-vault、Weibo-archiver、bilibili-favorites-exporter）有两条路：
+`usuyo-fetch` 的平台插件自带自己写的脚本，照第一条路直接交给投递接口。别人在用户自己的浏览器里跑的工具有两条路：
 
 - 改一行，把导出的清单直接交给投递接口（[§5.1](delivery.md#51-本机-http-接口)）：
 
@@ -117,7 +119,7 @@ function sendTousuyo(links) {
 }
 ```
 
-- 不改原工具：它照旧导出 JSON 文件，再写一个导入插件读这个文件（[§3.9](fetch.md#39-从文件导入)）。导入插件按自己做的事填 `access: official-export`、`login: none`，和 [§3.9](fetch.md#39-从文件导入) 一致；文件怎么来的写进 `description` 和插件 README，例如「读 xhs-vault 导出的清单；清单由你在登录的浏览器里导出」。手机上的 Agent（Mika 一类）导出的清单同样处理，`description` 写「清单由你手机上的某某导出，导出时用的是它自己的模型」。
+- 不改原工具：它照旧导出 JSON 文件，再写一个导入插件读这个文件（[§3.9](fetch.md#39-从文件导入)）。导入插件按自己做的事填 `access: official-export`、`login: none`，和 [§3.9](fetch.md#39-从文件导入) 一致；文件怎么来的写进 `description` 和插件 README，例如「读某某扩展导出的清单；清单由你在登录的浏览器里导出」。手机上的 Agent（Mika 一类）导出的清单同样处理，`description` 写「清单由你手机上的某某导出，导出时用的是它自己的模型」。
 
 令牌由用户粘贴进脚本设置；小红书链接里的 `xsec_token` 只在会话内有效，清单交过来后宜尽快取（[06 §1.3](../research/06-platform-access-and-account-risk.md#13-混合路径视觉层拿链接公开页面取内容)）。
 
@@ -225,4 +227,4 @@ run:
 
 按 [06 §17.4](../research/06-platform-access-and-account-risk.md#174-fork-与许可证)：MIT、Apache、BSD 一类可以 fork、可以打进插件资产，保留版权声明；GPL 系只做用户自装、插件以独立进程或 HTTP 调用，不随资产分发（[ADR-003 §8](../decisions/ADR-003-plugins.md#8-gpl-工具)）；非商业或源码可见许可不打包、不进两个组织；没有许可证的只参考做法。插件 README 写明上游、许可证和改动，`upstream` 字段照填。上游的发布包里没有 LICENSE 文件时（agent-desktop 就是这样），从上游仓库取一份放进资产。
 
-自己写的获取插件用 MIT，和 plugin-kit 一致。两个组织里的插件不调用用户自装的非商业许可工具；别人在自己仓库里这样做不管。
+自己写的获取插件用 MIT，和 plugin-kit 一致。`usuyo-fetch` 里的插件照别人的做法自己写，参考了哪些项目写进 `upstream` 和 README，MIT、Apache、BSD 一类照搬了代码的保留版权声明。别人在自己仓库里包装什么工具不管。

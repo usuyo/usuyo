@@ -42,7 +42,7 @@
   回答里没有「什么时候存的」：两种时间线只给 `sortIndex`。fieldtheory-cli 也拿不到书签时间，把 `bookmarkedAt` 记成空（`src/graphql-bookmarks.ts`）。所以 `actedAt` 留空，不用抓取时间冒充（[协议 §3.8](../protocol/fetch.md#38-list-与跟着收)）。
 - **官方归档**（`official-export`，不碰账号）：在 X 的设置里申请下载自己的数据，拿到一个 zip。[steipete/birdclaw](https://github.com/steipete/birdclaw)（MIT）读里面的 `data/like.js`、`data/like-partN.js`，也接受 `data/bookmark(s).js`（`src/lib/archive/slices.ts`）。它的代码接受书签文件，不等于今天的归档里一定有书签；调研笔记记过 timelinize 的 Twitter 源不导入喜欢和书签（[官方导出笔记](../research/notes/official-export-findings.md)）。归档里有没有书签、`like.js` 每条有哪些字段，要你申请一份来看。插件的 `list` 读这个 zip，只交链接，内容照样由 `fetch` 不带账号去取。
 - **带 cookie 调书签接口**（`session-api`，不做）：[afar1/fieldtheory-cli](https://github.com/afar1/fieldtheory-cli)（MIT，2026-09-05）的 `src/graphql-bookmarks.ts` 带网页的公开 bearer、`ct0` 和 `auth_token` cookie 调 `Bookmarks`，不生成 `x-client-transaction-id`，默认每页隔 600 毫秒；它的 issue 里没搜到锁号或 403 的报告。不做的原因：要你在 usuyo 里登录 X，cookie 出了浏览器、由程序按程序的节奏翻页；而 gallery-dl 带登录时每次都生成 `x-client-transaction-id`（`gallery_dl/extractor/twitter.py` 的 `_call`，第 1893 行起），说明登录着的接口可能在查这个头（推断）。浏览器脚本那条路已经够用，这条只多一样：能做跟着收，新存的书签自己进来。为这一样把账号交给程序，不值（[第 0 节](#0-结论)写了代价）；你要是更看重跟着收，这是要你答的一问。
-- **付费的官方接口**（`official-export`，要开发者账号）：[xdevplatform/xurl](https://github.com/xdevplatform/xurl)（MIT，2026-11-07 仍在推送）调 `GET /2/users/:id/bookmarks` 和 `GET /2/users/:id/liked_tweets`，每次最多 100 条（`api/shortcuts.go`）；要 OAuth 2.0 用户授权，应用要放进按量付费的套餐（README）。价格和条数上限写在 X 自己的文档站上，没核。可以作为你自己装 xurl、usuyo 包装它的插件（[协议 §9.1](../protocol/wrapping.md#91-包装命令行)），不是首选。
+- **付费的官方接口**（`official-export`，要开发者账号）：[xdevplatform/xurl](https://github.com/xdevplatform/xurl)（MIT，2026-11-07 仍在推送）调 `GET /2/users/:id/bookmarks` 和 `GET /2/users/:id/liked_tweets`，每次最多 100 条（`api/shortcuts.go`）；要 OAuth 2.0 用户授权，应用要放进按量付费的套餐（README）。价格和条数上限写在 X 自己的文档站上，没核。要用的话在插件里自己写一种调官方接口的获取方式，不是首选；清单里现在没有。
 
 <a id="3-取单条"></a>
 ## 3. 取单条
@@ -129,7 +129,7 @@
 <a id="9-清单"></a>
 ## 9. 清单
 
-清单就是插件仓库里的 `usuyo-plugin.yaml`，照[协议 §2.3.1](../protocol/manifest.md#231-方法-methods) 一种取法一个方法：`guest`（访客接口）、`embed`（嵌入接口）、`userscript`（浏览器脚本，`delivers: links`）、`archive`（官方归档，`list` 读 `twitter-*.zip`）做了；`deliver-content`、`session`、`signed`、`xurl`、`iphone` 列着、没做。节奏照[第 8 节](#8-节奏)，`permissions.network.hosts` 是 `api.x.com`、`x.com`、`cdn.syndication.twimg.com`、`pbs.twimg.com`、`video.twimg.com`、`t.co`。
+清单就是插件仓库里的 `usuyo-plugin.yaml`，照[协议 §2.3.1](../protocol/manifest.md#231-方法-methods) 一种取法一个方法：`guest`（访客接口）、`embed`（嵌入接口）、`userscript`（浏览器脚本，`delivers: links`）、`archive`（官方归档，`list` 读 `twitter-*.zip`）做了；`deliver-content`、`session`、`signed`、`iphone` 列着、没做。节奏照[第 8 节](#8-节奏)，`permissions.network.hosts` 是 `api.x.com`、`x.com`、`cdn.syndication.twimg.com`、`pbs.twimg.com`、`video.twimg.com`、`t.co`。
 
 
 - 没有 `sites`：usuyo 里不登录 X。没有 `visitors`：访客令牌是插件自己换的，不是宿主开窗口取的 cookie（[第 3 节](#3-取单条)）。

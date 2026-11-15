@@ -121,7 +121,7 @@
 - `POST /plugin-sources/refresh`，`{address?}`：刷新一个或全部，等读完（每个最多一分钟）回数组。
 
 <a id="手机"></a>
-**手机**（[手机那条路 §12](../platforms/phone.md#12-手机页做到的11-12-代码)）：只在 macOS 上的守护进程有，别处回 404 `not-found`（`hint`「此版本的 usuyo 服务不支持手机。」）。
+**手机**（[手机那条路 §12](../platforms/phone.md#12-手机连接页做到的11-12-代码)）：只在 macOS 上的守护进程有，别处回 404 `not-found`（`hint`「此版本的 usuyo 服务不支持手机。」）。
 - `GET /phone` 回 `PhoneView`，现读：macOS 版本（`sw_vers`）、有没有 `/System/Applications/iPhone Mirroring.app`、驱动、两项授权、镜像、上一次剪贴板试验、adb 和设备。`ios.driver.step?: {text, commands}` 是要你自己在终端里做的那一步（登记、重新登记或停掉「mirroir serve」）。`driver.state` 没装上是 `failed`，`hint` 是一句原因；换新没成时 `state` 还是 `present`（旧的那份在），也带 `hint`。
   - 看这一页不起任何程序：`android.adb` 是 `{path, version, running}`，`adb version` 不连 adb 的服务；`running` 是 adb 自己的服务（127.0.0.1:5037）这会儿在不在听，只连一下这个口子，不起它。在跑时经这个口子问一次 `host:devices-l` 列 `devices`，带 `android.step`（服务留在后台，`'<adb>' kill-server` 停掉它）；不在跑时 `devices` 是空的，不跑 `adb devices`。
   - 「mirroir serve」的令牌只发给认过的那一条连接：先看令牌文件在不在（不读），再连上服务地址，用 `lsof` 找这条连接的另一头在哪个进程手里，要正好一个、是这个守护进程的用户，而且是 launchd 里登记的 `dev.mirroir.serve` 的那个 `pid`，或程序就是按机器目录里装着的 `mirroir-mcp`，才读令牌，请求在这同一条连接上发；另开的连接从头再认。看不见的（别的用户的进程）算认不出。认不出来时什么都不发，授权是 `unknown`，镜像照 `pgrep` 看，当它没在跑（装着驱动时 `step` 是登记那一步）。
@@ -141,7 +141,7 @@
 **获取插件**（`GET /plugins` 的 `plugins[]`，[协议 §2.3.1](../protocol/manifest.md#231-方法-methods)）：`{id, name, description?, version, platforms, access, login, canList, sources, sites, visitors, settings, pacing, upstream?, pauses, methods}`。`upstream` 是清单 `upstream` 的 `{name, license}`，没写时不给；`GET /plugins` 另带 `failureLog`，失败日志 `logs/fetch-failures.jsonl` 在这台电脑上的路径。`access`、`login` 是做了的方法里最高的；`canList` 是有做了的方法能列；`sources` 是清单里写死的来源，每项带 `method`；`sites` 是做了的方法用到的登录站点；`pauses` 是所有方法的暂停，每项 `{method, scope, byYou, until?, code?, hint?}`，你点的「先别试」`method`、`scope` 都是 `*`。`methods` 是清单里每一种方法，照清单的顺序，没做的也在：
 - `{id, name, access, login, account: {kind, sites?, where?}, interaction, drives?, perPlatform?, gets: {fetch?, list?, link?, delivers?}, built, enabled, usable, blockers, lastCall?, pauses, riskNote?, script?}`。
 - `account.kind` 是清单的 `account`（`none`、`visitor`、`own-browser`、`own-phone`、`own-app`、`in-usuyo`、`developer`）；`sites` 是 `in-usuyo` 的登录站点或 `visitor` 的访客身份站点；`where` 是账号所在的地方给人看的名字：`visitor` 是访客身份的名字，`in-usuyo`、`own-browser`、`own-phone`、`own-app`（做没做都算）是方法列的站点的名字，没列站点时是插件的名字；`none`、`developer` 没有。
-- `drives` 是清单的 `drives`：`iphone`、`android`、`desktop-app`，手机页照它说要哪种手机。
+- `drives` 是清单的 `drives`：`iphone`、`android`、`desktop-app`，手机连接页照它说要哪种手机。
 - `perPlatform` 是层级和方法本身不同的平台（清单的 `perPlatform`），每项 `{platform, access, login, enabled}`；`enabled` 是这种方法在那个平台上开没开：没拨过开关时照那一层的默认（[协议 §2.3.1](../protocol/manifest.md#231-方法-methods)），拨过就和方法的 `enabled` 一样。方法的 `enabled` 照方法本身那一层。没有这样的平台时不给。
 - `gets.fetch` 是输出的词表（`text`、`images`、`media:video`…），`gets.list` 是清单里写死的来源名，`gets.link` 是来源从链接开始时链接框上的那句，`gets.delivers` 是 `links`。没做的方法清单里写了能力的也给。
 - `usable` 是这台机器上现在用得上；`blockers` 是用不上的原因，每项 `{code, hint}`，`code` 取 `not-built`、`off`、`login-missing`、`login-expired`、`visitor-missing`、`visitor-expired`、`check-failed`（插件的本机检查没过）、`health-failed`（插件没能自查）、`paused`（停着：被限流、被拦，`hint` 写到几点，例如「平台提示请求过于频繁。11月12日 15:30前不会使用。」；或你点的「暂停」，写到你点「立即重试」为止；通用网页一类按网站停的不算），`hint` 照设置的语言写，名字取自清单。

@@ -6,9 +6,9 @@
 <a id="0-结论"></a>
 ## 0. 结论
 
-| 平台 | 首个实现 | 兜底 | 做不到的 |
-|---|---|---|---|
-| 小红书 | `fetch` 走公开笔记页（带 `xsec_token` 的长链，解析 `__INITIAL_STATE__`），不签名、不登录，被送回首页时带一份访客身份再试一次；清单由你在日常浏览器里用油猴脚本交给 [`/v1/batches`](../protocol/delivery.md#51-本机-http-接口)，插件没有 `list` | 你自装的 XHS-Downloader，按 [协议 §9.2](../protocol/wrapping.md#92-包装本机-http-服务) 包装 | 不带任何 cookie 取单条不稳定：2026-10 有报告空 cookie 的长链被重定向到首页，带一份未登录的访客 cookie 才成功（[§2.2](#22-取单条)）；访客身份由清单的 `visitors` 声明，usuyo 开一个不登录的窗口取（[协议 §2.5.1](../protocol/manifest.md#251-访客身份-visitors)） |
+| 平台 | 实现 | 做不到的 |
+|---|---|---|
+| 小红书 | `fetch` 走公开笔记页（带 `xsec_token` 的长链，解析 `__INITIAL_STATE__`），不签名、不登录，被送回首页时带一份访客身份再试一次；清单由你在日常浏览器里用油猴脚本交给 [`/v1/batches`](../protocol/delivery.md#51-本机-http-接口)，或在 usuyo 的站点窗口里登录后读（`in-usuyo`，[协议 §2.3.1](../protocol/manifest.md#231a-在站点窗口里读)），插件没有 `list` | 不带任何 cookie 取单条不稳定：2026-10 有报告空 cookie 的长链被重定向到首页，带一份未登录的访客 cookie 才成功（[§2.2](#22-取单条)）；访客身份由清单的 `visitors` 声明，usuyo 开一个不登录的窗口取（[协议 §2.5.1](../protocol/manifest.md#251-访客身份-visitors)） |
 
 最大的风险在小红书：2026 年只读也有警告、封号的报告（[06 §16.2](../research/06-platform-access-and-account-risk.md#162-issue-里的账号问题)），匿名批量取还牵连过复制链接的账号（[XHS-Downloader #305](https://github.com/JoeanAmier/XHS-Downloader/issues/305)）。
 
@@ -20,7 +20,7 @@
 
 - **官方导出**：没有。[隐私政策](https://agree.xiaohongshu.com/h5/terms/ZXXY20220509001/-1)只列 App 内查看「笔记/收藏/赞过」，其他按邮件申请（official-export 笔记（同组笔记 `official-export-findings.md`，不在仓库里））。可以发邮件试，结果不能当计划。
 - **日常浏览器里的脚本**（`browser-session`，低到中）：[wkwunju/xhs-vault](https://github.com/wkwunju/xhs-vault)（MIT，2026-08-18）的 `userscript/xhs-export.user.js` 改写 `XMLHttpRequest`，只截获收藏页自己发出的 `collect`、`board` 请求，取出 note id、`xsec_token`、标题；另有一个按钮自动滚到底。自动滚动属于节奏异常，去掉，改成你自己往下翻。「赞过」页同理，接口名待核实。usuyo 用的脚本（`usuyo-fetch/rednote` 的 `userscript/`）就是这样改的：只记你自己的「收藏」「赞过」（请求里的 `user_id` 要是页面上登录的那个人），记下笔记 id、`xsec_token` 和标题，12 小时后作废；你点「交给 usuyo」时，先和本机的 usuyo 握手（发一个随机数和投递令牌的 id，核对对面用整个令牌签回的证明，[SPEC 本机接口](../spec/local-api.md#本机接口第-2-层11-11-照代码)），核对过了才带令牌把两批交给 `POST /v1/batches`，核对不过什么都不发。这条也不是零风险：小红书网页会对数据采集类扩展弹「有害插件」提示（[XHS-Downloader #283](https://github.com/JoeanAmier/XHS-Downloader/issues/283)），经扩展驱动用户自己已登录的 Chrome 读小红书也被判过违规（[OpenCLI #842](https://github.com/jackwener/OpenCLI/issues/842)）。只截获、不发额外请求的油猴脚本没有找到处罚报告。
-- **在 usuyo 的站点窗口里读**（`in-usuyo`，`browser-session`，11-14 做了）：和上面的脚本同一个核心（`userscript/src/core.js`，诊断那一段和 X、B站 的脚本逐字相同），换成站点窗口的壳（`userscript/src/window.js`，`node userscript/build.mjs` 拼成 `usuyo-xhs-window.js`）。usuyo 给小红书开一个窗口，自己一份网页数据，打开 `https://www.xiaohongshu.com/explore`，你在里面登录；脚本读页面里的 `__INITIAL_STATE__.user.userInfo` 认出登录的是谁，打开 `/user/profile/<你的 id>`，点写着「收藏」的标签，usuyo 每 4.5–7.5 秒叫它往下翻一屏；`collect/page` 回 `has_more: false`（或到底几屏都没有新回答）就点「赞过」接着翻，`like/page` 也到底了就说到底。记下的链接是 `<页面的 origin>/explore/<id>?xsec_token=…`，一页页交给 usuyo，落成「收藏」「赞过」两次导入，确认后由 `note-page` 取。碰到地址或标题像验证页（`captcha`、`verify`、`security`、「验证」）、个人页上读不出登录的人（10 秒）、列表接口的回答认不出、`code` 不是 0，都停下说原因。没核实过的：登录后才有的 cookie 名（所以不写 `cookies`，登录由脚本认）、个人页上「收藏」「赞过」标签的写法和程序点它管不管用、个人页是不是整页滚动、验证页的地址。只对本机的假站点测过；第一次真登录就是实测。
+- **在 usuyo 的站点窗口里读**（`in-usuyo`，`browser-session`，11-14 做了）：和上面的脚本共用一份主体（`userscript/src/core.js`，诊断那一段和 X、B站 的脚本逐字相同），换成站点窗口的壳（`userscript/src/window.js`，`node userscript/build.mjs` 拼成 `usuyo-xhs-window.js`）。usuyo 给小红书开一个窗口，自己一份网页数据，打开 `https://www.xiaohongshu.com/explore`，你在里面登录；脚本读页面里的 `__INITIAL_STATE__.user.userInfo` 认出登录的是谁，打开 `/user/profile/<你的 id>`，点写着「收藏」的标签，usuyo 每 4.5–7.5 秒叫它往下翻一屏；`collect/page` 回 `has_more: false`（或到底几屏都没有新回答）就点「赞过」接着翻，`like/page` 也到底了就说到底。记下的链接是 `<页面的 origin>/explore/<id>?xsec_token=…`，一页页交给 usuyo，落成「收藏」「赞过」两次导入，确认后由 `note-page` 取。碰到地址或标题像验证页（`captcha`、`verify`、`security`、「验证」）、个人页上读不出登录的人（10 秒）、列表接口的回答认不出、`code` 不是 0，都停下说原因。没核实过的：登录后才有的 cookie 名（所以不写 `cookies`，登录由脚本认）、个人页上「收藏」「赞过」标签的写法和程序点它管不管用、个人页是不是整页滚动、验证页的地址。只对本机的假站点测过；第一次真登录就是实测。
 - **自动化浏览器**（`browser-session`，高）：Playwright 打开要登录的页面返回 300012（[web-image-sourcing](https://github.com/danzey0425-lgtm/web-image-sourcing)）；[xiaohongshu-mcp](https://github.com/xpzouying/xiaohongshu-mcp) 的用户一两天内被警告、封号（[#720](https://github.com/xpzouying/xiaohongshu-mcp/issues/720)、[#726](https://github.com/xpzouying/xiaohongshu-mcp/issues/726)、[#728](https://github.com/xpzouying/xiaohongshu-mcp/issues/728)），10 月还有搜索被限（[#877](https://github.com/xpzouying/xiaohongshu-mcp/issues/877)）。它的「收藏」工具是收藏动作，不是列清单。
 - **本地签名**（`private-api`，高）：[redbook](https://github.com/lucasygu/redbook)、[MediaCrawler](https://github.com/NanmiCoder/MediaCrawler)、[Spider_XHS](https://github.com/cv-cat/Spider_XHS)，签名库是 [xhshow](https://github.com/Cloxl/xhshow)，有永久封禁记录（[MediaCrawler #865](https://github.com/NanmiCoder/MediaCrawler/issues/865)）。
 - **翻页**：收藏页是游标翻页，每页约 20–30 条（推断）。`xsec_token` 只在会话内有效，有项目实测几小时后链接 404（06 [§1.3](../research/06-platform-access-and-account-risk.md#13-混合路径视觉层拿链接公开页面取内容)），所以清单交来后要在当天取完。
@@ -41,14 +41,14 @@
 | [wkwunju/xhs-vault](https://github.com/wkwunju/xhs-vault) | MIT / JS、Python | 2026-08-18 | fork 油猴脚本：留 XHR 截获，删自动滚动和导出 `cookies.json`，改成 `POST /v1/batches`；`scraper/fetch.py` 是取单条的参照 |
 | [chenjin-cmd/xhs-account-teardown](https://github.com/chenjin-cmd/xhs-account-teardown) | MIT / Python | 2026-09-29 | 单条脚本的参照 |
 | [z-mio/ParseHub](https://github.com/z-mio/ParseHub) `provider_api/xhs.py` | MIT / Python | 2026-11-09 | 读它的 `new Set` 处理、CDN 地址换算、移动端回退；不用签名部分 |
-| [JoeanAmier/XHS-Downloader](https://github.com/JoeanAmier/XHS-Downloader) | GPL-3.0 / Python | 2026-11-07 | 兜底：你自装，插件经 HTTP 调；[#502](https://github.com/JoeanAmier/XHS-Downloader/pull/502) 正在加扫码登录和「风控暂停」 |
+| [JoeanAmier/XHS-Downloader](https://github.com/JoeanAmier/XHS-Downloader) | GPL-3.0 / Python | 2026-11-07 | 只读，看解析的做法和 issue 里的报告；[#502](https://github.com/JoeanAmier/XHS-Downloader/pull/502) 正在加扫码登录和「风控暂停」 |
 
 清单：`platforms: [rednote]`，`match` 是上面四种长链和两种短链，`access: public-web`、`login: none`，顶层 `visitors` 声明 `www.xiaohongshu.com` 的访客身份（窗口打开 `https://www.xiaohongshu.com/`），`fetch` 列 `visitors: [www.xiaohongshu.com]`，`outputs: [text, images, media:video, meta]`。`canonicalize` 取 24 位十六进制 note id 作 `contentId`，`identity.url` 写 `https://www.xiaohongshu.com/explore/<id>`，`resolvedUrl` 保留 `xsec_token`（[协议 §3.5](../protocol/fetch.md#35-canonicalize-与身份)）。节奏 `batch: true`、`interval: 15s`、`daily: 100`。
 
 <a id="24-插件做成的样子"></a>
 ### 2.4 插件做成的样子
 
-插件在 `usuyo-fetch/rednote`，照上面的做法：油猴脚本交清单，插件用访客身份取公开页。兜底仍是 XHS-Downloader 包装插件，没写。三个月后最可能变的是 SSR 字段和访客 cookie 的要求，所以解析只在 `src/state.rs` 一个文件里，字段缺了回 `upstream-changed`。
+插件在 `usuyo-fetch/rednote`，照上面的做法：油猴脚本交清单，插件用访客身份取公开页。三个月后最可能变的是 SSR 字段和访客 cookie 的要求，所以解析只在 `src/state.rs` 一个文件里，字段缺了回 `upstream-changed`。
 
 - **`canonicalize`**：四种长链（`explore/<id>`、`search_result/<id>`、`discovery/item/<id>`、`user/profile/<作者>/<id>`）和 `xhslink.com`、`xhslink.cn` 短链；短链只请求短链主机、只看它跳去哪里，不带 cookie。
 - **`fetch`**：用普通桌面 UA 打开长链，先不带 cookie；请求里只带 `xsec_token`、`xsec_source`，手机分享链接里指向分享人的参数不发出去。被送回首页或登录页时，宿主交了访客身份（`USUYO_VISITOR`）就带上再试一次，还不行、或没交，回 `visitor-required`；访客 cookie 只发给 `www.xiaohongshu.com` 的笔记页、只走 https。清洗后解析 `__INITIAL_STATE__`，图片、视频只下页面给的、在 `*.xhscdn.com` 上的地址，写进 `--out`；缺的写进 `missing`、`missingReason`。验证页回 `blocked`，链接里没有 `xsec_token` 回 `not-found` 加 `reason: link-expired`。

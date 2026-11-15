@@ -36,7 +36,7 @@
 
 | 项目 | 许可证 / 语言 | 最近推送 | 用法 |
 |---|---|---|---|
-| [yutto-dev/yutto](https://github.com/yutto-dev/yutto) | GPL-3.0 / Python | 2026-11-09 | 只读，看接口和参数，不抄代码；也可做你自装的包装插件 |
+| [yutto-dev/yutto](https://github.com/yutto-dev/yutto) | GPL-3.0 / Python | 2026-11-09 | 只读，看接口和参数，不抄代码 |
 | [amtoaer/bili-sync](https://github.com/amtoaer/bili-sync) | MIT / Rust | 2026-09-10 | 可借收藏夹请求代码（`fav_time` 的处理在 `crates/bili_sync/src/utils/convert.rs`，`DedeUserID` 在 `bilibili/credential.rs`）；它会签名、按网页流程刷新 cookie，这两部分不要 |
 | [ayasa520/bilibili-favorites-exporter](https://github.com/ayasa520/bilibili-favorites-exporter) | MIT / JS | 2025-09-09 | 兜底：扩展导出 JSON，写导入插件读 |
 

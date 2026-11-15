@@ -9,7 +9,7 @@
 ## 1. 做什么，不做什么
 
 - 只做 `list`：一页处理几条，每条返回一个 `url`，加界面上读到的标题、作者；不返回 `ref`（[协议 §3.8](../protocol/fetch.md#38-list-与跟着收)）。返回的链接和 `/v1/batches` 交来的一样进导入预览。
-- 内容不在手机上取。视频号的链接交 `wechat-channels` 的 `feed-info`，小红书交 `note-page`，公众号文章交 `wechat` 的 `article`（[routes.md](routes.md#3-小红书)）。
+- 内容不在手机上取。视频号的链接交 `wechat-channels` 的 `feed-info`，小红书交 `note-page`，公众号文章交 `wechat` 的 `article`（[routes.md §3](routes.md#3-总览)）。
 - 层级 `vision-ui`，`login: required`，`sites[].credential: app`：账号在你手机的 App 里，usuyo 什么凭据都不拿（[协议 §2.5](../protocol/manifest.md#25-登录站点-sites)）。
 
 <a id="2-iphone-镜像能做的和不能做的"></a>
@@ -35,7 +35,7 @@
 | [jfarcand/mirroir-mcp](https://github.com/jfarcand/mirroir-mcp) | Apache-2.0 · v0.47.0（2026-11-12） | `brew tap jfarcand/tap && brew install mirroir-mcp`（`install-agent` 不接受 npx 装的副本，所以要 Homebrew）；`mirroir-mcp doctor` 查缺什么；官方 release 有 `darwin-arm64` 包和 `SHA256SUMS` | 42 个工具：截图、`describe_screen`（Apple Vision 认字，默认语言 `en-US`）、按字点（`tap` 带 `text`）、按坐标点、滑动、`press_back`、`launch_app`（在 Spotlight 里打 App 名，没有按键的字经剪贴板粘贴）、`scroll_to`；没有配置文件时只开 14 个只读工具，改东西的工具要写进 `~/.mirroir-mcp/permissions.json`；`mirroir-mcp serve` 只在 127.0.0.1 上讲 HTTP MCP、带 bearer 令牌，`install-agent` 让它以自己签名的「mirroir serve」常驻，授权记在它身上；默认每天向 npm 查一次新版本，`updateCheck: false` 关掉；录下的流程能不经模型回放（`mirroir test`） | 驱动的第一个后端 |
 | [nickatnight96/iphone-mirror-mcp](https://github.com/nickatnight96/iphone-mirror-mcp) | MIT · v1.0.1（2026-08-14），9 星 | 见它的 README | 63 个工具，有 `read_clipboard`；没有无障碍树，按认字和模板找元素 | 参考它读剪贴板的做法 |
 | [phone-harness/phone-harness](https://github.com/phone-harness/phone-harness) | MIT · 2026-11-09 有推送 | `uv`，Python 3.12 | iPhone 经镜像窗口、安卓经 adb，同一套命令；本机手机走它的命令行，MCP 只给它的云手机 | 参考：iPhone 和安卓共一套接口的写法；不用它的云手机 |
-| [vercel-labs/agent-desktop](https://github.com/vercel-labs/agent-desktop) | Apache-2.0 · v1.2.0 | 插件资产 | 读 macOS App 的无障碍树 | 镜像窗口没有树，用不上；Mac 微信那几种取法用它（[routes.md §4](routes.md#4-视频号)） |
+| [vercel-labs/agent-desktop](https://github.com/vercel-labs/agent-desktop) | Apache-2.0 · v1.2.0 | 插件资产 | 读 macOS App 的无障碍树 | 镜像窗口没有树，用不上；Mac 微信那几种取法用它（[routes.md §3](routes.md#3-总览)） |
 
 <a id="4-驱动和流程分开"></a>
 ## 4. 驱动和流程分开
@@ -55,9 +55,9 @@
 
 **认字用哪一份。** 预装的 `builtin/ocr-vision` 是转换插件（图进、`ocr.json` 出），协议里获取插件调不了转换插件。iPhone 后端用 mirroir-mcp 的 `describe_screen`，它用的也是 Apple Vision；要和 `builtin/ocr-vision` 认出一样的字（同一个 revision、同一组语言），驱动另带一个小的 Swift 程序，用 `builtin/ocr-vision` 的识别代码（MIT，同一个作者），对 `screenshot` 截下的图再认一次。截图写 `${TMP}`，认完就删（[协议 §9.5](../protocol/wrapping.md#95-视觉层流程) 的隐私规则）。
 
-**装和管**（用户 11-12；做到的见[第 12 节](#12-手机页做到的11-12-代码)）。mirroir 不要你到终端里装。设置里有「手机」一页，做成设置那样：装（照[协议的资产](../protocol/distribution.md)取官方 release 的 `darwin-arm64` 包，钉版本、对 `SHA256SUMS`，放在按机器目录里）、屏幕录制和辅助功能各自给没给（给的那一下系统只认你自己点，页上有打开系统设置对应那一栏的按钮）、iPhone 镜像连没连上、试跑一次（演练模式，只读屏不点）、装的版本和有没有新的、卸掉。`install-agent` 不接受 npx 装的副本；接不接受 release 包里的那一份，还没核。
+**装和管**（用户 11-12；做到的见[第 12 节](#12-手机连接页做到的11-12-代码)）。mirroir 不要你到终端里装。设置里有「手机连接」一页，做成设置那样：装（照[协议的资产](../protocol/distribution.md)取官方 release 的 `darwin-arm64` 包，钉版本、对 `SHA256SUMS`，放在按机器目录里）、屏幕录制和辅助功能各自给没给（给的那一下系统只认你自己点，页上有打开系统设置对应那一栏的按钮）、iPhone 镜像连没连上、试跑一次（演练模式，只读屏不点）、装的版本和有没有新的、卸掉。`install-agent` 不接受 npx 装的副本；接不接受 release 包里的那一份，还没核。
 
-**怎么连 mirroir-mcp。** 装好以后「mirroir serve」常驻在 127.0.0.1 上（`mirroir-mcp install-agent`，那一页给出命令，由你在终端里跑，见[第 12 节](#12-手机页做到的11-12-代码)）。**令牌只发给认过的那一条连接**：驱动没在跑时，这台电脑上随便哪个程序都能占住那个端口等令牌；别的用户的程序占住同一个回环地址时，你这个用户的 `lsof` 看不见它，所以不认「端口上谁在听」，认「要带令牌的这条连接另一头在谁手里」。先连上，用 `lsof` 找这条连接的另一头在哪个进程手里，要正好一个、是你自己这个用户的，而且是 launchd 里登记的 `dev.mirroir.serve` 那个 `pid`、或程序就是按机器目录里装着的那份 `mirroir-mcp`，才读令牌，请求就在这同一条连接上发；看不见、认不出来就什么都不发，关掉连接，当它没在跑。插件按[协议 §9.2](../protocol/wrapping.md#92-包装本机-http-服务)、[§9.3](../protocol/wrapping.md#93-包装-mcp-服务) 当它的 MCP 客户端，地址和令牌是插件设置，令牌 `secret: true`。屏幕录制和辅助功能授给「mirroir serve」，不授给 usuyo。`health` 读它的 `tools/list`：`type_text`、`press_key`、`open_url`、`set_network`、`shake`、`generate_skill`、`run_steps`、`drag`、`long_press` 里有任何一个露出来，回 `dependency-missing`，`hint` 写要你在 `permissions.json` 里只留 `tap`、`swipe`、`press_back`、`press_home`、`scroll_to`；`launch_app` 也关掉。
+**怎么连 mirroir-mcp。** 装好以后「mirroir serve」常驻在 127.0.0.1 上（`mirroir-mcp install-agent`，那一页给出命令，由你在终端里跑，见[第 12 节](#12-手机连接页做到的11-12-代码)）。**令牌只发给认过的那一条连接**：驱动没在跑时，这台电脑上随便哪个程序都能占住那个端口等令牌；别的用户的程序占住同一个回环地址时，你这个用户的 `lsof` 看不见它，所以不认「端口上谁在听」，认「要带令牌的这条连接另一头在谁手里」。先连上，用 `lsof` 找这条连接的另一头在哪个进程手里，要正好一个、是你自己这个用户的，而且是 launchd 里登记的 `dev.mirroir.serve` 那个 `pid`、或程序就是按机器目录里装着的那份 `mirroir-mcp`，才读令牌，请求就在这同一条连接上发；看不见、认不出来就什么都不发，关掉连接，当它没在跑。插件按[协议 §9.2](../protocol/wrapping.md#92-包装本机-http-服务)、[§9.3](../protocol/wrapping.md#93-包装-mcp-服务) 当它的 MCP 客户端，地址和令牌是插件设置，令牌 `secret: true`。屏幕录制和辅助功能授给「mirroir serve」，不授给 usuyo。`health` 读它的 `tools/list`：`type_text`、`press_key`、`open_url`、`set_network`、`shake`、`generate_skill`、`run_steps`、`drag`、`long_press` 里有任何一个露出来，回 `dependency-missing`，`hint` 写要你在 `permissions.json` 里只留 `tap`、`swipe`、`press_back`、`press_home`、`scroll_to`；`launch_app` 也关掉。
 
 **链接怎么到 usuyo。** 点「复制链接」之前，驱动记下 Mac 剪贴板的 `changeCount`；点完以后每 200 毫秒看一次，变了就读字符串，取第一个链接；8 秒没变，这一条记「没拿到链接」，接着下一条，连着三条没拿到，回 `upstream-changed`。不往剪贴板写任何东西（写进去的会经通用剪贴板同步到手机）。剪贴板的原内容由宿主在调用前后存、放回（整机锁和这一步还没做，[协议 §3.13](../protocol/fetch.md#313-宿主和-plugin-kit-现在做到的11-11)）（[协议 §3.1](../protocol/fetch.md#31-运行器与节奏)）。读剪贴板的是插件进程，macOS 26 的「程序读剪贴板先问」弹窗记在 usuyo 上（推断，[协议 §7](../protocol/isolation.md#7-权限与隔离)）。
 
@@ -227,10 +227,10 @@ permissions:
 - 每个流程的演练模式回报；真跑五条后第二天账号有没有提示。
 - 有安卓手机的话：USB 调试的授权弹窗，`uiautomator dump` 在小红书收藏页拿不拿得到树。
 
-<a id="12-手机页做到的11-12-代码"></a>
-## 12. 手机页做到的（11-12 代码）
+<a id="12-手机连接页做到的11-12-代码"></a>
+## 12. 手机连接页做到的（11-12 代码）
 
-守护进程管「手机」那一页的八条路由（[本机接口](../spec/local-api.md#手机)），代码在 `crates/usuyo-core/src/phone/`。只在 macOS 上开（命令行的 `daemon` 配上 `PhoneConfig::system`）；别的系统和没配的时候，这几条回 404 `not-found`，页面说内核不管手机。这台机器上没有下过、跑过真的 mirroir，也没有连过手机：下面每一条只对着假的 release 服务器、假的「mirroir serve」、假的 `adb` 和假的剪贴板计数测过。
+守护进程管「手机连接」那一页的八条路由（[本机接口](../spec/local-api.md#手机)），代码在 `crates/usuyo-core/src/phone/`。只在 macOS 上开（命令行的 `daemon` 配上 `PhoneConfig::system`）；别的系统和没配的时候，这几条回 404 `not-found`，页面说内核不管手机。这台机器上没有下过、跑过真的 mirroir，也没有连过手机：下面每一条只对着假的 release 服务器、假的「mirroir serve」、假的 `adb` 和假的剪贴板计数测过。
 
 - **钉的那一版**：`crates/usuyo-core/data/phone-driver.json`，mirroir-mcp v0.47.0，只有 `mirroir-mcp-darwin-arm64.tar.gz` 一个包（官方 release 没出 Intel 的），2518002 字节，sha256 抄自同一个 release 的 `SHA256SUMS`（11-12 读的 release 接口给的 `digest` 和它一样）。Intel 的 Mac 点「装上」回 422，一句「mirroir 只给 Apple 芯片的 Mac 出了包，这台电脑装不了」。
 - **装**：和下模型同一套下载（只走 https、只连公网、照设置里的代理、60 秒没收到字节算断、不超过钉的大小），每次从头下，不续传；按钉的 sha256 核对；包里要正好一个叫 `mirroir-mcp` 的普通文件（`._*` 和 pax 头跳过，别的一律拒），写成 0755，和 `driver.json`（`{version, asset, sha256}`）一起先放进暂存文件夹，再整个换成按机器目录的 `drivers/mirroir-mcp/`（[按机器的目录](../spec/machine.md#按机器的目录)）。哪一步不成都什么也不留下，原来装着的那份不动，页面上「没装上：」后面是一句原因。换新同样；卸掉是整个目录挪开再删。

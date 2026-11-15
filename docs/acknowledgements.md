@@ -3,24 +3,24 @@
 
 状态：候选 · 2026-11-04
 
-usuyo 从下面这些项目学到了做法，或者计划包装、适配它们。这是以后放进 README 或关于页的候选名单，正式发布前要逐个确认许可证和署名要求。每条都注明它和 usuyo 的关系。
+usuyo 从下面这些项目学到了做法，或者参考它们的实现。这是以后放进 README 或关于页的候选名单，正式发布前要逐个确认许可证和署名要求。每条都注明它和 usuyo 的关系。
 
 <a id="怎么用这份名单"></a>
 ## 怎么用这份名单
 
 每条一行，依次是项目、一句话介绍、许可证、关系、详细出处。关系分三种：
 
-- **计划适配**：计划包装它的命令行、HTTP 接口或 MCP，或者 fork 后改成插件。获取方式只能放在第三方仓库（[ADR-003 §1](decisions/ADR-003-plugins.md#1-插件分三类)）；GPL、AGPL 工具在取得法律意见前只由用户自己安装、usuyo 以独立进程调用（[ADR-003 §8](decisions/ADR-003-plugins.md#8-gpl-工具)）。
+- **参考实现**：照它的做法自己写，许可证允许时移植它的一段代码并保留版权声明；获取插件不包装、不调用它，也不读它的输出文件（用户 11-13，[回答表](answers.md)）。平台的获取逻辑只放在获取插件组织的仓库里（[ADR-003 §1](decisions/ADR-003-plugins.md#1-插件分三类)）。
 - **参考设计**：借鉴它的做法、格式或协议，不用它的代码。
 - **相邻项目**：同一生态里的创作、发布、录屏、自动化等工具，usuyo 不接入。
 
-名单不是依赖清单。usuyo 代码直接依赖的库，致谢以后从 `go.mod` 和 `package.json` 生成。计划适配里有几条预计会直接编进 usuyo（readeck/go-readability、go-trafilatura、go-domdistiller、html-to-markdown、chromedp、kooky），编进去以后改由依赖清单致谢；[05 §4](research/05-note-apps-and-plugins.md#4-安全与隔离) 里的隔离工具也属于依赖，这里不收。
+名单不是依赖清单。usuyo 代码直接依赖的库，致谢以后从 `go.mod` 和 `package.json` 生成。参考实现里有几条预计会直接编进 usuyo（readeck/go-readability、go-trafilatura、go-domdistiller、html-to-markdown、chromedp、kooky），编进去以后改由依赖清单致谢；[05 §4](research/05-note-apps-and-plugins.md#4-安全与隔离) 里的隔离工具也属于依赖，这里不收。
 
 收录范围：
 
 - [06 调研](research/06-platform-access-and-account-risk.md#调研-06--平台内容获取的开源生态与账号风险)里标「（致谢）」的 260 条，按类别放进下面各节，出处链到 06 的同名小节；用户点名的项目链到 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)。
 - 用户点名、06 没标致谢的 7 条。用户说过，点名的项目都是以后的致谢候选，所以照收，按 06 里的类别和关系放进各节，限制写在各自那一行：
-  - NanmiCoder/MediaCrawler：自定义的非商业学习许可，条款里没有分发授权：不 fork、不分发、不抄代码。用户 11-12 要照它做：做成调用户自己装的那一份的方法（[取法清单](platforms/routes.md)），不随插件带。
+  - NanmiCoder/MediaCrawler：自定义的非商业学习许可，条款里没有分发授权：不 fork、不分发、不抄代码。只参考它的做法；读它结果文件的获取方式 11-13 起不做（[取法清单](platforms/routes.md)）。
   - ahang008/ah-skills：Skill 索引仓库，本身不从平台取内容，许可为非商业源码可见；同作者的 ah-douyin-clean-downloader 在 06 标了致谢，已收。
   - open-wxa/wxa-runner：在浏览器里运行自己的小程序、做本地调试和测试的工具，不取平台内容；内置的基础库是腾讯代码，不能分发。
   - pabatiba89-sys/kali-publish：social-auto-upload 派生的商业产品发布模块，视频号流程写死了推广话题和商品逻辑，只借登录经验；上游 social-auto-upload 已收。
@@ -28,11 +28,11 @@ usuyo 从下面这些项目学到了做法，或者计划包装、适配它们�
   - yikart/AiToEarn：用户 2026-11-01 给的视频号链接介绍的项目；发布和互动工具，不读收藏夹，互动功能是对平台账号的批量写操作，只记录。
   - google-gemini/computer-use-preview：用户 2026-11-01 给的视频号链接演示 Gemini 的 Computer Use，对应到这个参考实现是推断；截图要发到 Gemini 接口。
 - [02](research/02-adapter-ecosystems.md#调研-02--社区维护的来源适配器生态) 和 [05](research/05-note-apps-and-plugins.md#调研-05--笔记软件互通与插件化) 里被当作做法来源、准备兼容或借代码的 61 条，出处链到对应小节。只在表格里出现、没被引为做法的，以及只被当作反例的，不收。这 61 个仓库 2026-10-30 用 `gh api` 确认存在，许可证以返回值为准。
-- [调研 10](research/10-desktop-and-android-agents.md#调研-10--电脑端与安卓端的界面驱动agent-desktop-与-mika) 读的 2 条：用户 2026-11-03 点名的 vercel-labs/agent-desktop、wangzan101/Mika。[06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化) 同一天补了这两行，但 06 的「（致谢）」标注是 10-30 做的，没有重标，所以不在上面的 260 条里。agent-desktop 是视觉层获取插件可能依赖的运行时，记计划适配；Mika 只借做法，记参考设计。
+- [调研 10](research/10-desktop-and-android-agents.md#调研-10--电脑端与安卓端的界面驱动agent-desktop-与-mika) 读的 2 条：用户 2026-11-03 点名的 vercel-labs/agent-desktop、wangzan101/Mika。[06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化) 同一天补了这两行，但 06 的「（致谢）」标注是 10-30 做的，没有重标，所以不在上面的 260 条里。agent-desktop 是视觉层获取插件可能带的运行时（用不用待定），记参考实现；Mika 只借做法，记参考设计。
 - [调研 11](research/11-subscriptions-compat-and-wx-cli.md#调研-11--订阅兼容与-wx-cli) 推荐的 1 条：用户 2026-11-04 点名的 Thysrael/Horizon。只读它发布的 Atom 或 Markdown 日报，不包装它的 MCP，记参考设计。调研 11 读的 wx-cli 系工具不接入，不收。
 - 归档、停更、删库的项目照收，状态写在一句话里。
 
-合计 331 条：计划适配 128 条，参考设计 187 条，相邻项目 16 条。
+合计 331 条：参考实现 128 条，参考设计 187 条，相邻项目 16 条。
 
 用户给的视频号链接，按视频演示的内容推断对应 mingjuner123-spec/wechat-inbox-sync（待核实）。2026-11-01 又给了 4 条：MediaCrawler 已收；AiToEarn、computer-use-preview 新收；开源文件搜索工具那条认不出是哪个项目，没有收录（见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)）。
 
@@ -43,22 +43,22 @@ usuyo 从下面这些项目学到了做法，或者计划包装、适配它们�
 1. 许可证还是这里记的版本。NOASSERTION、无许可证文件、源码可见和非商业许可的条目，先读原文，确认能否公开列名、要不要附声明。
 2. 署名要求：Apache-2.0 的 NOTICE、MIT 的版权行，以及项目自己的额外要求，例如 DownVid 的商标说明不许暗示官方背书，SATA 许可要求先 star 并致谢。
 3. 状态：仓库还在，没有被归档、清空，也没有因律师函或 DMCA 下架。client-hook、private-api 两层的项目，以及同类项目收过律师函的，公开列名前再查一次。
-4. 关系：计划适配的项目做成插件以后，在致谢里写清插件仓库和所包装的上游版本。
+4. 关系：参考实现的项目，在致谢里写清参考它的插件仓库和参考时的版本。
 5. 06 还是草案，这里的 06 链接 2026-10-30 已按 06 的锚点核对过，06 定稿后再核对一次。
 
 <a id="多平台下载与抓取"></a>
 ## 多平台下载与抓取
 
-**计划适配（8）**
+**参考实现（8）**
 
-- [chubbyguan/chubbyskills](https://github.com/chubbyguan/chubbyskills)：14 个 Agent Skill 加统一命令行，把抖音、B站、小红书、公众号、X、播客等链接存成带来源字段的 Markdown，附本地检索、订阅日报和知识库 MCP。MIT。计划适配。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
-- [cv-cat/catbus](https://github.com/cv-cat/catbus)：Node 命令行，用同一套命令和统一 JSON 调用小红书、抖音、TikTok、B站、快手、微博等平台的网页端能力，面向人和 Agent。MIT。计划适配。见 [06 §4](research/06-platform-access-and-account-risk.md#4-多平台下载与抓取)
-- [iszhouhua/social-media-copilot](https://github.com/iszhouhua/social-media-copilot)：小红书、抖音、快手的数据采集浏览器扩展，可下载作品原始文件，server 分支提供 HTTP 调用；2026-07 有用户反馈扩展被 Chrome 商店下架。GPL-3.0。计划适配。见 [06 §4](research/06-platform-access-and-account-risk.md#4-多平台下载与抓取)
-- [lucky-Luor/bilibili-douyin-notes](https://github.com/lucky-Luor/bilibili-douyin-notes)：按平台取 B站、抖音、YouTube、小红书视频的字幕或媒体，无字幕时本地转写、按时间戳抽帧，再由宿主 Agent 写成 Markdown 笔记的 Agent Skill。MIT（抖音签名组件为 GPLv3，不在仓库内，运行时下载）。计划适配。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
-- [mikf/gallery-dl](https://github.com/mikf/gallery-dl)：从图片站和社交平台批量下载图片、视频与元数据的命令行，支持 X 书签、Instagram 收藏、Pinterest 画板、Reddit、微博等。GPL-2.0。计划适配。见 [06 §4](research/06-platform-access-and-account-risk.md#4-多平台下载与抓取)
-- [NanmiCoder/NewsCrawler](https://github.com/NanmiCoder/NewsCrawler)：多平台新闻与文章抓取集合，主产品 news-extractor Skill 把公众号、今日头条等文章链接转成结构化 JSON 或 Markdown。GPL-3.0。计划适配。见 [06 §4](research/06-platform-access-and-account-risk.md#4-多平台下载与抓取)
-- [tmwgsicp/ForgeRSS](https://github.com/tmwgsicp/ForgeRSS)：把网站和社交平台主页转成 RSS 2.0 订阅源的生成器，社交平台在本机带登录浏览器运行。AGPL-3.0。计划适配。见 [06 §4](research/06-platform-access-and-account-risk.md#4-多平台下载与抓取)
-- [ucmao/media-parser](https://github.com/ucmao/media-parser)：自建的多平台分享链接解析服务，输入分享链接返回作者、标题、文案、封面和视频、图集、音频地址。MIT。计划适配。见 [06 §4](research/06-platform-access-and-account-risk.md#4-多平台下载与抓取)
+- [chubbyguan/chubbyskills](https://github.com/chubbyguan/chubbyskills)：14 个 Agent Skill 加统一命令行，把抖音、B站、小红书、公众号、X、播客等链接存成带来源字段的 Markdown，附本地检索、订阅日报和知识库 MCP。MIT。参考实现。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
+- [cv-cat/catbus](https://github.com/cv-cat/catbus)：Node 命令行，用同一套命令和统一 JSON 调用小红书、抖音、TikTok、B站、快手、微博等平台的网页端能力，面向人和 Agent。MIT。参考实现。见 [06 §4](research/06-platform-access-and-account-risk.md#4-多平台下载与抓取)
+- [iszhouhua/social-media-copilot](https://github.com/iszhouhua/social-media-copilot)：小红书、抖音、快手的数据采集浏览器扩展，可下载作品原始文件，server 分支提供 HTTP 调用；2026-07 有用户反馈扩展被 Chrome 商店下架。GPL-3.0。参考实现。见 [06 §4](research/06-platform-access-and-account-risk.md#4-多平台下载与抓取)
+- [lucky-Luor/bilibili-douyin-notes](https://github.com/lucky-Luor/bilibili-douyin-notes)：按平台取 B站、抖音、YouTube、小红书视频的字幕或媒体，无字幕时本地转写、按时间戳抽帧，再由宿主 Agent 写成 Markdown 笔记的 Agent Skill。MIT（抖音签名组件为 GPLv3，不在仓库内，运行时下载）。参考实现。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
+- [mikf/gallery-dl](https://github.com/mikf/gallery-dl)：从图片站和社交平台批量下载图片、视频与元数据的命令行，支持 X 书签、Instagram 收藏、Pinterest 画板、Reddit、微博等。GPL-2.0。参考实现。见 [06 §4](research/06-platform-access-and-account-risk.md#4-多平台下载与抓取)
+- [NanmiCoder/NewsCrawler](https://github.com/NanmiCoder/NewsCrawler)：多平台新闻与文章抓取集合，主产品 news-extractor Skill 把公众号、今日头条等文章链接转成结构化 JSON 或 Markdown。GPL-3.0。参考实现。见 [06 §4](research/06-platform-access-and-account-risk.md#4-多平台下载与抓取)
+- [tmwgsicp/ForgeRSS](https://github.com/tmwgsicp/ForgeRSS)：把网站和社交平台主页转成 RSS 2.0 订阅源的生成器，社交平台在本机带登录浏览器运行。AGPL-3.0。参考实现。见 [06 §4](research/06-platform-access-and-account-risk.md#4-多平台下载与抓取)
+- [ucmao/media-parser](https://github.com/ucmao/media-parser)：自建的多平台分享链接解析服务，输入分享链接返回作者、标题、文案、封面和视频、图集、音频地址。MIT。参考实现。见 [06 §4](research/06-platform-access-and-account-risk.md#4-多平台下载与抓取)
 
 **参考设计（14）**
 
@@ -84,19 +84,19 @@ usuyo 从下面这些项目学到了做法，或者计划包装、适配它们�
 <a id="抖音快手与-tiktok"></a>
 ## 抖音、快手与 TikTok
 
-**计划适配（11）**
+**参考实现（11）**
 
-- [ahang008/ah-douyin-clean-downloader](https://github.com/ahang008/ah-douyin-clean-downloader)：面向 Codex 的抖音 Agent Skill，按分享链接下载原始视频，本机转写成 Markdown 与 SRT，也能把博主的公开作品整号归档。NOASSERTION（AH Source Available Non-Commercial License 1.0，源码可见，仅限非商业）。计划适配。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
-- [davidteather/TikTok-Api](https://github.com/davidteather/TikTok-Api)：非官方的 TikTok Python 封装，用 Playwright 会话取热门、用户、话题、音乐、评论和单条视频数据，不支持需要登录的接口。MIT。计划适配。见 [06 §5](research/06-platform-access-and-account-risk.md#5-抖音快手与-tiktok)
-- [Evil0ctal/Douyin_TikTok_Download_API](https://github.com/Evil0ctal/Douyin_TikTok_Download_API)：自托管的抖音、TikTok、B站数据服务，通过 REST、MCP 和命令行取作品、作者、评论、收藏夹，下载后可在本机转写。Apache-2.0。计划适配。见 [06 §5](research/06-platform-access-and-account-risk.md#5-抖音快手与-tiktok)
-- [Hannah2227/douyin-favorite-MyLike](https://github.com/Hannah2227/douyin-favorite-MyLike)：整理、搜索和回看本人抖音喜欢与收藏的桌面应用，请求由网页自己发出，支持增量采集、断点续采和收藏夹同步。MIT。计划适配。见 [06 §5](research/06-platform-access-and-account-risk.md#5-抖音快手与-tiktok)
-- [Inoue-AI/Inoue-AI-TikTok-SDK](https://github.com/Inoue-AI/Inoue-AI-TikTok-SDK)：TikTok 官方开放接口的异步 Python SDK，覆盖内容发布、Display API 和 Data Portability API。MIT。计划适配。见 [06 §5](research/06-platform-access-and-account-risk.md#5-抖音快手与-tiktok)
-- [JoeanAmier/KS-Downloader](https://github.com/JoeanAmier/KS-Downloader)：快手作品下载工具，按分享链接取单条视频或图集和作品信息，有终端界面和本地 Web API。GPL-3.0。计划适配。见 [06 §5](research/06-platform-access-and-account-risk.md#5-抖音快手与-tiktok)
-- [JoeanAmier/TikTokDownloader](https://github.com/JoeanAmier/TikTokDownloader)：抖音与 TikTok 作品下载和数据采集工具，可按账号批量取发布、喜欢、收藏和收藏夹作品，提供本地 Web API。GPL-3.0。计划适配。见 [06 §5](research/06-platform-access-and-account-risk.md#5-抖音快手与-tiktok)
-- [Johnserf-Seed/f2](https://github.com/Johnserf-Seed/f2)：多平台下载与接口封装的 Python 库和命令行，支持抖音、TikTok、微博、X，抖音侧能取主页、点赞、收藏、收藏夹、合集和直播。Apache-2.0。计划适配。见 [06 §5](research/06-platform-access-and-account-risk.md#5-抖音快手与-tiktok)
-- [mlbb229229-create/douyin-favorites-mcp](https://github.com/mlbb229229-create/douyin-favorites-mcp)：用 Playwright 持久化浏览器登录本人抖音，只读读取默认收藏、收藏夹列表及其中作品的 MCP 服务。MIT。计划适配。见 [06 §5](research/06-platform-access-and-account-risk.md#5-抖音快手与-tiktok)
-- [wujunwei928/parse-video](https://github.com/wujunwei928/parse-video)：Go 写的短视频分享链接解析服务和命令行，覆盖抖音、快手、西瓜视频等二十多个站点，返回标题、作者、视频和图集地址。MIT。计划适配。见 [06 §5](research/06-platform-access-and-account-risk.md#5-抖音快手与-tiktok)
-- [ZhangYukwiver/DouyinDataReview](https://github.com/ZhangYukwiver/DouyinDataReview)：读取本人抖音观看历史、喜欢、收藏并导出 JSON 的本地桌面应用，也能导入抖音官方个人信息下载档案、生成年度回顾。MIT。计划适配。见 [06 §5](research/06-platform-access-and-account-risk.md#5-抖音快手与-tiktok)
+- [ahang008/ah-douyin-clean-downloader](https://github.com/ahang008/ah-douyin-clean-downloader)：面向 Codex 的抖音 Agent Skill，按分享链接下载原始视频，本机转写成 Markdown 与 SRT，也能把博主的公开作品整号归档。NOASSERTION（AH Source Available Non-Commercial License 1.0，源码可见，仅限非商业）。参考实现。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
+- [davidteather/TikTok-Api](https://github.com/davidteather/TikTok-Api)：非官方的 TikTok Python 封装，用 Playwright 会话取热门、用户、话题、音乐、评论和单条视频数据，不支持需要登录的接口。MIT。参考实现。见 [06 §5](research/06-platform-access-and-account-risk.md#5-抖音快手与-tiktok)
+- [Evil0ctal/Douyin_TikTok_Download_API](https://github.com/Evil0ctal/Douyin_TikTok_Download_API)：自托管的抖音、TikTok、B站数据服务，通过 REST、MCP 和命令行取作品、作者、评论、收藏夹，下载后可在本机转写。Apache-2.0。参考实现。见 [06 §5](research/06-platform-access-and-account-risk.md#5-抖音快手与-tiktok)
+- [Hannah2227/douyin-favorite-MyLike](https://github.com/Hannah2227/douyin-favorite-MyLike)：整理、搜索和回看本人抖音喜欢与收藏的桌面应用，请求由网页自己发出，支持增量采集、断点续采和收藏夹同步。MIT。参考实现。见 [06 §5](research/06-platform-access-and-account-risk.md#5-抖音快手与-tiktok)
+- [Inoue-AI/Inoue-AI-TikTok-SDK](https://github.com/Inoue-AI/Inoue-AI-TikTok-SDK)：TikTok 官方开放接口的异步 Python SDK，覆盖内容发布、Display API 和 Data Portability API。MIT。参考实现。见 [06 §5](research/06-platform-access-and-account-risk.md#5-抖音快手与-tiktok)
+- [JoeanAmier/KS-Downloader](https://github.com/JoeanAmier/KS-Downloader)：快手作品下载工具，按分享链接取单条视频或图集和作品信息，有终端界面和本地 Web API。GPL-3.0。参考实现。见 [06 §5](research/06-platform-access-and-account-risk.md#5-抖音快手与-tiktok)
+- [JoeanAmier/TikTokDownloader](https://github.com/JoeanAmier/TikTokDownloader)：抖音与 TikTok 作品下载和数据采集工具，可按账号批量取发布、喜欢、收藏和收藏夹作品，提供本地 Web API。GPL-3.0。参考实现。见 [06 §5](research/06-platform-access-and-account-risk.md#5-抖音快手与-tiktok)
+- [Johnserf-Seed/f2](https://github.com/Johnserf-Seed/f2)：多平台下载与接口封装的 Python 库和命令行，支持抖音、TikTok、微博、X，抖音侧能取主页、点赞、收藏、收藏夹、合集和直播。Apache-2.0。参考实现。见 [06 §5](research/06-platform-access-and-account-risk.md#5-抖音快手与-tiktok)
+- [mlbb229229-create/douyin-favorites-mcp](https://github.com/mlbb229229-create/douyin-favorites-mcp)：用 Playwright 持久化浏览器登录本人抖音，只读读取默认收藏、收藏夹列表及其中作品的 MCP 服务。MIT。参考实现。见 [06 §5](research/06-platform-access-and-account-risk.md#5-抖音快手与-tiktok)
+- [wujunwei928/parse-video](https://github.com/wujunwei928/parse-video)：Go 写的短视频分享链接解析服务和命令行，覆盖抖音、快手、西瓜视频等二十多个站点，返回标题、作者、视频和图集地址。MIT。参考实现。见 [06 §5](research/06-platform-access-and-account-risk.md#5-抖音快手与-tiktok)
+- [ZhangYukwiver/DouyinDataReview](https://github.com/ZhangYukwiver/DouyinDataReview)：读取本人抖音观看历史、喜欢、收藏并导出 JSON 的本地桌面应用，也能导入抖音官方个人信息下载档案、生成年度回顾。MIT。参考实现。见 [06 §5](research/06-platform-access-and-account-risk.md#5-抖音快手与-tiktok)
 
 **参考设计（17）**
 
@@ -121,13 +121,13 @@ usuyo 从下面这些项目学到了做法，或者计划包装、适配它们�
 <a id="小红书"></a>
 ## 小红书
 
-**计划适配（5）**
+**参考实现（5）**
 
-- [jackwener/xhs-cli](https://github.com/jackwener/xhs-cli)：小红书命令行的浏览器版，用 Camoufox 打开网页读取页面状态，可查看收藏列表，命令都能输出 JSON。Apache-2.0。计划适配。见 [06 §6](research/06-platform-access-and-account-risk.md#6-小红书)
-- [JoeanAmier/XHS-Downloader](https://github.com/JoeanAmier/XHS-Downloader)：小红书笔记链接解析与作品下载工具，有图形界面、命令行、本地 HTTP API 和 MCP，另附在网页上提取收藏、点赞、专辑链接的油猴脚本。GPL-3.0。计划适配。见 [06 §6](research/06-platform-access-and-account-risk.md#6-小红书)
-- [lucasygu/redbook](https://github.com/lucasygu/redbook)：面向 AI Agent 的小红书 Node.js 命令行，读取本机 Chrome 的 Cookie，可搜索、读笔记、查看收藏和收藏专辑。MIT。计划适配。见 [06 §6](research/06-platform-access-and-account-risk.md#6-小红书)
-- [wkwunju/xhs-vault](https://github.com/wkwunju/xhs-vault)：把小红书收藏夹导出成本地可搜索的知识库，收藏页导出清单，逐条抓正文和平台字幕，macOS Vision 做图片 OCR。MIT。计划适配。见 [06 §6](research/06-platform-access-and-account-risk.md#6-小红书)
-- [xpzouying/xiaohongshu-mcp](https://github.com/xpzouying/xiaohongshu-mcp)：Go 写的小红书 MCP 和 HTTP 服务，用内置浏览器登录网页，提供搜索、笔记详情和评论、用户主页（含自己的收藏和点赞）等工具。Apache-2.0。计划适配。见 [06 §6](research/06-platform-access-and-account-risk.md#6-小红书)
+- [jackwener/xhs-cli](https://github.com/jackwener/xhs-cli)：小红书命令行的浏览器版，用 Camoufox 打开网页读取页面状态，可查看收藏列表，命令都能输出 JSON。Apache-2.0。参考实现。见 [06 §6](research/06-platform-access-and-account-risk.md#6-小红书)
+- [JoeanAmier/XHS-Downloader](https://github.com/JoeanAmier/XHS-Downloader)：小红书笔记链接解析与作品下载工具，有图形界面、命令行、本地 HTTP API 和 MCP，另附在网页上提取收藏、点赞、专辑链接的油猴脚本。GPL-3.0。参考实现。见 [06 §6](research/06-platform-access-and-account-risk.md#6-小红书)
+- [lucasygu/redbook](https://github.com/lucasygu/redbook)：面向 AI Agent 的小红书 Node.js 命令行，读取本机 Chrome 的 Cookie，可搜索、读笔记、查看收藏和收藏专辑。MIT。参考实现。见 [06 §6](research/06-platform-access-and-account-risk.md#6-小红书)
+- [wkwunju/xhs-vault](https://github.com/wkwunju/xhs-vault)：把小红书收藏夹导出成本地可搜索的知识库，收藏页导出清单，逐条抓正文和平台字幕，macOS Vision 做图片 OCR。MIT。参考实现。见 [06 §6](research/06-platform-access-and-account-risk.md#6-小红书)
+- [xpzouying/xiaohongshu-mcp](https://github.com/xpzouying/xiaohongshu-mcp)：Go 写的小红书 MCP 和 HTTP 服务，用内置浏览器登录网页，提供搜索、笔记详情和评论、用户主页（含自己的收藏和点赞）等工具。Apache-2.0。参考实现。见 [06 §6](research/06-platform-access-and-account-risk.md#6-小红书)
 
 **参考设计（12）**
 
@@ -147,21 +147,21 @@ usuyo 从下面这些项目学到了做法，或者计划包装、适配它们�
 <a id="b站youtube-与播客"></a>
 ## B站、YouTube 与播客
 
-**计划适配（13）**
+**参考实现（13）**
 
-- [ayasa520/bilibili-favorites-exporter](https://github.com/ayasa520/bilibili-favorites-exporter)：在 B站 收藏夹页把自建收藏夹和订阅的合集导出为 JSON，再在扩展页面里本地浏览、搜索的浏览器扩展。MIT。计划适配。见 [06 §7](research/06-platform-access-and-account-risk.md#7-b站youtube-与播客)
-- [iawia002/lux](https://github.com/iawia002/lux)：Go 写的视频下载库和命令行，按域名路由到各站点抽取器，覆盖 B站、YouTube 和多个国内视频站，release 停在 2024-05。MIT。计划适配。见 [06 §7](research/06-platform-access-and-account-risk.md#7-b站youtube-与播客)
-- [imputnet/cobalt](https://github.com/imputnet/cobalt)：自托管的媒体保存服务，提交链接就返回可下载的音视频或图片，网页前端和 API 分开部署。AGPL-3.0（`api/` 为 AGPL-3.0，`web/` 为 CC-BY-NC-SA-4.0）。计划适配。见 [06 §7](research/06-platform-access-and-account-risk.md#7-b站youtube-与播客)
-- [jdepoix/youtube-transcript-api](https://github.com/jdepoix/youtube-transcript-api)：按视频 ID 取 YouTube 字幕（含自动字幕和翻译）的 Python 库和命令行，不需要 API key，也不需要浏览器。MIT。计划适配。见 [06 §7](research/06-platform-access-and-account-risk.md#7-b站youtube-与播客)
-- [lightpohl/podcast-dl](https://github.com/lightpohl/podcast-dl)：读 RSS 下载播客单集音频的 Node 命令行，可另存节目和单集元数据 JSON，以及 feed 里声明的文字稿。MIT。计划适配。见 [06 §7](research/06-platform-access-and-account-risk.md#7-b站youtube-与播客)
-- [LuanRT/YouTube.js](https://github.com/LuanRT/YouTube.js)：YouTube 内部 InnerTube 接口的 JavaScript 客户端，可取视频信息、字幕、评论、播放列表、媒体库和观看历史。MIT。计划适配。见 [06 §7](research/06-platform-access-and-account-risk.md#7-b站youtube-与播客)
-- [sigma67/ytmusicapi](https://github.com/sigma67/ytmusicapi)：YouTube Music 的非官方 Python 接口，可读点赞歌曲、收听历史、播放列表，也能取播客单集。MIT。计划适配。见 [06 §7](research/06-platform-access-and-account-risk.md#7-b站youtube-与播客)
-- [soimort/you-get](https://github.com/soimort/you-get)：Python 写的网页媒体下载器，靠一张站点表路由，表外站点交给通用抽取器，可只输出 JSON 信息。NOASSERTION（`LICENSE.txt` 正文为 MIT）。计划适配。见 [06 §7](research/06-platform-access-and-account-risk.md#7-b站youtube-与播客)
-- [ultrazg/xyz](https://github.com/ultrazg/xyz)：Go 写的小宇宙 App 接口封装，起一个本地 HTTP 服务，提供搜索、订阅、收藏、收听历史等接口和文档页。MIT。计划适配。见 [06 §7](research/06-platform-access-and-account-risk.md#7-b站youtube-与播客)
-- [xiaoleiy/podpull](https://github.com/xiaoleiy/podpull)：Python 播客下载命令行，接受 Apple Podcasts 链接、RSS 或小宇宙单集链接，支持断点续传，可选本地转写和摘要。MIT。计划适配。见 [06 §7](research/06-platform-access-and-account-risk.md#7-b站youtube-与播客)
-- [XZXZZX-Ai/bilibili-mcp](https://github.com/XZXZZX-Ai/bilibili-mcp)：本地运行的 B站 MCP 服务，可读字幕并定位原话和时间点、读评论、遍历自己账号的全部收藏夹，无字幕时可本地转写。Apache-2.0。计划适配。见 [06 §7](research/06-platform-access-and-account-risk.md#7-b站youtube-与播客)
-- [yt-dlp/yt-dlp](https://github.com/yt-dlp/yt-dlp)：命令行音视频下载器，内置上千个站点抽取器，可只输出 JSON 元数据和字幕，抽取器能以插件扩展。Unlicense。计划适配。见 [06 §7](research/06-platform-access-and-account-risk.md#7-b站youtube-与播客)
-- [yutto-dev/yutto](https://github.com/yutto-dev/yutto)：Python 写的 B站 命令行下载器，支持投稿、收藏夹和稍后再看批量下载，可另存字幕和弹幕，也有 server 模式。GPL-3.0。计划适配。见 [06 §7](research/06-platform-access-and-account-risk.md#7-b站youtube-与播客)
+- [ayasa520/bilibili-favorites-exporter](https://github.com/ayasa520/bilibili-favorites-exporter)：在 B站 收藏夹页把自建收藏夹和订阅的合集导出为 JSON，再在扩展页面里本地浏览、搜索的浏览器扩展。MIT。参考实现。见 [06 §7](research/06-platform-access-and-account-risk.md#7-b站youtube-与播客)
+- [iawia002/lux](https://github.com/iawia002/lux)：Go 写的视频下载库和命令行，按域名路由到各站点抽取器，覆盖 B站、YouTube 和多个国内视频站，release 停在 2024-05。MIT。参考实现。见 [06 §7](research/06-platform-access-and-account-risk.md#7-b站youtube-与播客)
+- [imputnet/cobalt](https://github.com/imputnet/cobalt)：自托管的媒体保存服务，提交链接就返回可下载的音视频或图片，网页前端和 API 分开部署。AGPL-3.0（`api/` 为 AGPL-3.0，`web/` 为 CC-BY-NC-SA-4.0）。参考实现。见 [06 §7](research/06-platform-access-and-account-risk.md#7-b站youtube-与播客)
+- [jdepoix/youtube-transcript-api](https://github.com/jdepoix/youtube-transcript-api)：按视频 ID 取 YouTube 字幕（含自动字幕和翻译）的 Python 库和命令行，不需要 API key，也不需要浏览器。MIT。参考实现。见 [06 §7](research/06-platform-access-and-account-risk.md#7-b站youtube-与播客)
+- [lightpohl/podcast-dl](https://github.com/lightpohl/podcast-dl)：读 RSS 下载播客单集音频的 Node 命令行，可另存节目和单集元数据 JSON，以及 feed 里声明的文字稿。MIT。参考实现。见 [06 §7](research/06-platform-access-and-account-risk.md#7-b站youtube-与播客)
+- [LuanRT/YouTube.js](https://github.com/LuanRT/YouTube.js)：YouTube 内部 InnerTube 接口的 JavaScript 客户端，可取视频信息、字幕、评论、播放列表、媒体库和观看历史。MIT。参考实现。见 [06 §7](research/06-platform-access-and-account-risk.md#7-b站youtube-与播客)
+- [sigma67/ytmusicapi](https://github.com/sigma67/ytmusicapi)：YouTube Music 的非官方 Python 接口，可读点赞歌曲、收听历史、播放列表，也能取播客单集。MIT。参考实现。见 [06 §7](research/06-platform-access-and-account-risk.md#7-b站youtube-与播客)
+- [soimort/you-get](https://github.com/soimort/you-get)：Python 写的网页媒体下载器，靠一张站点表路由，表外站点交给通用抽取器，可只输出 JSON 信息。NOASSERTION（`LICENSE.txt` 正文为 MIT）。参考实现。见 [06 §7](research/06-platform-access-and-account-risk.md#7-b站youtube-与播客)
+- [ultrazg/xyz](https://github.com/ultrazg/xyz)：Go 写的小宇宙 App 接口封装，起一个本地 HTTP 服务，提供搜索、订阅、收藏、收听历史等接口和文档页。MIT。参考实现。见 [06 §7](research/06-platform-access-and-account-risk.md#7-b站youtube-与播客)
+- [xiaoleiy/podpull](https://github.com/xiaoleiy/podpull)：Python 播客下载命令行，接受 Apple Podcasts 链接、RSS 或小宇宙单集链接，支持断点续传，可选本地转写和摘要。MIT。参考实现。见 [06 §7](research/06-platform-access-and-account-risk.md#7-b站youtube-与播客)
+- [XZXZZX-Ai/bilibili-mcp](https://github.com/XZXZZX-Ai/bilibili-mcp)：本地运行的 B站 MCP 服务，可读字幕并定位原话和时间点、读评论、遍历自己账号的全部收藏夹，无字幕时可本地转写。Apache-2.0。参考实现。见 [06 §7](research/06-platform-access-and-account-risk.md#7-b站youtube-与播客)
+- [yt-dlp/yt-dlp](https://github.com/yt-dlp/yt-dlp)：命令行音视频下载器，内置上千个站点抽取器，可只输出 JSON 元数据和字幕，抽取器能以插件扩展。Unlicense。参考实现。见 [06 §7](research/06-platform-access-and-account-risk.md#7-b站youtube-与播客)
+- [yutto-dev/yutto](https://github.com/yutto-dev/yutto)：Python 写的 B站 命令行下载器，支持投稿、收藏夹和稍后再看批量下载，可另存字幕和弹幕，也有 server 模式。GPL-3.0。参考实现。见 [06 §7](research/06-platform-access-and-account-risk.md#7-b站youtube-与播客)
 
 **参考设计（14）**
 
@@ -183,18 +183,18 @@ usuyo 从下面这些项目学到了做法，或者计划包装、适配它们�
 <a id="微信生态"></a>
 ## 微信生态
 
-**计划适配（10）**
+**参考实现（10）**
 
-- [BlueMatthew/WechatExporter](https://github.com/BlueMatthew/WechatExporter)：从 iTunes 或 Finder 的 iPhone 备份里读取微信聊天记录，导出为 HTML、PDF 等格式，有图形界面和命令行。GPL-2.0。计划适配。见 [06 §8](research/06-platform-access-and-account-risk.md#8-微信生态)
-- [Bwkyd/wexin-read-mcp](https://github.com/Bwkyd/wexin-read-mcp)：让 AI 读取公众号文章的 MCP 服务，抓取交给作者的单文件程序 url-md，输出带 frontmatter 的 Markdown。MIT（实际抓取的 url-md 为 Apache-2.0）。计划适配。见 [06 §8](research/06-platform-access-and-account-risk.md#8-微信生态)
-- [fengxxc/wechatmp2markdown](https://github.com/fengxxc/wechatmp2markdown)：把单篇公众号文章转成 Markdown 的 Go 命令行和 Web 服务，图片可保留链接、下载到本地或内嵌 base64。MIT。计划适配。见 [06 §8](research/06-platform-access-and-account-risk.md#8-微信生态)
-- [Hello-Mr-Crab/pywechat](https://github.com/Hello-Mr-Crab/pywechat)：基于 pywinauto 的 Windows 微信 RPA，新版能把收藏里的笔记导出为 Markdown、批量复制收藏文章链接，附 MCP 和 Skill。NOASSERTION（LICENSE 为 LGPL-2.1）。计划适配。见 [06 §8](research/06-platform-access-and-account-risk.md#8-微信生态)
-- [jackwener/wechat-article-to-markdown](https://github.com/jackwener/wechat-article-to-markdown)：抓取单篇公众号文章转成带本地图片 Markdown 的命令行，附 Agent Skill。无许可证文件（`pyproject.toml` 与 README 写 MIT，仓库无 LICENSE 文件）。计划适配。见 [06 §8](research/06-platform-access-and-account-risk.md#8-微信生态)
-- [ltaoo/wx_channels_download](https://github.com/ltaoo/wx_channels_download)：视频号下载器扩展成的内容归档工具，以本机代理方式在视频号页面加下载按钮，提供 HTTP API、MCP、命令行和本地管理页，属 client-hook 层。NOASSERTION（MIT + Commons Clause）。计划适配。见 [06 §8](research/06-platform-access-and-account-risk.md#8-微信生态)
-- [pengyulong/wechat-favorites-exporter](https://github.com/pengyulong/wechat-favorites-exporter)：用 macOS 辅助功能驱动已登录的 Mac 微信收藏页，把收藏里的公众号文章链接导出为 CSV。MIT。计划适配。见 [06 §8](research/06-platform-access-and-account-risk.md#8-微信生态)
-- [rachelos/we-mp-rss](https://github.com/rachelos/we-mp-rss)：自托管的公众号订阅服务，定时抓取文章生成 RSS，导出 Markdown、PDF、Word、JSON，提供 API 与 Webhook。NOASSERTION（LICENSE 正文为 MIT）。计划适配。见 [06 §8](research/06-platform-access-and-account-risk.md#8-微信生态)
-- [Tencent/WeChatReading](https://github.com/Tencent/WeChatReading)：微信读书官方发布的 Agent Skill，用个人 API Key 调用官方接口读书架、阅读进度、笔记划线、想法和阅读统计。NOASSERTION（Apache-2.0 全文前加了腾讯开源声明）。计划适配。见 [06 §8](research/06-platform-access-and-account-risk.md#8-微信生态)
-- [wechat-article/wechat-article-exporter](https://github.com/wechat-article/wechat-article-exporter)：可自部署的公众号文章批量导出网站，用自己的公众号后台登录后导出 HTML、Markdown、DOCX 等格式；依赖的后台接口关闭后，2026-07-30 起停止维护。MIT（配套的 wxdown-service 无许可证）。计划适配。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
+- [BlueMatthew/WechatExporter](https://github.com/BlueMatthew/WechatExporter)：从 iTunes 或 Finder 的 iPhone 备份里读取微信聊天记录，导出为 HTML、PDF 等格式，有图形界面和命令行。GPL-2.0。参考实现。见 [06 §8](research/06-platform-access-and-account-risk.md#8-微信生态)
+- [Bwkyd/wexin-read-mcp](https://github.com/Bwkyd/wexin-read-mcp)：让 AI 读取公众号文章的 MCP 服务，抓取交给作者的单文件程序 url-md，输出带 frontmatter 的 Markdown。MIT（实际抓取的 url-md 为 Apache-2.0）。参考实现。见 [06 §8](research/06-platform-access-and-account-risk.md#8-微信生态)
+- [fengxxc/wechatmp2markdown](https://github.com/fengxxc/wechatmp2markdown)：把单篇公众号文章转成 Markdown 的 Go 命令行和 Web 服务，图片可保留链接、下载到本地或内嵌 base64。MIT。参考实现。见 [06 §8](research/06-platform-access-and-account-risk.md#8-微信生态)
+- [Hello-Mr-Crab/pywechat](https://github.com/Hello-Mr-Crab/pywechat)：基于 pywinauto 的 Windows 微信 RPA，新版能把收藏里的笔记导出为 Markdown、批量复制收藏文章链接，附 MCP 和 Skill。NOASSERTION（LICENSE 为 LGPL-2.1）。参考实现。见 [06 §8](research/06-platform-access-and-account-risk.md#8-微信生态)
+- [jackwener/wechat-article-to-markdown](https://github.com/jackwener/wechat-article-to-markdown)：抓取单篇公众号文章转成带本地图片 Markdown 的命令行，附 Agent Skill。无许可证文件（`pyproject.toml` 与 README 写 MIT，仓库无 LICENSE 文件）。参考实现。见 [06 §8](research/06-platform-access-and-account-risk.md#8-微信生态)
+- [ltaoo/wx_channels_download](https://github.com/ltaoo/wx_channels_download)：视频号下载器扩展成的内容归档工具，以本机代理方式在视频号页面加下载按钮，提供 HTTP API、MCP、命令行和本地管理页，属 client-hook 层。NOASSERTION（MIT + Commons Clause）。参考实现。见 [06 §8](research/06-platform-access-and-account-risk.md#8-微信生态)
+- [pengyulong/wechat-favorites-exporter](https://github.com/pengyulong/wechat-favorites-exporter)：用 macOS 辅助功能驱动已登录的 Mac 微信收藏页，把收藏里的公众号文章链接导出为 CSV。MIT。参考实现。见 [06 §8](research/06-platform-access-and-account-risk.md#8-微信生态)
+- [rachelos/we-mp-rss](https://github.com/rachelos/we-mp-rss)：自托管的公众号订阅服务，定时抓取文章生成 RSS，导出 Markdown、PDF、Word、JSON，提供 API 与 Webhook。NOASSERTION（LICENSE 正文为 MIT）。参考实现。见 [06 §8](research/06-platform-access-and-account-risk.md#8-微信生态)
+- [Tencent/WeChatReading](https://github.com/Tencent/WeChatReading)：微信读书官方发布的 Agent Skill，用个人 API Key 调用官方接口读书架、阅读进度、笔记划线、想法和阅读统计。NOASSERTION（Apache-2.0 全文前加了腾讯开源声明）。参考实现。见 [06 §8](research/06-platform-access-and-account-risk.md#8-微信生态)
+- [wechat-article/wechat-article-exporter](https://github.com/wechat-article/wechat-article-exporter)：可自部署的公众号文章批量导出网站，用自己的公众号后台登录后导出 HTML、Markdown、DOCX 等格式；依赖的后台接口关闭后，2026-07-30 起停止维护。MIT（配套的 wxdown-service 无许可证）。参考实现。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
 
 **参考设计（13）**
 
@@ -220,24 +220,24 @@ usuyo 从下面这些项目学到了做法，或者计划包装、适配它们�
 <a id="微博知乎豆瓣与海外社交平台"></a>
 ## 微博、知乎、豆瓣与海外社交平台
 
-**计划适配（16）**
+**参考实现（16）**
 
-- [afar1/fieldtheory-cli](https://github.com/afar1/fieldtheory-cli)：把自己的 X 书签（含书签文件夹和链接正文）同步到本地，提供全文搜索、Markdown 导出和大模型分类，可给 Agent 当知识库的命令行。MIT。计划适配。见 [06 §9](research/06-platform-access-and-account-risk.md#9-微博知乎豆瓣与海外社交平台)
-- [Chilfish/Weibo-archiver](https://github.com/Chilfish/Weibo-archiver)：油猴脚本加命令行，把自己的微博、关注列表和微博收藏导出成 JSON，用配套网页离线浏览。Apache-2.0。计划适配。见 [06 §9](research/06-platform-access-and-account-risk.md#9-微博知乎豆瓣与海外社交平台)
-- [cosformula/douban-sync-skill](https://github.com/cosformula/douban-sync-skill)：导出并增量同步本人豆瓣书、影视、音乐、游戏标记到本地 CSV 的 Agent Skill，日常增量走公开 RSS。MIT。计划适配。见 [06 §9](research/06-platform-access-and-account-risk.md#9-微博知乎豆瓣与海外社交平台)
-- [dataabc/weibo-crawler](https://github.com/dataabc/weibo-crawler)：按用户 ID 批量抓取微博用户资料和微博内容，写成 CSV、JSON 或数据库，可下载图片和视频，不填 cookie 也能取多数公开微博。无许可证文件。计划适配。见 [06 §9](research/06-platform-access-and-account-risk.md#9-微博知乎豆瓣与海外社交平台)
-- [dataabc/weiboSpider](https://github.com/dataabc/weiboSpider)：抓指定微博用户的资料和全部微博，写入文件或数据库，必须提供登录 cookie。无许可证文件。计划适配。见 [06 §9](research/06-platform-access-and-account-risk.md#9-微博知乎豆瓣与海外社交平台)
-- [handsomestWei/zhihu-fetch-skill](https://github.com/handsomestWei/zhihu-fetch-skill)：抓取知乎收藏夹、个人点赞与收藏动态、专栏和回答的正文与图片，支持断点续传并可写入 Obsidian 的 Agent Skill。MIT。计划适配。见 [06 §9](research/06-platform-access-and-account-risk.md#9-微博知乎豆瓣与海外社交平台)
-- [instaloader/instaloader](https://github.com/instaloader/instaloader)：下载 Instagram 帖子、快拍、Reels 及其文案和元数据的命令行与库，登录后可下载自己的收藏。MIT。计划适配。见 [06 §9](research/06-platform-access-and-account-risk.md#9-微博知乎豆瓣与海外社交平台)
-- [iyear/tdl](https://github.com/iyear/tdl)：Go 写的 Telegram 工具箱，可下载会话中的文件、转发、上传，并把消息导出为 JSON。AGPL-3.0。计划适配。见 [06 §9](research/06-platform-access-and-account-risk.md#9-微博知乎豆瓣与海外社交平台)
-- [karlicoss/rexport](https://github.com/karlicoss/rexport)：把自己的 Reddit 收藏、点赞、发帖和评论导出为 JSON，并提供读取导出数据的接口。MIT。计划适配。见 [06 §9](research/06-platform-access-and-account-risk.md#9-微博知乎豆瓣与海外社交平台)
-- [knadh/tg-archive](https://github.com/knadh/tg-archive)：定期把 Telegram 群组消息同步到本地 SQLite，再生成可发布的静态归档网站。MIT。计划适配。见 [06 §9](research/06-platform-access-and-account-risk.md#9-微博知乎豆瓣与海外社交平台)
-- [Marvae/douban-cli](https://github.com/Marvae/douban-cli)：豆瓣命令行加 Agent Skill，把自己的看过、想看、读过等记录（含仅自己可见的）导出为 JSON、CSV 或 Markdown。MIT。计划适配。见 [06 §9](research/06-platform-access-and-account-risk.md#9-微博知乎豆瓣与海外社交平台)
-- [public-clis/twitter-cli](https://github.com/public-clis/twitter-cli)：X 的终端命令行，读时间线、书签、用户帖子和文章，输出 YAML 或 JSON 给 Agent 用，附 Skill。Apache-2.0。计划适配。见 [06 §9](research/06-platform-access-and-account-risk.md#9-微博知乎豆瓣与海外社交平台)
-- [sean1832/pinterest-dl](https://github.com/sean1832/pinterest-dl)：从 Pinterest 画板、单个 Pin、分区或搜索结果下载图片和视频的命令行与库，可把描述写进图片元数据。Apache-2.0。计划适配。见 [06 §9](research/06-platform-access-and-account-risk.md#9-微博知乎豆瓣与海外社交平台)
-- [Serene-Arc/bulk-downloader-for-reddit](https://github.com/Serene-Arc/bulk-downloader-for-reddit)：Reddit 批量下载与归档工具，可按用户、子版、收藏、点赞下载帖子媒体，或把帖子和评论存成 JSON、YAML。GPL-3.0。计划适配。见 [06 §9](research/06-platform-access-and-account-risk.md#9-微博知乎豆瓣与海外社交平台)
-- [steipete/birdclaw](https://github.com/steipete/birdclaw)：把 X 官方归档导入本地 SQLite，提供全文搜索、Web 界面、命令行和只读 MCP，需要时经 X 官方命令行增量同步。MIT。计划适配。见 [06 §9](research/06-platform-access-and-account-risk.md#9-微博知乎豆瓣与海外社交平台)
-- [xdevplatform/xurl](https://github.com/xdevplatform/xurl)：X 官方出的 X API 命令行，支持多种 OAuth，带书签、点赞列表等快捷命令和 `SKILL.md`。MIT。计划适配。见 [06 §9](research/06-platform-access-and-account-risk.md#9-微博知乎豆瓣与海外社交平台)
+- [afar1/fieldtheory-cli](https://github.com/afar1/fieldtheory-cli)：把自己的 X 书签（含书签文件夹和链接正文）同步到本地，提供全文搜索、Markdown 导出和大模型分类，可给 Agent 当知识库的命令行。MIT。参考实现。见 [06 §9](research/06-platform-access-and-account-risk.md#9-微博知乎豆瓣与海外社交平台)
+- [Chilfish/Weibo-archiver](https://github.com/Chilfish/Weibo-archiver)：油猴脚本加命令行，把自己的微博、关注列表和微博收藏导出成 JSON，用配套网页离线浏览。Apache-2.0。参考实现。见 [06 §9](research/06-platform-access-and-account-risk.md#9-微博知乎豆瓣与海外社交平台)
+- [cosformula/douban-sync-skill](https://github.com/cosformula/douban-sync-skill)：导出并增量同步本人豆瓣书、影视、音乐、游戏标记到本地 CSV 的 Agent Skill，日常增量走公开 RSS。MIT。参考实现。见 [06 §9](research/06-platform-access-and-account-risk.md#9-微博知乎豆瓣与海外社交平台)
+- [dataabc/weibo-crawler](https://github.com/dataabc/weibo-crawler)：按用户 ID 批量抓取微博用户资料和微博内容，写成 CSV、JSON 或数据库，可下载图片和视频，不填 cookie 也能取多数公开微博。无许可证文件。参考实现。见 [06 §9](research/06-platform-access-and-account-risk.md#9-微博知乎豆瓣与海外社交平台)
+- [dataabc/weiboSpider](https://github.com/dataabc/weiboSpider)：抓指定微博用户的资料和全部微博，写入文件或数据库，必须提供登录 cookie。无许可证文件。参考实现。见 [06 §9](research/06-platform-access-and-account-risk.md#9-微博知乎豆瓣与海外社交平台)
+- [handsomestWei/zhihu-fetch-skill](https://github.com/handsomestWei/zhihu-fetch-skill)：抓取知乎收藏夹、个人点赞与收藏动态、专栏和回答的正文与图片，支持断点续传并可写入 Obsidian 的 Agent Skill。MIT。参考实现。见 [06 §9](research/06-platform-access-and-account-risk.md#9-微博知乎豆瓣与海外社交平台)
+- [instaloader/instaloader](https://github.com/instaloader/instaloader)：下载 Instagram 帖子、快拍、Reels 及其文案和元数据的命令行与库，登录后可下载自己的收藏。MIT。参考实现。见 [06 §9](research/06-platform-access-and-account-risk.md#9-微博知乎豆瓣与海外社交平台)
+- [iyear/tdl](https://github.com/iyear/tdl)：Go 写的 Telegram 工具箱，可下载会话中的文件、转发、上传，并把消息导出为 JSON。AGPL-3.0。参考实现。见 [06 §9](research/06-platform-access-and-account-risk.md#9-微博知乎豆瓣与海外社交平台)
+- [karlicoss/rexport](https://github.com/karlicoss/rexport)：把自己的 Reddit 收藏、点赞、发帖和评论导出为 JSON，并提供读取导出数据的接口。MIT。参考实现。见 [06 §9](research/06-platform-access-and-account-risk.md#9-微博知乎豆瓣与海外社交平台)
+- [knadh/tg-archive](https://github.com/knadh/tg-archive)：定期把 Telegram 群组消息同步到本地 SQLite，再生成可发布的静态归档网站。MIT。参考实现。见 [06 §9](research/06-platform-access-and-account-risk.md#9-微博知乎豆瓣与海外社交平台)
+- [Marvae/douban-cli](https://github.com/Marvae/douban-cli)：豆瓣命令行加 Agent Skill，把自己的看过、想看、读过等记录（含仅自己可见的）导出为 JSON、CSV 或 Markdown。MIT。参考实现。见 [06 §9](research/06-platform-access-and-account-risk.md#9-微博知乎豆瓣与海外社交平台)
+- [public-clis/twitter-cli](https://github.com/public-clis/twitter-cli)：X 的终端命令行，读时间线、书签、用户帖子和文章，输出 YAML 或 JSON 给 Agent 用，附 Skill。Apache-2.0。参考实现。见 [06 §9](research/06-platform-access-and-account-risk.md#9-微博知乎豆瓣与海外社交平台)
+- [sean1832/pinterest-dl](https://github.com/sean1832/pinterest-dl)：从 Pinterest 画板、单个 Pin、分区或搜索结果下载图片和视频的命令行与库，可把描述写进图片元数据。Apache-2.0。参考实现。见 [06 §9](research/06-platform-access-and-account-risk.md#9-微博知乎豆瓣与海外社交平台)
+- [Serene-Arc/bulk-downloader-for-reddit](https://github.com/Serene-Arc/bulk-downloader-for-reddit)：Reddit 批量下载与归档工具，可按用户、子版、收藏、点赞下载帖子媒体，或把帖子和评论存成 JSON、YAML。GPL-3.0。参考实现。见 [06 §9](research/06-platform-access-and-account-risk.md#9-微博知乎豆瓣与海外社交平台)
+- [steipete/birdclaw](https://github.com/steipete/birdclaw)：把 X 官方归档导入本地 SQLite，提供全文搜索、Web 界面、命令行和只读 MCP，需要时经 X 官方命令行增量同步。MIT。参考实现。见 [06 §9](research/06-platform-access-and-account-risk.md#9-微博知乎豆瓣与海外社交平台)
+- [xdevplatform/xurl](https://github.com/xdevplatform/xurl)：X 官方出的 X API 命令行，支持多种 OAuth，带书签、点赞列表等快捷命令和 `SKILL.md`。MIT。参考实现。见 [06 §9](research/06-platform-access-and-account-risk.md#9-微博知乎豆瓣与海外社交平台)
 
 **参考设计（19）**
 
@@ -264,20 +264,20 @@ usuyo 从下面这些项目学到了做法，或者计划包装、适配它们�
 <a id="视觉与-ui-自动化"></a>
 ## 视觉与 UI 自动化
 
-**计划适配（12）**
+**参考实现（12）**
 
-- [appium/WebDriverAgent](https://github.com/appium/WebDriverAgent)：以 XCTest 方式跑在 iPhone 上的 WebDriver 服务端，提供截图、控件树、点按和输入接口。NOASSERTION（LICENSE 为 BSD 3-Clause 文本）。计划适配。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
-- [danielpaulus/go-ios](https://github.com/danielpaulus/go-ios)：纯 Go 实现的 iOS 设备工具集和库，在 macOS、Linux、Windows 上都能截图、拉起 WebDriverAgent、做无障碍检查。MIT。计划适配。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
-- [Genymobile/scrcpy](https://github.com/Genymobile/scrcpy)：经 ADB 把 Android 手机的画面和声音投到电脑上，可用键鼠操作、可录屏，手机端不装 App。Apache-2.0。计划适配。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
-- [jfarcand/mirroir-mcp](https://github.com/jfarcand/mirroir-mcp)：通过 macOS「iPhone 镜像」窗口控制真实 iPhone 的 MCP 服务，截图后用 Apple Vision 做 OCR，用系统输入事件点按滑动。Apache-2.0。计划适配。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
-- [makeusabrew/audiotee](https://github.com/makeusabrew/audiotee)：用 Core Audio tap 录系统声音、按块把 PCM 写到标准输出的 macOS 命令行，可只录或排除指定进程。无许可证文件（README 写 MIT，仓库无 LICENSE 文件）。计划适配。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
-- [mobile-dev-inc/Maestro](https://github.com/mobile-dev-inc/Maestro)：用 YAML 写移动端和网页端端到端流程的测试框架，经系统无障碍层驱动 App，命令行内置 MCP 服务。Apache-2.0（Maestro Studio 与云服务不开源）。计划适配。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
-- [mobile-next/mobile-mcp](https://github.com/mobile-next/mobile-mcp)：面向 iOS、Android 真机和模拟器的 MCP 服务，优先读原生无障碍树，必要时退回截图和坐标。Apache-2.0。计划适配。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
-- [openatx/uiautomator2](https://github.com/openatx/uiautomator2)：经 ADB 在 Android 设备上运行 UiAutomator 服务，读取控件树、截图、点按和输入的 Python 库。MIT。计划适配。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
-- [openclaw/Peekaboo](https://github.com/openclaw/Peekaboo)：macOS 命令行和菜单栏应用，可截取任意窗口、检查无障碍树、执行原生 UI 自动化，也提供 MCP 服务。MIT。计划适配。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
-- [vercel-labs/agent-desktop](https://github.com/vercel-labs/agent-desktop)：Vercel Labs 的 Rust 命令行加 C 库，经 macOS AX、Windows UI Automation、Linux AT-SPI 读桌面 App 的无障碍树、按 ref 对元素发动作，每条命令输出一个 JSON 信封，不需要模型、不联网；用户点名；电脑端视觉层获取插件可能自带固定版本的它作为运行时（插件依赖它），不让用户 `npm i -g`。Apache-2.0（npm 包和发布压缩包里没有 LICENSE 文件，分发时从仓库带上）。计划适配。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)、[调研 10 §1](research/10-desktop-and-android-agents.md#1-agent-desktop)
-- [web-infra-dev/midscene](https://github.com/web-infra-dev/midscene)：视觉驱动的 UI 自动化 SDK，截图加视觉模型定位和操作，支持网页、Android、iOS、鸿蒙和桌面。MIT。计划适配。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
-- [zai-org/Open-AutoGLM](https://github.com/zai-org/Open-AutoGLM)：智谱开源的手机 Agent 框架和 9B 视觉模型，截图交给模型理解界面，再经 ADB、HDC 或 WDA 点按输入。Apache-2.0。计划适配。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
+- [appium/WebDriverAgent](https://github.com/appium/WebDriverAgent)：以 XCTest 方式跑在 iPhone 上的 WebDriver 服务端，提供截图、控件树、点按和输入接口。NOASSERTION（LICENSE 为 BSD 3-Clause 文本）。参考实现。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
+- [danielpaulus/go-ios](https://github.com/danielpaulus/go-ios)：纯 Go 实现的 iOS 设备工具集和库，在 macOS、Linux、Windows 上都能截图、拉起 WebDriverAgent、做无障碍检查。MIT。参考实现。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
+- [Genymobile/scrcpy](https://github.com/Genymobile/scrcpy)：经 ADB 把 Android 手机的画面和声音投到电脑上，可用键鼠操作、可录屏，手机端不装 App。Apache-2.0。参考实现。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
+- [jfarcand/mirroir-mcp](https://github.com/jfarcand/mirroir-mcp)：通过 macOS「iPhone 镜像」窗口控制真实 iPhone 的 MCP 服务，截图后用 Apple Vision 做 OCR，用系统输入事件点按滑动。Apache-2.0。参考实现。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
+- [makeusabrew/audiotee](https://github.com/makeusabrew/audiotee)：用 Core Audio tap 录系统声音、按块把 PCM 写到标准输出的 macOS 命令行，可只录或排除指定进程。无许可证文件（README 写 MIT，仓库无 LICENSE 文件）。参考实现。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
+- [mobile-dev-inc/Maestro](https://github.com/mobile-dev-inc/Maestro)：用 YAML 写移动端和网页端端到端流程的测试框架，经系统无障碍层驱动 App，命令行内置 MCP 服务。Apache-2.0（Maestro Studio 与云服务不开源）。参考实现。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
+- [mobile-next/mobile-mcp](https://github.com/mobile-next/mobile-mcp)：面向 iOS、Android 真机和模拟器的 MCP 服务，优先读原生无障碍树，必要时退回截图和坐标。Apache-2.0。参考实现。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
+- [openatx/uiautomator2](https://github.com/openatx/uiautomator2)：经 ADB 在 Android 设备上运行 UiAutomator 服务，读取控件树、截图、点按和输入的 Python 库。MIT。参考实现。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
+- [openclaw/Peekaboo](https://github.com/openclaw/Peekaboo)：macOS 命令行和菜单栏应用，可截取任意窗口、检查无障碍树、执行原生 UI 自动化，也提供 MCP 服务。MIT。参考实现。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
+- [vercel-labs/agent-desktop](https://github.com/vercel-labs/agent-desktop)：Vercel Labs 的 Rust 命令行加 C 库，经 macOS AX、Windows UI Automation、Linux AT-SPI 读桌面 App 的无障碍树、按 ref 对元素发动作，每条命令输出一个 JSON 信封，不需要模型、不联网；用户点名；电脑端视觉层获取插件可能自带固定版本的它作为运行时（插件依赖它），不让用户 `npm i -g`。Apache-2.0（npm 包和发布压缩包里没有 LICENSE 文件，分发时从仓库带上）。参考实现。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)、[调研 10 §1](research/10-desktop-and-android-agents.md#1-agent-desktop)
+- [web-infra-dev/midscene](https://github.com/web-infra-dev/midscene)：视觉驱动的 UI 自动化 SDK，截图加视觉模型定位和操作，支持网页、Android、iOS、鸿蒙和桌面。MIT。参考实现。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
+- [zai-org/Open-AutoGLM](https://github.com/zai-org/Open-AutoGLM)：智谱开源的手机 Agent 框架和 9B 视觉模型，截图交给模型理解界面，再经 ADB、HDC 或 WDA 点按输入。Apache-2.0。参考实现。见 [06 §10](research/06-platform-access-and-account-risk.md#10-视觉与-ui-自动化)
 
 **参考设计（5）**
 
@@ -290,12 +290,12 @@ usuyo 从下面这些项目学到了做法，或者计划包装、适配它们�
 <a id="agent-接入层"></a>
 ## Agent 接入层
 
-**计划适配（4）**
+**参考实现（4）**
 
-- [browserutils/kooky](https://github.com/browserutils/kooky)：Go 写的浏览器 cookie 读取库，覆盖 Chrome、Firefox、Safari 等多种浏览器。MIT。计划适配。见 [06 §11](research/06-platform-access-and-account-risk.md#11-agent-接入层)
-- [chromedp/chromedp](https://github.com/chromedp/chromedp)：Go 写的 Chrome DevTools 协议驱动，可启动自己的 Chrome，也可连接已运行的浏览器。MIT。计划适配。见 [06 §11](research/06-platform-access-and-account-risk.md#11-agent-接入层)
-- [jackwener/OpenCLI](https://github.com/jackwener/OpenCLI)：借浏览器扩展和本地守护进程驱动用户已登录的 Chrome，把一百多个网站变成默认输出 JSON 的命令行，附 Agent Skill。Apache-2.0。计划适配。见 [06 §11](research/06-platform-access-and-account-risk.md#11-agent-接入层)
-- [Panniantong/Agent-Reach](https://github.com/Panniantong/Agent-Reach)：面向 AI Agent 的统一命令行，把 B站、YouTube、小红书、X、Reddit、小宇宙等平台的搜索与按链接读取收成统一的渠道加动作，每个动作按序尝试多个上游工具。MIT（传递依赖许可各异，专用浏览器 CloakBrowser 的二进制为专有许可）。计划适配。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
+- [browserutils/kooky](https://github.com/browserutils/kooky)：Go 写的浏览器 cookie 读取库，覆盖 Chrome、Firefox、Safari 等多种浏览器。MIT。参考实现。见 [06 §11](research/06-platform-access-and-account-risk.md#11-agent-接入层)
+- [chromedp/chromedp](https://github.com/chromedp/chromedp)：Go 写的 Chrome DevTools 协议驱动，可启动自己的 Chrome，也可连接已运行的浏览器。MIT。参考实现。见 [06 §11](research/06-platform-access-and-account-risk.md#11-agent-接入层)
+- [jackwener/OpenCLI](https://github.com/jackwener/OpenCLI)：借浏览器扩展和本地守护进程驱动用户已登录的 Chrome，把一百多个网站变成默认输出 JSON 的命令行，附 Agent Skill。Apache-2.0。参考实现。见 [06 §11](research/06-platform-access-and-account-risk.md#11-agent-接入层)
+- [Panniantong/Agent-Reach](https://github.com/Panniantong/Agent-Reach)：面向 AI Agent 的统一命令行，把 B站、YouTube、小红书、X、Reddit、小宇宙等平台的搜索与按链接读取收成统一的渠道加动作，每个动作按序尝试多个上游工具。MIT（传递依赖许可各异，专用浏览器 CloakBrowser 的二进制为专有许可）。参考实现。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
 
 **参考设计（5）**
 
@@ -308,44 +308,44 @@ usuyo 从下面这些项目学到了做法，或者计划包装、适配它们�
 <a id="转换转写字幕与-ocr"></a>
 ## 转换：转写、字幕与 OCR
 
-**计划适配（36）**
+**参考实现（36）**
 
-- [ahmetoner/whisper-asr-webservice](https://github.com/ahmetoner/whisper-asr-webservice)：Whisper 的 FastAPI 服务，`POST /asr` 直接返回 srt、vtt 等格式，支持词级时间戳、VAD 和说话人分离。MIT。计划适配。见 [05 §2.4](research/05-note-apps-and-plugins.md#24-独立工具与服务)
-- [argmaxinc/argmax-oss-swift](https://github.com/argmaxinc/argmax-oss-swift)：Argmax 的 Apple 平台端侧语音工具包，WhisperKit 用 Core ML 在 Mac 和 iPhone 上跑 Whisper，附命令行和 OpenAI 兼容本地服务。MIT。计划适配。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
-- [brittain9/speech-kit-obsidian-plugin](https://github.com/brittain9/speech-kit-obsidian-plugin)：本地听写的 Obsidian 插件，推理跑在单独发版的 Rust sidecar 里，经 stdin、stdout 通信。MIT。计划适配。见 [05 §2.1](research/05-note-apps-and-plugins.md#21-转写插件)
-- [bytefer/macos-vision-ocr](https://github.com/bytefer/macos-vision-ocr)：调用 Apple Vision 框架的命令行 OCR，支持批量图片，输出带文字位置和置信度的 JSON。MIT。计划适配。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
-- [chidiwilliams/buzz](https://github.com/chidiwilliams/buzz)：离线转写和翻译的桌面应用，后端可选 Whisper、whisper.cpp、faster-whisper，能批量导出 TXT、SRT、VTT，带命令行。MIT。计划适配。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
-- [datalab-to/indra](https://github.com/datalab-to/indra)：Datalab 开源的 CPU OCR 工具和小模型，把 PDF 与图片转成 Markdown、纯文本或带框 JSON，支持 80 多种语言。Apache-2.0（模型权重为修改版 OpenRAIL-M）。计划适配。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
-- [datalab-to/marker](https://github.com/datalab-to/marker)：把 PDF、图片、Office 文档和 EPUB 转成 Markdown、JSON、HTML 的工具，内部用 Surya 做 OCR 和版面分析。Apache-2.0（权重为修改版 OpenRAIL-M）。计划适配。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
-- [datalab-to/surya](https://github.com/datalab-to/surya)：Datalab 的 OCR 模型和工具包，做文字行检测、识别、版面分析、阅读顺序和表格识别。Apache-2.0（权重为修改版 OpenRAIL-M）。计划适配。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
-- [docling-project/docling](https://github.com/docling-project/docling)：IBM 发起、现属 LF AI & Data 的文档转换工具，解析 PDF、Office、HTML、音频和视频，输出 Markdown、JSON、WebVTT。MIT。计划适配。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
-- [finnvoor/yap](https://github.com/finnvoor/yap)：调用 macOS 26 系统语音框架 SpeechAnalyzer 的转写命令行，输出 txt、srt、vtt、json。CC0-1.0。计划适配。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
-- [FireRedTeam/FireRedASR2S](https://github.com/FireRedTeam/FireRedASR2S)：小红书 FireRed 团队的第二代中文语音识别系统，覆盖普通话、二十多种方言和中英混说，输出句级和字级时间戳。Apache-2.0。计划适配。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
-- [ggml-org/whisper.cpp](https://github.com/ggml-org/whisper.cpp)：C/C++ 实现的 Whisper 推理，单个可执行文件在 CPU、Metal、CUDA、Vulkan 上转写音频，自带命令行和 HTTP 服务。MIT。计划适配。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
-- [hiroi-sora/Umi-OCR](https://github.com/hiroi-sora/Umi-OCR)：免费离线的 OCR 桌面软件，内置 PaddleOCR、RapidOCR 引擎，提供本地 HTTP 接口和命令行，只有 Windows 和 Linux 版。MIT。计划适配。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
-- [jianchang512/pyvideotrans](https://github.com/jianchang512/pyvideotrans)：视频翻译配音工具，识别语音生成字幕、翻译、配音再合成新视频，内置几十种本地和云端识别通道。GPL-3.0。计划适配。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
-- [k2-fsa/sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)：新一代 Kaldi 的 ONNX 推理框架，一套 C++ 运行时跑 Paraformer、SenseVoice、Whisper 等离线和流式识别，另有 VAD 和说话人分离。Apache-2.0。计划适配。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
-- [kaixxx/noScribe](https://github.com/kaixxx/noScribe)：面向访谈整理的本地转写桌面应用，用 faster-whisper 转写、pyannote 区分说话人，自带校对编辑器，也能无界面批处理。GPL-3.0。计划适配。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
-- [LuckLittleBoy/SenseVoice-OneApi](https://github.com/LuckLittleBoy/SenseVoice-OneApi)：把 SenseVoice 包成 OpenAI 兼容转写接口的 Docker 服务，只作用户自己运行的后端。无许可证文件。计划适配。见 [05 §2.4](research/05-note-apps-and-plugins.md#24-独立工具与服务)
-- [m-bain/whisperX](https://github.com/m-bain/whisperX)：在 faster-whisper 转写结果上做词级强制对齐和说话人分离，输出带词级时间戳的字幕和 JSON。BSD-2-Clause。计划适配。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
-- [microsoft/markitdown](https://github.com/microsoft/markitdown)：微软的 Python 工具，把 PDF、Office、HTML、图片、音频等文件转成给大模型用的 Markdown，附 MCP 服务和插件机制。MIT。计划适配。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
-- [modelscope/FunASR](https://github.com/modelscope/FunASR)：阿里通义实验室的语音识别工具包，含 Paraformer、SenseVoice、Fun-ASR-Nano 及 VAD、标点模型，另有免 Python 的单文件运行时。MIT（模型权重按各自模型卡）。计划适配。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
-- [Nexround/obsidian-text-lens](https://github.com/Nexround/obsidian-text-lens)：Obsidian OCR 插件，系统 OCR 走独立 helper 进程、经 stdio 交换 JSONL，macOS helper 安装前校验 SHA-256。MIT。计划适配。见 [05 §2.2](research/05-note-apps-and-plugins.md#22-ocr-插件)
-- [obsidian-power-plugins/power-extract](https://github.com/obsidian-power-plugins/power-extract)：Windows 上的 Obsidian OCR 插件，常驻 PowerShell 进程调用系统 OCR，按行收发请求，接口与 Text Extractor 同形。MIT。计划适配。见 [05 §2.2](research/05-note-apps-and-plugins.md#22-ocr-插件)
-- [opendatalab/MinerU](https://github.com/opendatalab/MinerU)：OpenDataLab 的文档解析工具，把 PDF、图片、Office、EPUB 等转成 Markdown 和 JSON，分四档精度。NOASSERTION（MinerU Open Source License，Apache-2.0 加附加条款）。计划适配。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
-- [QwenAudio/SenseVoice](https://github.com/QwenAudio/SenseVoice)：多语种语音理解小模型 SenseVoiceSmall 的仓库，识别中、粤、英、日、韩并给出情感和声音事件标签，提供 ONNX 导出。MIT（SenseVoiceSmall 权重用 FunASR 模型许可，可商用需署名）。计划适配。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
-- [QwenLM/Qwen3-ASR](https://github.com/QwenLM/Qwen3-ASR)：通义千问的语音识别模型和配套的强制对齐模型，支持 52 种语言和方言，附 Python 工具包和 OpenAI 兼容服务。Apache-2.0。计划适配。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
-- [SoMarkAI/OXR](https://github.com/SoMarkAI/OXR)：SoMark 开源的 1.3B 参数文档解析模型和配套服务，把 PDF 与文档图片转成 Markdown 和带版面坐标的 JSON。NOASSERTION（OXR License，以 Apache-2.0 为基础加附加条款）。计划适配。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
-- [speaches-ai/speaches](https://github.com/speaches-ai/speaches)：提供 OpenAI 兼容转写与翻译接口的服务，原名 faster-whisper-server，模型按请求动态加载。MIT。计划适配。见 [05 §2.4](research/05-note-apps-and-plugins.md#24-独立工具与服务)
-- [steipete/summarize](https://github.com/steipete/summarize)：命令行加浏览器侧边栏，把网页、文件、YouTube、播客和音视频提取成干净文本再生成摘要，也可只提取并输出 JSON。MIT。计划适配。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
-- [SWHL/RapidVideOCR](https://github.com/SWHL/RapidVideOCR)：读取 VideoSubFinder 导出的字幕关键帧，用 RapidOCR 识别后生成 srt、ass、txt 的硬字幕提取工具。Apache-2.0。计划适配。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
-- [SYSTRAN/faster-whisper](https://github.com/SYSTRAN/faster-whisper)：基于 CTranslate2 重新实现的 Whisper 推理库，速度更快、显存更省，支持词级时间戳和 VAD 过滤。MIT。计划适配。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
-- [tesseract-ocr/tesseract](https://github.com/tesseract-ocr/tesseract)：开源 OCR 引擎和命令行，装上 `chi_sim` 等语言包即可识别中文。Apache-2.0。计划适配。见 [05 §6.5](research/05-note-apps-and-plugins.md#65-怎么复用现有插件与工具)
-- [thewh1teagle/vibe](https://github.com/thewh1teagle/vibe)：Tauri 写的跨平台离线转写桌面应用，后端 vibe-server 可单独运行，提供 OpenAI 兼容转写接口。MIT。计划适配。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
-- [timminator/VideOCR](https://github.com/timminator/VideOCR)：带图形界面的硬字幕提取工具，可在时间轴上框选字幕区域，默认用本地 PaddleOCR 识别。MIT。计划适配。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
-- [WEIFENG2333/VideoCaptioner](https://github.com/WEIFENG2333/VideoCaptioner)：字幕全流程工具，转写、用大模型断句校正、翻译、配音、压字幕，有桌面版、命令行和 Agent Skill。GPL-3.0。计划适配。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
-- [wendy7756/AI-Video-Transcriber](https://github.com/wendy7756/AI-Video-Transcriber)：自部署的视频与播客转写工具，链接交给 yt-dlp 取字幕或音频，没有字幕时用本地 faster-whisper 转写，可选大模型校对、翻译和摘要。Apache-2.0。计划适配。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
-- [YaoFANGUK/video-subtitle-extractor](https://github.com/YaoFANGUK/video-subtitle-extractor)：在本机提取视频里压制的硬字幕并生成 SRT，先找出字幕帧，再用 PaddleOCR 识别。Apache-2.0（依赖的 VideoSubFinder 为 GPLv2，需用户自装）。计划适配。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
+- [ahmetoner/whisper-asr-webservice](https://github.com/ahmetoner/whisper-asr-webservice)：Whisper 的 FastAPI 服务，`POST /asr` 直接返回 srt、vtt 等格式，支持词级时间戳、VAD 和说话人分离。MIT。参考实现。见 [05 §2.4](research/05-note-apps-and-plugins.md#24-独立工具与服务)
+- [argmaxinc/argmax-oss-swift](https://github.com/argmaxinc/argmax-oss-swift)：Argmax 的 Apple 平台端侧语音工具包，WhisperKit 用 Core ML 在 Mac 和 iPhone 上跑 Whisper，附命令行和 OpenAI 兼容本地服务。MIT。参考实现。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
+- [brittain9/speech-kit-obsidian-plugin](https://github.com/brittain9/speech-kit-obsidian-plugin)：本地听写的 Obsidian 插件，推理跑在单独发版的 Rust sidecar 里，经 stdin、stdout 通信。MIT。参考实现。见 [05 §2.1](research/05-note-apps-and-plugins.md#21-转写插件)
+- [bytefer/macos-vision-ocr](https://github.com/bytefer/macos-vision-ocr)：调用 Apple Vision 框架的命令行 OCR，支持批量图片，输出带文字位置和置信度的 JSON。MIT。参考实现。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
+- [chidiwilliams/buzz](https://github.com/chidiwilliams/buzz)：离线转写和翻译的桌面应用，后端可选 Whisper、whisper.cpp、faster-whisper，能批量导出 TXT、SRT、VTT，带命令行。MIT。参考实现。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
+- [datalab-to/indra](https://github.com/datalab-to/indra)：Datalab 开源的 CPU OCR 工具和小模型，把 PDF 与图片转成 Markdown、纯文本或带框 JSON，支持 80 多种语言。Apache-2.0（模型权重为修改版 OpenRAIL-M）。参考实现。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
+- [datalab-to/marker](https://github.com/datalab-to/marker)：把 PDF、图片、Office 文档和 EPUB 转成 Markdown、JSON、HTML 的工具，内部用 Surya 做 OCR 和版面分析。Apache-2.0（权重为修改版 OpenRAIL-M）。参考实现。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
+- [datalab-to/surya](https://github.com/datalab-to/surya)：Datalab 的 OCR 模型和工具包，做文字行检测、识别、版面分析、阅读顺序和表格识别。Apache-2.0（权重为修改版 OpenRAIL-M）。参考实现。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
+- [docling-project/docling](https://github.com/docling-project/docling)：IBM 发起、现属 LF AI & Data 的文档转换工具，解析 PDF、Office、HTML、音频和视频，输出 Markdown、JSON、WebVTT。MIT。参考实现。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
+- [finnvoor/yap](https://github.com/finnvoor/yap)：调用 macOS 26 系统语音框架 SpeechAnalyzer 的转写命令行，输出 txt、srt、vtt、json。CC0-1.0。参考实现。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
+- [FireRedTeam/FireRedASR2S](https://github.com/FireRedTeam/FireRedASR2S)：小红书 FireRed 团队的第二代中文语音识别系统，覆盖普通话、二十多种方言和中英混说，输出句级和字级时间戳。Apache-2.0。参考实现。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
+- [ggml-org/whisper.cpp](https://github.com/ggml-org/whisper.cpp)：C/C++ 实现的 Whisper 推理，单个可执行文件在 CPU、Metal、CUDA、Vulkan 上转写音频，自带命令行和 HTTP 服务。MIT。参考实现。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
+- [hiroi-sora/Umi-OCR](https://github.com/hiroi-sora/Umi-OCR)：免费离线的 OCR 桌面软件，内置 PaddleOCR、RapidOCR 引擎，提供本地 HTTP 接口和命令行，只有 Windows 和 Linux 版。MIT。参考实现。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
+- [jianchang512/pyvideotrans](https://github.com/jianchang512/pyvideotrans)：视频翻译配音工具，识别语音生成字幕、翻译、配音再合成新视频，内置几十种本地和云端识别通道。GPL-3.0。参考实现。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
+- [k2-fsa/sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)：新一代 Kaldi 的 ONNX 推理框架，一套 C++ 运行时跑 Paraformer、SenseVoice、Whisper 等离线和流式识别，另有 VAD 和说话人分离。Apache-2.0。参考实现。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
+- [kaixxx/noScribe](https://github.com/kaixxx/noScribe)：面向访谈整理的本地转写桌面应用，用 faster-whisper 转写、pyannote 区分说话人，自带校对编辑器，也能无界面批处理。GPL-3.0。参考实现。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
+- [LuckLittleBoy/SenseVoice-OneApi](https://github.com/LuckLittleBoy/SenseVoice-OneApi)：把 SenseVoice 包成 OpenAI 兼容转写接口的 Docker 服务，只作用户自己运行的后端。无许可证文件。参考实现。见 [05 §2.4](research/05-note-apps-and-plugins.md#24-独立工具与服务)
+- [m-bain/whisperX](https://github.com/m-bain/whisperX)：在 faster-whisper 转写结果上做词级强制对齐和说话人分离，输出带词级时间戳的字幕和 JSON。BSD-2-Clause。参考实现。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
+- [microsoft/markitdown](https://github.com/microsoft/markitdown)：微软的 Python 工具，把 PDF、Office、HTML、图片、音频等文件转成给大模型用的 Markdown，附 MCP 服务和插件机制。MIT。参考实现。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
+- [modelscope/FunASR](https://github.com/modelscope/FunASR)：阿里通义实验室的语音识别工具包，含 Paraformer、SenseVoice、Fun-ASR-Nano 及 VAD、标点模型，另有免 Python 的单文件运行时。MIT（模型权重按各自模型卡）。参考实现。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
+- [Nexround/obsidian-text-lens](https://github.com/Nexround/obsidian-text-lens)：Obsidian OCR 插件，系统 OCR 走独立 helper 进程、经 stdio 交换 JSONL，macOS helper 安装前校验 SHA-256。MIT。参考实现。见 [05 §2.2](research/05-note-apps-and-plugins.md#22-ocr-插件)
+- [obsidian-power-plugins/power-extract](https://github.com/obsidian-power-plugins/power-extract)：Windows 上的 Obsidian OCR 插件，常驻 PowerShell 进程调用系统 OCR，按行收发请求，接口与 Text Extractor 同形。MIT。参考实现。见 [05 §2.2](research/05-note-apps-and-plugins.md#22-ocr-插件)
+- [opendatalab/MinerU](https://github.com/opendatalab/MinerU)：OpenDataLab 的文档解析工具，把 PDF、图片、Office、EPUB 等转成 Markdown 和 JSON，分四档精度。NOASSERTION（MinerU Open Source License，Apache-2.0 加附加条款）。参考实现。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
+- [QwenAudio/SenseVoice](https://github.com/QwenAudio/SenseVoice)：多语种语音理解小模型 SenseVoiceSmall 的仓库，识别中、粤、英、日、韩并给出情感和声音事件标签，提供 ONNX 导出。MIT（SenseVoiceSmall 权重用 FunASR 模型许可，可商用需署名）。参考实现。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
+- [QwenLM/Qwen3-ASR](https://github.com/QwenLM/Qwen3-ASR)：通义千问的语音识别模型和配套的强制对齐模型，支持 52 种语言和方言，附 Python 工具包和 OpenAI 兼容服务。Apache-2.0。参考实现。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
+- [SoMarkAI/OXR](https://github.com/SoMarkAI/OXR)：SoMark 开源的 1.3B 参数文档解析模型和配套服务，把 PDF 与文档图片转成 Markdown 和带版面坐标的 JSON。NOASSERTION（OXR License，以 Apache-2.0 为基础加附加条款）。参考实现。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
+- [speaches-ai/speaches](https://github.com/speaches-ai/speaches)：提供 OpenAI 兼容转写与翻译接口的服务，原名 faster-whisper-server，模型按请求动态加载。MIT。参考实现。见 [05 §2.4](research/05-note-apps-and-plugins.md#24-独立工具与服务)
+- [steipete/summarize](https://github.com/steipete/summarize)：命令行加浏览器侧边栏，把网页、文件、YouTube、播客和音视频提取成干净文本再生成摘要，也可只提取并输出 JSON。MIT。参考实现。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
+- [SWHL/RapidVideOCR](https://github.com/SWHL/RapidVideOCR)：读取 VideoSubFinder 导出的字幕关键帧，用 RapidOCR 识别后生成 srt、ass、txt 的硬字幕提取工具。Apache-2.0。参考实现。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
+- [SYSTRAN/faster-whisper](https://github.com/SYSTRAN/faster-whisper)：基于 CTranslate2 重新实现的 Whisper 推理库，速度更快、显存更省，支持词级时间戳和 VAD 过滤。MIT。参考实现。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
+- [tesseract-ocr/tesseract](https://github.com/tesseract-ocr/tesseract)：开源 OCR 引擎和命令行，装上 `chi_sim` 等语言包即可识别中文。Apache-2.0。参考实现。见 [05 §6.5](research/05-note-apps-and-plugins.md#65-怎么复用现有插件与工具)
+- [thewh1teagle/vibe](https://github.com/thewh1teagle/vibe)：Tauri 写的跨平台离线转写桌面应用，后端 vibe-server 可单独运行，提供 OpenAI 兼容转写接口。MIT。参考实现。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
+- [timminator/VideOCR](https://github.com/timminator/VideOCR)：带图形界面的硬字幕提取工具，可在时间轴上框选字幕区域，默认用本地 PaddleOCR 识别。MIT。参考实现。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
+- [WEIFENG2333/VideoCaptioner](https://github.com/WEIFENG2333/VideoCaptioner)：字幕全流程工具，转写、用大模型断句校正、翻译、配音、压字幕，有桌面版、命令行和 Agent Skill。GPL-3.0。参考实现。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
+- [wendy7756/AI-Video-Transcriber](https://github.com/wendy7756/AI-Video-Transcriber)：自部署的视频与播客转写工具，链接交给 yt-dlp 取字幕或音频，没有字幕时用本地 faster-whisper 转写，可选大模型校对、翻译和摘要。Apache-2.0。参考实现。见 [06 §3](research/06-platform-access-and-account-risk.md#3-用户点名的项目)
+- [YaoFANGUK/video-subtitle-extractor](https://github.com/YaoFANGUK/video-subtitle-extractor)：在本机提取视频里压制的硬字幕并生成 SRT，先找出字幕帧，再用 PaddleOCR 识别。Apache-2.0（依赖的 VideoSubFinder 为 GPLv2，需用户自装）。参考实现。见 [06 §12](research/06-platform-access-and-account-risk.md#12-转换转写字幕与-ocr)
 
 **参考设计（17）**
 
@@ -370,18 +370,18 @@ usuyo 从下面这些项目学到了做法，或者计划包装、适配它们�
 <a id="笔记知识库与收藏归档"></a>
 ## 笔记、知识库与收藏归档
 
-**计划适配（10）**
+**参考实现（10）**
 
-- [akosbalasko/yarle](https://github.com/akosbalasko/yarle)：Evernote ENEX 转 Markdown 的工具，保留创建和修改时间、标签、来源链接、笔记间链接和附件。MIT。计划适配。见 [06 §13](research/06-platform-access-and-account-risk.md#13-笔记知识库与收藏归档)
-- [gildas-lormeau/SingleFile](https://github.com/gildas-lormeau/SingleFile)：把当前网页连同图片、样式完整存成一个 HTML 文件的浏览器扩展，另有命令行版 single-file-cli。AGPL-3.0。计划适配。见 [06 §13](research/06-platform-access-and-account-risk.md#13-笔记知识库与收藏归档)
-- [hc-tec/my-collection-skills](https://github.com/hc-tec/my-collection-skills)：拉取 B站、知乎、小红书收藏结构和内容的一组 Agent Skill 与脚本，视频可下载音频用 Whisper 转写。MIT。计划适配。见 [06 §13](research/06-platform-access-and-account-risk.md#13-笔记知识库与收藏归档)
-- [JohannesKaufmann/html-to-markdown](https://github.com/JohannesKaufmann/html-to-markdown)：Go 写的 HTML 转 Markdown 库和命令行，规则以插件扩展，带表格、删除线等插件。MIT。计划适配。见 [06 §13](research/06-platform-access-and-account-risk.md#13-笔记知识库与收藏归档)
-- [karlicoss/instapexport](https://github.com/karlicoss/instapexport)：用 Instapaper 官方 API 把本人的文章收藏和高亮导出为 JSON，附读取历次导出的数据访问层。MIT。计划适配。见 [06 §13](research/06-platform-access-and-account-risk.md#13-笔记知识库与收藏归档)
-- [markusmobius/go-domdistiller](https://github.com/markusmobius/go-domdistiller)：Chrome 阅读模式所用 DOM Distiller 的 Go 原生移植，提取正文、图片、元数据和翻页链接。MIT（另附上游 DOM Distiller 与 boilerpipe 的许可文件）。计划适配。见 [06 §13](research/06-platform-access-and-account-risk.md#13-笔记知识库与收藏归档)
-- [markusmobius/go-trafilatura](https://github.com/markusmobius/go-trafilatura)：trafilatura 的 Go 原生移植，提取正文和标题、作者、日期、语言等元数据，内置两套备选算法。Apache-2.0。计划适配。见 [06 §13](research/06-platform-access-and-account-risk.md#13-笔记知识库与收藏归档)
-- [readeck/go-readability（Codeberg）](https://codeberg.org/readeck/go-readability)：Readeck 团队接手维护的 go-readability 分支，v2 兼容 Readability.js 0.6，托管在 Codeberg。MIT。计划适配。见 [06 §13](research/06-platform-access-and-account-risk.md#13-笔记知识库与收藏归档)
-- [vzhd1701/evernote-backup](https://github.com/vzhd1701/evernote-backup)：把 Evernote 或印象笔记账号里的全部笔记增量同步到本地 SQLite，再离线导出为 ENEX 的命令行。MIT。计划适配。见 [06 §13](research/06-platform-access-and-account-risk.md#13-笔记知识库与收藏归档)
-- [Y2Z/monolith](https://github.com/Y2Z/monolith)：把整个网页连同 CSS、图片、脚本内嵌进单个 HTML 文件的命令行和 Rust 库。CC0-1.0。计划适配。见 [06 §13](research/06-platform-access-and-account-risk.md#13-笔记知识库与收藏归档)
+- [akosbalasko/yarle](https://github.com/akosbalasko/yarle)：Evernote ENEX 转 Markdown 的工具，保留创建和修改时间、标签、来源链接、笔记间链接和附件。MIT。参考实现。见 [06 §13](research/06-platform-access-and-account-risk.md#13-笔记知识库与收藏归档)
+- [gildas-lormeau/SingleFile](https://github.com/gildas-lormeau/SingleFile)：把当前网页连同图片、样式完整存成一个 HTML 文件的浏览器扩展，另有命令行版 single-file-cli。AGPL-3.0。参考实现。见 [06 §13](research/06-platform-access-and-account-risk.md#13-笔记知识库与收藏归档)
+- [hc-tec/my-collection-skills](https://github.com/hc-tec/my-collection-skills)：拉取 B站、知乎、小红书收藏结构和内容的一组 Agent Skill 与脚本，视频可下载音频用 Whisper 转写。MIT。参考实现。见 [06 §13](research/06-platform-access-and-account-risk.md#13-笔记知识库与收藏归档)
+- [JohannesKaufmann/html-to-markdown](https://github.com/JohannesKaufmann/html-to-markdown)：Go 写的 HTML 转 Markdown 库和命令行，规则以插件扩展，带表格、删除线等插件。MIT。参考实现。见 [06 §13](research/06-platform-access-and-account-risk.md#13-笔记知识库与收藏归档)
+- [karlicoss/instapexport](https://github.com/karlicoss/instapexport)：用 Instapaper 官方 API 把本人的文章收藏和高亮导出为 JSON，附读取历次导出的数据访问层。MIT。参考实现。见 [06 §13](research/06-platform-access-and-account-risk.md#13-笔记知识库与收藏归档)
+- [markusmobius/go-domdistiller](https://github.com/markusmobius/go-domdistiller)：Chrome 阅读模式所用 DOM Distiller 的 Go 原生移植，提取正文、图片、元数据和翻页链接。MIT（另附上游 DOM Distiller 与 boilerpipe 的许可文件）。参考实现。见 [06 §13](research/06-platform-access-and-account-risk.md#13-笔记知识库与收藏归档)
+- [markusmobius/go-trafilatura](https://github.com/markusmobius/go-trafilatura)：trafilatura 的 Go 原生移植，提取正文和标题、作者、日期、语言等元数据，内置两套备选算法。Apache-2.0。参考实现。见 [06 §13](research/06-platform-access-and-account-risk.md#13-笔记知识库与收藏归档)
+- [readeck/go-readability（Codeberg）](https://codeberg.org/readeck/go-readability)：Readeck 团队接手维护的 go-readability 分支，v2 兼容 Readability.js 0.6，托管在 Codeberg。MIT。参考实现。见 [06 §13](research/06-platform-access-and-account-risk.md#13-笔记知识库与收藏归档)
+- [vzhd1701/evernote-backup](https://github.com/vzhd1701/evernote-backup)：把 Evernote 或印象笔记账号里的全部笔记增量同步到本地 SQLite，再离线导出为 ENEX 的命令行。MIT。参考实现。见 [06 §13](research/06-platform-access-and-account-risk.md#13-笔记知识库与收藏归档)
+- [Y2Z/monolith](https://github.com/Y2Z/monolith)：把整个网页连同 CSS、图片、脚本内嵌进单个 HTML 文件的命令行和 Rust 库。CC0-1.0。参考实现。见 [06 §13](research/06-platform-access-and-account-risk.md#13-笔记知识库与收藏归档)
 
 **参考设计（35）**
 
@@ -424,10 +424,10 @@ usuyo 从下面这些项目学到了做法，或者计划包装、适配它们�
 <a id="规则源与插件分发的先例"></a>
 ## 规则源与插件分发的先例
 
-**计划适配（2）**
+**参考实现（2）**
 
-- [DIYgod/RSSHub](https://github.com/DIYgod/RSSHub)：把各平台内容生成 RSS 订阅源的服务，路由覆盖微博、知乎、豆瓣、即刻、B站、小红书、公众号、YouTube 等。AGPL-3.0。计划适配。见 [06 §14](research/06-platform-access-and-account-risk.md#14-规则源生态)
-- [fivefilters/ftr-site-config](https://github.com/fivefilters/ftr-site-config)：FiveFilters 维护的站点正文提取规则库，每个域名一个文本文件，用 XPath 指定标题、正文和要删除的元素。NOASSERTION（`LICENSE.txt` 写明公有领域，即 CC0）。计划适配。见 [06 §14](research/06-platform-access-and-account-risk.md#14-规则源生态)
+- [DIYgod/RSSHub](https://github.com/DIYgod/RSSHub)：把各平台内容生成 RSS 订阅源的服务，路由覆盖微博、知乎、豆瓣、即刻、B站、小红书、公众号、YouTube 等。AGPL-3.0。参考实现。见 [06 §14](research/06-platform-access-and-account-risk.md#14-规则源生态)
+- [fivefilters/ftr-site-config](https://github.com/fivefilters/ftr-site-config)：FiveFilters 维护的站点正文提取规则库，每个域名一个文本文件，用 XPath 指定标题、正文和要删除的元素。NOASSERTION（`LICENSE.txt` 写明公有领域，即 CC0）。参考实现。见 [06 §14](research/06-platform-access-and-account-risk.md#14-规则源生态)
 
 **参考设计（30）**
 
@@ -465,9 +465,9 @@ usuyo 从下面这些项目学到了做法，或者计划包装、适配它们�
 <a id="相邻创作发布与分析"></a>
 ## 相邻：创作、发布与分析
 
-**计划适配（1）**
+**参考实现（1）**
 
-- [Breakthrough/PySceneDetect](https://github.com/Breakthrough/PySceneDetect)：基于 OpenCV 的镜头切换检测命令行和 Python 库，输出每个场景的起止时间，可按场景截图或切分视频。BSD-3-Clause。计划适配。见 [06 §15](research/06-platform-access-and-account-risk.md#15-相邻创作发布与分析)
+- [Breakthrough/PySceneDetect](https://github.com/Breakthrough/PySceneDetect)：基于 OpenCV 的镜头切换检测命令行和 Python 库，输出每个场景的起止时间，可按场景截图或切分视频。BSD-3-Clause。参考实现。见 [06 §15](research/06-platform-access-and-account-risk.md#15-相邻创作发布与分析)
 
 **参考设计（6）**
 
