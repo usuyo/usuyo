@@ -293,6 +293,15 @@ impl Library {
     }
 }
 
+/// 锁被占着时最多等多久，再报 [`Error::Busy`]。
+///
+/// 锁是 `flock`（标准库的 `File::try_lock`），属于打开的那个文件描述，不属于进程：这个进程里别的线程起子进程时，
+/// 子进程在 fork 到 exec 之间也拿着锁文件的一份（`O_CLOEXEC` 只在 exec 时关），这时关掉自己那份锁还在。
+/// Linux 上标准库起子进程走 `clone` 再 exec，有这一段；macOS 的 `posix_spawn` 在内核里一步做完，没有。
+/// 所以刚放开的锁可能还要一会儿才真放开（推断 Linux 的 CI 上刚建完库就打开报忙是这一段）；真有别的进程开着库，等完了照样报忙。
+const LOCK_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
+const LOCK_POLL: std::time::Duration = std::time::Duration::from_millis(20);
+
 fn take_lock(root: &Path) -> Result<fs::File> {
     let path = root.join(".usuyo/lock");
     let f = fs::OpenOptions::new()
@@ -301,9 +310,15 @@ fn take_lock(root: &Path) -> Result<fs::File> {
         .write(true)
         .open(&path)
         .map_err(|e| Error::io(&path, e))?;
-    match f.try_lock() {
-        Ok(()) => Ok(f),
-        Err(fs::TryLockError::WouldBlock) => Err(Error::Busy),
-        Err(fs::TryLockError::Error(e)) => Err(Error::io(&path, e)),
+    let start = std::time::Instant::now();
+    loop {
+        match f.try_lock() {
+            Ok(()) => return Ok(f),
+            Err(fs::TryLockError::WouldBlock) if start.elapsed() < LOCK_WAIT => {
+                std::thread::sleep(LOCK_POLL);
+            }
+            Err(fs::TryLockError::WouldBlock) => return Err(Error::Busy),
+            Err(fs::TryLockError::Error(e)) => return Err(Error::io(&path, e)),
+        }
     }
 }

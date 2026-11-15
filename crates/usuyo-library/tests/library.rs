@@ -2713,3 +2713,30 @@ fn an_untitled_item_is_named_after_the_first_line_of_its_text() {
     let id = lib.add_item(&user(), c).unwrap().id().clone();
     assert_eq!(lib.item(&id).unwrap().manifest.title, url);
 }
+
+/// 资料库的锁是 `flock`，跟着打开的那个文件描述走：同一进程里别的线程这时起子进程，fork 到 exec 之间
+/// 子进程手里有一份锁文件的副本，父进程关掉自己那份以后锁还在，直到子进程 exec（或退出）。
+/// 刚建完库就打开（`Engine::init_library` 之后马上 `Engine::open`）会撞上这一小段。
+/// 这里让一个子进程把锁文件当 stdin 拿着 0.3 秒，在 macOS 上也是同样的时序：打开要等它放手，不报忙。
+#[cfg(unix)]
+#[test]
+fn opening_waits_for_a_lock_that_a_child_process_still_holds_for_a_moment() {
+    let e = env();
+    drop(Library::init(&e.root, &e.machine).unwrap());
+    let lock = fs::OpenOptions::new()
+        .write(true)
+        .open(e.root.join(".usuyo/lock"))
+        .unwrap();
+    lock.try_lock().unwrap();
+    let mut child = std::process::Command::new("sleep")
+        .arg("0.3")
+        .stdin(lock.try_clone().unwrap())
+        .spawn()
+        .unwrap();
+    drop(lock);
+    let start = std::time::Instant::now();
+    let lib = Library::open(&e.root, &e.machine);
+    assert!(lib.is_ok(), "{:?}", lib.err());
+    assert!(start.elapsed() >= std::time::Duration::from_millis(200));
+    child.wait().unwrap();
+}

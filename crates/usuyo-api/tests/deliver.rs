@@ -437,6 +437,89 @@ async fn login_routes_store_cookies_and_never_answer_with_values() {
     assert_eq!(sites[0]["login"], "missing");
 }
 
+fn text_req(path: &str, body: impl Into<Body>) -> Request<Body> {
+    Request::builder()
+        .method("PUT")
+        .uri(path)
+        .header(header::HOST, format!("127.0.0.1:{PORT}"))
+        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+        .header(header::CONTENT_TYPE, "text/plain")
+        .body(body.into())
+        .unwrap()
+}
+
+#[tokio::test]
+async fn a_cookie_file_is_imported_for_its_site_only_and_values_never_come_back() {
+    let f = fixture();
+    let path = "/sites/www.example.test/login/file";
+    let file = "# Netscape HTTP Cookie File\n\
+        #HttpOnly_.example.test\tTRUE\t/\tTRUE\t4102444800\tsid\tfile-secret-sid\n\
+        .elsewhere.test\tTRUE\t/\tFALSE\t0\ttracker\tfile-other-site\n";
+    let res = send(&f.app, text_req(path, file)).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let v = json_of(res).await;
+    assert_eq!(
+        (v["login"].as_str(), v["source"].as_str()),
+        (Some("present"), Some("cookie-file"))
+    );
+    assert!(v["capturedAt"].is_string());
+    assert!(!v.to_string().contains("file-secret-sid"));
+    let stored = std::fs::read_to_string(f.tmp.path().join("machine/secrets.json")).unwrap();
+    assert!(stored.contains("file-secret-sid") && !stored.contains("file-other-site"));
+    let index = std::fs::read_to_string(f.tmp.path().join("machine/logins.json")).unwrap();
+    assert!(!index.contains("file-secret-sid"));
+
+    // 读不了的一行：说第几行，不带那一行的字
+    let res = send(
+        &f.app,
+        text_req(
+            path,
+            ".example.test\tTRUE\t/\tTRUE\tnever\tsid\tbad-line-secret\n",
+        ),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    let p = json_of(res).await.to_string();
+    assert!(
+        p.contains("第 1 行") && !p.contains("bad-line-secret"),
+        "{p}"
+    );
+    // 一个属于这个站点的都没有
+    let res = send(
+        &f.app,
+        text_req(
+            path,
+            ".elsewhere.test\tTRUE\t/\tFALSE\t0\tsid\tforeign-only\n",
+        ),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    assert!(!json_of(res).await.to_string().contains("foreign-only"));
+    // 超过 256 KiB
+    let big = format!(
+        "{}.example.test\tTRUE\t/\tTRUE\t0\tsid\tbig-secret\n",
+        "#\n".repeat(130 << 10)
+    );
+    let res = send(&f.app, text_req(path, big)).await;
+    assert_eq!(res.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    assert!(!json_of(res).await.to_string().contains("big-secret"));
+    // 不是文本
+    let res = send(&f.app, text_req(path, vec![0xff_u8, 0xfe, 0x00])).await;
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    // 前面几次失败的没有盖掉存着的那份
+    let sites = json_of(send(&f.app, req("GET", "/sites", Some(TOKEN), None)).await).await;
+    assert_eq!(sites[0]["source"], "cookie-file");
+    // 退出登录就删掉
+    let res = send(
+        &f.app,
+        req("DELETE", "/sites/www.example.test/login", Some(TOKEN), None),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+    let stored = std::fs::read_to_string(f.tmp.path().join("machine/secrets.json")).unwrap();
+    assert!(!stored.contains("file-secret-sid"));
+}
+
 #[tokio::test]
 async fn big_batches_and_login_bodies_fit_their_own_limits() {
     let f = fixture();
