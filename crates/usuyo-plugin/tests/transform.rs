@@ -954,15 +954,17 @@ async fn cancel_during_describe_drops_the_process() {
 
 /// `cargo test` 顺带编好的 `examples/kit_transform`，在测试可执行文件的上一级目录旁边。
 fn kit_example() -> PathBuf {
+    // 测试可执行文件离构建目录几层，随 cargo 的版本不同；往上找到有它的那一层
     let exe = std::env::current_exe().unwrap();
-    let profile = exe.parent().and_then(Path::parent).unwrap();
-    let path = profile.join("examples/kit_transform");
-    assert!(
-        path.is_file(),
-        "{} is missing: `cargo test` builds the examples unless it is narrowed with `--test`; add `--example kit_transform`",
-        path.display()
-    );
-    path
+    exe.ancestors()
+        .map(|dir| dir.join("examples/kit_transform"))
+        .find(|path| path.is_file())
+        .unwrap_or_else(|| {
+            panic!(
+                "examples/kit_transform is missing above {}: `cargo test` builds the examples unless it is narrowed with `--test`; add `--example kit_transform`",
+                exe.display()
+            )
+        })
 }
 
 #[tokio::test]

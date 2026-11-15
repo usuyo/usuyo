@@ -122,15 +122,17 @@ const VOICE: &str = r#"models:
 
 /// `cargo test` 顺带编好的 `examples/fake_transform`。
 fn fake_transform() -> PathBuf {
+    // 测试可执行文件离构建目录几层，随 cargo 的版本不同；往上找到有它的那一层
     let exe = std::env::current_exe().unwrap();
-    let profile = exe.parent().and_then(Path::parent).unwrap();
-    let path = profile.join("examples/fake_transform");
-    assert!(
-        path.is_file(),
-        "{} is missing: `cargo test` builds the examples unless it is narrowed with `--test`; add `--example fake_transform`",
-        path.display()
-    );
-    path
+    exe.ancestors()
+        .map(|dir| dir.join("examples/fake_transform"))
+        .find(|path| path.is_file())
+        .unwrap_or_else(|| {
+            panic!(
+                "examples/fake_transform is missing above {}: `cargo test` builds the examples unless it is narrowed with `--test`; add `--example fake_transform`",
+                exe.display()
+            )
+        })
 }
 
 struct Fixture {
