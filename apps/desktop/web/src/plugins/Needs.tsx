@@ -31,7 +31,7 @@ function needsOf(u: Use, sites: SiteLogin[], visitors: VisitorIdentity[]): Need[
   const out: Need[] = [];
   if (m.account.kind === "in-usuyo") {
     for (const s of m.account.sites ?? []) {
-      const site = sites.find((x) => x.site === s);
+      const site = sites.find((x) => x.site === s && x.plugins.includes(u.plugin.id));
       if (!site) continue;
       out.push({
         key: `login:${s}`,

@@ -113,4 +113,11 @@ export async function clearLoginData(site: string): Promise<void> {
   await invoke("clear_login", { site });
 }
 
+/** 站点窗口里读的方法退出登录以后，清掉这个插件在这个站点的网页数据（别的插件的不动）。 */
+export async function clearProfileData(plugin: string, site: string): Promise<void> {
+  if (!isDesktopShell()) return;
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("clear_profile", { plugin, site });
+}
+
 // 以后放在这里：托盘、全局快捷键。

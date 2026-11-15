@@ -510,7 +510,7 @@ async fn saving_and_forgetting_a_site() {
         .find(|s| s.site.site == "www.example.com")
         .unwrap();
     assert_eq!(a.plugins.len(), 2, "两个插件声明同一个站点，只登录一次");
-    f.host.forget_site("www.example.com").unwrap();
+    f.host.forget_site("www.example.com", None).unwrap();
     let a = f
         .host
         .sites()
@@ -751,12 +751,14 @@ fn a_browser_profile_site_records_sign_in_and_use_and_copies_no_cookies() {
         (LoginState::Missing, None)
     );
 
-    host.profile_signed_in("www.window.test").unwrap();
+    host.profile_signed_in("fake/window", "www.window.test")
+        .unwrap();
     let signed = site();
     assert_eq!(signed.login, LoginState::Present);
     let at = signed.captured_at.clone().unwrap();
     // 再登录一次不改时间
-    host.profile_signed_in("www.window.test").unwrap();
+    host.profile_signed_in("fake/window", "www.window.test")
+        .unwrap();
     assert_eq!(site().captured_at.as_deref(), Some(at.as_str()));
 
     host.profile_used("www.window.test", "fake/window", "in-usuyo", 42)
@@ -774,9 +776,91 @@ fn a_browser_profile_site_records_sign_in_and_use_and_copies_no_cookies() {
     .unwrap();
     assert!(host.save_site("www.window.test", &state).is_err());
     // 没声明的站点不记
-    assert!(host.profile_signed_in("www.other.test").is_err());
+    assert!(
+        host.profile_signed_in("fake/window", "www.other.test")
+            .is_err()
+    );
+    // 别的插件没声明过它也不记
+    assert!(
+        host.profile_signed_in("fake/other", "www.window.test")
+            .is_err()
+    );
 
-    host.forget_site("www.window.test").unwrap();
+    host.forget_site("www.window.test", Some("fake/window"))
+        .unwrap();
     let gone = site();
     assert_eq!((gone.login, gone.last_use), (LoginState::Missing, None));
+}
+
+fn window_host(tmp: &TempDir, ids: &[&str]) -> PluginHost {
+    let plugins = tmp.path().join("plugins");
+    for id in ids {
+        install(&plugins, id, &WINDOW_MANIFEST.replace("fake/window", id));
+    }
+    let found = discover(&plugins).unwrap();
+    assert!(found.rejected.is_empty(), "{:?}", found.rejected);
+    PluginHost::new(
+        HostConfig {
+            work_dir: tmp.path().join("lib/.usuyo/tmp"),
+            cache_dir: tmp.path().join("cache"),
+            locale: usuyo_plugin::Locale::new("zh-Hans"),
+            limits: Default::default(),
+        },
+        found.fetch,
+    )
+    .with_vault(Arc::new(FakeVault::default()), &tmp.path().join("machine"))
+}
+
+#[test]
+fn two_plugins_on_one_profile_site_sign_in_and_out_separately() {
+    let tmp = tempfile::tempdir().unwrap();
+    let host = window_host(&tmp, &["fake/first", "fake/second"]);
+    let rows = || host.sites().unwrap();
+    assert_eq!(rows().len(), 2, "一个插件一项，不合并");
+    host.profile_signed_in("fake/first", "www.window.test")
+        .unwrap();
+    let state = |id: &str| {
+        rows()
+            .into_iter()
+            .find(|d| d.plugins[0].as_str() == id)
+            .unwrap()
+            .login
+    };
+    assert_eq!(state("fake/first"), LoginState::Present);
+    assert_eq!(state("fake/second"), LoginState::Missing);
+    host.profile_signed_in("fake/second", "www.window.test")
+        .unwrap();
+    host.forget_site("www.window.test", Some("fake/first"))
+        .unwrap();
+    assert_eq!(state("fake/first"), LoginState::Missing);
+    assert_eq!(state("fake/second"), LoginState::Present);
+}
+
+#[test]
+fn a_site_with_two_credential_types_loads_only_the_first_plugin() {
+    let tmp = tempfile::tempdir().unwrap();
+    let plugins = tmp.path().join("plugins");
+    install(
+        &plugins,
+        "fake/a-profile",
+        &WINDOW_MANIFEST.replace("fake/window", "fake/a-profile"),
+    );
+    let cookie = manifest("fake/b-cookies", "www.window.test", "none", "");
+    install(&plugins, "fake/b-cookies", &cookie);
+    let found = discover(&plugins).unwrap();
+    assert!(found.rejected.is_empty(), "{:?}", found.rejected);
+    let (kept, refused) = usuyo_plugin::refuse_credential_conflicts(found.fetch);
+    assert_eq!(kept.len(), 1);
+    assert_eq!(kept[0].id().as_str(), "fake/a-profile");
+    assert_eq!(refused.len(), 1);
+    let why = refused[0].error.to_string();
+    for part in [
+        "fake/a-profile",
+        "fake/b-cookies",
+        "www.window.test",
+        "credential: cookies",
+        "credential: browser-profile",
+    ] {
+        assert!(why.contains(part), "{why}");
+    }
 }

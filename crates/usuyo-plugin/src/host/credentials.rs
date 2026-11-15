@@ -114,6 +114,71 @@ pub struct DeclaredVisitor {
     pub expires: Option<f64>,
 }
 
+/// 一个站点在装着的插件里只能有一种凭据形式（`cookies` 或 `browser-profile`）：按给定的顺序，
+/// 后面的插件和前面已留下的插件对同一站点声明了不同形式，就不加载，原因里写明两边。
+pub fn refuse_credential_conflicts(
+    fetch: Vec<FetchPlugin>,
+) -> (Vec<FetchPlugin>, Vec<super::Rejected>) {
+    let mut kept: Vec<FetchPlugin> = Vec::new();
+    let mut refused = Vec::new();
+    for p in fetch {
+        let conflict = p
+            .spec
+            .sites
+            .iter()
+            .filter(|s| s.credential != Credential::App)
+            .find_map(|s| {
+                kept.iter().find_map(|q| {
+                    q.spec
+                        .sites
+                        .iter()
+                        .find(|t| {
+                            t.site == s.site
+                                && t.credential != Credential::App
+                                && t.credential != s.credential
+                        })
+                        .map(|t| (s, q.id(), t.credential))
+                })
+            });
+        match conflict {
+            None => kept.push(p),
+            Some((s, other, other_kind)) => {
+                let message = format!(
+                    "site `{}` is `{}` here but `{}` in {other}: one site has one credential type across installed plugins",
+                    s.site,
+                    credential_name(s.credential),
+                    credential_name(other_kind),
+                );
+                refused.push(super::Rejected {
+                    dir: p.dir.clone(),
+                    error: PluginError::Manifest {
+                        field: "sites".into(),
+                        message: format!("{} not loaded: {message}", p.id()),
+                    },
+                });
+            }
+        }
+    }
+    (kept, refused)
+}
+
+fn credential_name(c: Credential) -> &'static str {
+    match c {
+        Credential::Cookies => "credential: cookies",
+        Credential::BrowserProfile => "credential: browser-profile",
+        Credential::App => "credential: app",
+    }
+}
+
+/// `Index::profiles` 的键：站点窗口的网页数据一个插件一份。
+fn profile_key(plugin: &PluginId, site: &str) -> String {
+    profile_key_of(plugin.as_str(), site)
+}
+
+fn profile_key_of(plugin: &str, site: &str) -> String {
+    format!("{plugin}:{site}")
+}
+
 fn site_key(site: &str) -> String {
     format!("site:{site}")
 }
@@ -377,7 +442,12 @@ impl Logins {
                 .iter()
                 .filter(|s| s.credential != Credential::App)
             {
-                match out.iter_mut().find(|d| d.site.site == s.site) {
+                // 站点窗口的网页数据一个插件一份：browser-profile 站点按 (插件, 站点) 各列一项，不合并。
+                let shared = s.credential == Credential::Cookies;
+                match out
+                    .iter_mut()
+                    .find(|d| shared && d.site.site == s.site && d.site.credential == s.credential)
+                {
                     Some(d) => {
                         d.plugins.push(p.id().clone());
                         for dom in &s.domains {
@@ -403,7 +473,9 @@ impl Logins {
         }
         for d in &mut out {
             if d.site.credential == Credential::BrowserProfile {
-                let record = index.profiles.get(&d.site.site);
+                let record = index
+                    .profiles
+                    .get(&profile_key(&d.plugins[0], &d.site.site));
                 d.login = if record.is_some() {
                     LoginState::Present
                 } else {
@@ -420,22 +492,28 @@ impl Logins {
         Ok(out)
     }
 
-    /// 一个装着的插件声明过的 `browser-profile` 站点；别的回错。
-    fn profile_site(&self, plugins: &[FetchPlugin], site: &str) -> Result<(), PluginError> {
+    /// 一个装着的插件自己声明过的 `browser-profile` 站点；别的回错。
+    fn profile_site(
+        &self,
+        plugins: &[FetchPlugin],
+        plugin: &str,
+        site: &str,
+    ) -> Result<(), PluginError> {
         let declared = plugins.iter().any(|p| {
-            p.spec
-                .sites
-                .iter()
-                .any(|s| s.site == site && s.credential == Credential::BrowserProfile)
+            p.id().as_str() == plugin
+                && p.spec
+                    .sites
+                    .iter()
+                    .any(|s| s.site == site && s.credential == Credential::BrowserProfile)
         });
         if declared {
             Ok(())
         } else {
             Err(PluginError::Credentials {
                 target: site.into(),
-                message:
-                    "no installed plugin declares this site with `credential: browser-profile`"
-                        .into(),
+                message: format!(
+                    "plugin {plugin} does not declare this site with `credential: browser-profile`"
+                ),
             })
         }
     }
@@ -444,19 +522,21 @@ impl Logins {
     pub fn profile_signed_in(
         &self,
         plugins: &[FetchPlugin],
+        plugin: &str,
         site: &str,
     ) -> Result<(), PluginError> {
-        self.profile_site(plugins, site)?;
+        self.profile_site(plugins, plugin, site)?;
         let _guard = self
             .lock
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let mut index = self.read_index()?;
-        if index.profiles.contains_key(site) {
+        let key = profile_key_of(plugin, site);
+        if index.profiles.contains_key(&key) {
             return Ok(());
         }
         index.profiles.insert(
-            site.into(),
+            key,
             ProfileRecord {
                 signed_in_at: jiff::Timestamp::now().to_string(),
                 last_use: None,
@@ -474,7 +554,7 @@ impl Logins {
         method: &str,
         noted: u32,
     ) -> Result<(), PluginError> {
-        self.profile_site(plugins, site)?;
+        self.profile_site(plugins, plugin, site)?;
         let _guard = self
             .lock
             .lock()
@@ -483,7 +563,7 @@ impl Logins {
         let now = jiff::Timestamp::now().to_string();
         let record = index
             .profiles
-            .entry(site.into())
+            .entry(profile_key_of(plugin, site))
             .or_insert_with(|| ProfileRecord {
                 signed_in_at: now.clone(),
                 last_use: None,
@@ -507,8 +587,7 @@ impl Logins {
         let declared = self
             .declared(plugins)?
             .into_iter()
-            .find(|d| d.site.site == site)
-            .filter(|d| d.site.credential == Credential::Cookies)
+            .find(|d| d.site.site == site && d.site.credential == Credential::Cookies)
             .ok_or_else(|| PluginError::Credentials {
                 target: site.into(),
                 message: "no installed plugin declares this site with `credential: cookies`".into(),
@@ -528,7 +607,7 @@ impl Logins {
         drop(guard);
         self.declared(plugins)?
             .into_iter()
-            .find(|d| d.site.site == site)
+            .find(|d| d.site.site == site && d.site.credential == Credential::Cookies)
             .ok_or_else(|| PluginError::Vault("site vanished while saving".into()))
     }
 
@@ -647,9 +726,24 @@ impl Logins {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         self.vault()?.remove(&site_key(site))?;
         let mut index = self.read_index()?;
-        let had_cookies = index.sites.remove(site).is_some();
-        let had_profile = index.profiles.remove(site).is_some();
-        if had_cookies || had_profile {
+        if index.sites.remove(site).is_some() {
+            self.write_index(&index)?;
+        }
+        Ok(())
+    }
+
+    /// 忘掉一个插件在站点窗口里的登录记录；别的插件同一站点的不动。
+    pub fn forget_profile(&self, plugin: &str, site: &str) -> Result<(), PluginError> {
+        let _guard = self
+            .lock
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut index = self.read_index()?;
+        if index
+            .profiles
+            .remove(&profile_key_of(plugin, site))
+            .is_some()
+        {
             self.write_index(&index)?;
         }
         Ok(())

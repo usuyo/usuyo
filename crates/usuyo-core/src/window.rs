@@ -127,7 +127,9 @@ impl Engine {
     /// `POST /plugins/{id}/methods/{method}/window/signed-in`：窗口里登录好了，记下时间。
     pub fn window_signed_in(&self, plugin_id: &str, method_id: &str) -> Result<()> {
         let (_, _, site) = self.window_method(plugin_id, method_id)?;
-        self.loaded().host.profile_signed_in(&site.site)?;
+        self.loaded()
+            .host
+            .profile_signed_in(plugin_id, &site.site)?;
         self.emit(Event::PluginsUpdated);
         Ok(())
     }

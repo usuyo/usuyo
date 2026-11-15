@@ -178,6 +178,7 @@ impl Why {
 
 /// 一种方法这台机器上为什么用不上；空的是用得上。名字取自清单，不写平台名。
 pub(crate) fn blockers(
+    plugin: &FetchPlugin,
     m: &Method,
     enabled: bool,
     health: Option<&HealthSeen>,
@@ -200,7 +201,10 @@ pub(crate) fn blockers(
     }
     if m.login == Login::Required {
         for name in &m.sites {
-            let Some(d) = sites.iter().find(|d| &d.site.site == name) else {
+            let Some(d) = sites
+                .iter()
+                .find(|d| &d.site.site == name && d.plugins.contains(plugin.id()))
+            else {
                 continue;
             };
             match d.login {
@@ -340,7 +344,7 @@ impl Engine {
             } else {
                 None
             };
-            let blocked = blockers(m, enabled, health.as_ref(), &sites, &visitors);
+            let blocked = blockers(plugin, m, enabled, health.as_ref(), &sites, &visitors);
             let only_visitor = !blocked.is_empty()
                 && blocked
                     .iter()

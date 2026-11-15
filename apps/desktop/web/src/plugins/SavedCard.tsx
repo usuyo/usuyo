@@ -168,7 +168,7 @@ function FileHow({ reader }: { reader: FileReader | undefined }) {
 function windowSteps(use: Use, sites: SiteLogin[]): { key: string; title: ReactNode; body?: ReactNode }[] {
   const m = use.method;
   const siteId = m.account.sites?.[0];
-  const site = sites.find((s) => s.site === siteId);
+  const site = sites.find((s) => s.site === siteId && s.plugins.includes(use.plugin.id));
   const name = site?.name ?? m.account.where ?? use.plugin.name;
   return [
     {

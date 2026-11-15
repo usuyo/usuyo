@@ -14,7 +14,7 @@ use usuyo_index::{Filter, SearchIndex, SearchRequest, Visibility};
 use usuyo_library::{Batch, ItemId, Library};
 use usuyo_plugin::{
     CallLimits, HostConfig, PluginHost, ProxySetting, TransformConfig, TransformLimits, Vault,
-    discover,
+    discover, refuse_credential_conflicts,
 };
 
 use crate::content::{self, Content};
@@ -246,6 +246,13 @@ pub(crate) fn find_plugins(roots: &[PathBuf]) -> Result<Found> {
             }
         }
     }
+    // 一个站点只能有一种凭据形式；按上面合出来的顺序，后装的那个不加载。
+    let (fetch, refused) = refuse_credential_conflicts(out.fetch);
+    for r in &refused {
+        tracing::warn!(dir = %r.dir.display(), error = %r.error, "plugin not loaded");
+        out.rejected.push((r.dir.clone(), r.error.to_string()));
+    }
+    out.fetch = fetch;
     Ok(out)
 }
 

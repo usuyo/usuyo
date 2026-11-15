@@ -130,6 +130,21 @@ async fn clear_visitor(
         .map_err(|e| plain(&app, words::CANT_CLEAR_VISITOR, &e))
 }
 
+/// 站点窗口里读的方法退出登录以后，清掉这个插件在这个站点的网页数据（别的插件的不动）。
+#[tauri::command]
+async fn clear_profile(
+    app: tauri::AppHandle,
+    logins: tauri::State<'_, Arc<Logins>>,
+    plugin: String,
+    site: String,
+) -> Result<(), String> {
+    let logins = Arc::clone(&logins);
+    logins
+        .clear(&app, &login::profile_store(&plugin, &site))
+        .await
+        .map_err(|e| plain(&app, words::CANT_CLEAR_LOGIN, &e))
+}
+
 /// 退出登录以后清掉这个站点的网页数据。
 #[tauri::command]
 async fn clear_login(
@@ -187,6 +202,7 @@ fn main() {
             reading_control,
             login_done,
             clear_login,
+            clear_profile,
             clear_visitor,
             open_settings_pane,
             title_bar_hidden

@@ -54,7 +54,7 @@ export function SiteLoginRow({ site, users }: { site: SiteLogin; users?: string[
 
   function logout() {
     setSay(null);
-    forget.mutate(site.site, {
+    forget.mutate({ site: site.site }, {
       onSuccess: () => {
         clearLoginData(site.site).catch((error: unknown) => setSay(typeof error === "string" ? error : t("plugins.accounts.loginClearFailed")));
       },

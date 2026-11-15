@@ -294,7 +294,29 @@ async fn links_from_a_site_window_become_imports_and_the_window_use_is_recorded(
         ("in-usuyo", "在 usuyo 中登录并读取", 3)
     );
     // 退出登录：记下的都去掉
-    engine.forget_site("www.example.test").unwrap();
+    engine
+        .forget_site("www.example.test", Some("fake/visit"))
+        .unwrap();
     assert_eq!(site().login, LoginState::Missing);
     assert!(site().last_use.is_none());
+}
+
+/// 窗口能去的域名只来自拥有这个窗口的插件自己的清单；同一站点别的插件写的 `domains` 在这里不算。
+#[test]
+fn a_window_takes_domains_from_its_own_plugin_only() {
+    let f = Fixture::new();
+    let dir = f.tmp.path().join("machine/plugins/fake/other/1.0.0");
+    std::fs::create_dir_all(&dir).unwrap();
+    let other = MANIFEST.replace("fake/visit", "fake/other").replace(
+        "loginUrl: https://www.example.test/login",
+        "loginUrl: https://www.example.test/login\n    domains: [\".example.test\"]",
+    );
+    std::fs::write(dir.join("usuyo-plugin.yaml"), other).unwrap();
+    std::fs::write(dir.join("plugin.sh"), SCRIPT).unwrap();
+    std::fs::write(dir.join("window.js"), "(function (usuyo) {})").unwrap();
+    let engine = f.engine(Duration::from_millis(50));
+    let mine = engine.window_spec("fake/visit", "in-usuyo").unwrap();
+    let theirs = engine.window_spec("fake/other", "in-usuyo").unwrap();
+    assert!(mine.domains.is_empty(), "{:?}", mine.domains);
+    assert_eq!(theirs.domains, [".example.test"]);
 }

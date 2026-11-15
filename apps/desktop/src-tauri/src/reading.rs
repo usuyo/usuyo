@@ -330,7 +330,8 @@ impl Logins {
             None,
         )?)
         .context("the window answer has the wrong shape")?;
-        if self.focus(app, &spec.site) {
+        let store = login::profile_store(&spec.plugin, &spec.site);
+        if self.focus(app, &store) {
             return Ok(());
         }
         let url = login::page_url(&spec.login_url)?;
@@ -385,12 +386,12 @@ impl Logins {
             .on_new_window(|_, _| NewWindowResponse::Deny)
             .on_download(|_, _| false);
         let site_view = window.add_child(
-            self.with_store(site_builder, &spec.site),
+            self.with_store(site_builder, &store),
             LogicalPosition::new(0.0, BAR_HEIGHT),
             LogicalSize::new(width, height - BAR_HEIGHT),
         )?;
         let closed = login::follow_size(&window, &bar_view, &site_view, BAR_HEIGHT);
-        let _pressed = self.hold(&spec.site, &label);
+        let _pressed = self.hold(&store, &label);
         let (tx, rx) = mpsc::channel();
         lock(&reads.windows).insert(label.clone(), tx);
 
@@ -405,7 +406,7 @@ impl Logins {
             };
             me.read(&seat, &spec, &rx);
             lock(&reads.windows).remove(&label);
-            me.release(&spec.site, &label);
+            me.release(&store, &label);
         });
         Ok(())
     }

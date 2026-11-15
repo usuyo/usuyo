@@ -390,6 +390,7 @@ impl Engine {
         let health = self.inner.methods.health_seen(plugin.id().as_str());
         let host = &self.loaded().host;
         if let Some(b) = blockers(
+            plugin,
             m,
             enabled,
             health.as_ref(),

@@ -97,7 +97,7 @@ export interface Platforms {
   /** 填一个密钥设置。 */
   setSecret(pluginId: string, key: string, value: string): Promise<FetchPlugin>;
   sites(): Promise<SiteLogin[]>;
-  forgetLogin(site: string): Promise<void>;
+  forgetLogin(site: string, plugin?: string): Promise<void>;
   visitors(): Promise<VisitorIdentity[]>;
   forgetVisitor(site: string): Promise<void>;
   imports(): Promise<ImportView[]>;
@@ -250,7 +250,7 @@ const daemon: Source = {
   revealScript: (id, method) => request<void>(paths.methodScriptReveal(id, method), { method: "POST" }),
   setSecret: (id, key, value) => request<FetchPlugin>(paths.pluginSecret(id, key), { method: "PUT", body: { value } }),
   sites: () => request<SiteLogin[]>(paths.sites),
-  forgetLogin: (site) => request<void>(paths.siteLogin(site), { method: "DELETE" }),
+  forgetLogin: (site, plugin) => request<void>(paths.siteLogin(site, plugin), { method: "DELETE" }),
   visitors: () => request<VisitorIdentity[]>(paths.visitors),
   forgetVisitor: (site) => request<void>(paths.visitor(site), { method: "DELETE" }),
   imports: () => request<ImportView[]>(paths.imports),

@@ -20,7 +20,7 @@ pub use host::{
     FetchRequest, FetchedSnapshot, HostConfig, InstalledPlugin, ListRequest, Locale, LoginState,
     OutFile, PluginHost, ProfileUse, ProxySetting, Rejected, ResidentTransform, TransformConfig,
     TransformLimits, TransformOutput, TransformPlugin, TransformRequest, Vault,
-    behind_fake_ip_proxy, discover, resolve_proxy,
+    behind_fake_ip_proxy, discover, refuse_credential_conflicts, resolve_proxy,
 };
 #[cfg(feature = "host")]
 pub use tokio_util::sync::CancellationToken;

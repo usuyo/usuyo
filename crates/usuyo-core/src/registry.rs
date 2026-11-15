@@ -258,7 +258,7 @@ impl Engine {
                     .iter()
                     .filter(|x| x.method == m.id || x.method == "*")
                     .collect();
-                let mut blockers = blockers(m, enabled, health.as_ref(), &sites, &visitors);
+                let mut blockers = blockers(p, m, enabled, health.as_ref(), &sites, &visitors);
                 // 停着也算用不上；通用网页插件按网站停，一个站停着不挡这种方法，只算整个平台上的
                 if m.built
                     && let Some(x) = own.iter().find(|x| {
@@ -459,9 +459,9 @@ impl Engine {
         Ok(site_view(d, host.plugins()))
     }
 
-    /// 忘掉一个站点的登录。会阻塞。
-    pub fn forget_site(&self, site: &str) -> Result<()> {
-        self.loaded().host.forget_site(site)?;
+    /// 忘掉一个站点的登录；`browser-profile` 站点要说是哪个插件的。会阻塞。
+    pub fn forget_site(&self, site: &str, plugin: Option<&str>) -> Result<()> {
+        self.loaded().host.forget_site(site, plugin)?;
         self.emit(Event::PluginsUpdated);
         Ok(())
     }

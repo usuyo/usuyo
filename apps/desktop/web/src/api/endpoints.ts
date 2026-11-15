@@ -127,7 +127,9 @@ export const paths = {
   /** GET：装着的插件会用到的账号站点和登录状态。登录窗口照它开。 */
   sites: "/sites",
   /** PUT `StorageState`：壳的登录窗口读出 cookie 以后交到这里（存进钥匙串）；DELETE 忘掉这个站点的登录。 */
-  siteLogin: (site: string) => `/sites/${encodeURIComponent(site)}/login`,
+  /** `plugin`：`browser-profile` 站点的登录一个插件一份，退出登录要说是哪个插件的。 */
+  siteLogin: (site: string, plugin?: string) =>
+    `/sites/${encodeURIComponent(site)}/login${plugin ? `?plugin=${encodeURIComponent(plugin)}` : ""}`,
   // —— 转换插件和模型（feature 003 §8.1）——
   /**
    * POST `TransformRequest`，回 202 `{queued: true}`。`{jobs: "pending"}`：这一条还没做好的转换（没转出来的也算）都挪到最前，

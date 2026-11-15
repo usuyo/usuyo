@@ -4,13 +4,13 @@ import { afterEach, expect, it, vi } from "vitest";
 import type { SiteLogin } from "../api/endpoints";
 import { ProfileSiteRow } from "./ProfileSiteRow";
 
-const { clearLoginData } = vi.hoisted(() => ({ clearLoginData: vi.fn<(site: string) => Promise<void>>() }));
-vi.mock("../shell", () => ({ clearLoginData }));
+const { clearProfileData } = vi.hoisted(() => ({ clearProfileData: vi.fn<(plugin: string, site: string) => Promise<void>>() }));
+vi.mock("../shell", () => ({ clearProfileData }));
 const forget = vi.fn<(input: URL, init?: RequestInit) => Promise<Response>>();
 
 afterEach(() => {
   cleanup();
-  clearLoginData.mockReset();
+  clearProfileData.mockReset();
   forget.mockReset();
   vi.unstubAllGlobals();
 });
@@ -55,7 +55,7 @@ it("says what usuyo holds, that cookies are not copied, and how it was used", ()
 
 it("deletes the website data before the daemon forgets, and keeps both when deleting fails", async () => {
   const order: string[] = [];
-  clearLoginData.mockImplementation(() => {
+  clearProfileData.mockImplementation(() => {
     order.push("clear");
     return Promise.resolve();
   });
@@ -67,12 +67,13 @@ it("deletes the website data before the daemon forgets, and keeps both when dele
   show(site);
   fireEvent.click(screen.getByRole("button", { name: "退出登录" }));
   await waitFor(() => expect(order).toEqual(["clear", "forget"]));
-  expect(clearLoginData).toHaveBeenCalledWith("www.example.test");
+  expect(clearProfileData).toHaveBeenCalledWith("someone/example", "www.example.test")
+  expect(String(forget.mock.calls[0]?.[0])).toContain("?plugin=someone%2Fexample");
   expect(forget.mock.calls[0]?.[1]?.method).toBe("DELETE");
   cleanup();
 
   order.length = 0;
-  clearLoginData.mockRejectedValue("没能删掉");
+  clearProfileData.mockRejectedValue("没能删掉");
   show(site);
   fireEvent.click(screen.getByRole("button", { name: "退出登录" }));
   expect(await screen.findByText("没能删掉")).toBeTruthy();

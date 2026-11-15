@@ -3,7 +3,7 @@ import type { SiteLogin } from "../api/endpoints";
 import { useForgetLogin } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
 import { dayText } from "../item/format";
-import { clearLoginData } from "../shell";
+import { clearProfileData } from "../shell";
 import { Button } from "../ui/Button";
 import { CardRow } from "../ui/Card";
 import { t } from "../i18n";
@@ -19,17 +19,19 @@ export function ProfileSiteRow({ site, users }: { site: SiteLogin; users?: strin
   const forget = useForgetLogin();
   const [say, setSay] = useState<string | null>(null);
   const signedIn = site.login === "present";
+  // 站点窗口的网页数据一个插件一份：`browser-profile` 站点每项只有它自己的插件
+  const owner = site.plugins[0] ?? "";
 
   // 先删网页数据、再让内核忘掉：前一步没成就什么都没去掉，可以再点
   async function logout() {
     setSay(null);
     try {
-      await clearLoginData(site.site);
+      await clearProfileData(owner, site.site);
     } catch (error) {
       setSay(typeof error === "string" ? error : t("plugins.accounts.profileClearFailed"));
       return;
     }
-    forget.mutate(site.site);
+    forget.mutate({ site: site.site, plugin: owner });
   }
 
   const lastUse = site.lastUse

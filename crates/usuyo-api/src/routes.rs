@@ -1006,11 +1006,19 @@ async fn site_login(
     ))
 }
 
+/// `?plugin=<id>`：`browser-profile` 站点的网页数据一个插件一份，退出登录要说是哪个插件的。
+#[derive(Deserialize)]
+struct SiteForgetQuery {
+    plugin: Option<String>,
+}
+
 async fn site_forget(
     State(s): State<AppState>,
     Path(site): Path<String>,
+    q: Result<Query<SiteForgetQuery>, QueryRejection>,
 ) -> Result<StatusCode, Problem> {
-    blocking(move || s.engine.forget_site(&site)).await?;
+    let Query(q) = q.map_err(|e| Problem::new("invalid-args", e.body_text()))?;
+    blocking(move || s.engine.forget_site(&site, q.plugin.as_deref())).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

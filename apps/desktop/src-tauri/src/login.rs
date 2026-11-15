@@ -64,7 +64,7 @@ pub struct Logins {
     /// Windows、Linux 上每个站点的网页数据目录放在这下面（macOS 用数据仓库的标识，不要目录）。
     #[cfg(not(target_vendor = "apple"))]
     data_root: PathBuf,
-    /// 站点（或 `visitor:<站点>`）→ 开着的窗口。
+    /// 网页数据名（站点、`visitor:<站点>` 或 `profile:<插件>:<站点>`）→ 开着的窗口。
     open: Mutex<HashMap<String, Session>>,
     next: AtomicU32,
 }
@@ -76,6 +76,12 @@ pub(crate) fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 /// 访客身份那个窗口的网页数据名，和同一主机的登录窗口（就叫站点名）分开。
 pub fn visitor_store(site: &str) -> String {
     format!("visitor:{site}")
+}
+
+/// 站点窗口里读（`browser-profile`）那个窗口的网页数据名：一个插件在一个站点一份，
+/// 和账号登录窗口（站点名）、访客窗口、同一站点别的插件的都分开。从不读出 cookie 交给插件。
+pub fn profile_store(plugin: &str, site: &str) -> String {
+    format!("profile:{plugin}:{site}")
 }
 
 /// 只开网页地址；`http` 只给本机（开发时的测试页）。
@@ -507,7 +513,8 @@ impl Logins {
     }
 
     /// 退出登录以后：关掉这个站点开着的窗口，清掉它那份网页数据，下次登录从头来。
-    /// 访客身份换一份时也用它，`site` 写 `visitor:<站点>`（`visitor_store`）。
+    /// 访客身份换一份时也用它，`site` 写 `visitor:<站点>`（`visitor_store`）；
+    /// 站点窗口里读的方法用 `profile:<插件>:<站点>`（`profile_store`）。
     pub async fn clear(&self, app: &AppHandle, site: &str) -> Result<()> {
         let label = lock(&self.open).remove(site).map(|s| s.window);
         if let Some(w) = label.and_then(|l| app.get_window(&l)) {
@@ -614,6 +621,17 @@ mod tests {
             site_cookies::store_id(&visitor_store(site)),
             site_cookies::store_id(site)
         );
+    }
+
+    #[test]
+    fn a_profile_window_never_shares_data_with_the_login_window_or_another_plugin() {
+        let site = "www.example.test";
+        let mine = profile_store("owner/mine", site);
+        assert_eq!(mine, "profile:owner/mine:www.example.test");
+        let id = |s: &str| site_cookies::store_id(s);
+        assert_ne!(id(&mine), id(site));
+        assert_ne!(id(&mine), id(&visitor_store(site)));
+        assert_ne!(id(&mine), id(&profile_store("owner/other", site)));
     }
 
     #[test]

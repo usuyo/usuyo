@@ -443,7 +443,7 @@ export function useSetSecret(pluginId: string) {
 export function useForgetLogin() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (site: string) => call((s) => s.forgetLogin(site)),
+    mutationFn: (v: { site: string; plugin?: string }) => call((s) => s.forgetLogin(v.site, v.plugin)),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.sites }),
   });
 }

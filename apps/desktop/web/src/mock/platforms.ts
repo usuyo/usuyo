@@ -628,9 +628,9 @@ export function createMockPlatforms(empty = false): Platforms {
       await wait(40);
       return sites.map((s) => ({ ...s }));
     },
-    async forgetLogin(site) {
+    async forgetLogin(site, owner) {
       await wait(40);
-      const s = sites.find((x) => x.site === site);
+      const s = sites.find((x) => x.site === site && (!owner || x.plugins.includes(owner)));
       if (s) {
         s.login = "missing";
         delete s.capturedAt;

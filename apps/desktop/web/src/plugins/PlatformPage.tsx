@@ -42,18 +42,22 @@ const all = (page: Page): Use[] => [...page.link, ...page.parts, ...page.saved];
 /** 这个平台的方法用到的登录和访客身份，各写哪几种方法用它。 */
 function AccountsCard({ page, sites, visitors }: { page: Page; sites: SiteLogin[]; visitors: Visitor[] }) {
   const uses = all(page);
-  const usersOf = (kind: "in-usuyo" | "visitor", site: string) =>
-    uses.filter((u) => u.method.account.kind === kind && (u.method.account.sites ?? []).includes(site)).map((u) => u.method.name);
-  const logins = sites.filter((s) => usersOf("in-usuyo", s.site).length > 0);
+  const usersOf = (kind: "in-usuyo" | "visitor", site: string, plugin?: string) =>
+    uses
+      .filter((u) => u.method.account.kind === kind && (u.method.account.sites ?? []).includes(site) && (!plugin || u.plugin.id === plugin))
+      .map((u) => u.method.name);
+  // `browser-profile` 站点一个插件一项，只算那个插件自己的方法
+  const loginUsers = (s: SiteLogin) => usersOf("in-usuyo", s.site, s.credential === "browser-profile" ? s.plugins[0] : undefined);
+  const logins = sites.filter((s) => loginUsers(s).length > 0);
   const ids = visitors.filter((v) => usersOf("visitor", v.site).length > 0);
   return (
     <Card title={t("plugins.accounts.title")} sub={t("plugins.accounts.sub")}>
       {logins.length === 0 && ids.length === 0 ? <CardRow title={t("plugins.accounts.none")} /> : null}
       {logins.map((s) =>
         s.credential === "browser-profile" ? (
-          <ProfileSiteRow key={s.site} site={s} users={usersOf("in-usuyo", s.site)} />
+          <ProfileSiteRow key={`${s.plugins[0]}:${s.site}`} site={s} users={loginUsers(s)} />
         ) : (
-          <SiteLoginRow key={s.site} site={s} users={usersOf("in-usuyo", s.site)} />
+          <SiteLoginRow key={s.site} site={s} users={loginUsers(s)} />
         ),
       )}
       {ids.map((v) => (
