@@ -614,12 +614,10 @@ impl Engine {
         let part = staging.join(format!("{name}.part"));
         let stage = staging.join(&name);
         let result = self.place_from(plan, &part, &stage).await;
-        for leftover in [&part] {
-            if let Err(e) = std::fs::remove_file(leftover)
-                && e.kind() != std::io::ErrorKind::NotFound
-            {
-                tracing::warn!(path = %leftover.display(), error = %e, "download not removed");
-            }
+        if let Err(e) = std::fs::remove_file(&part)
+            && e.kind() != std::io::ErrorKind::NotFound
+        {
+            tracing::warn!(path = %part.display(), error = %e, "download not removed");
         }
         if let Err(e) = remove_dir(&stage) {
             tracing::warn!(path = %stage.display(), error = %e, "staging folder not removed");
