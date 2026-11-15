@@ -217,6 +217,10 @@ SHA-256，小写十六进制，算存下来的字节。字段名叫 `sha256` 时
 | Android | Android | 安卓 |
 | 请求频率 | Request Rate | 节奏 |
 | 层级 | tier | 档位 |
+| 读取官方导出、不登录，读取公开页面、读取屏幕并模拟点按、在已登录的网页中读取、使用登录状态调用平台接口、调用平台未公开的接口、读取或修改平台客户端（七个层级给人看的名字；`official-export` 这类代号只出现在「技术信息」和悬停提示里） | Reads an official export, Reads public pages without signing in, Reads the screen and taps for you, Reads pages where you're signed in, Calls the platform's API with your sign-in, Calls the platform's private API, Reads or modifies the platform's app | `vision-ui`、`session-api` 这类代号 |
+| 详细说明、技术信息、高级（默认收起的几段） | Details, Technical Information, Advanced | 更多、关于（放代号和路径时） |
+| 参考的项目（插件清单的 `upstream`） | Referenced Projects | 使用的程序、调用的程序 |
+| 插件代号 | Plugin ID | 插件 id |
 | 通用（设置的第一节）、语言 | General, Language | — |
 | 正在下载、已下载、下载失败、未下载、重新下载 | Downloading…, Downloaded, Download failed, Not downloaded, Download Again | 在下载、下好了、没下成、还没下载、再下一次 |
 | 转写语音、识别图中文字、识别画面中文字、提取关键帧、合成可播放的视频（转换插件做的事） | Transcribe speech, Recognize text in images, Recognize text in video, Extract keyframes, Combine into playable video | 口播转成文字、认图里的字、取关键帧 |
