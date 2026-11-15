@@ -7,7 +7,7 @@
 | 来源 | 仓库名 | 例子 |
 |---|---|---|
 | 官方组织 `usuyo` | 应用 `usuyo`、`plugin-kit`、转换与导出插件 `<kind>-<name>`，不加 `usuyo-` 前缀 | `usuyo/transform-asr-sherpa`、`usuyo/export-obsidian` |
-| 获取方式组织 `usuyo-fetch` | 只放获取插件，`<platform>` 或 `<platform>-<取法>`，不加前缀 | `usuyo-fetch/douyin`、`usuyo-fetch/xiaohongshu-share`、`usuyo-fetch/takeout` |
+| 获取方式组织 `usuyo-fetch` | 只放获取插件，`<platform>` 或 `<platform>-<取法>`，不加前缀 | `usuyo-fetch/douyin`、`usuyo-fetch/rednote-share`、`usuyo-fetch/takeout` |
 | 个人仓库 | `usuyo-fetch-<name>`、`usuyo-transform-<name>`、`usuyo-export-<name>` | `someone/usuyo-fetch-douyin` |
 
 所有插件仓库都加 GitHub topic `usuyo-plugin`。插件的 `id` 就是仓库的 `owner/repo`。

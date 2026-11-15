@@ -591,6 +591,8 @@ struct WireMethod {
     #[serde(default)]
     script: Option<String>,
     #[serde(default)]
+    guide: Option<String>,
+    #[serde(default)]
     capabilities: Option<WireCapabilities>,
     #[serde(default)]
     risk: Option<Risk>,
@@ -782,6 +784,8 @@ pub struct Method {
     pub delivers: Option<Delivers>,
     /// 交链接的方法带的脚本文件：插件文件夹里的相对路径，只有 `Normal` 段。
     pub script: Option<String>,
+    /// 在 usuyo 的站点窗口里读的方法（[`Self::reads_in_window`]）：一句给人看的话，说脚本在窗口里做什么。
+    pub guide: Option<String>,
     pub capabilities: Capabilities,
     pub risk: Option<Risk>,
 }
@@ -824,6 +828,12 @@ impl Method {
     /// 宿主会不会调它：做了、在插件进程里跑。
     pub fn callable(&self) -> bool {
         self.built && self.delivers.is_none()
+    }
+
+    /// 在 usuyo 的站点窗口里读（协议 §2.3.1）：交链接、登录进 usuyo。窗口用它的 `browser-profile` 站点那份网页数据，
+    /// 打开那个站点的 `loginUrl`，在页面里跑 `script`，脚本经窗口交链接。
+    pub fn reads_in_window(&self) -> bool {
+        self.delivers.is_some() && self.account == Account::InUsuyo
     }
 
     /// 挑方法的先后（§2.3.1）：先层级低的，同一层先不带账号的。
@@ -1582,6 +1592,41 @@ fn method(m: &WireMethod, path: &str, ctx: &CapabilityContext<'_>) -> Check<Meth
             ));
         }
     }
+    if let Some(g) = &m.guide {
+        if m.delivers.is_none() || m.account != Account::InUsuyo {
+            return Err(invalid(
+                f("guide"),
+                "only methods that read in a usuyo window (`delivers` with `account: in-usuyo`) carry a guide",
+            ));
+        }
+        non_empty(&f("guide"), g)?;
+        if g.chars().count() > GUIDE_CHARS {
+            return Err(invalid(
+                f("guide"),
+                format!("is longer than {GUIDE_CHARS} characters"),
+            ));
+        }
+    }
+    // 在站点窗口里读：要一个脚本、一个 `browser-profile` 站点（窗口用它那份网页数据，cookie 不拷出去）
+    if m.built && m.delivers.is_some() && m.account == Account::InUsuyo {
+        if m.script.is_none() {
+            return Err(invalid(
+                f("script"),
+                "methods that read in a usuyo window run a script",
+            ));
+        }
+        let profile = m.sites.iter().any(|name| {
+            ctx.sites
+                .iter()
+                .any(|s| &s.site == name && s.credential == Credential::BrowserProfile)
+        });
+        if !profile {
+            return Err(invalid(
+                f("sites"),
+                "methods that read in a usuyo window use a `browser-profile` site",
+            ));
+        }
+    }
     if let Some(r) = &m.risk {
         non_empty(&f("risk.text"), &r.text)?;
         non_empty(&f("risk.source.label"), &r.source.label)?;
@@ -1627,10 +1672,14 @@ fn method(m: &WireMethod, path: &str, ctx: &CapabilityContext<'_>) -> Check<Meth
         drives: m.drives,
         delivers: m.delivers,
         script: m.script.clone(),
+        guide: m.guide.clone(),
         capabilities,
         risk: m.risk.clone(),
     })
 }
+
+/// 方法 `guide` 最多这么多字。
+const GUIDE_CHARS: usize = 300;
 
 /// 插件文件夹里的相对路径：不空，不以 `/` 开头，每一段都是普通的名字（没有 `.`、`..`、盘符）。
 fn is_plugin_relative(path: &str) -> bool {
@@ -1745,8 +1794,13 @@ fn check_visitors(visitors: &[Visitor]) -> Check<()> {
         }
         non_empty(&f("name"), &v.name)?;
         let url = check_http_url(&v.url).map_err(|e| invalid(f("url"), e))?;
-        if url.scheme() != "https" {
-            return Err(invalid(f("url"), "must be an https address"));
+        // 本机的 http 只给测试用的假站点（和壳的登录窗口一样）
+        let loopback = matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "[::1]"));
+        if url.scheme() != "https" && !loopback {
+            return Err(invalid(
+                f("url"),
+                "must be an https address (plain http only on this machine)",
+            ));
         }
         check_domains(&f("domains"), &v.site, &v.domains)?;
     }

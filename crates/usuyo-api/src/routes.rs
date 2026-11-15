@@ -49,6 +49,9 @@ const HANDSHAKE_BODY_LIMIT: usize = 256;
 const LOGIN_BODY_LIMIT: usize = 256 << 10;
 /// 一批链接（`/v1/batches`），最多 5000 条。
 const BATCH_BODY_LIMIT: usize = 4 << 20;
+/// 站点窗口一回记下的链接：壳那边最多收 [`WINDOW_LINKS_MAX`] 条，每条不过 2 KiB。
+const WINDOW_BODY_LIMIT: usize = 48 << 20;
+const WINDOW_LINKS_MAX: usize = 20_000;
 /// 列来源要按节奏等上一次调用，再等插件跑完。
 const SOURCES_TIMEOUT: Duration = Duration::from_secs(120);
 /// 交一个文件：传完、再等插件读完第一页。
@@ -149,11 +152,24 @@ pub(crate) fn build(engine: Engine, gate: Arc<Gate>, origins: &[String]) -> Rout
             post(method_script_reveal),
         )
         .route(
+            "/plugins/{owner}/{repo}/methods/{method}/window",
+            get(window_spec),
+        )
+        .route(
+            "/plugins/{owner}/{repo}/methods/{method}/window/signed-in",
+            post(window_signed_in),
+        )
+        .route(
+            "/plugins/{owner}/{repo}/methods/{method}/window/links",
+            post(window_links).layer(DefaultBodyLimit::max(WINDOW_BODY_LIMIT)),
+        )
+        .route(
             "/plugins/{owner}/{repo}/secrets/{key}",
             put(plugin_secret_set).delete(plugin_secret_forget),
         )
         .route("/sites", get(sites))
         .route("/visitors", get(visitors))
+        .route("/visitors/wanted", get(visitors_wanted))
         .route("/visitors/{site}", put(visitor_save).delete(visitor_forget))
         .route(
             "/sites/{site}/login",
@@ -812,6 +828,95 @@ async fn method_script_reveal(
         .reveal_method_script(&plugin_id(&owner, &repo), &method)
         .await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// 在站点窗口里读的方法：壳开窗口要的站点、登录页、域名、一句说明和脚本全文。
+async fn window_spec(
+    State(s): State<AppState>,
+    Path((owner, repo, method)): Path<(String, String, String)>,
+) -> ApiResult<usuyo_core::WindowView> {
+    Ok(Json(
+        blocking(move || s.engine.window_spec(&plugin_id(&owner, &repo), &method)).await?,
+    ))
+}
+
+/// 站点窗口里登录好了：内核记下时间（cookie 不经过这里）。
+async fn window_signed_in(
+    State(s): State<AppState>,
+    Path((owner, repo, method)): Path<(String, String, String)>,
+) -> Result<StatusCode, Problem> {
+    blocking(move || {
+        s.engine
+            .window_signed_in(&plugin_id(&owner, &repo), &method)
+    })
+    .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct WindowLinksRequest {
+    sources: Vec<WindowSourceRequest>,
+}
+
+#[derive(Deserialize)]
+struct WindowSourceRequest {
+    action: String,
+    links: Vec<BatchLink>,
+}
+
+/// 站点窗口里记下的链接：照插件的 `match` 筛过，每个来源落成普通的导入，等你确认。
+async fn window_links(
+    State(s): State<AppState>,
+    Path((owner, repo, method)): Path<(String, String, String)>,
+    req: Result<Json<WindowLinksRequest>, JsonRejection>,
+) -> ApiResult<usuyo_core::WindowHandover> {
+    let req = body(req)?;
+    let total: usize = req.sources.iter().map(|x| x.links.len()).sum();
+    if total > WINDOW_LINKS_MAX {
+        return Err(Problem::new(
+            "invalid-args",
+            format!("at most {WINDOW_LINKS_MAX} links"),
+        ));
+    }
+    let mut sources = Vec::with_capacity(req.sources.len());
+    for (j, src) in req.sources.into_iter().enumerate() {
+        if !ACTIONS.contains(&src.action.as_str()) {
+            return Err(Problem::new(
+                "invalid-args",
+                format!("sources[{j}]: unknown action `{}`", src.action),
+            ));
+        }
+        let mut links = Vec::with_capacity(src.links.len());
+        for (i, l) in src.links.into_iter().enumerate() {
+            let bad =
+                |why: &str| Problem::new("invalid-args", format!("sources[{j}].links[{i}]: {why}"));
+            let url = usuyo_core::link_in(&l.url).ok_or_else(|| bad("not an http(s) link"))?;
+            if !url.username().is_empty() || url.password().is_some() {
+                return Err(bad("links with a user name or password are not taken"));
+            }
+            links.push(DeliveredLink {
+                url,
+                title: l.title.map(|t| t.chars().take(500).collect()),
+                acted_at: None,
+            });
+        }
+        sources.push(usuyo_core::WindowSource {
+            action: src.action,
+            links,
+        });
+    }
+    Ok(Json(
+        blocking(move || {
+            s.engine
+                .window_links(&plugin_id(&owner, &repo), &method, sources)
+        })
+        .await?,
+    ))
+}
+
+/// 在要的访客身份：桌面壳照它开看不见、不登录的访客窗口。
+async fn visitors_wanted(State(s): State<AppState>) -> Json<Vec<usuyo_core::WantedVisitor>> {
+    Json(s.engine.visitors_wanted())
 }
 
 async fn plugin_try_now(

@@ -5,6 +5,7 @@ import type { FileReader, NewDeliverToken, SiteLogin, VisitorIdentity } from "..
 import { useCreateDeliverToken, useDeliverTokens, useMethodScript, useRevealScript, useSwitchMethod } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
 import { Sources } from "../imports/SourcePicker";
+import { openReading } from "../shell";
 import { Button } from "../ui/Button";
 import { Card, CardRow } from "../ui/Card";
 import { FlashLine, useFlash } from "../ui/Flash";
@@ -19,6 +20,7 @@ import { accountText, ACCESS_TEXT, clauses, getsText, lastCallText, TIER_TEXT } 
 function kindText(kind: SavedKind): string {
   const text: Record<SavedKind, () => string> = {
     file: () => t("plugins.saved.kind.file"),
+    window: () => t("plugins.saved.kind.window"),
     script: () => t("plugins.saved.kind.script"),
     phone: () => t("plugins.saved.kind.phone"),
     "link-list": () => t("plugins.saved.kind.linkList"),
@@ -92,7 +94,9 @@ function Steps({ use, kind, reader, sites, visitors }: { use: Use; kind: SavedKi
             ),
           },
         ]
-      : kind === "script"
+      : kind === "window"
+        ? windowSteps(use, sites)
+        : kind === "script"
         ? scriptSteps(use)
         : kind === "phone"
           ? [
@@ -153,6 +157,84 @@ function FileHow({ reader }: { reader: FileReader | undefined }) {
       {reader.reads}
       {reader.patterns.length > 0 ? <span className="mono mt-0.5 block text-tag text-faint">{reader.patterns.join("  ")}</span> : null}
       {reader.lists.length > 0 ? <span className="mt-0.5 block text-small text-sub">{t("plugins.saved.readsAlso", { lists: formatList(reader.lists) })}</span> : null}
+    </div>
+  );
+}
+
+/**
+ * 在 usuyo 的站点窗口里读的几步：会做什么（插件的一句和窗口怎么滚动）、页面里会跑插件的脚本（第一次用以前就写明）、
+ * 登录并读取、在导入页确认。站点名取自清单，不写死哪个平台。
+ */
+function windowSteps(use: Use, sites: SiteLogin[]): { key: string; title: ReactNode; body?: ReactNode }[] {
+  const m = use.method;
+  const siteId = m.account.sites?.[0];
+  const site = sites.find((s) => s.site === siteId);
+  const name = site?.name ?? m.account.where ?? use.plugin.name;
+  return [
+    {
+      key: "what",
+      title: t("plugins.window.stepWhat"),
+      body: (
+        <div className="flex flex-col gap-1 text-small text-sub">
+          {m.guide ? <p className="m-0 text-note text-label">{m.guide}</p> : null}
+          <p className="m-0">{t("plugins.window.what", { site: name })}</p>
+          <p className="m-0">{t("plugins.window.scrolling")}</p>
+          <p className="m-0">{t("plugins.window.separate", { site: name })}</p>
+        </div>
+      ),
+    },
+    {
+      key: "script",
+      title: t("plugins.window.stepScript"),
+      body: (
+        <div className="min-w-0 text-small text-sub">
+          <p className="m-0">{t("plugins.window.scriptBody", { plugin: use.plugin.name })}</p>
+          {m.script ? (
+            <code className="mono mt-1 block truncate rounded-sm bg-chip px-2.5 py-1.5 text-tag text-label select-text" title={m.script.path}>
+              {m.script.path}
+            </code>
+          ) : null}
+          {m.script && !m.script.present ? <p className="m-0 mt-1 text-warn">{t("plugins.script.missing", { path: m.script.path })}</p> : null}
+        </div>
+      ),
+    },
+    { key: "open", title: t("plugins.window.stepOpen"), body: <ReadingButton use={use} site={name} signedIn={site?.login === "present"} /> },
+    {
+      key: "confirm",
+      title: t("plugins.window.stepConfirm"),
+      body: (
+        <p className="m-0 text-small text-sub">
+          {rich("plugins.window.confirmBody", {
+            link: <Link to="/import" className="mx-0.5 text-label underline decoration-border2 underline-offset-4 hover:text-text" />,
+          })}
+        </p>
+      ),
+    },
+  ];
+}
+
+/** 「登录{站点}」：开壳的站点窗口。 */
+function ReadingButton({ use, site, signedIn }: { use: Use; site: string; signedIn: boolean }) {
+  const [say, setSay] = useState<string | null>(null);
+  async function open() {
+    setSay(null);
+    try {
+      const opened = await openReading(use.plugin.id, use.method.id);
+      setSay(opened ? t("plugins.window.opened") : t("plugins.window.appOnly"));
+    } catch (error) {
+      setSay(typeof error === "string" ? error : t("plugins.window.failed"));
+    }
+  }
+  return (
+    <div className="min-w-0">
+      <Button variant="soft" size="sm" onPress={() => void open()} isDisabled={use.method.script?.present !== true}>
+        {signedIn ? t("plugins.window.open", { site }) : t("plugins.window.login", { site })}
+      </Button>
+      {say ? (
+        <p role="status" className="m-0 mt-1.5 text-small text-sub">
+          {say}
+        </p>
+      ) : null}
     </div>
   );
 }

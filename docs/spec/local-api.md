@@ -65,12 +65,16 @@
 | `PUT /plugins/{owner}/{repo}/methods/{method}`；`DELETE …` | `{enabled}`：开或关一种方法，写进按机器的 `settings.json`（[按机器的目录](machine.md#按机器的目录)），马上生效，回整个插件。`DELETE` 去掉拨过的开关，这种方法回到各平台各自那一层的默认（`perPlatform` 抬到 `private-api` 的平台关着，别的平台开着；一个 `PUT` 做不到），回整个插件。没做的方法回 422 `unsupported-input`，没有这个插件或方法回 404 |
 | `GET /plugins/{owner}/{repo}/methods/{method}/script` | `{text}`：这种方法清单里 `script` 写的脚本文件的全文，给「复制脚本」。只认装着的清单写了的那个文件，解开链接以后要还在那个插件的文件夹里、是个普通文件，至多 4 MiB；路径不从请求里来。没有这个插件、方法，方法没写 `script`，文件不在、跑到文件夹外面，都回 404 |
 | `POST /plugins/{owner}/{repo}/methods/{method}/script/reveal` | 在系统的文件管理器里显示同一个文件（macOS `open -R`，Windows 资源管理器选中它，Linux `xdg-open` 它所在的文件夹），204；找文件同上，回 404；文件管理器 10 秒没回话或出错回 500 |
+| `GET /plugins/{owner}/{repo}/methods/{method}/window` | 在站点窗口里读的方法（[协议 §2.3.1](../protocol/manifest.md#231a-在站点窗口里读)）：`{plugin, pluginName, method, methodName, site, siteName, loginUrl, domains, guide?, script}`，壳照它开窗口；`script` 是脚本全文，找文件同上。别的方法回 404 |
+| `POST /plugins/{owner}/{repo}/methods/{method}/window/signed-in` | 窗口里认出登录了：记下这个 `browser-profile` 站点登录好的时间（已经记着的不改），204。cookie 不经过这里 |
+| `POST /plugins/{owner}/{repo}/methods/{method}/window/links` | 窗口里找到的链接 `{sources: [{action, links: [{url, title?}]}]}`，一共至多 2 万条、48 MiB；只留合插件 `match` 的、去掉重复的，每个 `action` 落成一次（或几次，一次至多 5000 条）`delivered` 导入，`client` 记方法的名字；记下这一回用了站点窗口。回 `{imports: [{id, action, links}], noted, dropped}` |
 | `POST /plugins/{owner}/{repo}/try-now` | 「现在再试」：去掉这个插件所有的暂停（包括「先别试」），排着的任务和导入马上再看 |
 | `POST /plugins/{owner}/{repo}/hold` | 「先别试」：到你点「现在再试」为止哪儿都不调它，别的插件照常 |
 | `PUT /plugins/{owner}/{repo}/secrets/{key}`；`DELETE …` | 填一个密钥设置 `{value}`（空的回 400），存进钥匙串；`DELETE` 去掉。值从不回出来，回的是插件 |
-| `GET /sites` | 装着的插件会用到的账号站点和登录状态 |
-| `PUT /sites/{site}/login`；`DELETE …` | 壳的登录窗口交来 storageState，只留属于这个站点的，存进钥匙串，回的里面没有值；`DELETE` 忘掉登录，204 |
+| `GET /sites` | 装着的插件会用到的账号站点和登录状态，带 `credential`（`cookies` 或 `browser-profile`）；`browser-profile` 站点的登录状态照站点窗口记下的算，`capturedAt` 是窗口里登录好的时间，`lastUse` 是上一回用站点窗口读的 `{at, plugin, method, methodName, noted}` |
+| `PUT /sites/{site}/login`；`DELETE …` | 壳的登录窗口交来 storageState，只留属于这个站点的，存进钥匙串，回的里面没有值（`browser-profile` 站点不收，回错误）；`DELETE` 忘掉登录（`browser-profile` 站点是忘掉窗口记下的时间和上一回的使用；网页数据由壳删掉），204 |
 | `GET /visitors` | 装着的插件在清单里声明的访客身份，和有没有存着、最早什么时候过期；不出现在 `/sites` 里 |
+| `GET /visitors/wanted` | 内核在要的访客身份 `[{site, replace}]`（[协议 §2.5.1](../protocol/manifest.md#251-访客身份-visitors)）：桌面壳照它开看不见的访客窗口；`replace` 为真时先清掉那份网页数据 |
 | `PUT /visitors/{site}`；`DELETE …` | 同上，存成 `visitor:<站点>`，和同一主机的账号分开；`DELETE` 去掉，账号不动 |
 | `GET /imports`；`POST /imports` | 全部导入（新的在前）；按 `{pluginId, method, source, title?}` 从一个插件一种方法的来源开始列。导入的视图多一项 `method`；`kind` 是 `source`、`delivered`、`file`，`file` 类多一项 `file: {name, reader}`（交来的文件名、读它的插件的名字） |
 | `GET /imports/{id}`；`DELETE …` | 一次导入；不要了：清单和还没收的去掉，已经收下的留着，204 |

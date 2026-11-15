@@ -11,13 +11,27 @@ use crate::jobs::PauseRow;
 use crate::methods::{Why, blockers};
 use crate::view::{
     AccountView, Bundled, Event, GetsView, LastCall, MethodView, NotLoaded, PacingView, PauseView,
-    PlatformTierView, PluginView, PluginsView, ScriptView, SettingView, SiteView, SourceView,
-    VisitorView,
+    PlatformTierView, PluginView, PluginsView, ScriptView, SettingView, SiteUseView, SiteView,
+    SourceView, VisitorView,
 };
 use crate::words::{self, Lang, Said};
 use crate::{Error, Result};
 
-fn site_view(d: DeclaredSite) -> SiteView {
+fn site_view(d: DeclaredSite, plugins: &[FetchPlugin]) -> SiteView {
+    let last_use = d.last_use.map(|u| {
+        let method_name = plugins
+            .iter()
+            .find(|p| p.id().as_str() == u.plugin)
+            .and_then(|p| p.spec.method(&u.method))
+            .map_or_else(|| u.method.clone(), |m| m.name.clone());
+        SiteUseView {
+            at: u.at,
+            plugin: u.plugin,
+            method: u.method,
+            method_name,
+            noted: u.noted,
+        }
+    });
     SiteView {
         site: d.site.site,
         name: d.site.name,
@@ -27,6 +41,8 @@ fn site_view(d: DeclaredSite) -> SiteView {
         login: d.login,
         captured_at: d.captured_at,
         plugins: d.plugins.into_iter().map(|p| p.to_string()).collect(),
+        credential: d.site.credential,
+        last_use,
     }
 }
 
@@ -319,6 +335,8 @@ impl Engine {
                         path: p.dir.join(rel).to_string_lossy().into_owned(),
                         present: script_file(&p.dir, rel).is_some(),
                     }),
+                    window: m.reads_in_window(),
+                    guide: m.guide.clone(),
                 }
             })
             .collect();
@@ -423,22 +441,22 @@ impl Engine {
 
     /// 登录站点和登录状态。只读本机的索引，不碰钥匙串。
     pub fn sites(&self) -> Result<Vec<SiteView>> {
-        Ok(self
-            .loaded()
-            .host
+        let host = &self.loaded().host;
+        Ok(host
             .sites()?
             .into_iter()
-            .map(site_view)
+            .map(|d| site_view(d, host.plugins()))
             .collect())
     }
 
     /// 存下登录窗口读出的 cookie：只留属于这个站点的，存进钥匙串。会阻塞（钥匙串可能弹窗）。
     pub fn save_site(&self, site: &str, state: &StorageState) -> Result<SiteView> {
-        let d = self.loaded().host.save_site(site, state)?;
+        let host = &self.loaded().host;
+        let d = host.save_site(site, state)?;
         self.inner.wake.notify_one();
         self.inner.imports_wake.notify_one();
         self.emit(Event::PluginsUpdated);
-        Ok(site_view(d))
+        Ok(site_view(d, host.plugins()))
     }
 
     /// 忘掉一个站点的登录。会阻塞。
@@ -462,6 +480,7 @@ impl Engine {
     /// 存下访客窗口读出的 cookie：只留属于这个访客身份的，存进钥匙串。会阻塞。
     pub fn save_visitor(&self, site: &str, state: &StorageState) -> Result<VisitorView> {
         let d = self.loaded().host.save_visitor(site, state)?;
+        self.visitor_arrived(site)?;
         self.inner.wake.notify_one();
         self.inner.imports_wake.notify_one();
         self.emit(Event::PluginsUpdated);

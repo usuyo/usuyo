@@ -951,6 +951,10 @@ export interface FetchMethod {
   riskNote?: { text: string; source: { label: string; url: string } };
   /** 交链接的方法在清单里写了的脚本文件：在这台电脑上的路径，`present` 是它在插件文件夹里。 */
   script?: { path: string; present: boolean };
+  /** 在 usuyo 的站点窗口里读：交链接、登录进 usuyo。窗口用那个站点自己的一份网页数据，页面里跑 `script`。 */
+  window: boolean;
+  /** 插件写的一句：这种方法的脚本在窗口里做什么。 */
+  guide?: string;
 }
 
 export interface PluginsView {
@@ -981,10 +985,17 @@ export interface SiteLogin {
   /** 除了站点本身和它的上级域名，还要读这些域名（和它们的子域）的 cookie。 */
   domains: string[];
   login: "missing" | "present" | "expired";
-  /** 上次存下登录的时间，RFC 3339。 */
+  /** 上次存下登录的时间，RFC 3339；`browser-profile` 是在站点窗口里登录好的时间。 */
   capturedAt?: string;
   /** 用到这个站点的插件 id。 */
   plugins: string[];
+  /**
+   * `cookies`：cookie 存在这台电脑的钥匙串里，调用时交给插件；
+   * `browser-profile`：在 usuyo 给这个站点单开的窗口里登录，cookie 只在那个窗口的网页数据里，不拷到别处。
+   */
+  credential: "cookies" | "browser-profile" | "app";
+  /** `browser-profile` 站点上一回用站点窗口读的情况。 */
+  lastUse?: { at: string; plugin: string; method: string; methodName: string; noted: number };
 }
 
 /**

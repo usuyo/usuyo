@@ -314,6 +314,13 @@ fn visitors_are_declared_apart_from_sites_and_work_without_login() {
         &replace(&with, "url: https://", "url: http://"),
         "visitors[0].url",
     );
+    // 本机的 http 只给测试用的假站点
+    let local = replace(
+        &with,
+        "url: https://www.example.com/",
+        "url: http://127.0.0.1:8080/",
+    );
+    assert!(parse(&local).is_ok());
     rejects(
         &replace(
             &with,
@@ -493,6 +500,45 @@ fn methods_are_checked() {
             "      fetch:\n        link: x\n        outputs",
         ),
         "methods[0].capabilities.fetch.link",
+    );
+}
+
+/// 在 usuyo 的站点窗口里读的方法：交链接、登录进 usuyo、一个 `browser-profile` 站点、一个脚本、可以带一句 `guide`。
+#[test]
+fn window_methods_use_a_profile_site_and_a_script() {
+    let window = "  - id: in-usuyo\n    name: 在 usuyo 中登录并读取\n    access: browser-session\n    login: required\n    account: in-usuyo\n    sites: [www.douyin.com]\n    delivers: links\n    script: userscript/window.js\n    guide: 登录以后打开你的收藏\n";
+    let d = replace(
+        &douyin(),
+        "  - id: iphone\n",
+        &format!("{window}  - id: iphone\n"),
+    );
+    let m = parse(&d).unwrap();
+    let spec = m.fetch().unwrap();
+    let w = spec.method("in-usuyo").unwrap();
+    assert!(w.reads_in_window() && !w.callable());
+    assert_eq!(w.guide.as_deref(), Some("登录以后打开你的收藏"));
+    assert!(!spec.method("userscript").unwrap().reads_in_window());
+
+    rejects(
+        &replace(&d, "    script: userscript/window.js\n", ""),
+        "methods[3].script",
+    );
+    rejects(
+        &replace(&d, "credential: browser-profile", "credential: cookies"),
+        "methods[3].sites",
+    );
+    rejects(
+        &replace(&d, "    guide: 登录以后打开你的收藏\n", "    guide: \"\"\n"),
+        "methods[3].guide",
+    );
+    // 别的方法不带 guide
+    rejects(
+        &replace(
+            &d,
+            "    script: userscript/saved.user.js\n",
+            "    script: userscript/saved.user.js\n    guide: x\n",
+        ),
+        "methods[2].guide",
     );
 }
 

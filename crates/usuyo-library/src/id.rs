@@ -208,8 +208,8 @@ mod tests {
 
     #[test]
     fn hyphenated_platform_splits_on_last_dash() {
-        let id = ItemId::from_identity(&ident("wechat-mp", Some("AbC"), None)).unwrap();
-        assert_eq!(id.platform(), "wechat-mp");
+        let id = ItemId::from_identity(&ident("wechat-channels", Some("AbC"), None)).unwrap();
+        assert_eq!(id.platform(), "wechat-channels");
         assert_eq!(ItemId::parse(id.as_str()).unwrap(), id);
     }
 

@@ -23,7 +23,7 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
-pub use credentials::{DeclaredSite, DeclaredVisitor, LoginState, Vault};
+pub use credentials::{DeclaredSite, DeclaredVisitor, LoginState, ProfileUse, Vault};
 pub use network::{ProxySetting, behind_fake_ip_proxy, resolve_proxy};
 pub use outdir::OutFile;
 use process::{Ending, Finished, Spawn};
@@ -443,9 +443,26 @@ impl PluginHost {
         self.logins.save(&self.plugins, site, state)
     }
 
-    /// 忘掉一个站点的登录。
+    /// 忘掉一个站点的登录（`browser-profile` 站点是忘掉站点窗口记下的时间；网页数据由壳清掉）。
     pub fn forget_site(&self, site: &str) -> Result<(), PluginError> {
         self.logins.forget(site)
+    }
+
+    /// 站点窗口里登录好了（`browser-profile` 站点）。只写索引，不碰钥匙串。
+    pub fn profile_signed_in(&self, site: &str) -> Result<(), PluginError> {
+        self.logins.profile_signed_in(&self.plugins, site)
+    }
+
+    /// 站点窗口读完一回：哪个插件的哪种方法、记下了多少条。只写索引。
+    pub fn profile_used(
+        &self,
+        site: &str,
+        plugin: &str,
+        method: &str,
+        noted: u32,
+    ) -> Result<(), PluginError> {
+        self.logins
+            .profile_used(&self.plugins, site, plugin, method, noted)
     }
 
     /// 装着的插件声明过的访客身份和有没有存着（§2.5.1）。只读索引，不碰钥匙串。

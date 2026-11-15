@@ -8,10 +8,10 @@ import type { Scene } from "./pictures";
 export type PlatformKey = "xhs" | "sph" | "bili" | "mp";
 
 export const PLATFORMS: Record<PlatformKey, { id: string; name: string; host: string }> = {
-  xhs: { id: "xiaohongshu", name: "小红书", host: "https://www.xiaohongshu.com/explore/" },
+  xhs: { id: "rednote", name: "小红书", host: "https://www.xiaohongshu.com/explore/" },
   sph: { id: "wechat-channels", name: "视频号", host: "https://channels.weixin.qq.com/web/pages/feed?id=" },
   bili: { id: "bilibili", name: "B站", host: "https://www.bilibili.com/video/" },
-  mp: { id: "wechat-mp", name: "公众号", host: "https://mp.weixin.qq.com/s/" },
+  mp: { id: "wechat", name: "微信", host: "https://mp.weixin.qq.com/s/" },
 };
 
 /** 地图上的主题：位置照主页画布（1440×900 页面坐标）。 */

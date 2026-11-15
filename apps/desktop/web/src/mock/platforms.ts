@@ -40,7 +40,7 @@ function settle(m: FetchMethod): FetchMethod {
 
 /** 一种取法的样例：没写的照常用默认值（做好了、开着、没停、不用登录、在后台）。 */
 export function method(m: MethodSpec): FetchMethod {
-  return settle({ login: "none", interaction: "background", built: true, enabled: true, usable: true, blockers: [], pauses: [], ...m });
+  return settle({ login: "none", interaction: "background", built: true, enabled: true, usable: true, blockers: [], pauses: [], window: false, ...m });
 }
 
 // 没做好的取法，清单里写了能力的，内核照样给 `gets`：做好以后会取得什么。
@@ -120,15 +120,15 @@ function basePlugins(): FetchPlugin[] {
     },
     {
       ...base,
-      id: "usuyo-fetch/xiaohongshu",
+      id: "usuyo-fetch/rednote",
       name: "小红书",
       description: "按你存过的笔记链接取公开笔记页的正文、图片和视频，做个人备份；存过的由你浏览器里的脚本把链接交进来",
-      platforms: [{ id: "xiaohongshu", name: "小红书" }],
+      platforms: [{ id: "rednote", name: "小红书" }],
       access: "public-web",
       login: "none",
       canList: true,
       visitors: ["www.xiaohongshu.com"],
-      pacing: [{ platform: "xiaohongshu", batch: true, intervalSec: 15, daily: 100 }],
+      pacing: [{ platform: "rednote", batch: true, intervalSec: 15, daily: 100 }],
       methods: [
         // 要访客身份、这台电脑上还没有的一种。
         method({
@@ -140,6 +140,19 @@ function basePlugins(): FetchPlugin[] {
           blockers: [{ code: "visitor-missing", hint: said("需要先打开一次小红书首页，获取访客身份", "Open the 小红书 home page once to get a visitor identity first") }],
           riskNote: { text: "不填 cookie 批量取约 108 条后，复制链接的账号被下线。", source: { label: "XHS-Downloader #305", url: "https://github.com/JoeanAmier/XHS-Downloader/issues/305" } },
         }),
+        // 在 usuyo 的站点窗口里登录并读取：这台电脑上还没登录过。
+        method({
+          id: "in-usuyo",
+          name: "在 usuyo 中登录并读取",
+          access: "browser-session",
+          login: "required",
+          account: { kind: "in-usuyo", sites: ["www.xiaohongshu.com"], where: "小红书" },
+          gets: { delivers: "links" },
+          window: true,
+          guide: "登录以后打开你的个人页，先读「收藏」再读「赞过」，只记页面自己请求回来的列表；默认隔几秒往下翻一屏，翻到底停下",
+          script: { path: "~/Library/Application Support/usuyo/plugins/usuyo-fetch/rednote/0.1.0/userscript/usuyo-xhs-window.js", present: true },
+          riskNote: { text: "自动往下翻是用你的账号做的自动操作，比你自己翻高一级；网页对采集类扩展弹「有害插件」", source: { label: "XHS-Downloader #283", url: "https://github.com/JoeanAmier/XHS-Downloader/issues/283" } },
+        }),
         method({
           id: "userscript",
           name: "浏览器脚本",
@@ -147,7 +160,7 @@ function basePlugins(): FetchPlugin[] {
           login: "required",
           account: { kind: "own-browser" },
           gets: { delivers: "links" },
-          script: { path: "~/Library/Application Support/usuyo/plugins/usuyo-fetch/xiaohongshu/0.1.0/userscript/usuyo-xhs-saved.user.js", present: false },
+          script: { path: "~/Library/Application Support/usuyo/plugins/usuyo-fetch/rednote/0.1.0/userscript/usuyo-xhs-saved.user.js", present: false },
           riskNote: { text: "网页对采集类扩展弹「有害插件」；只截获、不发请求的脚本没有处罚报告。", source: { label: "XHS-Downloader #283", url: "https://github.com/JoeanAmier/XHS-Downloader/issues/283" } },
         }),
         notBuilt({
@@ -293,7 +306,7 @@ function baseVisitors(): VisitorIdentity[] {
       cookies: [],
       domains: [],
       state: "missing",
-      plugins: ["usuyo-fetch/xiaohongshu"],
+      plugins: ["usuyo-fetch/rednote"],
     },
   ];
 }
@@ -309,6 +322,7 @@ function baseSites(): SiteLogin[] {
       login: "present",
       capturedAt: "2026-11-10T12:30:00.000Z",
       plugins: ["usuyo-fetch/bilibili"],
+      credential: "cookies",
     },
     {
       site: "yuanbao.tencent.com",
@@ -318,6 +332,17 @@ function baseSites(): SiteLogin[] {
       domains: [],
       login: "missing",
       plugins: ["usuyo-fetch/wechat-channels"],
+      credential: "cookies",
+    },
+    {
+      site: "www.xiaohongshu.com",
+      name: "小红书",
+      loginUrl: "https://www.xiaohongshu.com/explore",
+      cookies: [],
+      domains: [".xiaohongshu.com"],
+      login: "missing",
+      plugins: ["usuyo-fetch/rednote"],
+      credential: "browser-profile",
     },
   ];
 }

@@ -9,7 +9,7 @@
 ## 1. 做什么，不做什么
 
 - 只做 `list`：一页处理几条，每条返回一个 `url`，加界面上读到的标题、作者；不返回 `ref`（[协议 §3.8](../protocol/fetch.md#38-list-与跟着收)）。返回的链接和 `/v1/batches` 交来的一样进导入预览。
-- 内容不在手机上取。视频号的链接交 `wechat-channels` 的 `feed-info`，小红书交 `note-page`，公众号文章交 `wechat-mp` 的 `article`（[routes.md](routes.md#3-小红书)）。
+- 内容不在手机上取。视频号的链接交 `wechat-channels` 的 `feed-info`，小红书交 `note-page`，公众号文章交 `wechat` 的 `article`（[routes.md](routes.md#3-小红书)）。
 - 层级 `vision-ui`，`login: required`，`sites[].credential: app`：账号在你手机的 App 里，usuyo 什么凭据都不拿（[协议 §2.5](../protocol/manifest.md#25-登录站点-sites)）。
 
 <a id="2-iphone-镜像能做的和不能做的"></a>
@@ -87,10 +87,10 @@ methods:
         order: newest-first
         timeout: 10m
         sources:
-          - {source: "xiaohongshu:favorites", title: 我在 iPhone 上收藏的笔记, action: favorite}
-          - {source: "xiaohongshu:likes", title: 我在 iPhone 上赞过的笔记, action: like}
+          - {source: "rednote:favorites", title: 我在 iPhone 上收藏的笔记, action: favorite}
+          - {source: "rednote:likes", title: 我在 iPhone 上赞过的笔记, action: like}
 pacing:
-  xiaohongshu: {batch: true, interval: 60s, daily: 20}
+  rednote: {batch: true, interval: 60s, daily: 20}
 permissions:
   devices: [clipboard]
   network: {mode: allowlist, hosts: ["${setting.mirroir-endpoint}"]}
@@ -177,7 +177,7 @@ permissions:
 | 6 | 「复制链接」 | 点，等剪贴板变 | 菜单收起 |
 | 7 | — | `back()`；滑一屏，按链接去重 | 收藏列表 |
 
-只留 `mp.weixin.qq.com` 的链接，交 `wechat-mp` 的 `article`；别的链接照原样交，由运行器按 `match` 分给对应的仓库。
+只留 `mp.weixin.qq.com` 的链接，交 `wechat` 的 `article`；别的链接照原样交，由运行器按 `match` 分给对应的仓库。
 
 <a id="8-安卓经-adb"></a>
 ## 8. 安卓经 adb
@@ -212,7 +212,7 @@ permissions:
 | 2 | iPhone 后端 | plugin-kit 视觉层 SDK | mirroir serve 的 HTTP MCP 客户端（地址、令牌、超时 10 秒）；`tools/list` 检查（[第 4 节](#4-驱动和流程分开)）；`describe_screen` 转成统一的「字和位置」 | 1 |
 | 3 | Mac 剪贴板和认字的小程序 | plugin-kit 视觉层 SDK 的资产 | Swift：读 `changeCount` 和字符串；用 `builtin/ocr-vision` 的识别代码认一张图；都只读，输出 JSON | — |
 | 4 | 假 mirroir 服务和样例 | plugin-kit `testdata/` | 按步回放截图和 `describe_screen` 回答；样例从你手机截，去掉别人的名字和头像 | 2 |
-| 5 | 三个流程 | `usuyo-fetch/wechat-channels`、`xiaohongshu`、`wechat-mp` 的 `iphone` 取法 | [第 7 节](#7-第一批流程)的三个流程文件、清单片段、对着 4 的测试 | 1–4；演练模式跑过一次你的手机 |
+| 5 | 三个流程 | `usuyo-fetch/wechat-channels`、`rednote`、`wechat` 的 `iphone` 取法 | [第 7 节](#7-第一批流程)的三个流程文件、清单片段、对着 4 的测试 | 1–4；演练模式跑过一次你的手机 |
 | 6 | 安卓后端 | plugin-kit 视觉层 SDK | 宿主 adb 服务的客户端；`uiautomator dump` 解析；手机侧读剪贴板 | 1；宿主的 adb 服务 |
 | 7 | 协议补项 | `docs/protocol/` | 一个仓库几种取法的清单写法；占手机的调用默认 `manual`；`fetchSoon` | — |
 

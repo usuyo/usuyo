@@ -298,12 +298,14 @@ impl Engine {
     /// 取这条链接的方法，照 §2.3.1 排好：平台插件的在前、通用网页的在后；各自里先层级低的，同一层先不带账号的，
     /// 再照插件和清单的顺序。只留做了、开着、这台机器上用得上、有能接链接的 `fetch` 的。
     /// 一种都用不上时回第二项：排在最前的那种为什么用不上，拿来告诉你。
+    /// 第三项：开着、只差一份访客身份（没有或过期）、排在所有用得上的方法前面的那种要的站点，
+    /// 宿主可以先去取一份（[`crate::visitor_wanted`]）。
     /// `platform` 是这条链接的平台（条目 id 前面那段），`perPlatform` 照它取层级和默认的开关。
     pub(crate) async fn fetch_candidates(
         &self,
         url: &url::Url,
         platform: &str,
-    ) -> Result<(Vec<Candidate>, Option<CallFailure>)> {
+    ) -> Result<(Vec<Candidate>, Option<CallFailure>, Option<String>)> {
         let host = &self.loaded().host;
         let sites = host.sites()?;
         let visitors = host.visitors()?;
@@ -330,6 +332,7 @@ impl Engine {
         ranked.sort_by_key(|(web, rank, pi, mi, _, _)| (*web, *rank, *pi, *mi));
         let mut out = Vec::new();
         let mut why: Option<CallFailure> = None;
+        let mut visitor: Option<String> = None;
         for (_, _, _, _, plugin, m) in ranked {
             let enabled = self.inner.methods.enabled_on(plugin, m, platform);
             let health = if enabled {
@@ -338,6 +341,14 @@ impl Engine {
                 None
             };
             let blocked = blockers(m, enabled, health.as_ref(), &sites, &visitors);
+            let only_visitor = !blocked.is_empty()
+                && blocked
+                    .iter()
+                    .all(|b| matches!(b.code.as_str(), "visitor-missing" | "visitor-expired"));
+            // 只看排在所有用得上的方法前面的那种：前面有用得上的，照常先调它
+            if only_visitor && visitor.is_none() && out.is_empty() {
+                visitor = m.visitors.first().cloned();
+            }
             match blocked.first() {
                 None => out.push(Candidate {
                     plugin: plugin.clone(),
@@ -350,7 +361,7 @@ impl Engine {
                 Some(_) => {}
             }
         }
-        Ok((out, why))
+        Ok((out, why, visitor))
     }
 
     /// 记下这种方法这一次调用的结果；失败的另记一行失败日志。

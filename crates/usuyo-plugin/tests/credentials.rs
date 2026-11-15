@@ -686,3 +686,97 @@ async fn visitor_values_are_scrubbed_and_foreign_cookies_refused() {
     assert!(!all.contains("visitor-late-value"), "{all}");
     assert!(all.contains("[redacted]"), "{all}");
 }
+
+/// 在站点窗口里读的插件：`browser-profile` 站点，cookie 不交给宿主。
+const WINDOW_MANIFEST: &str = r#"protocol: 1
+id: fake/window
+kind: fetch
+name: Fake window
+version: 1.0.0
+license: MIT
+maintainers: [someone]
+platforms: [example]
+match: ["www.window.test/n/*"]
+sites:
+  - site: www.window.test
+    name: 窗口站点
+    credential: browser-profile
+    loginUrl: https://www.window.test/login
+methods:
+  - id: get
+    name: 取单条
+    access: public-web
+    login: none
+    account: none
+    capabilities:
+      fetch:
+        outputs: [text]
+  - id: in-usuyo
+    name: 在 usuyo 中登录并读取
+    access: browser-session
+    login: required
+    account: in-usuyo
+    sites: [www.window.test]
+    delivers: links
+    script: window.js
+permissions:
+  fs: {write: ["${OUT}"]}
+run:
+  command: ["${PLUGIN_DIR}/plugin.sh"]
+"#;
+
+#[test]
+fn a_browser_profile_site_records_sign_in_and_use_and_copies_no_cookies() {
+    let tmp = tempfile::tempdir().unwrap();
+    let plugins = tmp.path().join("plugins");
+    install(&plugins, "fake/window", WINDOW_MANIFEST);
+    let found = discover(&plugins).unwrap();
+    assert!(found.rejected.is_empty(), "{:?}", found.rejected);
+    let vault = Arc::new(FakeVault::default());
+    let host = PluginHost::new(
+        HostConfig {
+            work_dir: tmp.path().join("lib/.usuyo/tmp"),
+            cache_dir: tmp.path().join("cache"),
+            locale: usuyo_plugin::Locale::new("zh-Hans"),
+            limits: Default::default(),
+        },
+        found.fetch,
+    )
+    .with_vault(vault.clone(), &tmp.path().join("machine"));
+
+    let site = || host.sites().unwrap().into_iter().next().unwrap();
+    assert_eq!(site().site.site, "www.window.test");
+    assert_eq!(
+        (site().login, site().captured_at),
+        (LoginState::Missing, None)
+    );
+
+    host.profile_signed_in("www.window.test").unwrap();
+    let signed = site();
+    assert_eq!(signed.login, LoginState::Present);
+    let at = signed.captured_at.clone().unwrap();
+    // 再登录一次不改时间
+    host.profile_signed_in("www.window.test").unwrap();
+    assert_eq!(site().captured_at.as_deref(), Some(at.as_str()));
+
+    host.profile_used("www.window.test", "fake/window", "in-usuyo", 42)
+        .unwrap();
+    let used = site().last_use.unwrap();
+    assert_eq!(
+        (used.plugin.as_str(), used.method.as_str(), used.noted),
+        ("fake/window", "in-usuyo", 42)
+    );
+    // 钥匙串里什么都没有：这种站点的 cookie 只在站点窗口那份网页数据里
+    assert!(vault.0.lock().unwrap().is_empty());
+    // 不收 cookie
+    let state: StorageState = serde_json::from_value(json!({"cookies": [
+        {"name": "sid", "value": "v", "domain": ".window.test", "path": "/"}]}))
+    .unwrap();
+    assert!(host.save_site("www.window.test", &state).is_err());
+    // 没声明的站点不记
+    assert!(host.profile_signed_in("www.other.test").is_err());
+
+    host.forget_site("www.window.test").unwrap();
+    let gone = site();
+    assert_eq!((gone.login, gone.last_use), (LoginState::Missing, None));
+}

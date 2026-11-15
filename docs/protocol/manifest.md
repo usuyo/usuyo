@@ -42,7 +42,7 @@ upstream:
 
 | 字段 | 类型 | 必填 | 含义 | 例子 |
 |---|---|---|---|---|
-| `platforms` | 字符串数组 | 是 | 平台 id，取自 plugin-kit 里的平台列表（`douyin`、`xiaohongshu`、`bilibili`、`wechat-mp`、`wechat-channels`、`x`、`web`……）；新平台向 plugin-kit 提 PR 加名字。平台列表的每一项除了 id，还规定 `contentId` 的格式（正则）和规范链接的模板，例如 `douyin` 是十进制作品 ID，`bilibili` 用 BV 号、分 P 写成 `BV…:p2`；plugin-kit 为每个平台附一份共用的 `testdata/canonicalize.json`。同一平台的所有插件共用节奏和去重，所以 id 和 `contentId` 的写法都不能各起各的 | `[douyin]` |
+| `platforms` | 字符串数组 | 是 | 平台 id，取自 plugin-kit 里的平台列表（`douyin`、`rednote`、`bilibili`、`wechat`、`wechat-channels`、`x`、`web`……）；新平台向 plugin-kit 提 PR 加名字。平台列表的每一项除了 id，还规定 `contentId` 的格式（正则）和规范链接的模板，例如 `douyin` 是十进制作品 ID，`bilibili` 用 BV 号、分 P 写成 `BV…:p2`；plugin-kit 为每个平台附一份共用的 `testdata/canonicalize.json`。同一平台的所有插件共用节奏和去重，所以 id 和 `contentId` 的写法都不能各起各的 | `[douyin]` |
 | `match` | 字符串数组 | `fetch.input` 含 `url` 时必填 | 粗筛链接用的 `host/path` glob，不含 scheme；`*.` 前缀匹配子域但不含裸域；最终身份由 `canonicalize` 判定（[02 §15.1](../research/02-adapter-ecosystems.md#151-声明与匹配)） | `["v.douyin.com/*", "www.douyin.com/video/*"]` |
 | `sites` | 对象数组 | 有方法登录进 usuyo 时必填 | 会用到哪些账号，见 [§2.5](#25-登录站点-sites)；每一项都要有方法用它 | |
 | `visitors` | 对象数组 | 否 | 会用到哪些站点的访客身份（不是账号），见 [§2.5.1](#251-访客身份-visitors) | |
@@ -156,8 +156,17 @@ run:
 | `interaction` | 否，默认 `background` | 这次调用用户看不看得见：`background` 只读，不弹菜单、不改剪贴板、不抢焦点、不动指针、不占手机屏幕；`foreground` 是上面任何一样会发生。宿主只拿它排程和加锁（[§3.1](fetch.md#31-运行器与节奏)），不拦、不弹确认 | `foreground` |
 | `delivers` | 否 | `links`：这种方法不在插件进程里跑（浏览器脚本、扩展），由它把链接交给本机接口（[§5](delivery.md#5-投递接口)）。这时不能写 `capabilities` | `links` |
 | `script` | 否 | 只给写了 `delivers` 的方法：它的脚本文件（油猴脚本一类）在插件文件夹里的相对路径，每一段都是普通的名字，不以 `/` 开头，没有 `.`、`..`、`\`。安装时和清单放在一起；获取插件页照它说在哪、能「在访达里显示」「复制脚本」。宿主只读插件文件夹里面的这个文件，解开链接以后跑到外面的不认 | `userscript/usuyo-x-saved.user.js` |
+| `guide` | 否 | 只给在站点窗口里读的方法（见下）：一句给人看的话，说脚本在窗口里做什么，最多 300 字。获取插件页照它写这种方法的第一步 | `登录以后打开你的个人页，先读「收藏」再读「赞过」` |
 | `capabilities` | 做了、又没写 `delivers` 时必填 | 能力名到能力声明：`fetch`、`list`、`unfavorite`，字段见 [§2.3](#23-获取插件的字段) 的能力表；做了的至少有 `fetch` 或 `list`。没做的可以写，用来说它做好以后会取得什么（宿主从不调它，`GET /plugins` 照它给 `gets`）；写了也照样检查，只是 `list.order` 可以不写 | |
 | `risk` | 否 | 记录到的一句情况和出处，`{text, source: {label, url}}`，`url` 是 http(s)。只是信息，宿主不拿它拦 | |
+
+<a id="231a-在站点窗口里读"></a>
+**在站点窗口里读。** 写了 `delivers: links`、`account: in-usuyo` 的方法不在插件进程里跑，而在 usuyo 给这个站点单开的窗口里跑（2026-11-14）。做了的这种方法要写 `script`，`sites` 里要有一个 `credential: browser-profile` 的站点（[§2.5](#25-登录站点-sites)），否则清单不合格。
+
+- **窗口。** 桌面壳开一个窗口：上面一条是 usuyo 自己的页面（说明、面板），下面是站点的网页，用这个站点自己那份网页数据（和访客身份、别的站点、你日常的浏览器都分开）。网页打开站点的 `loginUrl`，你在里面登录；cookie 留在那份网页数据里，不读出来、不进钥匙串、不交给插件进程。只能去站点本身和它 `domains`（含子域）的 https 页面（http 只给本机的测试站点）；新窗口、下载、别的协议（`file:`、`data:`、`javascript:`、App 的链接）一律挡掉。
+- **页面里跑的脚本。** `script` 那个文件是一个 JavaScript 函数表达式 `(function (usuyo) { … })`。壳在页面载入前（每次整页跳转都是）、只在主框架、只在上面那几个站点上叫它，交给它的 `usuyo` 只有四样：`usuyo.lang`（`zh-Hans` 或 `en`）；`usuyo.onStep(fn)`，该往下翻一屏时叫 `fn`（自动滚动时每 4.5–7.5 秒一次，带随机；你切成手动、暂停、停下了都不叫）；`usuyo.onResume(fn)`，停下以后你点了「继续」时叫 `fn`（脚本接着读，先交一份 `state: reading` 的报告；在这之前路上还写着停下的报告壳不算）；`usuyo.submit(report)`，交一份报告，什么都不回。脚本和站点自己的代码在同一个页面里，所以它够不着的东西页面也够不着：没有令牌、没有 cookie、没有别的命令。
+- **报告。** `{links?, counts?, state?, reason?, signedIn?, diagnosis?}`，别的字段整份不收。`links` 一份最多 200 条，每条 `{action, url, title?}`：`action` 是 `/v1/batches` 认的那几个（`favorite`、`like`、`share`、`view`、`unknown`），`url` 最多 2 KiB、要是窗口能去的站点，标题截到 200 字；`counts` 是 `{requests, recognised, skipped?}`（数，`skipped` 按固定的词分，最多 16 种）；`state` 是 `reading`、`end`（列表到底了）或 `stopped`；`reason` 是停下的原因，一个小写字母开头的英文词，壳认得的有 `verify`（验证页）、`signin`（要登录）、`unknown`（认不出的回答）、`errorCode`（站点回了错误码）、`quiet`（翻到底也没有列表）、`notab`（找不到要读的列表），别的照原样显示；`signedIn` 是页面里认出登录了没有；`diagnosis` 是只有形状、不含内容的诊断（字符串，最多 256 KiB），面板上「拷贝诊断信息」拷它。报告整份 512 KiB 以内。
+- **交出去。** 壳在一个窗口里最多记 2 万条（去掉重复）。脚本说 `end`、你点「完成」、或者关掉窗口时，壳把记下的按 `action` 分好交给内核（`POST /plugins/{id}/methods/{method}/window/links`，只认主令牌）；内核再照插件的 `match` 筛一遍，每个 `action` 落成一次（最多 5000 条一次）普通的导入，`client` 记这种方法的名字，在导入页确认了才照 [§3.1](fetch.md#31-运行器与节奏) 去取。认出登录时壳告诉内核（`…/window/signed-in`），内核记下时间；交出去时记下这一回哪种方法、找到几条。这些只记在按机器的 `logins.json` 里，退出登录时连同那份网页数据一起去掉。
 
 **开和关。** 每种做了的方法有自己的开关，记在按机器的 `settings.json`（`plugins.<插件 id>.methods.<方法 id>.enabled`，[机器目录](../spec/machine.md#按机器的目录)）。没写时：`private-api`、`client-hook` 两层关着，其余开着；要登录的方法开着，但要等登录以后才用得上。`built: false` 的没有开关。`delivers: links` 的方法宿主不调，开关只记你的选择，关着时页上写它用不上。获取插件页一个平台一页：收链接的那几种（`fetch` 取得到正文或标题和作者、不能列、不交链接的）在「用哪种方法」里选，「自动」把它们拨回各自那一层在这个平台上的默认，选一种是开它、关掉这个平台上别的收链接的方法；开关仍是一种方法一个，管几个平台的插件拨了，别的平台也跟着变，页上写明。只补上一样的（取不到正文也取不到标题和作者的）在「自动」下各带自己的开关。
 
@@ -243,6 +252,8 @@ requires:
   runtime: ["chrome>=136"]
 ```
 
+在站点窗口里读的方法（[§2.3.1](#231a-在站点窗口里读)）也用 `browser-profile` 的站点：资料目录就是 usuyo 那个站点窗口的网页数据，`loginUrl` 是窗口打开的那一页；没有写 `cookies` 时，登录好没有由页面里的脚本报（`signedIn`）。这种站点的登录状态照内核记下的「窗口里登录好的时间」算，退出登录时壳删掉那份网页数据、内核删掉记录。
+
 一种方法最多声明一个 `credential: browser-profile` 的站点，因为一次调用只交出一个资料目录。这个目录（`${PROFILE}`）不用在 `permissions.fs` 里声明：`sites` 本身就是声明，宿主只在用到这个站点的那次调用（或那个常驻进程，[§3.12](fetch.md#312-常驻模式-serve)）里放行读写。
 
 视频号借元宝登录态的插件在 README 里多写一句「元宝可以用微信登录，这时这个元宝账号和你的微信号关联」；两边是否共用风控没查到，不写进界面。
@@ -256,7 +267,7 @@ requires:
 |---|---|---|---|---|
 | `site` | 字符串 | 是 | 主机名，小写；一个清单里不重复 | `www.example.com` |
 | `name` | 字符串 | 是 | 界面上写「开一次 X 首页」的 X | `例子` |
-| `url` | URL | 是 | 宿主打开的页面，只能是 https | `https://www.example.com/` |
+| `url` | URL | 是 | 宿主打开的页面，只能是 https；明文 http 只给本机的测试站点（`127.0.0.1`、`localhost`、`[::1]`） | `https://www.example.com/` |
 | `cookies` | 字符串数组 | 否 | 这些名字都出现了就算取到；不写时等名字连着几秒不再变 | `["<访客 cookie 名>"]` |
 | `domains` | 字符串数组 | 否 | 和 [§2.5](#25-登录站点-sites) 的 `domains` 同一套规则：和 `site` 同一个可注册域名，不能是公共后缀 | `[".example.com"]` |
 
@@ -280,6 +291,7 @@ methods:
 - **和同一主机的账号是两回事。** 访客身份和账号各存一份（钥匙串里分开的两项），登录窗口和访客窗口各用一份网页数据；以后登录这个主机，不会和访客身份混在一起。只列了访客身份的调用拿不到账号的 cookie，只列了 `sites` 的调用拿不到访客身份。
 - **方法里的每一项都要在顶层 `visitors` 里声明**，否则清单不合格。`login: none` 的方法可以列访客身份，照样不能列 `sites`。
 - 页面要访客身份而没有交来、或交来的页面仍不收时，插件回 `visitor-required`（不是 `login-required`），在 `message` 里分清是哪一种；界面据此写「要先取访客身份」或「换一份」，不会让人去找一个不存在的登录。
+- **自动取（2026-11-14）。** 取一条链接时，排在所有用得上的方法前面的那种只差一份访客身份（没有、过期），或者调了以后回 `visitor-required`（站点不收存着的那份），这一条先不往下换方法，等一回：内核记下「要一份」（`GET /visitors/wanted`，`replace` 为真是要换掉存着的那份），任务排到 90 秒以后。桌面壳每 2 秒问一次，要了就开一个看不见、不登录的访客窗口（要换的先清掉那份网页数据），照上面的规则取到就交给内核、关窗口，一分钟取不到就关掉；内核收到马上把等着的几条再排。每条只等这一回；没交来时到点照常再试，这时条目上才说要访客身份。一个站点同一时间只要一份，取不到以后歇 10 分钟不再要，免得一批几百条反复开窗口。只在取单条时这样，列清单不等。
 - 访客身份只存 cookie，不存 localStorage；`credentialsUpdate` 只写回账号站点（[§6](credentials.md#6-凭据)），不改访客身份。
 - 界面只说有没有、什么时候存下的、最早哪个 cookie 什么时候过期；不出现在登录站点的列表里，也不算「还没登录」。
 

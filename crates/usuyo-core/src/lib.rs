@@ -30,6 +30,8 @@ mod trash;
 mod unpack;
 mod vault;
 pub mod view;
+mod visitor_wanted;
+mod window;
 mod words;
 
 pub use engine::{Engine, EngineConfig, Links, RetryPolicy, Via};
@@ -51,4 +53,6 @@ pub use transform::{Power, PowerSource, SystemPower};
 pub use trash::{ClockGuard, Expiry};
 pub use usuyo_plugin::{CallLimits, ProxySetting, TransformLimits, Vault};
 pub use vault::{FileVault, system_vault};
+pub use visitor_wanted::WantedVisitor;
+pub use window::{WindowHandover, WindowSource, WindowView};
 pub use words::{Lang, Said, Words};

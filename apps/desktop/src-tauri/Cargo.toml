@@ -34,6 +34,8 @@ usuyo-api = { path = "../../../crates/usuyo-api", default-features = false, feat
 
 [dev-dependencies]
 tempfile = "3.27.0"
+# `tauri::test`：对着假的运行时核对站点网页的权限（src/channel.rs）。
+tauri = { version = "2", features = ["unstable", "test"] }
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.31", features = ["signal"] }

@@ -134,7 +134,7 @@ function sendTousuyo(links) {
 **例子一：Mac 上读微信收藏里的公众号文章链接**，再交给公众号的 `public-web` 插件取正文（[06 §17.3](../research/06-platform-access-and-account-risk.md#173-首批自己适配的插件)）。
 
 ```yaml
-platforms: [wechat-mp]
+platforms: [wechat]
 sites:
   - {site: weixin.qq.com, name: 微信, credential: app}
 upstream:
@@ -154,7 +154,7 @@ methods:
         sources:
           - {source: "wechat:favorites:articles", title: 微信收藏里的文章, action: favorite}
 pacing:
-  wechat-mp: {batch: true, interval: 6s, daily: 30}
+  wechat: {batch: true, interval: 6s, daily: 30}
 permissions:
   devices: [accessibility, clipboard, screen-capture]   # screen-capture 只给截图加 OCR 的退路用
   network: {mode: none}
@@ -170,7 +170,7 @@ permissions:
 **例子二：安卓手机上的小红书收藏，经 ADB**（包名 `com.xingin.xhs` 出自 Mika 的 App 知识文件）。
 
 ```yaml
-platforms: [xiaohongshu]
+platforms: [rednote]
 sites:
   - {site: www.xiaohongshu.com, name: 小红书, credential: app}
 methods:
@@ -186,9 +186,9 @@ methods:
         order: newest-first
         timeout: 10m
         sources:
-          - {source: "xiaohongshu:favorites", title: 我在手机上收藏的笔记, action: favorite}
+          - {source: "rednote:favorites", title: 我在手机上收藏的笔记, action: favorite}
 pacing:
-  xiaohongshu: {batch: true, interval: 10s, daily: 60}
+  rednote: {batch: true, interval: 10s, daily: 60}
 settings:
   - {key: display, label: 在哪块屏上跑, type: enum, options: [main, virtual], default: main}
 permissions:
@@ -197,7 +197,7 @@ permissions:
 requires:
   runtime: ["adb"]
 run:
-  command: ["${PLUGIN_DIR}/usuyo-fetch-xiaohongshu-android"]
+  command: ["${PLUGIN_DIR}/usuyo-fetch-rednote-android"]
   serve: true
 ```
 

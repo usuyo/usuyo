@@ -80,6 +80,7 @@ curl -X POST "http://127.0.0.1:47615/v1/file-imports?reader=usuyo-fetch%2Fx%23pa
 
 | 入口 | 走哪条 | `origins[].entry` |
 |---|---|---|
+| usuyo 的站点窗口（在 usuyo 中登录并读取，[§2.3.1](manifest.md#231a-在站点窗口里读)） | 不走投递令牌：页面里的脚本经窗口只进不出的那一条交给壳，壳带主令牌交给 `POST /plugins/{id}/methods/{method}/window/links`，照插件的 `match` 筛过落成导入，进导入预览 | `import` |
 | usuyo 自己的浏览器扩展「保存当前页」 | `POST /v1/file-imports`，正文和文件装在一个文件里，由读它的方法读 | `import` |
 | 别人的扩展和油猴脚本（xhs-vault、Weibo-archiver 一类） | `POST /v1/batches` 交清单；拿着内容的交 `POST /v1/file-imports`；或导出 JSON 文件，在导入页交给读它的方法（[§3.9](fetch.md#39-从文件导入)） | `extension` 或 `import` |
 | iOS 快捷指令 | 写进监听文件夹；或开了局域网直传时 `POST` 到电脑 | `mobile` |

@@ -7,6 +7,7 @@ import { LinkCard } from "./LinkCard";
 import { SecretField } from "./Needs";
 import type { PlatformPage as Page, Use } from "./platforms";
 import { SavedCard } from "./SavedCard";
+import { ProfileSiteRow } from "./ProfileSiteRow";
 import { SiteLoginRow } from "./SiteLoginRow";
 import { VisitorIdentity } from "./VisitorIdentity";
 import { t } from "../i18n";
@@ -48,9 +49,13 @@ function AccountsCard({ page, sites, visitors }: { page: Page; sites: SiteLogin[
   return (
     <Card title={t("plugins.accounts.title")} sub={t("plugins.accounts.sub")}>
       {logins.length === 0 && ids.length === 0 ? <CardRow title={t("plugins.accounts.none")} /> : null}
-      {logins.map((s) => (
-        <SiteLoginRow key={s.site} site={s} users={usersOf("in-usuyo", s.site)} />
-      ))}
+      {logins.map((s) =>
+        s.credential === "browser-profile" ? (
+          <ProfileSiteRow key={s.site} site={s} users={usersOf("in-usuyo", s.site)} />
+        ) : (
+          <SiteLoginRow key={s.site} site={s} users={usersOf("in-usuyo", s.site)} />
+        ),
+      )}
       {ids.map((v) => (
         <VisitorIdentity key={v.site} visitor={v} users={usersOf("visitor", v.site)} />
       ))}

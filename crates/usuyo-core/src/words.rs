@@ -323,6 +323,10 @@ pub(crate) const BLOCK_VISITOR_EXPIRED: Words = w(
     "{site}访客身份已过期，需要重新获取",
     "The {site} visitor identity has expired. Get a new one",
 );
+pub(crate) const VISITOR_FETCHING: Words = w(
+    "正在获取{site}访客身份，获取后会再试一次",
+    "Getting a {site} visitor identity. This item will be tried again after that",
+);
 pub(crate) const BLOCK_HEALTH_FAILED: Words = w(
     "插件无法完成自检：{why}",
     "The plugin couldn't check itself: {why}",

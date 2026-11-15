@@ -7,6 +7,9 @@
 //! 访客身份（插件清单的 `visitors`，不是账号）用同一套窗口，不登录：打开清单写的那一页，
 //! 等声明的 cookie 都出现（没声明名字的等名字不再变），交给内核 `PUT /visitors/{site}`。
 //! 访客身份的网页数据是 `visitor:<站点>` 那一份，和同一主机的账号分开。
+//! 内核要一份访客身份时（`GET /visitors/wanted`），壳自己开一个看不见的访客窗口去取，取不到一分钟后关掉。
+//!
+//! 在站点窗口里读的方法（`browser-profile` 站点）也用这里的窗口和网页数据，见 `reading.rs`。
 
 use crate::words::{self, Lang};
 use std::collections::HashMap;
@@ -33,12 +36,21 @@ const POLL: Duration = Duration::from_secs(1);
 /// 访客 cookie 连着这么多次没变就算页面生成完了。
 const VISITOR_SETTLED_POLLS: u32 = 3;
 const API_TIMEOUT: Duration = Duration::from_secs(10);
+/// 看不见的访客窗口最多开这么久；取不到就关掉，内核到点照常再试。
+const HIDDEN_VISITOR_LIMIT: Duration = Duration::from_secs(60);
+/// 内核要的访客身份，隔多久问一次；同一个站点取过以后，这么久里不再自己去取。
+const WANTED_POLL: Duration = Duration::from_secs(2);
+const WANTED_RETRY: Duration = Duration::from_secs(120);
 
 /// 窗口在等什么。
 #[derive(Clone)]
 enum Goal {
     Login(SiteSpec),
-    Visitor(VisitorSpec),
+    /// `hidden`：内核要的，窗口不显示，过了 [`HIDDEN_VISITOR_LIMIT`] 还没取到就关掉。
+    Visitor {
+        spec: VisitorSpec,
+        hidden: bool,
+    },
 }
 
 struct Session {
@@ -48,7 +60,7 @@ struct Session {
 }
 
 pub struct Logins {
-    daemon: Arc<Daemon>,
+    pub(crate) daemon: Arc<Daemon>,
     /// Windows、Linux 上每个站点的网页数据目录放在这下面（macOS 用数据仓库的标识，不要目录）。
     #[cfg(not(target_vendor = "apple"))]
     data_root: PathBuf,
@@ -57,7 +69,7 @@ pub struct Logins {
     next: AtomicU32,
 }
 
-fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+pub(crate) fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
@@ -67,7 +79,7 @@ pub fn visitor_store(site: &str) -> String {
 }
 
 /// 只开网页地址；`http` 只给本机（开发时的测试页）。
-fn page_url(raw: &str) -> Result<Url> {
+pub(crate) fn page_url(raw: &str) -> Result<Url> {
     let url = Url::parse(raw).with_context(|| format!("bad login url {raw}"))?;
     let local = matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "[::1]"));
     match url.scheme() {
@@ -136,7 +148,12 @@ impl Logins {
     }
 
     /// 带令牌找内核。回 2xx 的 JSON（204 是 `Null`）；别的状态说清楚是哪一条。
-    fn api(&self, method: &str, segments: &[&str], body: Option<Value>) -> Result<Value> {
+    pub(crate) fn api(
+        &self,
+        method: &str,
+        segments: &[&str],
+        body: Option<Value>,
+    ) -> Result<Value> {
         let c = self.daemon.connection().map_err(|e| anyhow!(e))?;
         let mut url = Url::parse(&c.base)?;
         url.path_segments_mut()
@@ -159,6 +176,15 @@ impl Logins {
                 .header("Authorization", &auth)
                 .header("Content-Type", "application/json")
                 .send(serde_json::to_vec(&b)?),
+            ("POST", Some(b)) => agent
+                .post(url.as_str())
+                .header("Authorization", &auth)
+                .header("Content-Type", "application/json")
+                .send(serde_json::to_vec(&b)?),
+            ("POST", None) => agent
+                .post(url.as_str())
+                .header("Authorization", &auth)
+                .send_empty(),
             ("DELETE", _) => agent
                 .delete(url.as_str())
                 .header("Authorization", &auth)
@@ -205,8 +231,12 @@ impl Logins {
     }
 
     /// 开访客身份的窗口：不登录，取到就关。打开哪一页、等哪些 cookie 由内核照插件清单给。
-    pub fn open_visitor(self: &Arc<Self>, app: &AppHandle, site: &str) -> Result<()> {
+    /// `hidden`：内核要的（[`Self::watch_wanted`]），窗口不显示，取不到一分钟后关掉。
+    pub fn open_visitor(self: &Arc<Self>, app: &AppHandle, site: &str, hidden: bool) -> Result<()> {
         let store = visitor_store(site);
+        if hidden && lock(&self.open).contains_key(&store) {
+            return Ok(());
+        }
         if self.focus(app, &store) {
             return Ok(());
         }
@@ -220,10 +250,58 @@ impl Logins {
         let lang = Lang::of(self.daemon.machine_dir());
         let bar = json!({ "mode": "visitor", "name": v.name, "lang": lang.tag() });
         let title = words::VISITOR_TITLE.fill(lang, &[("site", &v.name)]);
-        self.open_window(app, store, &title, url, bar, Goal::Visitor(v))
+        self.open_window(
+            app,
+            store,
+            &title,
+            url,
+            bar,
+            Goal::Visitor { spec: v, hidden },
+        )
     }
 
-    fn focus(&self, app: &AppHandle, store: &str) -> bool {
+    /// 一直问内核要不要访客身份（`GET /visitors/wanted`）；要的话开一个看不见、不登录的访客窗口去取，
+    /// 站点拒收了存着的那份时先清掉那份网页数据。同一个站点取过以后两分钟里不再自己去取。
+    pub fn watch_wanted(self: &Arc<Self>, app: &AppHandle) {
+        let mut tried: HashMap<String, std::time::Instant> = HashMap::new();
+        loop {
+            std::thread::sleep(WANTED_POLL);
+            let wanted = match self.api("GET", &["visitors", "wanted"], None) {
+                Ok(v) => v,
+                // 内核还没起来、或重启着：下一轮再问
+                Err(_) => continue,
+            };
+            let Some(list) = wanted.as_array() else {
+                continue;
+            };
+            for w in list {
+                let (Some(site), replace) = (
+                    w.get("site").and_then(Value::as_str),
+                    w.get("replace").and_then(Value::as_bool).unwrap_or(false),
+                ) else {
+                    continue;
+                };
+                if tried.get(site).is_some_and(|t| t.elapsed() < WANTED_RETRY)
+                    || lock(&self.open).contains_key(&visitor_store(site))
+                {
+                    continue;
+                }
+                tried.insert(site.to_owned(), std::time::Instant::now());
+                if replace
+                    && let Err(e) =
+                        tauri::async_runtime::block_on(self.clear(app, &visitor_store(site)))
+                {
+                    eprintln!("usuyo: cannot clear the old visitor identity of {site}: {e:#}");
+                    continue;
+                }
+                if let Err(e) = self.open_visitor(app, site, true) {
+                    eprintln!("usuyo: cannot open the visitor window for {site}: {e:#}");
+                }
+            }
+        }
+    }
+
+    pub(crate) fn focus(&self, app: &AppHandle, store: &str) -> bool {
         let label = lock(&self.open).get(store).map(|s| s.window.clone());
         match label.and_then(|l| app.get_window(&l)) {
             Some(w) => {
@@ -232,6 +310,48 @@ impl Logins {
                 true
             }
             None => false,
+        }
+    }
+
+    /// 下一个窗口的标签：`login-<n>`，上面那条是 `-bar`，站点的网页是 `-site`。
+    pub(crate) fn next_label(&self) -> String {
+        format!("login-{}", self.next.fetch_add(1, Ordering::Relaxed))
+    }
+
+    /// 站点的网页用这个站点（或 `visitor:<站点>`）自己那份网页数据。
+    pub(crate) fn with_store(
+        &self,
+        builder: WebviewBuilder<tauri::Wry>,
+        store: &str,
+    ) -> WebviewBuilder<tauri::Wry> {
+        #[cfg(target_vendor = "apple")]
+        {
+            builder.data_store_identifier(site_cookies::store_id(store))
+        }
+        #[cfg(not(target_vendor = "apple"))]
+        {
+            builder.data_directory(self.data_root.join(site_cookies::store_dir_name(store)))
+        }
+    }
+
+    /// 记下这个站点开着的窗口；同一个站点同一时间只有一个。
+    pub(crate) fn hold(&self, store: &str, label: &str) -> Arc<AtomicBool> {
+        let pressed = Arc::new(AtomicBool::new(false));
+        lock(&self.open).insert(
+            store.to_owned(),
+            Session {
+                window: label.to_owned(),
+                pressed: Arc::clone(&pressed),
+            },
+        );
+        pressed
+    }
+
+    /// 窗口关了：这个站点不再记着它（换成别的窗口了的不动）。
+    pub(crate) fn release(&self, store: &str, label: &str) {
+        let mut open = lock(&self.open);
+        if open.get(store).is_some_and(|s| s.window == label) {
+            open.remove(store);
         }
     }
 
@@ -244,13 +364,15 @@ impl Logins {
         bar: Value,
         goal: Goal,
     ) -> Result<()> {
-        let n = self.next.fetch_add(1, Ordering::Relaxed);
-        let label = format!("login-{n}");
+        let label = self.next_label();
+        let hidden = matches!(goal, Goal::Visitor { hidden: true, .. });
         let (width, height) = (480.0, 780.0);
         let window = WindowBuilder::new(app, &label)
             .title(title)
             .inner_size(width, height)
             .min_inner_size(360.0, 480.0)
+            .visible(!hidden)
+            .focused(!hidden)
             .build()?;
         let bar_view = window.add_child(
             WebviewBuilder::new(
@@ -261,54 +383,22 @@ impl Logins {
             LogicalPosition::new(0.0, 0.0),
             LogicalSize::new(width, BAR_HEIGHT),
         )?;
-        let site_builder = WebviewBuilder::new(format!("{label}-site"), WebviewUrl::External(url));
-        #[cfg(target_vendor = "apple")]
-        let site_builder = site_builder.data_store_identifier(site_cookies::store_id(&store));
-        #[cfg(not(target_vendor = "apple"))]
-        let site_builder =
-            site_builder.data_directory(self.data_root.join(site_cookies::store_dir_name(&store)));
+        let site_label = format!("{label}-site");
+        let site_builder = self.with_store(
+            WebviewBuilder::new(&site_label, WebviewUrl::External(url)),
+            &store,
+        );
         let site_view = window.add_child(
             site_builder,
             LogicalPosition::new(0.0, BAR_HEIGHT),
             LogicalSize::new(width, height - BAR_HEIGHT),
         )?;
-
-        let closed = Arc::new(AtomicBool::new(false));
-        {
-            let (w, bar_view, site_view, closed) = (
-                window.clone(),
-                bar_view.clone(),
-                site_view.clone(),
-                Arc::clone(&closed),
-            );
-            window.on_window_event(move |e| match e {
-                WindowEvent::Resized(size) => {
-                    let s = size.to_logical::<f64>(w.scale_factor().unwrap_or(1.0));
-                    let _ = bar_view.set_size(LogicalSize::new(s.width, BAR_HEIGHT));
-                    let _ = site_view.set_position(LogicalPosition::new(0.0, BAR_HEIGHT));
-                    let _ = site_view
-                        .set_size(LogicalSize::new(s.width, (s.height - BAR_HEIGHT).max(0.0)));
-                }
-                WindowEvent::Destroyed => closed.store(true, Ordering::SeqCst),
-                _ => {}
-            });
-        }
-
-        let pressed = Arc::new(AtomicBool::new(false));
-        lock(&self.open).insert(
-            store.clone(),
-            Session {
-                window: label.clone(),
-                pressed: Arc::clone(&pressed),
-            },
-        );
+        let closed = follow_size(&window, &bar_view, &site_view, BAR_HEIGHT);
+        let pressed = self.hold(&store, &label);
         let me = Arc::clone(self);
         std::thread::spawn(move || {
             me.watch(&window, &bar_view, &site_view, &goal, &pressed, &closed);
-            let mut open = lock(&me.open);
-            if open.get(&store).is_some_and(|s| s.window == label) {
-                open.remove(&store);
-            }
+            me.release(&store, &label);
         });
         Ok(())
     }
@@ -325,9 +415,17 @@ impl Logins {
     ) {
         let mut settle = Settle::default();
         let mut failed_at: Option<std::time::Instant> = None;
+        let opened = std::time::Instant::now();
         while !closed.load(Ordering::SeqCst) {
             std::thread::sleep(POLL);
             if closed.load(Ordering::SeqCst) {
+                return;
+            }
+            if matches!(goal, Goal::Visitor { hidden: true, .. })
+                && opened.elapsed() > HIDDEN_VISITOR_LIMIT
+            {
+                eprintln!("usuyo: the hidden visitor window got no identity in time; closing it");
+                let _ = window.destroy();
                 return;
             }
             // 交给内核没成：过一会儿再试，不一直打。
@@ -369,7 +467,7 @@ impl Logins {
                         Some(json!({ "cookies": selected })),
                     )
                 }
-                Goal::Visitor(v) => {
+                Goal::Visitor { spec: v, .. } => {
                     let selected = site_cookies::select(&v.site, &v.domains, all, now_secs());
                     let ready = if v.cookies.is_empty() {
                         settle.see(&selected)
@@ -436,6 +534,33 @@ impl Logins {
         }
         Ok(())
     }
+}
+
+/// 窗口变大小时，上面那条和下面的网页跟着变；回一个窗口关了以后为真的标记。
+pub(crate) fn follow_size(
+    window: &Window,
+    bar: &Webview,
+    site: &Webview,
+    bar_height: f64,
+) -> Arc<AtomicBool> {
+    let closed = Arc::new(AtomicBool::new(false));
+    let (w, bar, site, flag) = (
+        window.clone(),
+        bar.clone(),
+        site.clone(),
+        Arc::clone(&closed),
+    );
+    window.on_window_event(move |e| match e {
+        WindowEvent::Resized(size) => {
+            let s = size.to_logical::<f64>(w.scale_factor().unwrap_or(1.0));
+            let _ = bar.set_size(LogicalSize::new(s.width, bar_height));
+            let _ = site.set_position(LogicalPosition::new(0.0, bar_height));
+            let _ = site.set_size(LogicalSize::new(s.width, (s.height - bar_height).max(0.0)));
+        }
+        WindowEvent::Destroyed => flag.store(true, Ordering::SeqCst),
+        _ => {}
+    });
+    closed
 }
 
 /// 在上面那条里说一句。

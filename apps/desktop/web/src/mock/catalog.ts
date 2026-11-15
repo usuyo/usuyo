@@ -43,7 +43,7 @@ function start(): CatalogPlugin[] {
   return [
     fetchPlugin("usuyo-fetch/bilibili", "B站", "按视频链接取元数据、封面和低画质音视频（不用账号）；列公开的收藏夹；列我的收藏夹和稍后再看（用账号）", [{ id: "bilibili", name: "B站" }], [m("view", "公开接口", "public-web"), m("favorites-public", "公开收藏夹", "public-web"), m("favorites", "我的收藏夹", "session-api", "in-usuyo", "required")], "0.1.0", "0.1.0"),
     fetchPlugin("usuyo-fetch/x", "X", "按链接取帖子的文字和图片；读官方归档里的书签和喜欢", [{ id: "x", name: "X" }], [m("guest", "访客接口", "public-web"), m("archive", "官方归档", "official-export")], "0.2.0", "0.1.0"),
-    fetchPlugin("usuyo-fetch/xiaohongshu", "小红书", "按分享链接取笔记的文字、图片和视频", [{ id: "xiaohongshu", name: "小红书" }], [m("note-page", "笔记页", "public-web", "visitor"), m("userscript", "浏览器脚本", "browser-session", "own-browser", "required")], "0.1.0", "0.1.0"),
+    fetchPlugin("usuyo-fetch/rednote", "小红书", "按分享链接取笔记的文字、图片和视频", [{ id: "rednote", name: "小红书" }], [m("note-page", "笔记页", "public-web", "visitor"), m("userscript", "浏览器脚本", "browser-session", "own-browser", "required")], "0.1.0", "0.1.0"),
     fetchPlugin("usuyo-fetch/wechat-channels", "微信视频号", "取视频号视频的作者、描述和封面", [{ id: "wechat-channels", name: "微信视频号" }], [m("feed-info", "视频信息", "public-web")], "0.1.0", "0.1.0"),
     fetchPlugin("usuyo-fetch/douyin", "抖音", "按分享链接取作品的文字、作者和视频（不用账号）", [{ id: "douyin", name: "抖音" }], [m("share-page", "分享页", "public-web"), m("iphone", "iPhone 镜像", "vision-ui", "own-phone", "required", false)], "0.1.0"),
     fetchPlugin("usuyo-fetch/zhihu", "知乎", "按链接取回答和文章的正文", [{ id: "zhihu", name: "知乎" }], [m("page", "公开页", "public-web", "visitor")], "0.1.0"),

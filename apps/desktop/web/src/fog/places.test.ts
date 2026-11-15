@@ -14,7 +14,7 @@ const point = (itemId: string, id: string, name: string): MapView["points"][numb
 const FRAME = { width: 1280, height: 800, mapX: 248 };
 
 it("keeps the sample platforms apart on the source map", () => {
-  const ids = ["xiaohongshu", "wechat-channels", "bilibili", "wechat-mp", "web", "file", "x"];
+  const ids = ["rednote", "wechat-channels", "bilibili", "wechat", "web", "file", "x"];
   const { sources } = buildPlaces({ regions: [], points: ids.map((id, i) => point(`i${i}`, id, id)) }, new Map(), { width: 1440, height: 900, mapX: 248 });
   for (const a of sources) for (const b of sources) if (a !== b) expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThan(150);
 });

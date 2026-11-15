@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { VisitorIdentity as Visitor } from "../api/endpoints";
 import { useForgetVisitor } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
+import { dayText } from "../item/format";
 import { clearVisitorData, openVisitor } from "../shell";
 import { Button } from "../ui/Button";
 import { CardRow } from "../ui/Card";
@@ -72,6 +73,7 @@ export function VisitorIdentity({ visitor, users }: { visitor: Visitor; users?: 
       sub={
         <>
           <span className={visitor.state === "expired" ? "text-warn" : stored ? "text-label" : "text-sub"}>{VISITOR_STATE[visitor.state]}</span>
+          {stored && visitor.capturedAt ? ` · ${t("plugins.accounts.visitorSaved", { day: dayText(visitor.capturedAt) })}` : ""}
           {users && users.length > 0 ? ` · ${t("plugins.accounts.users", { names: formatList(users) })}` : ""}
           <span className="block">{t("plugins.accounts.visitorBody", { name: visitor.name })}</span>
         </>

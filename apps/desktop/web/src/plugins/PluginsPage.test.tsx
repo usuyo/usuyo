@@ -80,7 +80,7 @@ function catalogOf(plugins: FetchPlugin[]): CatalogView {
   };
 }
 
-const SITE: SiteLogin = { site: "www.bilibili.com", name: "B站", loginUrl: "https://passport.bilibili.com/login", cookies: ["SESSDATA"], domains: [], login: "missing", plugins: ["usuyo-fetch/bilibili"] };
+const SITE: SiteLogin = { site: "www.bilibili.com", name: "B站", loginUrl: "https://passport.bilibili.com/login", cookies: ["SESSDATA"], domains: [], login: "missing", plugins: ["usuyo-fetch/bilibili"], credential: "cookies" };
 
 const bili = (methods: FetchMethod[], extra: Partial<FetchPlugin> = {}): FetchPlugin => ({
   id: "usuyo-fetch/bilibili",
@@ -272,6 +272,37 @@ it("steps for a browser script: where the file is, reveal and copy, an inline to
   expect(within(steps).getByText(/「复制诊断」/)).toBeTruthy();
 });
 
+it("steps for a window method: what it does, the plugin script named before first use, sign in here, confirm on the Import page", async () => {
+  const site: SiteLogin = { site: "www.example.test", name: "例子", loginUrl: "https://www.example.test/login", cookies: [], domains: [], login: "missing", plugins: ["usuyo-fetch/bilibili"], credential: "browser-profile" };
+  const reading = method({
+    id: "in-usuyo",
+    name: "在 usuyo 中登录并读取",
+    access: "browser-session",
+    login: "required",
+    account: { kind: "in-usuyo", sites: ["www.example.test"], where: "例子" },
+    gets: { delivers: "links" },
+    window: true,
+    guide: "登录以后打开你的个人页，先读「收藏」",
+    script: { path: "/m/plugins/usuyo-fetch/bilibili/0.1.0/userscript/window.js", present: true },
+    riskNote: { text: "自动往下翻是用你的账号做的自动操作", source: { label: "某处 #1", url: "https://example.test/1" } },
+  });
+  serve({ plugins: [bili([guest, reading], { sites: ["www.example.test"] })], notLoaded: [] }, [site], [], "/plugins/bilibili");
+  const steps = await screen.findByRole("list", { name: "在 usuyo 中登录并读取的步骤" });
+  expect(within(steps).getByText("登录以后打开你的个人页，先读「收藏」")).toBeTruthy();
+  expect(within(steps).getByText(/只用于例子的窗口/)).toBeTruthy();
+  expect(within(steps).getByText(/每隔几秒自动向下滚动一屏/)).toBeTruthy();
+  expect(within(steps).getByText(/不会拷贝到其他地方/)).toBeTruthy();
+  expect(within(steps).getByText(/登录后的页面中会运行B站插件附带的脚本/)).toBeTruthy();
+  expect(within(steps).getByText("/m/plugins/usuyo-fetch/bilibili/0.1.0/userscript/window.js")).toBeTruthy();
+  // 浏览器标签页里开不了站点窗口：说一句，不装作开了
+  fireEvent.click(within(steps).getByRole("button", { name: "登录例子" }));
+  expect(await within(steps).findByText("此窗口只能在 usuyo 应用中打开，浏览器标签页中不可用。")).toBeTruthy();
+  expect(within(steps).getByRole("link", { name: "导入" }).getAttribute("href")).toBe("/import");
+  expect(screen.getByText(/已记录：自动往下翻是用你的账号做的自动操作/)).toBeTruthy();
+  // 账号与访客身份里是这个站点窗口的那一行
+  expect(screen.getByText("例子窗口登录")).toBeTruthy();
+});
+
 it("steps for a file reader: how to get the file, then 选文件 with this reader; one off by default says why and has its switch", async () => {
   const crawler = method({ id: "mediacrawler", name: "MediaCrawler 的结果文件", access: "private-api", account: { kind: "none" }, gets: { list: [] }, enabled: false });
   const reader: FileReader = { id: "usuyo-fetch/bilibili#mediacrawler", name: crawler.name, plugin: "B站", reads: "MediaCrawler 保存的 json", patterns: ["*.json"], lists: [] };
@@ -286,7 +317,7 @@ it("steps for a file reader: how to get the file, then 选文件 with this reade
 
 it("steps for a phone method point to the phone page", async () => {
   const phone = method({ id: "iphone", name: "iPhone", access: "vision-ui", account: { kind: "own-phone", where: "小红书" }, gets: { list: ["收藏"] } });
-  serve({ plugins: [bili([phone], { id: "usuyo-fetch/xiaohongshu", name: "小红书", platforms: [{ id: "xiaohongshu", name: "小红书" }], sites: [] })], notLoaded: [] }, [], [], "/plugins/xiaohongshu");
+  serve({ plugins: [bili([phone], { id: "usuyo-fetch/rednote", name: "小红书", platforms: [{ id: "rednote", name: "小红书" }], sites: [] })], notLoaded: [] }, [], [], "/plugins/rednote");
   const steps = await screen.findByRole("list", { name: "iPhone 的步骤" });
   expect(within(steps).getByRole("link", { name: "前往「手机」页面" }).getAttribute("href")).toBe("/phone");
 });

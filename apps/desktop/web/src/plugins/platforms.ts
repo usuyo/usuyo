@@ -149,10 +149,11 @@ export function alsoMoves(u: Use, platform: string): string[] {
 }
 
 /** 拿回存过的那几种，各自的步骤照哪一类走。 */
-export type SavedKind = "file" | "script" | "phone" | "link-list" | "list";
+export type SavedKind = "file" | "window" | "script" | "phone" | "link-list" | "list";
 
 export function savedKind(u: Use, readers: Set<string>): SavedKind {
   if (readers.has(keyOf(u))) return "file";
+  if (u.method.window) return "window";
   if (u.method.gets.delivers === "links") return "script";
   if (u.method.account.kind === "own-phone") return "phone";
   if (u.method.gets.link !== undefined) return "link-list";

@@ -37,12 +37,12 @@
 |---|---|---|---|---|
 | 1 | plugin-kit 视觉层 SDK · iPhone 驱动 | — | 包 mirroir-mcp，加自己的剪贴板和节奏（[phone.md §4](phone.md#4-驱动和流程分开)） | — |
 | 2 | `wechat-channels` · `iphone` | `vision-ui` | 自己写的流程 | 1 |
-| 3 | `xiaohongshu` · `iphone` | `vision-ui` | 自己写的流程 | 1 |
+| 3 | `rednote` · `iphone` | `vision-ui` | 自己写的流程 | 1 |
 | 4 | `ytdlp` | 按平台 | 包 yt-dlp | — |
 | 5 | `douyin` · `share-page` | `public-web` | 移植 parse-video 的抖音解析 | — |
 | 6 | `douyin` · `export` | `official-export` | 自己写的导入 | 你申请的一份「个人信息下载」 |
-| 7 | `wechat-mp` · `article` | `public-web` | 移植 wechat-article-exporter 的单篇管线 | — |
-| 8 | `wechat-mp` · `favorites-iphone` | `vision-ui` | 自己写的流程 | 1 |
+| 7 | `wechat` · `article` | `public-web` | 移植 wechat-article-exporter 的单篇管线 | — |
+| 8 | `wechat` · `favorites-iphone` | `vision-ui` | 自己写的流程 | 1 |
 | 9 | `kuaishou` · `share-page` | `public-web` | 移植 parse-video 的快手解析 | — |
 | 10 | `weibo` · `status`、`userscript` | `public-web`、`browser-session` | 自己写的单条，改写的 Weibo-archiver 脚本 | — |
 
@@ -53,11 +53,12 @@
 <a id="3-小红书"></a>
 ## 3. 小红书
 
-`usuyo-fetch/xiaohongshu`
+`usuyo-fetch/rednote`
 
 | 取法 | 拿到什么 | 账号 | 层级 | 做成什么样 | 你要装或给的 | 已有 | 记录到的情况 | 不用账号能试 |
 |---|---|---|---|---|---|---|---|---|
-| `note-page` | 单条图文、视频（不登录是低清） | 访客身份 | `public-web` | 自己写（[xiaohongshu.md §2.4](xiaohongshu.md#24-插件做成的样子)） | 在 usuyo 里取一次访客身份 | 做了 | 空 cookie 的长链被送回首页（[XHS-Downloader #495](https://github.com/JoeanAmier/XHS-Downloader/issues/495)）；不填 cookie 批量取约 108 条后，复制链接的账号被下线（[#305](https://github.com/JoeanAmier/XHS-Downloader/issues/305)） | 能 |
+| `note-page` | 单条图文、视频（不登录是低清） | 访客身份 | `public-web` | 自己写（[rednote.md §2.4](rednote.md#24-插件做成的样子)） | 在 usuyo 里取一次访客身份 | 做了 | 空 cookie 的长链被送回首页（[XHS-Downloader #495](https://github.com/JoeanAmier/XHS-Downloader/issues/495)）；不填 cookie 批量取约 108 条后，复制链接的账号被下线（[#305](https://github.com/JoeanAmier/XHS-Downloader/issues/305)） | 能 |
+| `in-usuyo` | 存过的：收藏、赞过 | 登录进 usuyo：usuyo 给小红书单开的站点窗口里，自己一份网页数据，cookie 不拷出来 | `browser-session` | 和 `userscript` 同一个脚本核心，换成站点窗口的壳（`userscript/usuyo-xhs-window.js`）：打开你的个人页、点「收藏」再点「赞过」，默认每隔 4.5–7.5 秒往下翻一屏，到底、碰到验证页或登录墙、认不出回答就停；只看页面自己请求回来的列表，链接经窗口只进不出的那一条交给 usuyo，落成导入，确认后由 `note-page` 取（[rednote.md §2.1](rednote.md#21-列出你存过的)） | 在窗口里登录一次 | 做了（11-14）；只对本机的假站点测过 | 自动往下翻是用你的账号做的自动操作，比你自己翻（`userscript`）高一级；网页对采集类扩展弹「有害插件」（[#283](https://github.com/JoeanAmier/XHS-Downloader/issues/283)） | 不能 |
 | `userscript` | 存过的：收藏、赞过 | 账号只在你自己的浏览器里 | `browser-session` | 自己写，改写自 xhs-vault（MIT） | 脚本管理器和脚本，导入页发的令牌 | 做了 | 网页对采集类扩展弹「有害插件」（[#283](https://github.com/JoeanAmier/XHS-Downloader/issues/283)）；经扩展驱动用户自己的 Chrome 读，被判违规（[OpenCLI #842](https://github.com/jackwener/OpenCLI/issues/842)）；只截获、不发请求的脚本没有处罚报告（[06 §16.2](../research/06-platform-access-and-account-risk.md#162-issue-里的账号问题)） | 不能 |
 | `iphone` | 存过的：收藏（笔记）、赞过 | 账号在你手机的 App 里 | `vision-ui` | 自己写的流程，iPhone 驱动（[phone.md §7.2](phone.md#72-小红书收藏)） | 「mirroir serve」的屏幕录制和辅助功能；接力（通用剪贴板） | 没有 | 镜像没有公开的识别接口，没有处罚报告（[06 §1.2](../research/06-platform-access-and-account-risk.md#12-视觉层的风险从哪里来)）；分享链接带跟踪参数（#305）；`xsec_token` 几小时后 404（[06 §1.3](../research/06-platform-access-and-account-risk.md#13-混合路径视觉层拿链接公开页面取内容)） | 不能 |
 | `android` | 存过的：收藏、赞过 | 账号在你安卓手机的 App 里 | `vision-ui` | 自己写的流程，adb 驱动（[phone.md §8](phone.md#8-安卓经-adb)） | 安卓手机，USB 调试，那台手机上登录小红书 | 设计了（[协议 §9.5](../protocol/wrapping.md#95-视觉层流程) 例子二） | USB 调试开关在 Android 16 及以前 App 读得到（[调研 10 §5.1](../research/10-desktop-and-android-agents.md#51-平台能不能察觉)） | 不能 |
@@ -191,14 +192,14 @@
 <a id="13-公众号和微信收藏"></a>
 ## 13. 公众号和微信收藏
 
-`usuyo-fetch/wechat-mp`
+`usuyo-fetch/wechat`
 
 | 取法 | 拿到什么 | 账号 | 层级 | 做成什么样 | 你要装或给的 | 已有 | 记录到的情况 | 不用账号能试 |
 |---|---|---|---|---|---|---|---|---|
-| `article` | 单条文章：正文、图片、作者、发布时间 | 不要 | `public-web` | 自己写，移植 [wechat-article-exporter](https://github.com/wechat-article/wechat-article-exporter) 的单篇管线（MIT；2026-07-30 停止维护，网站 2026-10 下线）：取文章页，换回懒加载的图，在不联网的沙箱里跑文章页自带的数据脚本取标题和时间；对照 [wechatmp2markdown](https://github.com/fengxxc/wechatmp2markdown)（MIT，v1.1.11，2025-03）和 ParseHub `weixin.py` | — | 做了（`usuyo-fetch/wechat-mp`，11-12）；不带账号对真平台跑过：`/s/<短码>` 的一篇文章完整取到（正文转成 Markdown、52 张图、原样的页面）；长链接（`__biz`、`mid`、`idx`、`sn`）两次都落到「环境异常，完成验证后即可继续访问」，带上原链接里的 `chksm` 以后有没有用没复测。视频、音频只记地址，不下载 | 匿名抓取出环境验证页（[wewe-rss #388](https://github.com/cooderl/wewe-rss/issues/388)） | 能 |
+| `article` | 单条文章：正文、图片、作者、发布时间 | 不要 | `public-web` | 自己写，移植 [wechat-article-exporter](https://github.com/wechat-article/wechat-article-exporter) 的单篇管线（MIT；2026-07-30 停止维护，网站 2026-10 下线）：取文章页，换回懒加载的图，在不联网的沙箱里跑文章页自带的数据脚本取标题和时间；对照 [wechatmp2markdown](https://github.com/fengxxc/wechatmp2markdown)（MIT，v1.1.11，2025-03）和 ParseHub `weixin.py` | — | 做了（`usuyo-fetch/wechat`，11-12）；不带账号对真平台跑过：`/s/<短码>` 的一篇文章完整取到（正文转成 Markdown、52 张图、原样的页面）；长链接（`__biz`、`mid`、`idx`、`sn`）两次都落到「环境异常，完成验证后即可继续访问」，带上原链接里的 `chksm` 以后有没有用没复测。视频、音频只记地址，不下载 | 匿名抓取出环境验证页（[wewe-rss #388](https://github.com/cooderl/wewe-rss/issues/388)） | 能 |
 | `favorites-iphone` | 存过的：微信收藏里的文章链接 | 账号在你手机的微信里 | `vision-ui` | 自己写的流程，iPhone 驱动（[phone.md §7.3](phone.md#73-微信收藏里的文章)） | 同小红书 `iphone` | 没有 | 同视频号 `iphone` | 不能 |
 | `favorites-mac` | 存过的：微信收藏里的文章链接 | 账号在你电脑的微信里 | `vision-ui` | 自己写的流程，资产里带 agent-desktop（[协议 §9.5](../protocol/wrapping.md#95-视觉层流程) 例子一）；做法照 [wechat-favorites-exporter](https://github.com/pengyulong/wechat-favorites-exporter)（MIT） | usuyo 的辅助功能 | 设计了 | Mac 微信 4.1 在 macOS 26 上不给树；这台的 3.8.8.19 是 AppKit 界面（推断树还在）；PC 微信读界面有强制下线（[pywechat #260](https://github.com/Hello-Mr-Crab/pywechat/issues/260)） | 不能 |
-| `usuyo-fetch-hook/wechat-mp` · `local-db` | 存过的：微信收藏全部条目 | 账号在你电脑的微信里 | `client-hook` | 取密钥、解密本机微信数据库的工具（WeFlow 一类）；没有建 | — | 没有 | 腾讯 2026-01-08 一份 DMCA 按 4,195 个仓库的派生网络处理，2026-06-29 至 10-13 又发 36 份，wx-cli 返回 451；WeFlow 用户 2026-03 起成批报告收到微信警告（[06 §16.2](../research/06-platform-access-and-account-risk.md#162-issue-里的账号问题)、[§16.3](../research/06-platform-access-and-account-risk.md#163-下架停更与法律风险)） | 不能 |
+| `usuyo-fetch-hook/wechat` · `local-db` | 存过的：微信收藏全部条目 | 账号在你电脑的微信里 | `client-hook` | 取密钥、解密本机微信数据库的工具（WeFlow 一类）；没有建 | — | 没有 | 腾讯 2026-01-08 一份 DMCA 按 4,195 个仓库的派生网络处理，2026-06-29 至 10-13 又发 36 份，wx-cli 返回 451；WeFlow 用户 2026-03 起成批报告收到微信警告（[06 §16.2](../research/06-platform-access-and-account-risk.md#162-issue-里的账号问题)、[§16.3](../research/06-platform-access-and-account-risk.md#163-下架停更与法律风险)） | 不能 |
 
 按公众号列全部文章靠公众号后台的接口（`session-api`）：wechat-article-exporter 说它用的那条 2026-07 下旬关闭（[#200](https://github.com/wechat-article/wechat-article-exporter/issues/200)）；[we-mp-rss](https://github.com/rachelos/we-mp-rss)（许可证 NOASSERTION）2026-11-10 仍有推送，2026-10-30 有 issue 报它的容器里有挖矿程序和后门，现在能不能用没核，没有列。收藏里的笔记、图片、聊天记录没有公开链接，手机流程只认链接类条目。
 

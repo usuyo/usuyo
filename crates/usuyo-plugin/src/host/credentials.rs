@@ -64,6 +64,28 @@ struct Index {
     /// 插件 id → 填了值的密钥设置。
     #[serde(default)]
     secrets: BTreeMap<String, BTreeSet<String>>,
+    /// `browser-profile` 站点：在 usuyo 的站点窗口里登录过。网页数据在壳那份数据仓库里，
+    /// 这里只记时间和上次用它的方法，cookie 不拷到钥匙串、不进这份索引。
+    #[serde(default)]
+    profiles: BTreeMap<String, ProfileRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProfileRecord {
+    signed_in_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    last_use: Option<ProfileUse>,
+}
+
+/// 上次用这个站点窗口读的那一回：什么时候、哪个插件的哪种方法、记下了多少条链接。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileUse {
+    pub at: String,
+    pub plugin: String,
+    pub method: String,
+    pub noted: u32,
 }
 
 /// 装着的插件声明过的一个登录站点，合起来看。
@@ -73,8 +95,10 @@ pub struct DeclaredSite {
     pub site: Site,
     pub plugins: Vec<PluginId>,
     pub login: LoginState,
-    /// 上次存下登录的时间（RFC 3339）。
+    /// 上次存下登录的时间（RFC 3339）；`browser-profile` 站点是在站点窗口里登录好的时间。
     pub captured_at: Option<String>,
+    /// `browser-profile` 站点上次用站点窗口读的那一回。
+    pub last_use: Option<ProfileUse>,
 }
 
 /// 装着的插件声明过的一个访客身份，合起来看。
@@ -340,7 +364,8 @@ impl Logins {
         write_private(path, &bytes)
     }
 
-    /// 装着的插件声明过的 `credential: cookies` 站点，合起来，带登录状态。
+    /// 装着的插件声明过的 `credential: cookies` 和 `browser-profile` 站点，合起来，带登录状态。
+    /// `browser-profile` 的登录状态照站点窗口记下的：登录好了就是 `present`，退出登录以后没有记录。
     pub fn declared(&self, plugins: &[FetchPlugin]) -> Result<Vec<DeclaredSite>, PluginError> {
         let index = self.read_index()?;
         let now = now_secs();
@@ -350,7 +375,7 @@ impl Logins {
                 .spec
                 .sites
                 .iter()
-                .filter(|s| s.credential == Credential::Cookies)
+                .filter(|s| s.credential != Credential::App)
             {
                 match out.iter_mut().find(|d| d.site.site == s.site) {
                     Some(d) => {
@@ -371,16 +396,105 @@ impl Logins {
                         plugins: vec![p.id().clone()],
                         login: LoginState::Missing,
                         captured_at: None,
+                        last_use: None,
                     }),
                 }
             }
         }
         for d in &mut out {
+            if d.site.credential == Credential::BrowserProfile {
+                let record = index.profiles.get(&d.site.site);
+                d.login = if record.is_some() {
+                    LoginState::Present
+                } else {
+                    LoginState::Missing
+                };
+                d.captured_at = record.map(|r| r.signed_in_at.clone());
+                d.last_use = record.and_then(|r| r.last_use.clone());
+                continue;
+            }
             let record = index.sites.get(&d.site.site);
             d.login = login_of(&d.site, record, now);
             d.captured_at = record.map(|r| r.captured_at.clone());
         }
         Ok(out)
+    }
+
+    /// 一个装着的插件声明过的 `browser-profile` 站点；别的回错。
+    fn profile_site(&self, plugins: &[FetchPlugin], site: &str) -> Result<(), PluginError> {
+        let declared = plugins.iter().any(|p| {
+            p.spec
+                .sites
+                .iter()
+                .any(|s| s.site == site && s.credential == Credential::BrowserProfile)
+        });
+        if declared {
+            Ok(())
+        } else {
+            Err(PluginError::Credentials {
+                target: site.into(),
+                message:
+                    "no installed plugin declares this site with `credential: browser-profile`"
+                        .into(),
+            })
+        }
+    }
+
+    /// 站点窗口里登录好了：记下时间（已经记着的不改，退出登录才清掉）。
+    pub fn profile_signed_in(
+        &self,
+        plugins: &[FetchPlugin],
+        site: &str,
+    ) -> Result<(), PluginError> {
+        self.profile_site(plugins, site)?;
+        let _guard = self
+            .lock
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut index = self.read_index()?;
+        if index.profiles.contains_key(site) {
+            return Ok(());
+        }
+        index.profiles.insert(
+            site.into(),
+            ProfileRecord {
+                signed_in_at: jiff::Timestamp::now().to_string(),
+                last_use: None,
+            },
+        );
+        self.write_index(&index)
+    }
+
+    /// 站点窗口读完一回：记下哪种方法、记下了多少条。还没记登录时一并记上。
+    pub fn profile_used(
+        &self,
+        plugins: &[FetchPlugin],
+        site: &str,
+        plugin: &str,
+        method: &str,
+        noted: u32,
+    ) -> Result<(), PluginError> {
+        self.profile_site(plugins, site)?;
+        let _guard = self
+            .lock
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut index = self.read_index()?;
+        let now = jiff::Timestamp::now().to_string();
+        let record = index
+            .profiles
+            .entry(site.into())
+            .or_insert_with(|| ProfileRecord {
+                signed_in_at: now.clone(),
+                last_use: None,
+            });
+        record.last_use = Some(ProfileUse {
+            at: now,
+            plugin: plugin.into(),
+            method: method.into(),
+            noted,
+        });
+        self.write_index(&index)
     }
 
     /// 存下登录窗口交来的 cookie：只留属于这个站点（合起所有插件的声明）的。
@@ -394,6 +508,7 @@ impl Logins {
             .declared(plugins)?
             .into_iter()
             .find(|d| d.site.site == site)
+            .filter(|d| d.site.credential == Credential::Cookies)
             .ok_or_else(|| PluginError::Credentials {
                 target: site.into(),
                 message: "no installed plugin declares this site with `credential: cookies`".into(),
@@ -532,7 +647,9 @@ impl Logins {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         self.vault()?.remove(&site_key(site))?;
         let mut index = self.read_index()?;
-        if index.sites.remove(site).is_some() {
+        let had_cookies = index.sites.remove(site).is_some();
+        let had_profile = index.profiles.remove(site).is_some();
+        if had_cookies || had_profile {
             self.write_index(&index)?;
         }
         Ok(())

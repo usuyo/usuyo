@@ -268,10 +268,10 @@ function place(raws: RawItem[]): Map<string, { x: number; y: number }> {
 }
 
 const PLATFORM_RULES: [RegExp, Platform][] = [
-  [/xiaohongshu|xhslink/, { id: "xiaohongshu", name: "小红书" }],
+  [/xiaohongshu|xhslink/, { id: "rednote", name: "小红书" }],
   [/channels\.weixin/, { id: "wechat-channels", name: "视频号" }],
   [/bilibili|b23\.tv/, { id: "bilibili", name: "B站" }],
-  [/mp\.weixin/, { id: "wechat-mp", name: "公众号" }],
+  [/mp\.weixin/, { id: "wechat", name: "微信" }],
 ];
 
 function parseShare(input: string): { url: string; title: string; platform: Platform } {

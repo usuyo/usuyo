@@ -576,6 +576,11 @@ pub struct MethodView {
     /// 交链接的方法在清单里写了的脚本文件：在这台电脑上的路径，和它在不在插件文件夹里。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub script: Option<ScriptView>,
+    /// 在 usuyo 的站点窗口里读（交链接、登录进 usuyo）。
+    pub window: bool,
+    /// 这种方法的脚本在窗口里做什么（清单的 `methods[].guide`）。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub guide: Option<String>,
 }
 
 /// 一种方法带的脚本文件（清单的 `methods[].script`）。
@@ -717,6 +722,23 @@ pub struct SiteView {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub captured_at: Option<String>,
     pub plugins: Vec<String>,
+    /// `cookies`：cookie 存在钥匙串，调用时交给插件；`browser-profile`：在 usuyo 的站点窗口里登录，
+    /// cookie 只在那个窗口的网页数据里，`capturedAt` 是登录好的时间。
+    pub credential: usuyo_plugin::protocol::Credential,
+    /// `browser-profile` 站点上一回用站点窗口读的情况。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_use: Option<SiteUseView>,
+}
+
+/// 上一回用站点窗口读：什么时候、哪种方法（名字照清单）、记下了多少条链接。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SiteUseView {
+    pub at: String,
+    pub plugin: String,
+    pub method: String,
+    pub method_name: String,
+    pub noted: u32,
 }
 
 /// 一个访客身份（`/visitors`）：站点给没登录的访客的 cookie，不是账号。访客窗口照它开、照它判断取到没有。

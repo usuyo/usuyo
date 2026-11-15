@@ -1,8 +1,10 @@
 // 发布版在 Windows 上不弹控制台窗口。
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod channel;
 mod daemon;
 mod login;
+mod reading;
 mod site_cookies;
 mod window;
 mod words;
@@ -13,6 +15,7 @@ use tauri::{Manager, RunEvent};
 
 use crate::daemon::{Connection, Daemon};
 use crate::login::Logins;
+use crate::reading::{Control, Reads};
 use crate::window::Chrome;
 use crate::words::{Lang, Words};
 
@@ -75,10 +78,36 @@ async fn open_visitor(
             .map_err(|e| plain(&app, words::CANT_CLEAR_OLD_VISITOR, &e))?;
     }
     let handle = app.clone();
-    tauri::async_runtime::spawn_blocking(move || logins.open_visitor(&app, &site))
+    tauri::async_runtime::spawn_blocking(move || logins.open_visitor(&app, &site, false))
         .await
         .map_err(|e| e.to_string())?
         .map_err(|e| plain(&handle, words::CANT_OPEN_VISITOR, &e))
+}
+
+/// 开一种方法的站点窗口（在 usuyo 中登录并读取）。前端只给插件和方法的 id，
+/// 站点、登录页、脚本由壳自己问内核。
+#[tauri::command]
+async fn open_reading(
+    app: tauri::AppHandle,
+    logins: tauri::State<'_, Arc<Logins>>,
+    reads: tauri::State<'_, Arc<Reads>>,
+    plugin: String,
+    method: String,
+) -> Result<(), String> {
+    let (logins, reads) = (Arc::clone(&logins), Arc::clone(&reads));
+    let handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        logins.open_reading(&app, &reads, &plugin, &method)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| plain(&handle, words::CANT_OPEN_READING, &e))
+}
+
+/// 站点窗口上面那条面板里的按钮：自己翻、你翻、暂停、继续、完成。只认那条自己的页面。
+#[tauri::command]
+fn reading_control(webview: tauri::Webview, reads: tauri::State<'_, Arc<Reads>>, control: Control) {
+    reads.control(webview.label(), control);
 }
 
 /// 登录窗口上面那条里的「登录好了」。只认那条自己的页面。
@@ -148,10 +177,14 @@ fn main() {
     let app = tauri::Builder::default()
         // 「打开原帖」经它交给系统浏览器；能开哪些网址由 capabilities/default.json 管（只有 http、https）。
         .plugin(tauri_plugin_opener::init())
+        // 站点窗口往壳交链接的那一条（channel.rs），权限只在开窗口时给那块网页
+        .plugin(channel::plugin())
         .invoke_handler(tauri::generate_handler![
             daemon_connection,
             open_login,
             open_visitor,
+            open_reading,
+            reading_control,
             login_done,
             clear_login,
             clear_visitor,
@@ -162,8 +195,15 @@ fn main() {
             let plugins = app.path().resource_dir()?.join("plugins");
             let daemon = Arc::new(Daemon::new(plugins)?);
             let logins = Arc::new(Logins::new(Arc::clone(&daemon)));
+            let reads = Arc::new(Reads::default());
             app.manage(Arc::clone(&daemon));
             app.manage(Arc::clone(&logins));
+            app.manage(Arc::clone(&reads));
+            // 内核要访客身份时自己去取（看不见的访客窗口）
+            {
+                let (handle, logins) = (app.handle().clone(), Arc::clone(&logins));
+                std::thread::spawn(move || logins.watch_wanted(&handle));
+            }
             // 设置写坏了也要开得了窗口：照默认（不用系统标题栏）开，原因进日志。
             let system_title_bar = window::system_title_bar(daemon.machine_dir()).unwrap_or_else(|e| {
                 eprintln!("usuyo: window.systemTitleBar not read, opening without the system title bar: {e:#}");
@@ -179,6 +219,19 @@ fn main() {
                     std::thread::spawn(move || {
                         if let Err(e) = logins.open_login(&handle, &site) {
                             eprintln!("usuyo: cannot open the login window: {e:#}");
+                        }
+                    });
+                }
+                // `USUYO_OPEN_READING=<插件 id>#<方法 id>`：一启动就开那种方法的站点窗口
+                if let Ok(target) = std::env::var("USUYO_OPEN_READING")
+                    && let Some((plugin, method)) = target.split_once('#')
+                {
+                    let (plugin, method) = (plugin.to_owned(), method.to_owned());
+                    let (handle, logins, reads) =
+                        (app.handle().clone(), Arc::clone(&logins), Arc::clone(&reads));
+                    std::thread::spawn(move || {
+                        if let Err(e) = logins.open_reading(&handle, &reads, &plugin, &method) {
+                            eprintln!("usuyo: cannot open the site window: {e:#}");
                         }
                     });
                 }

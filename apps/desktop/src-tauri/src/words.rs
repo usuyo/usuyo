@@ -113,6 +113,10 @@ pub const NO_SUCH_PANE: Words = w(
     "There's no settings pane named {pane}.",
 );
 pub const CANT_OPEN_SETTINGS: Words = w("无法打开系统设置。", "Couldn't open System Settings.");
+pub const CANT_OPEN_READING: Words = w(
+    "无法打开这个站点的窗口。",
+    "Couldn't open the window for this site.",
+);
 
 // login.rs：登录窗口的标题和上面那条里的话
 pub const LOGIN_TITLE: Words = w("登录{site} · usuyo", "Sign In to {site} · usuyo");

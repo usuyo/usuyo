@@ -23,7 +23,7 @@ const OPTIONS: FollowOption[] = [
     ],
     minHours: 6,
   },
-  { kind: "creator", pluginId: "usuyo-fetch/xiaohongshu", pluginName: "小红书", methodName: "RSSHub", built: false, minHours: 12 },
+  { kind: "creator", pluginId: "usuyo-fetch/rednote", pluginName: "小红书", methodName: "RSSHub", built: false, minHours: 12 },
   { kind: "feed", pluginId: "usuyo/web", pluginName: "网页", methodName: "订阅源", built: true, minHours: 6 },
 ];
 

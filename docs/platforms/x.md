@@ -1,7 +1,7 @@
 <a id="x推特获取设计"></a>
 # X（推特）：获取设计
 
-写给接手写 X 插件的模型和以后查。和[小红书](xiaohongshu.md)、[视频号](wechat-channels.md)、[B站](bilibili.md)那几份同样的写法。依据是 2026-11-11 用 `gh api` 读的上游源码、README 和 issue（版本写在[第 11 节](#11-依据)）；没有向 x.com、twitter.com、twimg.com 或 X 的任何主机发过请求，也没有读 X 自己的文档站（它也在 X 的主机上）。所以凡是线上行为，要么出自上游的代码和 issue，要么标「要你来核」。标「推断」的是没有证据的判断。
+写给接手写 X 插件的模型和以后查。和[小红书](rednote.md)、[视频号](wechat-channels.md)、[B站](bilibili.md)那几份同样的写法。依据是 2026-11-11 用 `gh api` 读的上游源码、README 和 issue（版本写在[第 11 节](#11-依据)）；没有向 x.com、twitter.com、twimg.com 或 X 的任何主机发过请求，也没有读 X 自己的文档站（它也在 X 的主机上）。所以凡是线上行为，要么出自上游的代码和 issue，要么标「要你来核」。标「推断」的是没有证据的判断。
 
 所有平台放在一起的总表、要不要账号的几个说法、怎么相对安全地试，在 [platforms/README](README.md)；这里不重复。
 
@@ -37,7 +37,7 @@
 
 - **日常浏览器里的脚本**（`browser-session`，推荐）：照 [prinsss/twitter-web-exporter](https://github.com/prinsss/twitter-web-exporter)（MIT，v1.4.3，2026-08-31）的做法。它在页面环境里改写 `XMLHttpRequest.prototype.open`，等请求完成后读回答，不发任何额外请求（`src/core/extensions/manager.ts`）。书签认 URL 里的 `/graphql/<id>/Bookmarks`，从 `data.bookmark_timeline_v2.timeline.instructions` 取帖子（`src/modules/bookmarks/api.ts`）；喜欢认 `/graphql/<id>/Likes`，从 `data.user.result.timeline.timeline.instructions` 取（`src/modules/likes/api.ts`）。它要注入到页面环境、不能是内容脚本环境，否则截不到（同一个文件里的检查，和它的 [#19](https://github.com/prinsss/twitter-web-exporter/issues/19)）。作者明说不带自动滚动，免得被当成机器（[#120](https://github.com/prinsss/twitter-web-exporter/issues/120)），一屏屏要你自己翻（[#51](https://github.com/prinsss/twitter-web-exporter/issues/51)）。调研 06 扫过它的 issue，没有使用者被锁的报告（[06 §16.2](../research/06-platform-access-and-account-risk.md#162-issue-里的账号问题)）。
 
-  usuyo 的脚本放在 X 插件仓库的 `userscript/` 下，照小红书插件的脚本写（握手、令牌只存脚本管理器、只连 `127.0.0.1`，见 `usuyo-fetch/xiaohongshu/README.md`；小红书那边记下的条目 12 小时作废是因为 `xsec_token` 会过期，X 的链接不过期，不照搬）。它只记：帖子 id、作者的 `screen_name`、正文第一行当标题；书签记 `action: favorite`，喜欢记 `action: like`；交的链接是 `https://x.com/<screen_name>/status/<id>`。喜欢只记你自己的：请求里的 `userId` 要等于登录着的那个人（怎么在页面里拿到自己的 id 要实现时核，推断可以读 `twid` cookie 或页面状态；X 2024 年起不给别人看喜欢列表，推断页面上本来就只有你自己的）。
+  usuyo 的脚本放在 X 插件仓库的 `userscript/` 下，照小红书插件的脚本写（握手、令牌只存脚本管理器、只连 `127.0.0.1`，见 `usuyo-fetch/rednote/README.md`；小红书那边记下的条目 12 小时作废是因为 `xsec_token` 会过期，X 的链接不过期，不照搬）。它只记：帖子 id、作者的 `screen_name`、正文第一行当标题；书签记 `action: favorite`，喜欢记 `action: like`；交的链接是 `https://x.com/<screen_name>/status/<id>`。喜欢只记你自己的：请求里的 `userId` 要等于登录着的那个人（怎么在页面里拿到自己的 id 要实现时核，推断可以读 `twid` cookie 或页面状态；X 2024 年起不给别人看喜欢列表，推断页面上本来就只有你自己的）。
 
   回答里没有「什么时候存的」：两种时间线只给 `sortIndex`。fieldtheory-cli 也拿不到书签时间，把 `bookmarkedAt` 记成空（`src/graphql-bookmarks.ts`）。所以 `actedAt` 留空，不用抓取时间冒充（[协议 §3.8](../protocol/fetch.md#38-list-与跟着收)）。
 - **官方归档**（`official-export`，不碰账号）：在 X 的设置里申请下载自己的数据，拿到一个 zip。[steipete/birdclaw](https://github.com/steipete/birdclaw)（MIT）读里面的 `data/like.js`、`data/like-partN.js`，也接受 `data/bookmark(s).js`（`src/lib/archive/slices.ts`）。它的代码接受书签文件，不等于今天的归档里一定有书签；调研笔记记过 timelinize 的 Twitter 源不导入喜欢和书签（[官方导出笔记](../research/notes/official-export-findings.md)）。归档里有没有书签、`like.js` 每条有哪些字段，要你申请一份来看。插件的 `list` 读这个 zip，只交链接，内容照样由 `fetch` 不带账号去取。

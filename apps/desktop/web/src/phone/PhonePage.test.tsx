@@ -21,10 +21,10 @@ const method = (m: Partial<FetchMethod> & Pick<FetchMethod, "id" | "name">): Fet
   mockMethod({ access: "vision-ui", account: { kind: "own-phone", where: "小红书" }, gets: { list: ["收藏"], delivers: "links" }, ...m });
 
 const xhs: FetchPlugin = {
-  id: "usuyo-fetch/xiaohongshu",
+  id: "usuyo-fetch/rednote",
   name: "小红书",
   version: "0.1.0",
-  platforms: [{ id: "xiaohongshu", name: "小红书" }],
+  platforms: [{ id: "rednote", name: "小红书" }],
   access: "public-web",
   login: "none",
   canList: false,
@@ -268,7 +268,7 @@ it("lists the methods that use a phone, what each still needs, and links to its 
   const list = await screen.findByRole("list", { name: "使用手机的获取方式" });
   const links = within(list).getAllByRole("link");
   expect(links).toHaveLength(2);
-  expect(links[0]?.getAttribute("href")).toBe("/plugins/xiaohongshu");
+  expect(links[0]?.getAttribute("href")).toBe("/plugins/rednote");
   expect(within(list).getByText("不可用。需要先允许录屏与系统录音和连接 iPhone。")).toBeTruthy();
   expect(within(list).getByText("尚未提供")).toBeTruthy();
   expect(within(list).getByText("已记录：镜像没有公开的识别接口。")).toBeTruthy();

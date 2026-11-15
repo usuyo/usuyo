@@ -91,6 +91,9 @@ pub struct EngineConfig {
     pub default_sources: Vec<String>,
     /// 开发开关（`USUYO_DEV_LOOPBACK_SOURCES=1`）：订阅源和安装包只连本机回环地址，可以是明文 http。
     pub dev_loopback_sources: bool,
+    /// 一条为访客身份等多久（[`crate::visitor_wanted`]）：桌面壳在这段时间里取一份交来就马上再试，
+    /// 没交来就到点再试。默认 90 秒。
+    pub visitor_wait: Duration,
 }
 
 impl EngineConfig {
@@ -117,6 +120,7 @@ impl EngineConfig {
             phone: None,
             default_sources: Vec::new(),
             dev_loopback_sources: false,
+            visitor_wait: Duration::from_secs(90),
         }
     }
 }
@@ -315,6 +319,9 @@ pub(crate) struct Inner {
     pub system_language: crate::words::Lang,
     /// 交给插件的 `USUYO_LOCALE`，获取插件和转换插件共用。
     pub locale: usuyo_plugin::Locale,
+    /// 在要的访客身份和等着它的条目（[`crate::visitor_wanted`]）。
+    pub visitors_wanted: crate::visitor_wanted::Wanted,
+    pub visitor_wait: Duration,
 }
 
 #[derive(Clone)]
@@ -421,6 +428,8 @@ impl Engine {
                 language: std::sync::RwLock::new(lang),
                 system_language: config.system_language,
                 locale,
+                visitors_wanted: crate::visitor_wanted::Wanted::default(),
+                visitor_wait: config.visitor_wait,
             }),
         };
         if engine.inner.index.needs_rebuild() {

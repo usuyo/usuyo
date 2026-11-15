@@ -1118,6 +1118,13 @@
           ],
           "default": null
         },
+        "guide": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "id": {
           "type": "string"
         },

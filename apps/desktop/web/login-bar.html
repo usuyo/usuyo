@@ -8,15 +8,43 @@
     <link rel="icon" href="data:," />
   </head>
   <body>
-    <!-- 登录窗口上面那一条（src-tauri/src/login.rs）：说这是哪个站点的窗口，没声明 cookie 的站点放「完成登录」。字由 src/shell/loginBar.ts 按语言填。 -->
-    <div class="flex h-full items-center gap-3 border-b border-border bg-rail px-4">
-      <p id="say" role="status" class="m-0 min-w-0 flex-1 text-small text-sub"></p>
-      <button
-        id="done"
-        type="button"
-        hidden
-        class="press h-ctl-xs shrink-0 cursor-pointer rounded-sm border border-border2 bg-chip px-3 text-small font-medium text-text"
-      ></button>
+    <!--
+      登录窗口上面那一条（src-tauri/src/login.rs）：说这是哪个站点的窗口，没声明 cookie 的站点放「完成登录」。
+      站点窗口（src-tauri/src/reading.rs）多一块面板：读到哪了、几个计数、自动滚动、暂停和继续、完成、拷贝诊断信息。
+      字由 src/shell/loginBar.ts 按语言填。
+    -->
+    <div class="flex h-full flex-col justify-center gap-1.5 border-b border-border bg-rail px-4">
+      <div class="flex items-center gap-3">
+        <p id="say" role="status" class="m-0 min-w-0 flex-1 text-small text-sub"></p>
+        <button
+          id="done"
+          type="button"
+          hidden
+          class="press h-ctl-xs shrink-0 cursor-pointer rounded-sm border border-border2 bg-chip px-3 text-small font-medium text-text"
+        ></button>
+      </div>
+      <div id="panel" hidden class="flex min-w-0 flex-col gap-1.5">
+        <p id="counts" class="m-0 truncate text-small text-label"></p>
+        <p id="detail" class="m-0 truncate text-tag text-faint"></p>
+        <div class="flex flex-wrap items-center gap-2">
+          <label class="flex cursor-pointer items-center gap-1.5 text-small text-text">
+            <input id="auto" type="checkbox" class="cursor-pointer" />
+            <span id="auto-label"></span>
+          </label>
+          <button
+            id="pause"
+            type="button"
+            class="press h-ctl-xs cursor-pointer rounded-sm border border-border2 bg-chip px-3 text-small font-medium text-text"
+          ></button>
+          <button
+            id="finish"
+            type="button"
+            class="press h-ctl-xs cursor-pointer rounded-sm border border-border2 bg-chip px-3 text-small font-medium text-text"
+          ></button>
+          <button id="copy" type="button" class="cursor-pointer border-0 bg-transparent p-0 text-small text-sub underline"></button>
+          <span id="copy-note" class="text-tag text-faint"></span>
+        </div>
+      </div>
     </div>
     <script type="module" src="/src/shell/loginBar.ts"></script>
   </body>

@@ -277,7 +277,16 @@ impl Engine {
             // 链接可能带分享参数，原因里不写它：这句会进日志和 `jobs.db`
             .map_err(|e| Error::InvalidArgs(format!("bad job url: {e}")))?;
         let batch = job.import_id.is_some();
-        let (candidates, unusable) = self.fetch_candidates(&url, platform).await?;
+        let (candidates, unusable, visitor) = self.fetch_candidates(&url, platform).await?;
+        // 有一种开着的方法只差一份访客身份（没有或过期）：先要一份，这条等一回再试
+        if let Some(site) = &visitor {
+            if self.wait_for_visitor(id.as_str(), site, false)? {
+                return Ok(());
+            }
+            self.inner
+                .visitors_wanted
+                .gave_up(site, id.as_str(), now_ms());
+        }
 
         // 都没取到时条目上写谁的原因：为这条链接写的平台方法里第一个失败的；通用网页的失败只进失败日志，
         // 平台方法一种都没调成（都用不上）时才轮到它。
@@ -386,6 +395,13 @@ impl Engine {
                 Err(PluginError::Call { failure, .. }) => {
                     tracing::info!(plugin = %pid, method = %method.id, item = %id, failure = %failure, "fetch failed");
                     self.record_method_call(plugin, &method.id, url.host_str(), Err(&failure))?;
+                    // 站点不收存着的访客身份：换一份，这条等一回再试（每条只等这一回）
+                    if failure.code == ErrorCode::VisitorRequired
+                        && let Some(site) = method.visitors.first()
+                        && self.wait_for_visitor(id.as_str(), site, true)?
+                    {
+                        return Ok(());
+                    }
                     if !plugin.spec.is_web() && failure.code != ErrorCode::UnsupportedInput {
                         platform_refused = true;
                     }
@@ -435,6 +451,7 @@ impl Engine {
         }
 
         if missing.is_some() {
+            self.inner.visitors_wanted.done(id.as_str());
             self.inner.jobs.finish(id.as_str())?;
             self.emit(Event::ItemUpdated { id: id.to_string() });
             return Ok(());

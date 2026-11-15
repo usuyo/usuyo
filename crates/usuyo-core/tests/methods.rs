@@ -425,7 +425,10 @@ async fn switches_have_defaults_and_turning_one_on_makes_it_a_candidate() {
 #[tokio::test]
 async fn with_nothing_usable_the_item_says_what_to_do() {
     let f = Fixture::new();
-    let engine = f.engine();
+    // 不等访客身份（没有桌面壳去取）：这一回就说缺什么
+    let mut config = EngineConfig::new(&f.library, f.machine());
+    config.visitor_wait = Duration::ZERO;
+    let engine = Engine::open(config).unwrap();
     engine.set_method("fake/multi", "guest", false).unwrap();
     engine.set_method("fake/multi", "tool", false).unwrap();
     let t = engine

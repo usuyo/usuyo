@@ -18,7 +18,7 @@ pub use error::PluginError;
 pub use host::{
     CallLimits, CallOptions, DeclaredSite, DeclaredVisitor, Discovery, FetchInput, FetchPlugin,
     FetchRequest, FetchedSnapshot, HostConfig, InstalledPlugin, ListRequest, Locale, LoginState,
-    OutFile, PluginHost, ProxySetting, Rejected, ResidentTransform, TransformConfig,
+    OutFile, PluginHost, ProfileUse, ProxySetting, Rejected, ResidentTransform, TransformConfig,
     TransformLimits, TransformOutput, TransformPlugin, TransformRequest, Vault,
     behind_fake_ip_proxy, discover, resolve_proxy,
 };

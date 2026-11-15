@@ -95,6 +95,17 @@ export async function clearVisitorData(site: string): Promise<void> {
   await invoke("clear_visitor", { site });
 }
 
+/**
+ * 开一种方法的站点窗口（在 usuyo 中登录并读取，src-tauri/src/reading.rs）。只交插件和方法的 id：
+ * 站点、登录页、脚本由壳自己问内核；找到的链接由壳交给内核，落成一次导入。不在桌面壳里时回 false。
+ */
+export async function openReading(plugin: string, method: string): Promise<boolean> {
+  if (!isDesktopShell()) return false;
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("open_reading", { plugin, method });
+  return true;
+}
+
 /** 退出登录以后清掉这个站点那份网页数据（登录窗口的 cookie、缓存），下次登录从头来。 */
 export async function clearLoginData(site: string): Promise<void> {
   if (!isDesktopShell()) return;

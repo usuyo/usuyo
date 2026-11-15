@@ -1,7 +1,7 @@
 <a id="各平台怎么取"></a>
 # 各平台怎么取
 
-每个平台每一样东西要不要账号、走哪条路、做到哪，都在这一页。一个平台的细节（请求、身份、存下什么、错误怎么报）写在那个平台自己的设计里：[小红书](xiaohongshu.md)、[视频号](wechat-channels.md)、[B站](bilibili.md)、[X](x.md)。小红书、视频号、B站这三份照 2026-11-11 用 `gh api` 读的源码、README、release 和 issue 写，没有登录任何账号，没有对平台发请求，没有运行第三方代码，也没有读本机的微信数据目录；标「推断」的没有实测。证据和来源在[调研 06](../research/06-platform-access-and-account-risk.md)，这里不重抄。每个平台仓库里有哪几种取法、各用什么做成，在 [routes.md](routes.md)；手机上替你复制链接的那几种取法，在 [phone.md](phone.md)。
+每个平台每一样东西要不要账号、走哪条路、做到哪，都在这一页。一个平台的细节（请求、身份、存下什么、错误怎么报）写在那个平台自己的设计里：[小红书](rednote.md)、[视频号](wechat-channels.md)、[B站](bilibili.md)、[X](x.md)。小红书、视频号、B站这三份照 2026-11-11 用 `gh api` 读的源码、README、release 和 issue 写，没有登录任何账号，没有对平台发请求，没有运行第三方代码，也没有读本机的微信数据目录；标「推断」的没有实测。证据和来源在[调研 06](../research/06-platform-access-and-account-risk.md)，这里不重抄。每个平台仓库里有哪几种取法、各用什么做成，在 [routes.md](routes.md)；手机上替你复制链接的那几种取法，在 [phone.md](phone.md)。
 
 <a id="1-怎么读这一页"></a>
 ## 1. 怎么读这一页
@@ -34,9 +34,9 @@
 
 | 平台 | 哪一样 | 要不要账号 | 走哪条路（层级） | 状态 | 在哪 |
 |---|---|---|---|---|---|
-| 小红书 | 图文 | 访客身份 | 公开笔记页，读页面里的状态对象，不签名（`public-web`） | 做了 | `usuyo-fetch/xiaohongshu`；[xiaohongshu.md §2.2](xiaohongshu.md#22-取单条) |
+| 小红书 | 图文 | 访客身份 | 公开笔记页，读页面里的状态对象，不签名（`public-web`） | 做了 | `usuyo-fetch/rednote`；[rednote.md §2.2](rednote.md#22-取单条) |
 | 小红书 | 视频 | 访客身份 | 同一个 `fetch`，下载页面给的地址；不登录只有低清（`public-web`） | 做了 | 同上 |
-| 小红书 | 存过的 | 账号只在你自己的浏览器里；或账号在你手机的 App 里 | 油猴脚本只记收藏页、赞过页自己的请求，交 `/v1/batches`（`browser-session`）；或 iPhone 镜像替你逐条复制链接（`vision-ui`） | 脚本做了；手机设计了 | `usuyo-fetch/xiaohongshu/userscript/`；[xiaohongshu.md §2.1](xiaohongshu.md#21-列出你存过的)；[phone.md §7.2](phone.md#72-小红书收藏) |
+| 小红书 | 存过的 | 账号只在你自己的浏览器里；或账号在你手机的 App 里 | 油猴脚本只记收藏页、赞过页自己的请求，交 `/v1/batches`（`browser-session`）；或 iPhone 镜像替你逐条复制链接（`vision-ui`） | 脚本做了；手机设计了 | `usuyo-fetch/rednote/userscript/`；[rednote.md §2.1](rednote.md#21-列出你存过的)；[phone.md §7.2](phone.md#72-小红书收藏) |
 | 小红书 | 创作者 / 关键词 | 不要（推断） | RSSHub 用不登录的无头浏览器截获主页请求（`public-web`）；搜索只找到要签名的（`private-api`） | 只有调研 | [多平台笔记 RSSHub 表](../research/notes/multi-platform-tier-table-and-base-deps.md#rsshub) |
 | 视频号 | 图文 | 不要 | 分享链接对应的匿名接口，只有作者、描述、封面（`public-web`） | 做了 | `usuyo-fetch/wechat-channels`；[wechat-channels.md §3.2](wechat-channels.md#32-取单条) |
 | 视频号 | 视频 | 要在 usuyo 里登录（腾讯元宝，不是微信） | 元宝换临时凭证，再匿名要视频地址（`session-api`） | 做了 | 同上 |
