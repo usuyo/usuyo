@@ -253,7 +253,7 @@ ACP 会话在窗口里只显示它交来的改动提议和权限请求，不显�
 
 清单里的 `methods` 做了（11-12，[协议 §2.3.1](protocol/manifest.md#231-方法-methods)）：每种方法自己的层级、账号、站点、访客身份和能力，没做的也列；宿主照它挑方法、换下一种、只要缺的那几样补缺，按方法交凭据、记暂停和上一次调用，每次失败记进按机器目录的 `logs/fetch-failures.jsonl`；开关记在按机器的 `settings.json`；这台机器上用不用得上看登录、访客身份和插件的本机检查；本机接口的 `GET /plugins` 按方法摆，`PUT …/methods/{method}` 开关一种，来源带方法，`list` 可以从一条链接开始。获取插件页按平台摆方法，用选择框选获取方式；用户拖动排方法的顺序没做。
 
-**插件仓库的 README** 开头一张「功能 × 实现方式 × 风险层级」表（功能、实现方式（方法 id）、账号、风险层级、状态），下面每种方法一节，只陈述事实。各平台每一类用哪几种获取方式、对真平台跑过的记录、还没定的事在 [platforms/routes.md](platforms/routes.md)；要不要账号、怎么相对安全地试在 [platforms/README.md](platforms/README.md)。
+**插件仓库的 README** 开头一张「功能 × 实现方式 × 风险层级」表（功能、实现方式（方法 id）、账号、风险层级、状态），下面每种方法一节，只陈述事实。各平台每一类用哪几种获取方式、对真平台跑过的记录、还没定的事在 [platforms/routes.md](platforms/routes.md)；要不要账号、怎么相对安全地试在 [platforms/README.md](platforms/README.md)。各平台的内容不带账号怎么取、参考项目的做法、我们差在哪和改动清单，在 [platforms/anonymous-content.md](platforms/anonymous-content.md)。
 
 - **主要的平台**是小红书、视频号、B 站、X、抖音，其余接着做，不排先后。
 - **有清单的 12 个**：小红书（`note-page` 公开笔记页加访客身份；`in-usuyo` 在 usuyo 的站点窗口里登录、自己往下翻、交收藏和赞过（11-14，[协议 §2.3.1](protocol/manifest.md#231a-在站点窗口里读)）；`userscript` 浏览器脚本交收藏和赞过）、微信视频号（`feed-info` 分享链接的匿名接口；`yuanbao` 用腾讯元宝只换视频）、B 站（`view` 公开接口取单条；`favorites-public` 不带账号列公开收藏夹；`favorites` 登录后列收藏夹和稍后再看；`userscript`）、X（`guest` 访客接口、`embed` 嵌入接口取单条；`userscript` 交书签和喜欢；`archive` 读官方归档）、抖音（`share-page`，现在取不到；`h5-token`，默认关着；`userscript`），还有微信、快手、微博、知乎、YouTube、Instagram、Telegram；每一类做到哪见 [routes.md §3](platforms/routes.md#3-总览)，对真平台跑过的见 [routes.md §4](platforms/routes.md#4-对真平台跑过的记录)。

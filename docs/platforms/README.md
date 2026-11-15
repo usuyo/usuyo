@@ -1,7 +1,7 @@
 <a id="各平台怎么取"></a>
 # 各平台怎么取
 
-这一页写要不要账号怎么分、各层级和账号的说法、怎么相对安全地试。一个平台的细节（请求、身份、存下什么、错误怎么报）写在那个平台自己的设计里：[小红书](rednote.md)、[视频号](wechat-channels.md)、[B站](bilibili.md)、[X](x.md)。小红书、视频号、B站这三份照 2026-11-11 用 `gh api` 读的源码、README、release 和 issue 写，没有登录任何账号，没有对平台发请求，没有运行第三方代码，也没有读本机的微信数据目录；标「推断」的没有实测。证据和来源在[调研 06](../research/06-platform-access-and-account-risk.md)，这里不重抄。每个插件有哪几种获取方式、各自的账号、风险层级和状态，写在插件仓库 README 开头的表里；跨平台的总览和对真平台跑过的记录在 [routes.md](routes.md)；手机上替你复制链接的那几种获取方式，在 [phone.md](phone.md)。
+这一页写要不要账号怎么分、各层级和账号的说法、怎么相对安全地试。一个平台的细节（请求、身份、存下什么、错误怎么报）写在那个平台自己的设计里：[小红书](rednote.md)、[视频号](wechat-channels.md)、[B站](bilibili.md)、[X](x.md)。小红书、视频号、B站这三份照 2026-11-11 用 `gh api` 读的源码、README、release 和 issue 写，没有登录任何账号，没有对平台发请求，没有运行第三方代码，也没有读本机的微信数据目录；标「推断」的没有实测。证据和来源在[调研 06](../research/06-platform-access-and-account-risk.md)，这里不重抄。每个插件有哪几种获取方式、各自的账号、风险层级和状态，写在插件仓库 README 开头的表里；跨平台的总览和对真平台跑过的记录在 [routes.md](routes.md)；手机上替你复制链接的那几种获取方式，在 [phone.md](phone.md)。各平台的内容不带账号怎么取、参考项目怎么做、我们的插件差在哪，在 [anonymous-content.md](anonymous-content.md)。
 
 <a id="1-怎么读这一页"></a>
 ## 1. 怎么读这一页
