@@ -17,6 +17,7 @@ import { ItemActions, ItemMeta } from "./ItemDetails";
 import { NoteBlock } from "./NoteBlock";
 import { usePlayer } from "./usePlayer";
 import { Viewer } from "./Viewer";
+import { PlatformName } from "../plugins/names";
 
 const route = getRouteApi("/items/$id");
 
@@ -122,7 +123,9 @@ function ItemBody({ item, topics, jump }: { item: Item; topics: Topic[]; jump: I
       <header className="mt-2.5 flex flex-wrap items-start gap-x-6 gap-y-3">
         <div className="min-w-0 flex-[1_1_320px]">
           <div className="flex h-6 items-center gap-2">
-            <PlatformChip>{item.platform.name}</PlatformChip>
+            <PlatformChip>
+              <PlatformName platform={item.platform} />
+            </PlatformChip>
             <span className="truncate text-note text-sub">{item.author}</span>
           </div>
           <h1 className="m-0 mt-2 text-title font-semibold text-text">{item.title}</h1>

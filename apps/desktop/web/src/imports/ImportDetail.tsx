@@ -2,11 +2,15 @@ import { Link } from "@tanstack/react-router";
 import { Check } from "lucide-react";
 import { useState } from "react";
 import { Checkbox, ToggleButton, ToggleButtonGroup } from "react-aria-components";
-import type { ImportEntry, ImportView, VisitorIdentity } from "../api/endpoints";
-import { useImport, useImportChange, useImportEntries, usePlugins, useVisitors } from "../api/hooks";
+import type { FetchPlugin, ImportEntry, ImportView, ImportWaiting, VisitorIdentity } from "../api/endpoints";
+import { useImport, useImportChange, useImportEntries, usePlugins, useSites, useVisitors } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
 import { rich, t } from "../i18n";
 import { dayText } from "../item/format";
+import { useNames } from "../plugins/names";
+import { TryAgain } from "../plugins/Needs";
+import { SiteLoginButton } from "../plugins/SiteLoginRow";
+import { VisitorTake } from "../plugins/VisitorIdentity";
 import { timeText } from "../plugins/words";
 import { Button } from "../ui/Button";
 import { NotStored } from "./NotStored";
@@ -20,14 +24,17 @@ export function ImportDetail({ id, onGone }: { id: string; onGone: () => void })
   const view = useImport(id);
   const plugins = usePlugins();
   const visitors = useVisitors();
+  const names = useNames();
   if (view.error) return <ErrorLine error={view.error} />;
   const v = view.data;
   if (!v) return null;
   const plugin = plugins.data?.plugins.find((p) => p.id === v.pluginId);
-  const platform = plugin?.platforms[0]?.name;
-  const methodName = plugin?.methods.find((m) => m.id === v.method)?.name ?? v.method;
+  const first = plugin?.platforms[0];
+  const platform = first ? names.platform(first.id, first.name) : undefined;
+  const found = plugin?.methods.find((m) => m.id === v.method);
+  const methodName = plugin && found ? names.method(plugin.id, found.id, found.name) : v.method;
   const visitor = visitors.data?.find((x) => plugin?.visitors.includes(x.site))?.state;
-  const pluginName = plugin?.name ?? v.pluginId ?? "";
+  const pluginName = plugin ? names.plugin(plugin.id, plugin.name) : (v.pluginId ?? "");
   const from =
     v.kind === "delivered"
       ? v.client
@@ -47,16 +54,43 @@ export function ImportDetail({ id, onGone }: { id: string; onGone: () => void })
           {t("imports.detail.meta", { from, day: dayText(v.createdAt) })}
         </span>
       </div>
-      {v.state === "listing" ? <Listing v={v} visitor={visitor} /> : null}
+      {v.state === "listing" ? <Listing v={v} visitor={visitor} plugin={plugin} /> : null}
       {v.state === "ready" ? <Ready v={v} platform={platform} /> : null}
-      {v.state === "taking" || v.state === "held" || v.state === "done" ? <Running v={v} platform={platform} visitor={visitor} /> : null}
+      {v.state === "taking" || v.state === "held" || v.state === "done" ? <Running v={v} platform={platform} visitor={visitor} plugin={plugin} /> : null}
       <Discard id={v.id} done={v.state === "done"} onGone={onGone} />
     </div>
   );
 }
 
 /** 在列：一页页列，列到的条目跟着出现。 */
-function Listing({ v, visitor }: { v: ImportView; visitor: VisitorIdentity["state"] | undefined }) {
+/**
+ * 等着你动手的那一步，就地给按钮：插件暂停了给「立即重试」，要登录给登录，要访客身份给获取；
+ * 没有到点时间的（等你处理的）再给「继续导入」，处理完点它接着走。照节奏、等到明天、平台不做批量的不用动手，不给。
+ */
+function WaitingAction({ id, waiting, plugin }: { id: string; waiting: ImportWaiting; plugin: FetchPlugin | undefined }) {
+  const sites = useSites();
+  const visitors = useVisitors();
+  const change = useImportChange(id);
+  if (waiting.until !== undefined || waiting.code === "pacing" || waiting.code === "daily-limit" || waiting.code === "batch-off") return null;
+  const login = waiting.code === "login-required" && plugin ? (sites.data ?? []).filter((s) => s.plugins.includes(plugin.id)) : [];
+  const visitor = waiting.code === "visitor-required" && plugin ? (visitors.data ?? []).find((x) => plugin.visitors.includes(x.site)) : undefined;
+  const retry = plugin !== undefined && (waiting.code === "held" || waiting.code === "rate-limited" || waiting.code === "blocked");
+  return (
+    <div className="mt-2 flex flex-wrap items-start gap-2">
+      {login.map((s) => (
+        <SiteLoginButton key={s.site} site={s} />
+      ))}
+      {visitor ? <VisitorTake visitor={visitor} /> : null}
+      {retry && plugin ? <TryAgain pluginId={plugin.id} label={t("plugins.needs.retryNow")} /> : null}
+      <Button variant="outline" size="sm" isDisabled={change.isPending} onPress={() => change.mutate({ kind: "resume" })}>
+        {t("imports.detail.resume")}
+      </Button>
+      {change.error ? <ErrorLine error={change.error} className="w-full" /> : null}
+    </div>
+  );
+}
+
+function Listing({ v, visitor, plugin }: { v: ImportView; visitor: VisitorIdentity["state"] | undefined; plugin: FetchPlugin | undefined }) {
   const n = v.preview.new + v.preview.stored + v.preview.trashed;
   return (
     <>
@@ -71,7 +105,12 @@ function Listing({ v, visitor }: { v: ImportView; visitor: VisitorIdentity["stat
           <p className="m-0 mt-1 text-note text-sub">{t("imports.detail.listingSourceNote")}</p>
         </>
       )}
-      {v.waiting ? <p className="m-0 mt-1 text-small text-sub">{waitingText(v.waiting, undefined, visitor)}</p> : null}
+      {v.waiting ? (
+        <>
+          <p className="m-0 mt-1 text-small text-sub">{waitingText(v.waiting, undefined, visitor)}</p>
+          <WaitingAction id={v.id} waiting={v.waiting} plugin={plugin} />
+        </>
+      ) : null}
       <Group v={v} standing="new" title={t("imports.group.newTitle")} note={t("imports.group.newNote")} />
       <Group v={v} standing="stored" title={t("imports.group.storedTitle")} note={t("imports.group.storedNote")} />
       <Group v={v} standing="trashed" title={t("imports.group.trashedTitle")} note={t("imports.group.trashedNote")} />
@@ -152,7 +191,7 @@ function willText(takeNew: number, bringBack: number, stored: number): string {
 }
 
 /** 按节奏收、停着、收完：只说收下了几条、为什么在等、下一条大概什么时候、哪些没存下。 */
-function Running({ v, platform, visitor }: { v: ImportView; platform: string | undefined; visitor: VisitorIdentity["state"] | undefined }) {
+function Running({ v, platform, visitor, plugin }: { v: ImportView; platform: string | undefined; visitor: VisitorIdentity["state"] | undefined; plugin: FetchPlugin | undefined }) {
   const change = useImportChange(v.id);
   return (
     <>
@@ -178,6 +217,7 @@ function Running({ v, platform, visitor }: { v: ImportView; platform: string | u
           </Button>
         ) : null}
       </div>
+      {v.state === "taking" && v.waiting ? <WaitingAction id={v.id} waiting={v.waiting} plugin={plugin} /> : null}
       {change.error ? <ErrorLine error={change.error} className="mt-2" /> : null}
       {v.notStored > 0 ? <NotStored v={v} /> : null}
       <Taken v={v} />

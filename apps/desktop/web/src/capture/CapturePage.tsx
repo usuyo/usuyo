@@ -11,6 +11,7 @@ import { onPaletteChange } from "../theme/apply";
 import { useUiStore } from "../store/ui";
 import { Button } from "../ui/Button";
 import { drawBackdrop } from "./backdrop";
+import { useNames } from "../plugins/names";
 
 type Phase = { kind: "idle" } | { kind: "taken"; res: TakeResponse } | { kind: "gone" };
 
@@ -35,6 +36,7 @@ export function CapturePage() {
   const [value, setValue] = useState("");
   const [hover, setHover] = useState(false);
   const take = useTake();
+  const names = useNames();
   const markLanding = useUiStore((s) => s.markLanding);
   const reduced = useReducedMotion();
 
@@ -146,8 +148,8 @@ export function CapturePage() {
               <div className="truncate text-small text-sub">
                 {result
                   ? result.seen
-                    ? t("capture.lineSeen", { platform: result.platform.name, title: result.title, day: dayText(result.takenAt) })
-                    : t("capture.line", { platform: result.platform.name, title: result.title })
+                    ? t("capture.lineSeen", { platform: names.platform(result.platform.id, result.platform.name), title: result.title, day: dayText(result.takenAt) })
+                    : t("capture.line", { platform: names.platform(result.platform.id, result.platform.name), title: result.title })
                   : ""}
               </div>
             </div>

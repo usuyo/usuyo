@@ -1,7 +1,8 @@
 // 「手机连接」页：iPhone 镜像和 Android 两条路，和用到手机的获取方式。
 export default {
   title: "手机连接",
-  intro: "usuyo 读取镜像到这台 Mac 上的 iPhone 屏幕，在你保存的列表中只点按「分享」和「复制链接」。链接通过通用剪贴板传到这台 Mac，再用无需登录的获取方式获取内容。",
+  intro: "通过手机导入你在 App 中保存的内容，账号留在手机上。",
+  introMore: "usuyo 读取镜像到这台 Mac 上的 iPhone 屏幕，在你保存的列表中只点按「分享」和「复制链接」。链接通过通用剪贴板传到这台 Mac，再用无需登录的获取方式获取内容。",
   notServed: "此版本的 usuyo 尚未提供手机功能。之后可以在这里安装手机驱动、查看授权和连接状态。",
   sectionsLabel: "手机的各部分",
   iphone: { name: "iPhone", sub: "通过这台 Mac 上的 iPhone 镜像。将 iPhone 锁定并放在附近即可，无需拿在手里。" },

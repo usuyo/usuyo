@@ -8,13 +8,16 @@ import { MachineTag, PlatformChip } from "../ui/Chip";
 import { Toggle } from "../ui/Toggle";
 import { hitText } from "./words";
 import { t } from "../i18n";
+import { PlatformName } from "../plugins/names";
 
 /** 一条成员或命中的：平台、标题、作者，点进条目页。 */
 function ItemLine({ item, sub, action }: { item: ItemSummary; sub?: string; action: ReactNode }) {
   return (
     <li className="flex items-center gap-2 border-b border-border py-1 last:border-b-0">
       <Link to="/items/$id" params={{ id: item.id }} className="press -mx-2 flex min-w-0 flex-1 items-center gap-2.5 rounded-btn px-2 py-1.5 no-underline hover:bg-chip/60">
-        <PlatformChip>{item.platform.name}</PlatformChip>
+        <PlatformChip>
+          <PlatformName platform={item.platform} />
+        </PlatformChip>
         <span className="min-w-0">
           <span className="block truncate text-body text-text">{item.title}</span>
           {sub ? <span className="block truncate text-small text-sub">{sub}</span> : item.author ? <span className="block truncate text-small text-sub">{item.author}</span> : null}

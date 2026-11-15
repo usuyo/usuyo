@@ -22,7 +22,7 @@ describe("plugin words", () => {
   });
 
   it("tells a missing visitor identity from one that no longer works, and stays neutral without the state", () => {
-    expect(visitorText("missing")).toBe("需要访客身份：在「获取插件」页面中获取访客身份");
+    expect(visitorText("missing")).toBe("需要先获取访客身份");
     expect(visitorText("present")).toBe("访客身份已失效：更换后重试");
     expect(visitorText("expired")).toBe("访客身份已失效：更换后重试");
     expect(visitorText()).toBe("需要访客身份");
@@ -45,6 +45,6 @@ describe("plugin words", () => {
     expect(accountText({ kind: "visitor" }, [])).toBe("No account needed; uses the site's visitor identity");
     expect(getsText({ fetch: ["text", "images", "media:video"], list: ["Bookmarks", "Likes"] })).toEqual(["Single item: post text, images, and video", "Lists: Bookmarks and Likes"]);
     expect(lastCallText({ at: new Date(2026, 10, 11, 13, 0).toISOString(), ok: false, code: "blocked" }, now)).toBe("Last used 1:00 PM: failed. The platform blocked this plugin");
-    expect(visitorText("missing")).toBe("Visitor identity required. Get one on the Fetch Plugins page.");
+    expect(visitorText("missing")).toBe("Get a visitor identity first");
   });
 });

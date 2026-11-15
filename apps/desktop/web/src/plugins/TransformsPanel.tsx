@@ -5,6 +5,7 @@ import { useModelChange, useTransforms } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
 import { sizeText } from "../item/faces";
 import { Button } from "../ui/Button";
+import { Fold } from "../ui/Fold";
 import { rich, t } from "../i18n";
 import { formatList } from "../i18n/format";
 import { JOB_TEXT } from "./words";
@@ -17,6 +18,9 @@ export function TransformsPanel({ only }: { only?: string } = {}) {
     <section aria-label={t("plugins.transforms.title")} className="min-w-0 animate-fade">
       <h2 className="m-0 text-name font-semibold text-text">{t("plugins.transforms.title")}</h2>
       <p className="m-0 mt-1.5 max-w-[640px] text-note text-sub">{t("plugins.transforms.intro")}</p>
+      <Fold title={t("common.details")} className="mt-1.5 max-w-[640px]">
+        <p className="m-0 text-small text-sub">{t("plugins.transforms.introMore")}</p>
+      </Fold>
       {transforms.error ? <ErrorLine error={transforms.error} className="mt-5" /> : null}
       {transforms.data ? (
         <>
@@ -62,7 +66,7 @@ function TransformCard({ plugin }: { plugin: TransformPlugin }) {
       ) : null}
       <div className="flex-1" />
       <div className="mono mt-3 truncate border-t border-border pt-2.5 text-tag text-faint" title={plugin.id}>
-        {plugin.id} · {plugin.version}
+        {plugin.version}
       </div>
     </article>
   );

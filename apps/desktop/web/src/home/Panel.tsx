@@ -11,6 +11,7 @@ import { dayText, goneText, LAYER_NAME, positionText, snippetParts, STORED_TEXT 
 import { openExternal, webUrl } from "../shell";
 import { Button } from "../ui/Button";
 import { PlatformChip, TopicPill } from "../ui/Chip";
+import { PlatformName } from "../plugins/names";
 
 interface PanelProps {
   open: boolean;
@@ -85,7 +86,7 @@ function Results({ hits, searchError, hover, onSelect, onClearQuery, onRowHover 
                   <span className="truncate text-note leading-[19px] font-medium text-text">
                     {h.title}
                     {"  ·  "}
-                    {h.platform.name}
+                    <PlatformName platform={h.platform} />
                   </span>
                   <span className="text-small text-sub">
                     {pre}
@@ -130,7 +131,9 @@ function DetailBody({ item, hasQ, topics, onClose }: { item: Item; hasQ: boolean
         </Button>
       ) : null}
       <div className="flex h-ctl-sm items-center gap-2">
-        <PlatformChip>{item.platform.name}</PlatformChip>
+        <PlatformChip>
+          <PlatformName platform={item.platform} />
+        </PlatformChip>
         <span className="min-w-0 flex-1 truncate text-note text-sub">{item.author}</span>
         <Button variant="ghost" size="sm" square aria-label={t("home.panel.closeDetail")} onPress={onClose}>
           <X size={16} aria-hidden="true" />
@@ -144,6 +147,7 @@ function DetailBody({ item, hasQ, topics, onClose }: { item: Item; hasQ: boolean
       <p className="m-0 mt-1.5 text-small text-faint">
         {t("home.panel.added", { day: dayText(item.takenAt) })} · {STORED_TEXT[item.stored]}
       </p>
+      {item.missing ? <p className="m-0 mt-1 text-small text-warn">{item.missing}</p> : null}
       {item.topicIds.length ? (
         <div className="mt-3 flex flex-wrap gap-1.5">
           {item.topicIds.map((id) => (

@@ -6,22 +6,27 @@ import { ErrorLine } from "../components/ErrorLine";
 import { Rail } from "../frame/Rail";
 import { t } from "../i18n";
 import { dayText } from "../item/format";
+import { useNames } from "../plugins/names";
 import { Button } from "../ui/Button";
 import { Choice } from "../ui/Choice";
+import { Fold } from "../ui/Fold";
 import { DeliverTokens } from "./DeliverTokens";
 import { FileImport } from "./FileImport";
 import { ImportDetail } from "./ImportDetail";
 import { SourcePicker } from "./SourcePicker";
 import { stateLine } from "./words";
 
-/** 导入：左边选来源、看预览、收；右边一栏是每一次导入的记录，交进来的清单也在这里。 */
+/** 导入：左边按平台列能导入的东西（或选导出的文件）、看预览、添加；右边一栏是每一次导入的记录，发送到 usuyo 的列表也在这里。令牌的管理收在「高级」里。 */
 export function ImportPage() {
   const { open, from, pick, reader } = useSearch({ from: "/import" });
   const navigate = useNavigate();
   const imports = useImports();
   const plugins = usePlugins();
-  const methodOf = (pluginId: string | undefined, method: string | undefined) =>
-    plugins.data?.plugins.find((p) => p.id === pluginId)?.methods.find((m) => m.id === method)?.name ?? method;
+  const names = useNames();
+  const methodOf = (pluginId: string | undefined, method: string | undefined) => {
+    const found = plugins.data?.plugins.find((p) => p.id === pluginId)?.methods.find((m) => m.id === method)?.name ?? method;
+    return pluginId && method && found ? names.method(pluginId, method, found) : found;
+  };
   const show = (id: string | undefined) => void navigate({ to: "/import", search: id ? { open: id } : {} });
   const half = (next: "platform" | "file") => void navigate({ to: "/import", search: next === "file" ? { from: "file" } : {}, replace: true });
 
@@ -64,7 +69,9 @@ export function ImportPage() {
                 ) : (
                   <>
                     <SourcePicker onStarted={show} {...(pick ? { initial: pick } : {})} />
-                    <DeliverTokens />
+                    <Fold title={t("imports.advanced")} className="mt-8">
+                      <DeliverTokens />
+                    </Fold>
                   </>
                 )}
               </>

@@ -1,8 +1,9 @@
-import { Navigate, Outlet, useParams } from "@tanstack/react-router";
+import { Link, Navigate, Outlet, useParams } from "@tanstack/react-router";
 import type { PluginsView } from "../api/endpoints";
 import { usePlugins, useSites, useVisitors } from "../api/hooks";
 import { Rail } from "../frame/Rail";
 import { PlatformPage } from "./PlatformPage";
+import { localized, useNames } from "./names";
 import { platformPages } from "./platforms";
 import { TransformsPanel } from "./TransformsPanel";
 import { t } from "../i18n";
@@ -28,7 +29,16 @@ export function PlatformRoute() {
   const plugins = usePlugins();
   if (!plugins.data) return null;
   const owner = plugins.data.plugins.find((p) => p.platforms.some((x) => x.id === platform));
-  if (!owner) return <p className="m-0 animate-fade text-note text-sub">{t("plugins.page.notFound")}</p>;
+  if (!owner) {
+    return (
+      <p className="m-0 animate-fade text-note text-sub">
+        {t("plugins.page.notFound")}
+        <Link to="/plugins" className="ml-1 text-label underline decoration-border2 underline-offset-4 hover:text-text">
+          {t("plugins.page.browse")}
+        </Link>
+      </p>
+    );
+  }
   const [o, r] = owner.id.split("/");
   return <Navigate to="/plugins/$owner/$repo" params={{ owner: o ?? "", repo: r ?? "" }} search={{ platform }} replace />;
 }
@@ -43,9 +53,10 @@ export function PlatformCards({ id }: { id: string }) {
   const plugins = usePlugins();
   const sites = useSites();
   const visitors = useVisitors();
+  const names = useNames();
   // 登录和访客身份到了再画：账号那几行照它们写，先画空的会闪一下
   if (!plugins.data || (sites.isPending && !sites.error) || (visitors.isPending && !visitors.error)) return null;
-  const page = platformPages(plugins.data).find((p) => p.id === id);
+  const page = platformPages(localized(plugins.data, names)).find((p) => p.id === id);
   if (!page) return <p className="m-0 animate-fade text-note text-sub">{t("plugins.page.notFound")}</p>;
   return <PlatformPage key={page.id} page={page} sites={sites.data ?? []} visitors={visitors.data ?? []} failureLog={plugins.data.failureLog} />;
 }

@@ -82,7 +82,7 @@ export function FileImport({ onStarted, initial }: { onStarted: (id: string) => 
                   </Button>
                 </FileTrigger>
                 <Text slot="label" className="min-w-0 flex-1 text-note text-sub">
-                  {t("imports.file.dropNote", { plugin: reader.plugin, reader: reader.name })}
+                  {t("imports.file.dropNote")}
                 </Text>
               </div>
             )}

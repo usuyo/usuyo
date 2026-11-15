@@ -3,7 +3,8 @@ import { mirror } from "../messages";
 
 export default mirror<typeof zh>()({
   title: "Phone Connection",
-  intro: "usuyo reads the iPhone screen mirrored to this Mac and, in lists you saved, taps only “Share” and “Copy Link”. Links reach this Mac through Universal Clipboard, and the content is then fetched with a method that needs no login.",
+  intro: "Import what you saved in apps on your phone. Your account stays on the phone.",
+  introMore: "usuyo reads the iPhone screen mirrored to this Mac and, in lists you saved, taps only “Share” and “Copy Link”. Links reach this Mac through Universal Clipboard, and the content is then fetched with a method that needs no login.",
   notServed: "This version of usuyo doesn't support phones yet. Later you'll install the phone driver here and check permissions and the connection.",
   sectionsLabel: "Phone Sections",
   iphone: { name: "iPhone", sub: "Through iPhone Mirroring on this Mac. Keep iPhone locked and nearby; you don't need to hold it." },

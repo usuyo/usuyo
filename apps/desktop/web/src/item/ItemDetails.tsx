@@ -9,6 +9,7 @@ import { TopicPill } from "../ui/Chip";
 import { FlashLine, useFlash } from "../ui/Flash";
 import { t } from "../i18n";
 import { dayText, keepText, savedText, sentences, type MediaKeep } from "./format";
+import { PlatformName } from "../plugins/names";
 
 function Row({ label, top, children }: { label: string; top?: boolean; children: ReactNode }) {
   return (
@@ -31,7 +32,7 @@ export function ItemMeta({ item, topics, keep }: { item: Item; topics: Topic[]; 
       <div className="flex min-h-7 items-center gap-3">
         <span className="w-[52px] shrink-0 text-small text-faint">{t("item.meta.source")}</span>
         <span className="text-note text-label">
-          {item.platform.name}
+          <PlatformName platform={item.platform} />
           {item.author ? ` · ${item.author}` : ""} ·
         </span>
         <AriaButton

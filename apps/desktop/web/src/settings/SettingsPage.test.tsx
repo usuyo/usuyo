@@ -110,7 +110,7 @@ it("shows the stored proxy without its password and sends the same address back 
 it("the window row stores whether to use the system title bar and says it takes effect on the next launch", async () => {
   const sent = serve(VIEW);
   const toggle = await screen.findByRole("switch", { name: "使用系统标题栏" });
-  expect(screen.getByText(/更改在下次打开 usuyo 时生效/)).toBeTruthy();
+  expect(screen.getByText(/下次打开 usuyo 时生效/)).toBeTruthy();
   fireEvent.click(toggle);
   await waitFor(() => expect(sent).toEqual([{ path: "/api/settings", method: "PATCH", body: { window: { systemTitleBar: true } } }]));
 });

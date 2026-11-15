@@ -35,6 +35,7 @@ export function MapScreen({ map, topics }: { map: MapView; topics: Topic[] }) {
   const landing = useUiStore((s) => s.landing);
   const clearLanding = useUiStore((s) => s.clearLanding);
   const markLanding = useUiStore((s) => s.markLanding);
+  const reportTake = useUiStore((s) => s.reportTake);
   const search = useSearch(q);
   const follow = useFollow();
   const take = useTake();
@@ -131,7 +132,13 @@ export function MapScreen({ map, topics }: { map: MapView; topics: Topic[] }) {
         : [{ input: e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text"), kind: "link" }];
     for (const body of inputs) {
       if (body.input.trim() === "") continue;
-      take.mutate(body, { onSuccess: (res) => !res.seen && markLanding(res.id) });
+      take.mutate(body, {
+        onSuccess: (res) => {
+          if (!res.seen) markLanding(res.id);
+          reportTake({ result: res });
+        },
+        onError: (error) => reportTake({ error }),
+      });
     }
   }
 

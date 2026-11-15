@@ -482,6 +482,15 @@ export function createMockLibrary(empty: boolean): Library & Transforms & Settin
         pending: [],
       };
       entries.set(id, { item, withheld: [], x: 330 + (n % 9) * 46 + (r01(id) - 0.5) * 14, y: 846 - Math.floor(n / 9) * 30 });
+      // 过几秒「取到」：认得出平台的取成，认不出的（通用网页）没取成，留一句原因，内核取不到时同样把原因放进 `missing`。
+      setTimeout(() => {
+        const entry = entries.get(id);
+        if (!entry || entry.item.stored !== "link") return;
+        entry.item =
+          share.platform.id === "web"
+            ? { ...entry.item, missing: said("无法获取内容：这个网页需要登录后才能查看", "Couldn't fetch the content: this page requires signing in") }
+            : { ...entry.item, stored: "partial", missing: said("视频未保存：平台没有提供原文件", "The video wasn't saved: the platform didn't provide the original file") };
+      }, 2500);
       return { id, seen: false, title: item.title, platform: item.platform, takenAt: now };
     },
     setNote: (id, text) =>

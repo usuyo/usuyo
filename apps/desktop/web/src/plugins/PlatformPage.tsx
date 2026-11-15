@@ -20,10 +20,11 @@ import { pauseText } from "./words";
  */
 export function PlatformPage({ page, sites, visitors, failureLog }: { page: Page; sites: SiteLogin[]; visitors: Visitor[]; failureLog: string }) {
   const readers = useFileReaders();
+  const name = page.name;
   return (
-    <div aria-label={page.name} role="region" className="flex min-w-0 animate-fade flex-col gap-4">
+    <div aria-label={name} role="region" className="flex min-w-0 animate-fade flex-col gap-4">
       <header>
-        <h2 className="m-0 text-name font-semibold text-text">{page.name}</h2>
+        <h2 className="m-0 text-name font-semibold text-text">{name}</h2>
         <p className="m-0 mt-1 text-note text-sub">
           {t("plugins.page.header", { count: page.plugins.length, plugins: formatList(page.plugins.map((p) => p.name)) })}
         </p>
@@ -123,39 +124,26 @@ function PacingRow({ plugin, platform, titled }: { plugin: FetchPlugin; platform
   );
 }
 
-/** 关于：插件的 id 和版本、它调的程序和许可、要填的密钥、失败日志在哪。 */
+/** 密钥与日志：插件要填的密钥（存进钥匙串）、取不到时的失败日志在哪。插件的代号、版本和参考的项目在「技术信息」里。 */
 function AboutCard({ page, failureLog }: { page: Page; failureLog: string }) {
+  const keyed = page.plugins.filter((p) => p.settings.some((s) => s.secret));
   return (
     <Card title={t("plugins.about.title")}>
-      {page.plugins.map((p) => (
-        <CardRow
-          key={p.id}
-          title={p.name}
-          sub={
-            <>
-              <span className="mono text-tag text-faint">
-                {p.id} · {p.version}
-              </span>
-              {p.description ? <span className="block">{p.description}</span> : null}
-              <span className="block">{p.upstream && p.upstream.length > 0 ? t("plugins.about.upstream", { list: formatList(p.upstream.map((u) => t("plugins.about.upstreamItem", { name: u.name, license: u.license }))) }) : t("plugins.about.noUpstream")}</span>
-            </>
-          }
-        >
-          {p.settings.some((s) => s.secret) ? (
-            <div className="flex flex-col gap-2">
-              {p.settings
-                .filter((s) => s.secret)
-                .map((s) => (
-                  <div key={s.key} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
-                    <span className="text-note text-label">
-                      {s.label}
-                      <span className="ml-1.5 text-small text-sub">{s.filled === true ? t("plugins.about.secretFilled") : t("plugins.about.secretEmpty")}</span>
-                    </span>
-                    <SecretField pluginId={p.id} setting={s} />
-                  </div>
-                ))}
-            </div>
-          ) : null}
+      {keyed.map((p) => (
+        <CardRow key={p.id} title={p.name}>
+          <div className="flex flex-col gap-2">
+            {p.settings
+              .filter((s) => s.secret)
+              .map((s) => (
+                <div key={s.key} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+                  <span className="text-note text-label">
+                    {s.label}
+                    <span className="ml-1.5 text-small text-sub">{s.filled === true ? t("plugins.about.secretFilled") : t("plugins.about.secretEmpty")}</span>
+                  </span>
+                  <SecretField pluginId={p.id} setting={s} />
+                </div>
+              ))}
+          </div>
         </CardRow>
       ))}
       <CardRow title={t("plugins.about.failureLog")} sub={t("plugins.about.failureLogSub")}>

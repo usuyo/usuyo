@@ -95,7 +95,11 @@ it("opens a plugin's detail across the page and installs it", async () => {
   const { posted } = serve([BILI, ZHIHU, TG], "/plugins/usuyo-fetch/zhihu");
   expect(await screen.findByRole("heading", { name: "知乎", level: 1 })).toBeTruthy();
   expect(screen.getByText("x.tar.gz · 2 MB")).toBeTruthy();
-  expect(screen.getByText("不登录，读取公开页面 · 不需要账号")).toBeTruthy();
+  // 先说能取什么：账号用在哪、层级的意思；代号只在「技术信息」里。
+  expect(screen.getByText("不需要账号 · 不登录，读取公开页面")).toBeTruthy();
+  expect(screen.queryByRole("region", { name: "技术信息" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "技术信息" }));
+  expect(within(screen.getByRole("region", { name: "技术信息" })).getByText("usuyo-fetch/zhihu")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "安装" }));
   await waitFor(() => expect(posted).toHaveLength(1));
   expect(posted[0]).toMatch(/\/catalog\/usuyo-fetch\/zhihu\/install$/);

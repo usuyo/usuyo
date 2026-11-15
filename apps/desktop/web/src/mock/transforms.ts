@@ -19,7 +19,7 @@ function basePlugins(): TransformPlugin[] {
     },
     {
       id: "builtin/asr-sherpa",
-      name: "口播转文字",
+      name: said("语音转写", "Speech Transcription"),
       version: "0.1.0",
       jobs: ["asr"],
       models: [
@@ -34,7 +34,7 @@ function basePlugins(): TransformPlugin[] {
     },
     {
       id: "builtin/ocr-vision",
-      name: "图里的字",
+      name: said("图中文字识别", "Text Recognition"),
       version: "0.1.0",
       jobs: ["ocr", "frames"],
       models: [],
@@ -42,7 +42,7 @@ function basePlugins(): TransformPlugin[] {
     },
     {
       id: "lin/asr-firered",
-      name: "FireRedASR2 转口播",
+      name: said("FireRedASR2 语音转写", "FireRedASR2 Transcription"),
       version: "0.3.1",
       jobs: ["asr"],
       models: [{ name: "firered-asr2-aed-l", size: 912 * MB, license: "Apache-2.0", state: "present" }],
@@ -50,7 +50,7 @@ function basePlugins(): TransformPlugin[] {
     },
     {
       id: "lin/ocr-ppocr",
-      name: "PP-OCR 认字",
+      name: said("PP-OCR 文字识别", "PP-OCR Text Recognition"),
       version: "0.2.0",
       jobs: ["ocr", "frames"],
       models: [{ name: "pp-ocrv6-small", size: 16 * MB, license: "Apache-2.0", state: "absent" }],

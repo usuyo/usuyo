@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { FileText, FolderInput, FolderOutput, History, Monitor, Moon, Plug, Rss, Settings, Smartphone, Sun, Trash2 } from "lucide-react";
+import { FolderInput, Monitor, Moon, Plug, Settings, Smartphone, Sun, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { t, type MessageKey } from "../i18n";
 import { useUiStore, type ThemePreference } from "../store/ui";
@@ -9,15 +9,12 @@ import { TakeField } from "./TakeField";
 /** 底下去别的页。 */
 type NavKey = Extract<MessageKey, `frame.nav.${string}`>;
 
-const PAGES: { label: NavKey; icon: ReactNode; to: "/drafts" | "/follow" | "/changes" | "/export" | "/import" | "/plugins" | "/phone" | "/trash" | "/settings" }[] = [
-  { to: "/drafts", label: "frame.nav.drafts", icon: <FileText size={16} aria-hidden="true" /> },
-  { to: "/follow", label: "frame.nav.follow", icon: <Rss size={16} aria-hidden="true" /> },
+// 只放能用的页，按用得多少排；文稿、订阅、导出、更改记录的路由还在，内核提供以前不放进来。
+const PAGES: { label: NavKey; icon: ReactNode; to: "/import" | "/plugins" | "/phone" | "/trash" | "/settings" }[] = [
   { to: "/import", label: "frame.nav.import", icon: <FolderInput size={16} aria-hidden="true" /> },
-  { to: "/export", label: "frame.nav.export", icon: <FolderOutput size={16} aria-hidden="true" /> },
-  { to: "/changes", label: "frame.nav.changes", icon: <History size={16} aria-hidden="true" /> },
-  { to: "/trash", label: "frame.nav.trash", icon: <Trash2 size={16} aria-hidden="true" /> },
   { to: "/plugins", label: "frame.nav.plugins", icon: <Plug size={16} aria-hidden="true" /> },
   { to: "/phone", label: "frame.nav.phone", icon: <Smartphone size={16} aria-hidden="true" /> },
+  { to: "/trash", label: "frame.nav.trash", icon: <Trash2 size={16} aria-hidden="true" /> },
   { to: "/settings", label: "frame.nav.settings", icon: <Settings size={16} aria-hidden="true" /> },
 ];
 

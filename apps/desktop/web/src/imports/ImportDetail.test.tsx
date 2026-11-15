@@ -69,6 +69,7 @@ function serve(v: ImportView) {
       if (path.endsWith("/imports")) return Promise.resolve(Response.json([v]));
       if (path.endsWith("/plugins")) return Promise.resolve(Response.json({ plugins: [], notLoaded: [] }));
       if (path.endsWith("/events")) return new Promise(() => {});
+      if (path.endsWith("/catalog")) return Promise.resolve(Response.json({ sources: [], plugins: [] }));
       return Promise.resolve(Response.json([]));
     }),
   );
@@ -136,4 +137,36 @@ it("counts in whole English sentences, singular and plural", async () => {
   serve(view());
   expect(await screen.findByRole("button", { name: "Add 5 Items" })).toBeTruthy();
   expect(screen.getByText("New items to add: 3. Items to restore from the Trash: 2. 1 saved item won't change.")).toBeTruthy();
+});
+
+it("puts the step a stopped listing waits for right under it: sign in, then continue", async () => {
+  const posted: string[] = [];
+  const plugin = { id: "example/site", name: "示例", version: "0.1.0", platforms: [{ id: "site", name: "示例" }], access: "session-api", login: "required", canList: true, sources: [], sites: ["www.example.com"], visitors: [], settings: [], pacing: [], pauses: [], methods: [] };
+  const site = { site: "www.example.com", name: "示例", loginUrl: "https://www.example.com/login", cookies: [], domains: [], login: "expired", plugins: [plugin.id], credential: "cookies" };
+  const v = view({ kind: "source", state: "listing", pluginId: plugin.id, method: "saved", waiting: { code: "login-required" } });
+  vi.stubGlobal("scrollTo", vi.fn());
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: URL | string, init?: RequestInit) => {
+      const path = new URL(input).pathname;
+      if (init?.method === "POST") posted.push(path);
+      if (path.endsWith("/resume")) return Promise.resolve(Response.json(v));
+      if (path.endsWith(`/imports/${ID}`)) return Promise.resolve(Response.json(v));
+      if (path.endsWith("/imports")) return Promise.resolve(Response.json([v]));
+      if (path.endsWith("/plugins")) return Promise.resolve(Response.json({ plugins: [plugin], notLoaded: [] }));
+      if (path.endsWith("/sites")) return Promise.resolve(Response.json([site]));
+      if (path.endsWith("/catalog")) return Promise.resolve(Response.json({ sources: [], plugins: [] }));
+      if (path.endsWith("/events")) return new Promise(() => {});
+      return Promise.resolve(Response.json([]));
+    }),
+  );
+  const router = createAppRouter(createMemoryHistory({ initialEntries: [`/import?open=${ID}`] }));
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByRole("button", { name: "登录" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "继续导入" }));
+  await waitFor(() => expect(posted.some((p) => p.endsWith(`/imports/${ID}/resume`))).toBe(true));
 });

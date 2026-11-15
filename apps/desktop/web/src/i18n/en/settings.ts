@@ -3,7 +3,7 @@ import { mirror } from "../messages";
 
 export default mirror<typeof zh>()({
   title: "Settings",
-  intro: "Changes take effect immediately. Settings that send content off this computer are marked “Leaves This Computer”.",
+  intro: "Changes take effect immediately, and settings that send content off this computer are marked “Leaves This Computer”.",
   sectionsLabel: "Settings Sections",
   away: "Leaves This Computer",
   general: {
@@ -33,8 +33,7 @@ export default mirror<typeof zh>()({
     name: "Window",
     sub: "Applies to this computer only.",
     titleBar: "Use system title bar",
-    titleBarSub:
-      "When off, the window has no system title bar: content extends to the top, the window buttons sit in usuyo's top bar, and you drag the top bar to move the window. Takes effect the next time you open usuyo. macOS only; Windows and Linux always use the system title bar.",
+    titleBarSub: "When off, content extends to the top of the window and you drag the top bar to move it. Takes effect the next time you open usuyo. macOS only.",
     on: "On",
     off: "Off",
   },
@@ -66,10 +65,10 @@ export default mirror<typeof zh>()({
     keepLabel: "How long the {trash} keeps items",
     days: { one: "{count} day", other: "{count} days" },
     forever: "Forever",
-    keepsForever: "Deleted items, and images and videos moved out by Keep Text Only, stay in the {trash} and aren't deleted automatically.",
+    keepsForever: "What you delete stays in the {trash} and isn't deleted automatically.",
     keepsDays: {
-      one: "Deleted items, and images and videos moved out by Keep Text Only, stay in the {trash} for {count} day, then are deleted permanently without a record. You can restore them any time before then.",
-      other: "Deleted items, and images and videos moved out by Keep Text Only, stay in the {trash} for {count} days, then are deleted permanently without a record. You can restore them any time before then.",
+      one: "What you delete stays in the {trash} for {count} day. You can restore it until then; after that it's deleted permanently.",
+      other: "What you delete stays in the {trash} for {count} days. You can restore it until then; after that it's deleted permanently.",
     },
     heldForever: {
       one: "This computer's clock is far past {since}. So that a wrong clock doesn't delete everything in the {trash}, {count} expired item was kept. If the time is correct, you can delete it as scheduled.",
@@ -86,8 +85,8 @@ export default mirror<typeof zh>()({
     auto: "Automatic",
     autoOn: "Process after adding",
     autoOff: "Process only when opened",
-    autoOnSub: "Added items are queued for transcription and recognition. This runs only while connected to power, one item at a time; on battery, the current task finishes and the rest wait. An item you open is processed right away, even on battery.",
-    autoOffSub: "Off: an item is processed only when you open it. Added items are saved as usual and processed when you open them later.",
+    autoOnSub: "Added items are processed one at a time while connected to power and pause on battery. An item you open is processed right away.",
+    autoOffSub: "An item is processed only when you open it.",
     models: "Models",
     modelsSub: "Download or delete models in <link>Fetch Plugins</link> under Transcription & Text Recognition.",
     noModels: "None of the installed transform plugins need a model download.",
@@ -97,10 +96,10 @@ export default mirror<typeof zh>()({
     name: "Diagnostics",
     sub: "Look here when something goes wrong.",
     unreadable: "Unreadable items",
-    unreadableSub: "Usually a file was changed outside usuyo. usuyo skips these items and everything else works; once a file is fixed, its item returns the next time you open usuyo.",
+    unreadableSub: "Usually a file was changed outside usuyo. Once the file is fixed, the item returns the next time you open usuyo.",
     allReadable: "All items can be read.",
     log: "Log",
-    logSub: "What the usuyo service records while it runs. When something goes wrong, look here for the cause.",
+    logSub: "The usuyo service's record of what it does. Look here when something goes wrong.",
   },
   agent: {
     name: "Agent",

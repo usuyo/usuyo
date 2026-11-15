@@ -63,6 +63,19 @@ export function useItem(id: string | null) {
   });
 }
 
+/**
+ * 刚添加的一条：内容还没取到（只有链接、没有原因）时隔一会儿重拉，取到了或说了取不到的原因就停。
+ * 事件流也会刷新它；样例库没有事件流，靠这个看得到结果。
+ */
+export function useFetchingItem(id: string | null) {
+  return useQuery({
+    queryKey: queryKeys.item(id ?? ""),
+    queryFn: () => call((l) => l.item(id ?? "")),
+    enabled: id !== null,
+    refetchInterval: (q) => (q.state.data && q.state.data.stored === "link" && q.state.data.missing === undefined ? 2000 : false),
+  });
+}
+
 /** 这一条已经不在资料库里了：内核回 404（不是兜底路由的那种）。 */
 export function isGone(error: Error | null): boolean {
   return error instanceof ApiError && error.status === 404 && !isNotServed(error);

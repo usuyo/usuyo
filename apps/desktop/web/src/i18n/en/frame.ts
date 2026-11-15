@@ -3,11 +3,7 @@ import { mirror } from "../messages";
 
 export default mirror<typeof zh>()({
   nav: {
-    drafts: "Drafts",
-    follow: "Subscriptions",
     import: "Import",
-    export: "Export",
-    changes: "Change History",
     trash: "{trash}",
     plugins: "Fetch Plugins",
     phone: "Phone Connection",
@@ -24,7 +20,14 @@ export default mirror<typeof zh>()({
     label: "Add Link",
     placeholder: "Paste a link to add it",
     note: "You can also drag links onto the map.",
-    added: "Added",
+    adding: "Adding…",
+    fetching: "Added. Fetching content…",
+    fetched: "Added with content",
+    partly: "Added. Some content wasn't fetched.",
+    failed: "Link added. Content wasn't fetched.",
     snapshot: "Already saved. Added a new snapshot.",
+    show: "Show",
+    why: "See Why",
+    linksOnly: "Only links can be added.",
   },
 });

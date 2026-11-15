@@ -1,11 +1,7 @@
 // 左栏、还没提供的页面、左上角添加链接的那一栏。
 export default {
   nav: {
-    drafts: "文稿",
-    follow: "订阅",
     import: "导入",
-    export: "导出",
-    changes: "更改记录",
     trash: "{trash}",
     plugins: "获取插件",
     phone: "手机连接",
@@ -22,7 +18,14 @@ export default {
     label: "添加链接",
     placeholder: "粘贴链接以添加",
     note: "也可以将链接拖到地图上。",
-    added: "已添加",
-    snapshot: "此链接已保存过，已添加新的快照",
+    adding: "正在添加…",
+    fetching: "已添加，正在获取内容…",
+    fetched: "已添加并获取内容",
+    partly: "已添加，部分内容未获取到",
+    failed: "已添加链接，未获取到内容",
+    snapshot: "已保存过，已添加新的快照",
+    show: "查看",
+    why: "查看原因",
+    linksOnly: "只能添加链接。",
   },
 } as const;

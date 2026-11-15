@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import type { TakeResponse } from "../api/endpoints";
 
 export type ThemePreference = "system" | "dark" | "light";
 
@@ -16,6 +17,10 @@ interface UiState {
   landing: string[];
   markLanding: (id: string) => void;
   clearLanding: (id: string) => void;
+  /** 上一次添加链接（左上的粘贴框、拖到地图上）的结果；左上那一行照它说收到了没有、取到了没有。`n` 每次加一。 */
+  lastTake: { n: number; result: TakeResponse } | { n: number; error: Error } | null;
+  reportTake: (outcome: { result: TakeResponse } | { error: Error }) => void;
+  clearTake: () => void;
 }
 
 export const useUiStore = create<UiState>()(
@@ -28,6 +33,9 @@ export const useUiStore = create<UiState>()(
       landing: [],
       markLanding: (id) => set((s) => ({ landing: [...s.landing, id] })),
       clearLanding: (id) => set((s) => ({ landing: s.landing.filter((x) => x !== id) })),
+      lastTake: null,
+      reportTake: (outcome) => set((s) => ({ lastTake: { n: (s.lastTake?.n ?? 0) + 1, ...outcome } })),
+      clearTake: () => set({ lastTake: null }),
     }),
     { name: "usuyo-ui", partialize: (s) => ({ theme: s.theme, accent: s.accent }) },
   ),

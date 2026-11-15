@@ -89,7 +89,7 @@ function basePlugins(): FetchPlugin[] {
           account: { kind: "none" },
           gets: { fetch: ["text", "images", "media:video", "meta"] },
           lastCall: { at: minutesAgo(40), ok: true },
-          riskNote: { text: "没有账号参与。访客令牌会被拒或被限流，此时改走嵌入接口。", source: { label: "gallery-dl #9505", url: "https://github.com/mikf/gallery-dl/issues/9505" } },
+          riskNote: { text: said("没有账号参与。访客令牌可能被拒或被限流，此时改用嵌入接口。", "No account is involved. The guest token can be refused or rate-limited; the Embed API is used then."), source: { label: "gallery-dl #9505", url: "https://github.com/mikf/gallery-dl/issues/9505" } },
         }),
         // 你关掉的一种。
         method({ id: "embed", name: "嵌入接口", access: "public-web", account: { kind: "none" }, gets: { fetch: ["text", "images"] }, enabled: false }),
@@ -112,7 +112,7 @@ function basePlugins(): FetchPlugin[] {
           login: "required",
           account: { kind: "in-usuyo", sites: ["x.com"], where: "X" },
           gets: { list: ["搜索", "用户时间线"] },
-          riskNote: { text: "注册三年的账号一次取 800 个关注后被封。", source: { label: "twikit #338", url: "https://github.com/d60/twikit/issues/338" } },
+          riskNote: { text: said("有用户报告：注册三年的账号一次获取 800 个关注后被封。", "A user reported that a three-year-old account was suspended after fetching 800 followings at once."), source: { label: "twikit #338", url: "https://github.com/d60/twikit/issues/338" } },
         }),
         notBuilt({ id: "mirror", name: "手机镜像", access: "vision-ui", login: "required", account: { kind: "own-phone", where: "X" }, drives: "iphone", interaction: "foreground", gets: { list: ["书签", "喜欢"], delivers: "links" } }),
       ],
@@ -137,7 +137,7 @@ function basePlugins(): FetchPlugin[] {
           account: { kind: "visitor", sites: ["www.xiaohongshu.com"], where: "小红书" },
           gets: { fetch: ["text", "images", "media:video"] },
           blockers: [{ code: "visitor-missing", hint: said("需要先打开一次小红书首页，获取访客身份", "Open the 小红书 home page once to get a visitor identity first") }],
-          riskNote: { text: "不填 cookie 批量取约 108 条后，复制链接的账号被下线。", source: { label: "XHS-Downloader #305", url: "https://github.com/JoeanAmier/XHS-Downloader/issues/305" } },
+          riskNote: { text: said("其他下载工具的用户报告：不带 cookie 连续获取约 108 条后，复制链接用的账号被下线。", "Users of another downloader reported that after about 108 fetches in a row without cookies, the account used to copy the links was signed out."), source: { label: "XHS-Downloader #305", url: "https://github.com/JoeanAmier/XHS-Downloader/issues/305" } },
         }),
         // 在 usuyo 的站点窗口里登录并读取：这台电脑上还没登录过。
         method({
@@ -150,7 +150,7 @@ function basePlugins(): FetchPlugin[] {
           window: true,
           guide: "登录以后打开你的个人页，先读「收藏」再读「赞过」，只记页面自己请求回来的列表；默认隔几秒往下翻一屏，翻到底停下",
           script: { path: "~/Library/Application Support/usuyo/plugins/usuyo-fetch/rednote/0.1.0/userscript/usuyo-xhs-window.js", present: true },
-          riskNote: { text: "自动往下翻是用你的账号做的自动操作，比你自己翻高一级；网页对采集类扩展弹「有害插件」", source: { label: "XHS-Downloader #283", url: "https://github.com/JoeanAmier/XHS-Downloader/issues/283" } },
+          riskNote: { text: said("自动向下滚动是用你的账号进行的自动操作，比你自己滚动高一级。有报告称网页会对采集类扩展提示「有害插件」。", "Scrolling automatically is an automated action with your account, one tier above scrolling yourself. Reports say the site warns about collecting extensions as harmful."), source: { label: "XHS-Downloader #283", url: "https://github.com/JoeanAmier/XHS-Downloader/issues/283" } },
         }),
         method({
           id: "userscript",
@@ -160,7 +160,7 @@ function basePlugins(): FetchPlugin[] {
           account: { kind: "own-browser" },
           gets: { delivers: "links" },
           script: { path: "~/Library/Application Support/usuyo/plugins/usuyo-fetch/rednote/0.1.0/userscript/usuyo-xhs-saved.user.js", present: false },
-          riskNote: { text: "网页对采集类扩展弹「有害插件」；只截获、不发请求的脚本没有处罚报告。", source: { label: "XHS-Downloader #283", url: "https://github.com/JoeanAmier/XHS-Downloader/issues/283" } },
+          riskNote: { text: said("有报告称网页会对采集类扩展提示「有害插件」；只读取页面、不另外发请求的脚本没有处罚报告。", "Reports say the site warns about collecting extensions as harmful. There are no reports of penalties for scripts that only read the page and send no extra requests."), source: { label: "XHS-Downloader #283", url: "https://github.com/JoeanAmier/XHS-Downloader/issues/283" } },
         }),
         notBuilt({
           id: "iphone",
@@ -204,7 +204,7 @@ function basePlugins(): FetchPlugin[] {
           account: { kind: "in-usuyo", sites: ["yuanbao.tencent.com"], where: "腾讯元宝" },
           gets: { fetch: ["media:video"] },
           blockers: [{ code: "login-missing", hint: said("需要先在 usuyo 中登录腾讯元宝", "Sign in to 腾讯元宝 in usuyo first") }],
-          riskNote: { text: "公开部署的解析服务被大量调用后，元宝账号被封。", source: { label: "wx_channels_download #495", url: "https://github.com/ltaoo/wx_channels_download/issues/495" } },
+          riskNote: { text: said("有报告称：公开部署的解析服务被大量调用后，所用的元宝账号被封。", "A public parsing service was called heavily, and the Yuanbao account it used was suspended."), source: { label: "wx_channels_download #495", url: "https://github.com/ltaoo/wx_channels_download/issues/495" } },
         }),
         notBuilt({ id: "pc-client", name: "电脑微信", access: "client-hook", login: "required", account: { kind: "own-app", where: "微信视频号" }, drives: "desktop-app", gets: { fetch: ["media:video"] } }),
         notBuilt({
@@ -239,7 +239,7 @@ function basePlugins(): FetchPlugin[] {
           account: { kind: "none" },
           gets: { fetch: ["meta", "images", "subtitle", "media:video", "media:audio"] },
           lastCall: { at: minutesAgo(8), ok: true },
-          riskNote: { text: "2026-06 起缺指纹参数的部分接口回 412。", source: { label: "BiliNote #397", url: "https://github.com/JefferyHcool/BiliNote/issues/397" } },
+          riskNote: { text: said("2026 年 6 月起，部分接口在缺少指纹参数时返回 412。", "Since June 2026, some endpoints return 412 without fingerprint parameters."), source: { label: "BiliNote #397", url: "https://github.com/JefferyHcool/BiliNote/issues/397" } },
         }),
         // 上一次调用没成的一种。
         method({
@@ -259,7 +259,7 @@ function basePlugins(): FetchPlugin[] {
           gets: { list: ["稍后再看"] },
           // 样例里这一种刚被限流：页面上写原因和什么时候再试
           pauses: [{ method: "favorites", scope: "bilibili", byYou: false, until: inMinutes(12), code: "rate-limited", hint: said("B站提示请求过于频繁，稍后再试", "Bilibili reported too many requests. Try again later.") }],
-          riskNote: { text: "一例大会员被冻结，因果不明。", source: { label: "yutto #452", url: "https://github.com/yutto-dev/yutto/issues/452" } },
+          riskNote: { text: said("其他下载工具的用户报告过一例大会员账号被冻结，原因不明。", "A user of another downloader reported one premium account frozen, cause unknown."), source: { label: "yutto #452", url: "https://github.com/yutto-dev/yutto/issues/452" } },
         }),
       ],
     },

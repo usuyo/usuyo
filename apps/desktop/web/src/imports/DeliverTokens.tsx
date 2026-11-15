@@ -40,7 +40,7 @@ export function DeliverTokens() {
   }
 
   return (
-    <section aria-label={t("imports.tokens.title")} className="mt-10">
+    <section aria-label={t("imports.tokens.title")}>
       <h2 className="m-0 text-section font-semibold text-text">{t("imports.tokens.title")}</h2>
       <p className="m-0 mt-1 text-small text-sub">
         {t("imports.tokens.note")}

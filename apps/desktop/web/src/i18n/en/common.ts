@@ -25,12 +25,13 @@ export default mirror<typeof zh>()({
   backToMap: "Back to Map",
   followedTopics: "Followed Topics",
   showLess: "Show Less",
+  details: "Details",
   tag: { autoSelected: "Auto-selected", generated: "Generated" },
   reasonUnknown: "Unknown reason",
   error: {
     daemonDown: "The usuyo service isn't running. Reopen usuyo and try again.",
     notServed: "This version of usuyo doesn't include this feature yet.",
-    status: "The usuyo service returned an error ({status}).",
-    loadFailed: "Couldn't load.",
+    status: "The usuyo service returned an error ({status}). You can check the log under Diagnostics in Settings.",
+    loadFailed: "Couldn't load. Try again later, or check the log under Diagnostics in Settings.",
   },
 });

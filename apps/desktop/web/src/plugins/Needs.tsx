@@ -26,7 +26,7 @@ const CHECKS = new Set(["check-failed", "health-failed"]);
  * 这种方法在这台电脑上要的几样，一样一行：要的登录、访客身份、手机，插件本机检查没过的那几句（内核的原话），
  * 要填的密钥，停着的。每行写现在怎样，缺的给一个动手的地方。开关不在这里，由调用处摆。
  */
-function needsOf(u: Use, sites: SiteLogin[], visitors: VisitorIdentity[]): Need[] {
+export function needsOf(u: Use, sites: SiteLogin[], visitors: VisitorIdentity[]): Need[] {
   const m = u.method;
   const out: Need[] = [];
   if (m.account.kind === "in-usuyo") {
@@ -105,7 +105,7 @@ export function Needs({ use, sites, visitors }: { use: Use; sites: SiteLogin[]; 
   );
 }
 
-function TryAgain({ pluginId, label }: { pluginId: string; label: string }) {
+export function TryAgain({ pluginId, label }: { pluginId: string; label: string }) {
   const change = usePluginChange(pluginId);
   return (
     <div className="min-w-0">

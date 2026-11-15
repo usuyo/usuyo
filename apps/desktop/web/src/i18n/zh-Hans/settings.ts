@@ -1,7 +1,7 @@
 // 设置页：一节一节，从上到下。
 export default {
   title: "设置",
-  intro: "更改会立即生效。会让内容离开这台电脑的部分标有「离开这台电脑」。",
+  intro: "更改会立即生效，会让内容离开这台电脑的部分标有「离开这台电脑」。",
   sectionsLabel: "设置的各部分",
   away: "离开这台电脑",
   general: {
@@ -31,8 +31,7 @@ export default {
     name: "窗口",
     sub: "仅应用于这台电脑。",
     titleBar: "使用系统标题栏",
-    titleBarSub:
-      "关闭时窗口顶部不显示系统标题栏，内容延伸到窗口顶部，左上角的窗口按钮显示在 usuyo 的顶栏上，拖移顶栏可以移动窗口。更改在下次打开 usuyo 时生效。仅适用于 macOS；Windows 和 Linux 始终使用系统标题栏。",
+    titleBarSub: "关闭后内容延伸到窗口顶部，拖移顶栏可以移动窗口。下次打开 usuyo 时生效，仅适用于 macOS。",
     on: "已开启",
     off: "已关闭",
   },
@@ -64,8 +63,8 @@ export default {
     keepLabel: "{trash}中的项目保留多久",
     days: "{count} 天",
     forever: "永久",
-    keepsForever: "删除的条目和仅保留文字时移出的图片和视频会一直保留在{trash}中，不会自动删除。",
-    keepsDays: "删除的条目和仅保留文字时移出的图片和视频在{trash}中保留 {count} 天，到期后永久删除，不留记录；到期前可以随时恢复。",
+    keepsForever: "删除的内容会一直保留在{trash}中，不会自动删除。",
+    keepsDays: "删除的内容在{trash}中保留 {count} 天，到期前可以恢复，到期后永久删除，不留记录。",
     heldForever: "这台电脑的时间比{since}晚了很多。为避免因时间错误删除{trash}中的全部项目，{count} 个到期的项目暂未删除。如果时间正确，可以按时间删除它们。",
     held: "这台电脑的时间比{since}晚了很多，超过了{trash}保留的 {days} 天。为避免因时间错误删除{trash}中的全部项目，{count} 个到期的项目暂未删除。如果时间正确，可以按时间删除它们。",
   },
@@ -75,8 +74,8 @@ export default {
     auto: "自动处理",
     autoOn: "添加后自动处理",
     autoOff: "仅在打开时处理",
-    autoOnSub: "添加条目后自动排队转写和识别。仅在接通电源时进行，一次处理一个；断开电源后，当前任务完成即暂停。你打开的条目会立即处理，使用电池时也是如此。",
-    autoOffSub: "已关闭：只在你打开条目时处理该条目。已添加的内容照常保存，之后打开时再处理。",
+    autoOnSub: "添加后在接通电源时逐个处理，断开电源后暂停；你打开的条目会立即处理。",
+    autoOffSub: "只在你打开条目时处理。",
     models: "模型",
     modelsSub: "在<link>获取插件</link>的「转写与识别」中下载或删除模型。",
     noModels: "已安装的转换插件都不需要下载模型。",
@@ -86,10 +85,10 @@ export default {
     name: "诊断",
     sub: "出现问题时在这里查看。",
     unreadable: "无法读取的条目",
-    unreadableSub: "通常是在 usuyo 以外修改了文件。usuyo 会跳过这些条目，其余照常；修复文件后，下次打开时会重新显示。",
+    unreadableSub: "通常是在 usuyo 以外修改了文件。修复文件后，下次打开 usuyo 时会重新显示。",
     allReadable: "所有条目都可以读取。",
     log: "日志",
-    logSub: "usuyo 服务记录的运行情况。出现问题时，可以在这里查找原因。",
+    logSub: "usuyo 服务的运行记录，出现问题时在这里查找原因。",
   },
   agent: {
     name: "Agent",

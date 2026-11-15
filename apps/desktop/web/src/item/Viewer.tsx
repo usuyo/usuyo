@@ -11,6 +11,7 @@ import { t } from "../i18n";
 import { clock, facetOf, imageName, keepText, sentences, type MediaKeep } from "./format";
 import { PAGE } from "../plugins/words";
 import type { Player } from "./usePlayer";
+import { useNames } from "../plugins/names";
 
 type ImageFacet = Extract<Facet, { layer: "image" }>;
 
@@ -37,6 +38,7 @@ export function Viewer({
 }) {
   const images = facetOf(item, "image");
   const flash = useFlash(1400);
+  const names = useNames();
   const reduced = useReducedMotion();
   const { video, attachVideo } = player;
 
@@ -140,7 +142,7 @@ export function Viewer({
                   params={{ platform: item.platform.id }}
                   className="mt-2.5 text-small text-label underline decoration-border2 underline-offset-4 hover:text-text"
                 >
-                  {PAGE.itemPlatformLink(item.platform.name)}
+                  {PAGE.itemPlatformLink(names.platform(item.platform.id, item.platform.name))}
                 </Link>
               </>
             ) : (

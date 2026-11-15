@@ -137,7 +137,7 @@ function Steps({ use, kind, reader, sites, visitors }: { use: Use; kind: SavedKi
 }
 
 /** 这种方法关着时：为什么关着（默认关着的那一层，或你关的），和它的开关。 */
-function OffSwitch({ use }: { use: Use }) {
+export function OffSwitch({ use }: { use: Use }) {
   const switcher = useSwitchMethod(use.plugin.id);
   const m = use.method;
   if (m.enabled) return null;
@@ -214,7 +214,7 @@ function windowSteps(use: Use, sites: SiteLogin[]): { key: string; title: ReactN
 }
 
 /** 「登录{站点}」：开壳的站点窗口。 */
-function ReadingButton({ use, site, signedIn }: { use: Use; site: string; signedIn: boolean }) {
+export function ReadingButton({ use, site, signedIn }: { use: Use; site: string; signedIn: boolean }) {
   const [say, setSay] = useState<string | null>(null);
   async function open() {
     setSay(null);
@@ -266,7 +266,7 @@ function scriptSteps(use: Use): { key: string; title: ReactNode; body?: ReactNod
   ];
 }
 
-function ScriptFile({ use }: { use: Use }) {
+export function ScriptFile({ use }: { use: Use }) {
   const script = use.method.script;
   const reveal = useRevealScript();
   const text = useMethodScript(use.plugin.id, use.method.id, script?.present === true);
@@ -308,7 +308,7 @@ function ScriptFile({ use }: { use: Use }) {
 }
 
 /** 脚本自己写的那一页（说明里的「你自己的……页」和 `@match`）。 */
-function ScriptPage({ use }: { use: Use }) {
+export function ScriptPage({ use }: { use: Use }) {
   const text = useMethodScript(use.plugin.id, use.method.id, use.method.script?.present === true);
   const found = text.data ? scriptPages(text.data) : null;
   const platform = formatList(use.plugin.platforms.map((p) => p.name));

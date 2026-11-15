@@ -148,6 +148,7 @@ function PluginCard({ plugin: p }: { plugin: CatalogPlugin }) {
     <Link
       {...linkProps(p)}
       aria-label={p.name}
+      title={p.id}
       style={{ viewTransitionName: sharedName(p.id) }}
       className="press flex h-full min-w-0 flex-col rounded-card border border-border bg-card px-4 py-3.5 no-underline outline-none hover:border-border2 focus-visible:outline-2 focus-visible:outline-accent"
     >
@@ -159,7 +160,6 @@ function PluginCard({ plugin: p }: { plugin: CatalogPlugin }) {
       <div className="flex-1" />
       <div className="mt-3 flex min-w-0 items-center justify-between gap-3 border-t border-border pt-2.5 text-tag text-faint">
         <span className="min-w-0 truncate">{p.platforms.length > 0 ? formatList(p.platforms.map((x) => x.name)) : t(`plugins.catalog.group.${p.kind}`)}</span>
-        <span className="mono shrink-0 truncate">{p.id}</span>
       </div>
     </Link>
   );

@@ -7,6 +7,7 @@ import type { GrantState, PhoneAndroid, PhoneDryRun, PhoneIos, PhoneStep, PhoneV
 import { useDryRun, usePhone, usePhoneAction, usePlugins } from "../api/hooks";
 import { ErrorLine, NotServedLine } from "../components/ErrorLine";
 import { Rail } from "../frame/Rail";
+import { Fold } from "../ui/Fold";
 import { sizeText } from "../item/faces";
 import { ACCESS_TEXT } from "../plugins/words";
 import { Row } from "../settings/Row";
@@ -37,9 +38,10 @@ export function PhonePage() {
       <Rail label={t("common.nav.main")} />
       <main className="@container absolute inset-y-0 right-0 left-rail overflow-y-auto scroll-smooth px-6 pt-7 pb-24 motion-reduce:scroll-auto lg:px-gutter">
         <h1 className="m-0 text-title font-semibold text-text">{t("phone.title")}</h1>
-        <p className="m-0 mt-1 max-w-[720px] text-note text-sub">
-          {t("phone.intro")}
-        </p>
+        <p className="m-0 mt-1 max-w-[720px] text-note text-sub">{t("phone.intro")}</p>
+        <Fold title={t("common.details")} className="mt-1.5 max-w-[720px]">
+          <p className="m-0 text-small text-sub">{t("phone.introMore")}</p>
+        </Fold>
         {missing ? (
           <NotServedLine className="mt-4">{t("phone.notServed")}</NotServedLine>
         ) : null}
@@ -470,7 +472,7 @@ function Methods({ phone }: { phone: PhoneView | null }) {
             </span>
             <span className="min-w-0">
               <span className="block text-note text-label">
-                {ACCESS_TEXT[m.access]} <span className="mono text-tag text-faint">{m.access}</span>
+                <span title={m.access}>{ACCESS_TEXT[m.access]}</span>
               </span>
               <span className="block text-small text-sub">{methodState(m, phone)}</span>
               {m.risk ? <span className="block text-small text-faint">{t("phone.methods.risk", { risk: m.risk })}</span> : null}

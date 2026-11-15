@@ -146,8 +146,7 @@ function MethodExplain({ use, page, sites, visitors }: { use: Use; page: Platfor
       <Term name={t("plugins.link.termGets")}>{gets.length > 0 ? clauses(gets) : t("plugins.link.getsUnknown")}</Term>
       <Term name={t("plugins.link.termAccount")}>{accountOf(use)}</Term>
       <Term name={t("plugins.link.termTier")}>
-        {ACCESS_TEXT[access]}
-        <span className="mono ml-1.5 text-tag text-faint">{access}</span>
+        <span title={access}>{ACCESS_TEXT[access]}</span>
         <span className="block text-small text-sub">{TIER_TEXT[access]}</span>
       </Term>
       <Term name={t("plugins.link.termNeeds")}>

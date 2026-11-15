@@ -23,12 +23,13 @@ export default {
   backToMap: "回到地图",
   followedTopics: "关注的主题",
   showLess: "收起",
+  details: "详细说明",
   tag: { autoSelected: "自动选取", generated: "模型生成" },
   reasonUnknown: "原因未知",
   error: {
     daemonDown: "usuyo 服务未运行。重新打开 usuyo 后再试。",
     notServed: "此版本的 usuyo 尚未提供这项功能。",
-    status: "usuyo 服务返回了错误（{status}）。",
-    loadFailed: "无法载入。",
+    status: "usuyo 服务返回了错误（{status}）。可以在设置的「诊断」中查看日志。",
+    loadFailed: "无法载入。稍后再试，或在设置的「诊断」中查看日志。",
   },
 } as const;

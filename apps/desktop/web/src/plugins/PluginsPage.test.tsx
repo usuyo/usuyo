@@ -149,8 +149,11 @@ it("writes the platform page in English when English is chosen, with plurals and
   expect(screen.getByRole("region", { name: "Add Link" })).toBeTruthy();
   const pacing = screen.getByRole("region", { name: "Request Rate" });
   expect(within(pacing).getByText("At least 5 seconds between requests; daily import limit: 500.")).toBeTruthy();
-  const about = screen.getByRole("region", { name: "About" });
-  expect(within(about).getByText("Uses: parse-video (MIT)")).toBeTruthy();
+  expect(screen.getByRole("region", { name: "Keys & Logs" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Technical Information" }));
+  const tech = screen.getByRole("region", { name: "Technical Information" });
+  expect(within(tech).getByText("Referenced Projects")).toBeTruthy();
+  expect(within(tech).getByText("parse-video (MIT)")).toBeTruthy();
   const accounts = screen.getByRole("region", { name: "Accounts & Visitor Identities" });
   expect(within(accounts).getByRole("button", { name: "Get Visitor Identity" })).toBeTruthy();
 });
@@ -340,9 +343,10 @@ it("lists logins and visitor identities with the methods that use them, the paci
   expect(within(pacing).getByText("每两次请求至少间隔 5 秒，每天最多导入 500 次。")).toBeTruthy();
   expect(within(pacing).getByText(/平台提示请求过于频繁/)).toBeTruthy();
   expect(within(pacing).getByRole("button", { name: "立即重试" })).toBeTruthy();
-  const about = screen.getByRole("region", { name: "关于" });
-  expect(within(about).getByText(/使用的程序：parse-video（MIT）/)).toBeTruthy();
+  const about = screen.getByRole("region", { name: "密钥与日志" });
   expect(within(about).getByText("/m/logs/fetch-failures.jsonl")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "技术信息" }));
+  expect(within(screen.getByRole("region", { name: "技术信息" })).getByText("parse-video（MIT）")).toBeTruthy();
 });
 
 it("names the other platforms a multi-platform method's one switch moves, and offers no lone option that equals 自动", async () => {

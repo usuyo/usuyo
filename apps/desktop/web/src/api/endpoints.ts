@@ -868,7 +868,7 @@ export interface FetchPlugin {
   visitors: string[];
   settings: PluginSetting[];
   pacing: PluginPacing[];
-  /** 清单的 `upstream`：插件调的第三方程序和它的许可；没写时不给。 */
+  /** 清单的 `upstream`：插件参考过的项目和它们的许可；没写时不给。 */
   upstream?: { name: string; license: string }[];
   /** 所有取法的暂停。 */
   pauses: PluginPause[];
