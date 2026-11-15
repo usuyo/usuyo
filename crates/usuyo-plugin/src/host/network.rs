@@ -119,6 +119,7 @@ fn proxy_url(text: &str) -> Result<String, String> {
 /// 系统代理最多多久读一次。
 const PROXY_FRESH_FOR: Duration = Duration::from_secs(60);
 /// `scutil --proxy` 最多等多久。
+#[cfg(target_os = "macos")]
 const SCUTIL_TIMEOUT: Duration = Duration::from_secs(2);
 
 static SYSTEM_PROXY: Mutex<Option<(Instant, Option<String>)>> = Mutex::new(None);
