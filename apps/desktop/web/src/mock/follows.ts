@@ -1,5 +1,5 @@
 // 样例：跟着收。和内核同一套接口，数据在内存里。
-// 能跟着的取法照 docs/platforms/routes.md：B站的收藏夹和稍后再看能列；按创作者列的（RSSHub）还没做；关键词搜索没有不签名的路子，不列。
+// 能跟着的取法照 docs/platforms/routes.md：B站的收藏夹和稍后再看能列；按创作者列的（YouTube 频道订阅源）还没做；关键词搜索没有不签名的路子，不列。
 // 订阅源用官方预装的通用网页获取读。最近收下的指向样例库里真有的条目。
 import type { FollowOption, FollowsView, FollowTaken, FollowTrial, FollowView } from "../api/endpoints";
 import type { Follows, Library } from "../api/source";
@@ -23,7 +23,7 @@ const OPTIONS: FollowOption[] = [
     ],
     minHours: 6,
   },
-  { kind: "creator", pluginId: "usuyo-fetch/rednote", pluginName: "小红书", methodName: "RSSHub", built: false, minHours: 12 },
+  { kind: "creator", pluginId: "usuyo-fetch/youtube", pluginName: "YouTube", methodName: "频道订阅源", built: false, minHours: 12 },
   { kind: "feed", pluginId: "usuyo/web", pluginName: "网页", methodName: "订阅源", built: true, minHours: 6 },
 ];
 

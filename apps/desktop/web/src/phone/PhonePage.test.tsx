@@ -287,7 +287,7 @@ it("speaks English when English is chosen, with plurals and lists", async () => 
   setLanguageChoice("en");
   const ready = await sample("phone-register");
   serve({ ...ready, ios: { ...ready.ios, clipboard: { state: "unchanged", at: new Date().toISOString(), waitSec: 1 } } });
-  expect(await screen.findByRole("heading", { name: "Phone" })).toBeTruthy();
+  expect(await screen.findByRole("heading", { name: "Phone Connection" })).toBeTruthy();
   expect(await screen.findByText("This Mac's clipboard didn't change within 1 second.")).toBeTruthy();
   expect(screen.getByText("First, register “mirroir serve” in Terminal and connect iPhone.")).toBeTruthy();
   expect(screen.getByRole("group", { name: "Step to Complete in Terminal" })).toBeTruthy();

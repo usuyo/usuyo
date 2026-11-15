@@ -8,9 +8,9 @@ afterEach(() => {
 describe("mock platforms", () => {
   it("lists one plugin per platform with every method, and a spread of states the daemon gives", async () => {
     const { plugins } = await createMockPlatforms().plugins();
-    expect(plugins.map((p) => p.name)).toEqual(["X", "小红书", "微信视频号", "B站", "yt-dlp"]);
+    expect(plugins.map((p) => p.name)).toEqual(["X", "小红书", "微信视频号", "B站"]);
     const x = plugins.find((p) => p.id === "usuyo-fetch/x");
-    expect(x?.methods).toHaveLength(9);
+    expect(x?.methods).toHaveLength(8);
     expect(x?.methods.filter((m) => m.built).map((m) => m.name)).toEqual(["访客接口", "嵌入接口", "浏览器脚本", "官方归档"]);
     const all = plugins.flatMap((p) => p.methods);
     // 用得上的就是没有原因的。
@@ -28,21 +28,13 @@ describe("mock platforms", () => {
     expect(bili?.methods.find((m) => m.id === "favorites")).toMatchObject({ usable: false, blockers: [{ code: "paused" }] });
   });
 
-  it("keeps one switch for a method with per-platform tiers: once switched, every platform follows", async () => {
-    const m = createMockPlatforms();
-    const before = (await m.plugins()).plugins.find((p) => p.id === "usuyo-fetch/ytdlp")?.methods[0];
-    expect(before).toMatchObject({ enabled: true, perPlatform: [{ platform: "youtube", enabled: false }, { platform: "weibo", enabled: false }] });
-    const after = (await m.switchMethod("usuyo-fetch/ytdlp", "ytdlp", true)).methods[0];
-    expect(after?.perPlatform?.every((t) => t.enabled)).toBe(true);
-  });
-
   it("switches a built method and its reasons follow, and refuses one that is not built", async () => {
     const m = createMockPlatforms();
     const x = await m.switchMethod("usuyo-fetch/x", "embed", true);
     expect(x.methods.find((y) => y.id === "embed")).toMatchObject({ enabled: true, usable: true, blockers: [] });
     const off = await m.switchMethod("usuyo-fetch/x", "guest", false);
     expect(off.methods.find((y) => y.id === "guest")).toMatchObject({ enabled: false, usable: false, blockers: [{ code: "off" }] });
-    expect(x.methods.filter((y) => !y.built).map((y) => y.name)).toEqual(["内容投递", "会话接口", "签名接口", "官方 API", "手机镜像"]);
+    expect(x.methods.filter((y) => !y.built).map((y) => y.name)).toEqual(["内容投递", "会话接口", "签名接口", "手机镜像"]);
     await expect(m.switchMethod("usuyo-fetch/x", "signed", true)).rejects.toThrow();
   });
 

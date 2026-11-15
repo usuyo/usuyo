@@ -1,4 +1,4 @@
-// 样例：「手机」页。地址栏带 ?mock=phone-<样子> 才有；不带时和内核今天一样，这几条接口不在。
+// 样例：「手机连接」页。地址栏带 ?mock=phone-<样子> 才有；不带时和内核今天一样，这几条接口不在。
 import { ApiError } from "../api/client";
 import type { AndroidDevice, PhoneDryRun, PhoneStep, PhoneView } from "../api/endpoints";
 import type { Phone } from "../api/source";

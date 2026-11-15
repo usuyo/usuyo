@@ -1,4 +1,4 @@
-// 「手机」页上的话，和从插件里挑出用到手机的获取方式。
+// 「手机连接」页上的话，和从插件里挑出用到手机的获取方式。
 import type { Access, AndroidDevice, FetchPlugin, GrantState, MethodBlocker, PhoneClipboardTest, PhoneView } from "../api/endpoints";
 import { t, type MessageKey } from "../i18n";
 import { formatList } from "../i18n/format";
@@ -49,7 +49,7 @@ export function iosMissing(ios: PhoneView["ios"]): string[] {
   return out;
 }
 
-/** 用到手机的一种获取方式，「手机」页上一行。 */
+/** 用到手机的一种获取方式，「手机连接」页上一行。 */
 export interface PhoneMethod {
   pluginId: string;
   /** 插件卡片在「获取插件」页的哪个平台下。 */
@@ -93,7 +93,7 @@ export function phoneMethods(plugins: FetchPlugin[]): PhoneMethod[] {
   );
 }
 
-/** 这一种现在能不能用，不能的话差什么。`phone` 是 null 时内核还不给手机那一页。 */
+/** 这一种现在能不能用，不能的话差什么。`phone` 是 null 时内核还不给「手机连接」那一页。 */
 export function methodState(m: PhoneMethod, phone: PhoneView | null): string {
   if (!m.built) return t("phone.methods.notBuilt");
   // 内核给的原因原样显示。

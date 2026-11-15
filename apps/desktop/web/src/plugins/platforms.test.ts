@@ -43,14 +43,14 @@ describe("where a method goes on a platform page", () => {
   });
 
   it("gives each platform of a multi-platform plugin its own page with that plugin on it", () => {
-    const ytdlp = plugin("usuyo-fetch/ytdlp", [method({ id: "ytdlp", name: "yt-dlp", access: "public-web", account: { kind: "none" }, gets: { fetch: ["meta", "media:video"] } })], [
+    const multi = plugin("example/multi", [method({ id: "clip", name: "多平台", access: "public-web", account: { kind: "none" }, gets: { fetch: ["meta", "media:video"] } })], [
       { id: "bilibili", name: "B站" },
       { id: "youtube", name: "YouTube" },
     ]);
-    const pages = platformPages({ plugins: [plugin("usuyo-fetch/bilibili", [guest]), ytdlp], notLoaded: [], failureLog: "" });
+    const pages = platformPages({ plugins: [plugin("usuyo-fetch/bilibili", [guest]), multi], notLoaded: [], failureLog: "" });
     expect(pages.map((p) => [p.id, p.plugins.map((x) => x.id), p.link.map((u) => u.method.id)])).toEqual([
-      ["bilibili", ["usuyo-fetch/bilibili", "usuyo-fetch/ytdlp"], ["guest", "ytdlp"]],
-      ["youtube", ["usuyo-fetch/ytdlp"], ["ytdlp"]],
+      ["bilibili", ["usuyo-fetch/bilibili", "example/multi"], ["guest", "clip"]],
+      ["youtube", ["example/multi"], ["clip"]],
     ]);
   });
 });
@@ -85,12 +85,12 @@ describe("the select's meaning", () => {
 
   it("clears a multi-platform method on 自动 even when it already matches here, because elsewhere it does not", () => {
     // 在 B站上照默认开着，在 YouTube 上那一层默认关着、却被拨成了开着：一个 PUT 回不去，去掉开关才各回各的
-    const ytdlp = plugin(
-      "usuyo-fetch/ytdlp",
+    const multi = plugin(
+      "example/multi",
       [
         method({
-          id: "ytdlp",
-          name: "yt-dlp",
+          id: "clip",
+          name: "多平台",
           access: "public-web",
           account: { kind: "none" },
           gets: { fetch: ["text", "meta"] },
@@ -102,18 +102,18 @@ describe("the select's meaning", () => {
         { id: "youtube", name: "YouTube" },
       ],
     );
-    const p = page([guest], [ytdlp]);
+    const p = page([guest], [multi]);
     expect(linkChoice(p.link, "bilibili")).toEqual({ kind: "auto" });
-    expect(linkSwitches(p.link, "bilibili", "auto")).toEqual([{ pluginId: "usuyo-fetch/ytdlp", methodId: "ytdlp", enabled: null }]);
+    expect(linkSwitches(p.link, "bilibili", "auto")).toEqual([{ pluginId: "example/multi", methodId: "clip", enabled: null }]);
   });
 
   it("takes the tier on this platform for a method another plugin raised here, across plugins", () => {
-    const ytdlp = plugin(
-      "usuyo-fetch/ytdlp",
+    const multi = plugin(
+      "example/multi",
       [
         method({
-          id: "ytdlp",
-          name: "yt-dlp",
+          id: "clip",
+          name: "多平台",
           access: "public-web",
           account: { kind: "none" },
           gets: { fetch: ["text", "meta"] },
@@ -125,14 +125,14 @@ describe("the select's meaning", () => {
         { id: "youtube", name: "YouTube" },
       ],
     );
-    const p = page([guest], [ytdlp]);
+    const p = page([guest], [multi]);
     // 在 B站上那一层是 private-api，默认关着：这就是「自动」
     expect(linkChoice(p.link, "bilibili")).toEqual({ kind: "auto" });
-    expect(linkSwitches(p.link, "bilibili", "usuyo-fetch/ytdlp#ytdlp")).toEqual([
-      { pluginId: "usuyo-fetch/ytdlp", methodId: "ytdlp", enabled: true },
+    expect(linkSwitches(p.link, "bilibili", "example/multi#clip")).toEqual([
+      { pluginId: "example/multi", methodId: "clip", enabled: true },
       { pluginId: "usuyo-fetch/bilibili", methodId: "guest", enabled: false },
     ]);
-    expect(autoOrder(p.link, "bilibili").map((u: Use) => u.method.id)).toEqual(["guest", "ytdlp"]);
+    expect(autoOrder(p.link, "bilibili").map((u: Use) => u.method.id)).toEqual(["guest", "clip"]);
   });
 
   it("orders 自动 by tier, then account-free first, platform plugins before the generic web plugin", () => {

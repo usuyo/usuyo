@@ -238,7 +238,7 @@ impl RuntimeRequirement {
                         .is_some_and(|v| v.starts_with(|c: char| c.is_ascii_alphanumeric()))
                 });
         if name.is_empty() || !constraint_ok {
-            return Err(format!("`{text}` is not a runtime like `yt-dlp>=2026.10`"));
+            return Err(format!("`{text}` is not a runtime like `python>=3.12`"));
         }
         Ok(Self {
             name: name.to_owned(),
@@ -2120,10 +2120,10 @@ mod tests {
 
     #[test]
     fn runtime_requirements() {
-        let r = RuntimeRequirement::parse("yt-dlp>=2026.10").unwrap();
+        let r = RuntimeRequirement::parse("python>=3.12").unwrap();
         assert_eq!(
             (r.name.as_str(), r.constraint.as_deref()),
-            ("yt-dlp", Some(">=2026.10"))
+            ("python", Some(">=3.12"))
         );
         assert!(
             RuntimeRequirement::parse("node")

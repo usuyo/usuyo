@@ -81,7 +81,7 @@ function basePlugins(): FetchPlugin[] {
       canList: true,
       pacing: [{ platform: "x", batch: true, intervalSec: 10, daily: 200 }],
       methods: [
-        // 照 usuyo-fetch/x 的 README：四种做好了，五种写了做法、还在等。
+        // 照 usuyo-fetch/x 的 README：四种做好了，四种写了做法、还在等。
         method({
           id: "guest",
           name: "访客接口",
@@ -114,7 +114,6 @@ function basePlugins(): FetchPlugin[] {
           gets: { list: ["搜索", "用户时间线"] },
           riskNote: { text: "注册三年的账号一次取 800 个关注后被封。", source: { label: "twikit #338", url: "https://github.com/d60/twikit/issues/338" } },
         }),
-        notBuilt({ id: "api", name: "官方 API", access: "official-export", login: "required", account: { kind: "developer", where: "X" }, gets: { list: ["书签", "喜欢"] } }),
         notBuilt({ id: "mirror", name: "手机镜像", access: "vision-ui", login: "required", account: { kind: "own-phone", where: "X" }, drives: "iphone", interaction: "foreground", gets: { list: ["书签", "喜欢"], delivers: "links" } }),
       ],
     },
@@ -261,36 +260,6 @@ function basePlugins(): FetchPlugin[] {
           // 样例里这一种刚被限流：页面上写原因和什么时候再试
           pauses: [{ method: "favorites", scope: "bilibili", byYou: false, until: inMinutes(12), code: "rate-limited", hint: said("B站提示请求过于频繁，稍后再试", "Bilibili reported too many requests. Try again later.") }],
           riskNote: { text: "一例大会员被冻结，因果不明。", source: { label: "yutto #452", url: "https://github.com/yutto-dev/yutto/issues/452" } },
-        }),
-        notBuilt({ id: "yutto", name: "yutto（高清音视频、字幕）", access: "session-api", login: "required", account: { kind: "in-usuyo", sites: ["www.bilibili.com"], where: "B站" }, gets: { fetch: ["media:video", "subtitle"] } }),
-      ],
-    },
-    // 一个插件管几个平台、在其中几个上层级更高的一种（照 usuyo-fetch/ytdlp）：开关只有一个，那几个平台没拨过时关着。
-    {
-      ...base,
-      id: "usuyo-fetch/ytdlp",
-      name: "yt-dlp",
-      description: "用 yt-dlp 按链接取一条视频：标题、作者、封面、字幕和视频文件",
-      platforms: [
-        { id: "bilibili", name: "B站" },
-        { id: "youtube", name: "YouTube" },
-        { id: "weibo", name: "微博" },
-      ],
-      access: "private-api",
-      login: "none",
-      canList: false,
-      pacing: [{ platform: "youtube", batch: true, intervalSec: 10, daily: 200 }],
-      methods: [
-        method({
-          id: "ytdlp",
-          name: "yt-dlp",
-          access: "public-web",
-          account: { kind: "none" },
-          gets: { fetch: ["meta", "images", "subtitle", "media:video"] },
-          perPlatform: [
-            { platform: "youtube", access: "private-api", login: "none", enabled: false },
-            { platform: "weibo", access: "private-api", login: "none", enabled: false },
-          ],
         }),
       ],
     },

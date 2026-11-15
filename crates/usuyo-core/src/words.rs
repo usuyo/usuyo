@@ -398,7 +398,7 @@ pub(crate) const REVEAL_FAILED: Words = w(
     "Couldn't show it in {fileManager}.",
 );
 
-// phone/：手机那一页
+// phone/：「手机连接」那一页
 pub(crate) const PHONE_NOT_SERVED: Words = w(
     "此版本的 usuyo 服务不支持手机。",
     "This version of the usuyo service doesn't support phones.",

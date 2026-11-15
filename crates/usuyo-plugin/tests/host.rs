@@ -921,7 +921,7 @@ async fn calls_name_their_method_and_unbuilt_ones_are_not_called() {
 async fn health_reports_checks_per_method_without_a_method_argument() {
     let f = install(
         r#"printf '%s\n' "$@" > "$USUYO_CACHE_DIR/args"
-echo '{"ok": true, "ready": true, "protocol": 1, "version": "1.0.0", "checks": [{"name": "yt-dlp", "ok": false, "message": "没找到 yt-dlp", "methods": ["page"]}]}'"#,
+echo '{"ok": true, "ready": true, "protocol": 1, "version": "1.0.0", "checks": [{"name": "ffmpeg", "ok": false, "message": "没找到 ffmpeg", "methods": ["page"]}]}'"#,
     );
     let h = f
         .host

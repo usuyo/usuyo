@@ -110,7 +110,7 @@ const session = method({
   blockers: [{ code: "login-missing", hint: "要先在 usuyo 里登录B站" }],
 });
 const signed = method({ id: "signed", name: "签名接口", access: "private-api", account: { kind: "none" }, gets: { fetch: ["text"] }, enabled: false });
-const video = method({ id: "yutto", name: "yutto", access: "session-api", account: { kind: "in-usuyo", sites: ["www.bilibili.com"], where: "B站" }, gets: { fetch: ["media:video"] } });
+const video = method({ id: "video", name: "视频文件", access: "session-api", account: { kind: "in-usuyo", sites: ["www.bilibili.com"], where: "B站" }, gets: { fetch: ["media:video"] } });
 const unbuilt = method({ id: "app", name: "客户端", access: "client-hook", account: { kind: "own-app" }, gets: {}, built: false, enabled: false });
 
 async function choose(label: string, option: string) {
@@ -138,7 +138,7 @@ it("writes the platform page in English when English is chosen, with plurals and
   setLanguageChoice("en");
   const visitor = method({ id: "visitor", name: "visitor-api", access: "public-web", account: { kind: "visitor", sites: ["www.bilibili.com"], where: "Bilibili" }, gets: { fetch: ["text"] } });
   serve(
-    { plugins: [bili([guest, session, visitor], { upstream: [{ name: "yutto", license: "GPL-3.0" }] })], notLoaded: [] },
+    { plugins: [bili([guest, session, visitor], { upstream: [{ name: "parse-video", license: "MIT" }] })], notLoaded: [] },
     [SITE],
     [{ site: "www.bilibili.com", name: "Bilibili", url: "https://www.bilibili.com/", cookies: [], domains: [], state: "missing", plugins: ["usuyo-fetch/bilibili"] }],
     "/plugins/bilibili",
@@ -150,7 +150,7 @@ it("writes the platform page in English when English is chosen, with plurals and
   const pacing = screen.getByRole("region", { name: "Request Rate" });
   expect(within(pacing).getByText("At least 5 seconds between requests; daily import limit: 500.")).toBeTruthy();
   const about = screen.getByRole("region", { name: "About" });
-  expect(within(about).getByText("Uses: yutto (GPL-3.0)")).toBeTruthy();
+  expect(within(about).getByText("Uses: parse-video (MIT)")).toBeTruthy();
   const accounts = screen.getByRole("region", { name: "Accounts & Visitor Identities" });
   expect(within(accounts).getByRole("button", { name: "Get Visitor Identity" })).toBeTruthy();
 });
@@ -162,7 +162,7 @@ it("explains 自动 in the daemon's order, with the unbuilt one disabled and par
   expect(within(card).getAllByText("在 usuyo 中登录B站账号：未登录")[0]).toBeTruthy();
   expect(within(card).getByText(/已关闭：签名接口（此层级默认关闭）/)).toBeTruthy();
   expect(within(card).getByText("补充：视频")).toBeTruthy();
-  expect(within(card).getByRole("switch", { name: "补充：yutto" })).toBeTruthy();
+  expect(within(card).getByRole("switch", { name: "补充：视频文件" })).toBeTruthy();
   fireEvent.click(within(card).getByRole("button", { name: /获取方式/ }));
   const option = await screen.findByRole("option", { name: /^客户端/ });
   expect(option.getAttribute("aria-disabled")).toBe("true");
@@ -206,7 +206,7 @@ it("a specific method's explanation has its needs with one action each, risk and
             riskNote: { text: "只读，不改。", source: { label: "某个 issue", url: "https://example.com/1" } },
             blockers: [
               { code: "login-missing", hint: "要先在 usuyo 里登录B站" },
-              { code: "check-failed", hint: "没找到 yutto：brew install yutto" },
+              { code: "check-failed", hint: "没找到 ffmpeg：brew install ffmpeg" },
             ],
           },
         ]),
@@ -220,7 +220,7 @@ it("a specific method's explanation has its needs with one action each, risk and
   const needs = await screen.findByRole("list", { name: "会话接口需要的项目" });
   expect(within(needs).getByText("在 usuyo 中登录B站账号：未登录")).toBeTruthy();
   expect(within(needs).getByRole("button", { name: "登录" })).toBeTruthy();
-  expect(within(needs).getByText("没找到 yutto：brew install yutto")).toBeTruthy();
+  expect(within(needs).getByText("没找到 ffmpeg：brew install ffmpeg")).toBeTruthy();
   expect(within(needs).getByRole("button", { name: "重新检查" })).toBeTruthy();
   expect(screen.getByText(/只读，不改。/)).toBeTruthy();
   expect(screen.getByText(/上次使用：.*，失败：登录过期了/)).toBeTruthy();
@@ -304,29 +304,29 @@ it("steps for a window method: what it does, the plugin script named before firs
 });
 
 it("steps for a file reader: how to get the file, then 选文件 with this reader; one off by default says why and has its switch", async () => {
-  const crawler = method({ id: "mediacrawler", name: "MediaCrawler 的结果文件", access: "private-api", account: { kind: "none" }, gets: { list: [] }, enabled: false });
-  const reader: FileReader = { id: "usuyo-fetch/bilibili#mediacrawler", name: crawler.name, plugin: "B站", reads: "MediaCrawler 保存的 json", patterns: ["*.json"], lists: [] };
-  const served = serve({ plugins: [bili([guest, crawler])], notLoaded: [] }, [SITE], [], "/plugins/bilibili", [reader]);
-  const steps = await screen.findByRole("list", { name: "MediaCrawler 的结果文件的步骤" });
-  expect(await within(steps).findByText(/MediaCrawler 保存的 json/)).toBeTruthy();
-  expect(within(steps).getByRole("link", { name: "选择文件" }).getAttribute("href")).toBe("/import?from=file&reader=usuyo-fetch%2Fbilibili%23mediacrawler");
+  const dump = method({ id: "dump", name: "接口结果文件", access: "private-api", account: { kind: "none" }, gets: { list: [] }, enabled: false });
+  const reader: FileReader = { id: "usuyo-fetch/bilibili#dump", name: dump.name, plugin: "B站", reads: "接口返回的 json", patterns: ["*.json"], lists: [] };
+  const served = serve({ plugins: [bili([guest, dump])], notLoaded: [] }, [SITE], [], "/plugins/bilibili", [reader]);
+  const steps = await screen.findByRole("list", { name: "接口结果文件的步骤" });
+  expect(await within(steps).findByText(/接口返回的 json/)).toBeTruthy();
+  expect(within(steps).getByRole("link", { name: "选择文件" }).getAttribute("href")).toBe("/import?from=file&reader=usuyo-fetch%2Fbilibili%23dump");
   expect(screen.getByText(/此获取方式默认关闭：/)).toBeTruthy();
-  fireEvent.click(screen.getByRole("switch", { name: "MediaCrawler 的结果文件：已关闭" }));
-  await waitFor(() => expect(served.switched).toEqual([{ path: "/api/plugins/usuyo-fetch/bilibili/methods/mediacrawler", body: { enabled: true } }]));
+  fireEvent.click(screen.getByRole("switch", { name: "接口结果文件：已关闭" }));
+  await waitFor(() => expect(served.switched).toEqual([{ path: "/api/plugins/usuyo-fetch/bilibili/methods/dump", body: { enabled: true } }]));
 });
 
 it("steps for a phone method point to the phone page", async () => {
   const phone = method({ id: "iphone", name: "iPhone", access: "vision-ui", account: { kind: "own-phone", where: "小红书" }, gets: { list: ["收藏"] } });
   serve({ plugins: [bili([phone], { id: "usuyo-fetch/rednote", name: "小红书", platforms: [{ id: "rednote", name: "小红书" }], sites: [] })], notLoaded: [] }, [], [], "/plugins/rednote");
   const steps = await screen.findByRole("list", { name: "iPhone 的步骤" });
-  expect(within(steps).getByRole("link", { name: "前往「手机」页面" }).getAttribute("href")).toBe("/phone");
+  expect(within(steps).getByRole("link", { name: "前往「手机连接」页面" }).getAttribute("href")).toBe("/phone");
 });
 
 it("lists logins and visitor identities with the methods that use them, the pacing, and what the plugin calls", async () => {
   const visitor = method({ id: "visitor", name: "访客身份接口", access: "public-web", account: { kind: "visitor", sites: ["www.bilibili.com"], where: "B站" }, gets: { fetch: ["text"] } });
   serve(
     {
-      plugins: [bili([guest, session, visitor], { upstream: [{ name: "yutto", license: "GPL-3.0" }], pauses: [{ method: "guest", scope: "bilibili", byYou: false, until: "2099-01-01T15:00:00.000Z", code: "rate-limited" }] })],
+      plugins: [bili([guest, session, visitor], { upstream: [{ name: "parse-video", license: "MIT" }], pauses: [{ method: "guest", scope: "bilibili", byYou: false, until: "2099-01-01T15:00:00.000Z", code: "rate-limited" }] })],
       notLoaded: [],
     },
     [SITE],
@@ -341,22 +341,22 @@ it("lists logins and visitor identities with the methods that use them, the paci
   expect(within(pacing).getByText(/平台提示请求过于频繁/)).toBeTruthy();
   expect(within(pacing).getByRole("button", { name: "立即重试" })).toBeTruthy();
   const about = screen.getByRole("region", { name: "关于" });
-  expect(within(about).getByText(/使用的程序：yutto（GPL-3.0）/)).toBeTruthy();
+  expect(within(about).getByText(/使用的程序：parse-video（MIT）/)).toBeTruthy();
   expect(within(about).getByText("/m/logs/fetch-failures.jsonl")).toBeTruthy();
 });
 
 it("names the other platforms a multi-platform method's one switch moves, and offers no lone option that equals 自动", async () => {
-  const ytdlp: FetchPlugin = {
-    ...bili([method({ id: "ytdlp", name: "yt-dlp", access: "public-web", account: { kind: "none" }, gets: { fetch: ["text", "meta"] } })]),
-    id: "usuyo-fetch/ytdlp",
-    name: "yt-dlp",
+  const multi: FetchPlugin = {
+    ...bili([method({ id: "clip", name: "多平台", access: "public-web", account: { kind: "none" }, gets: { fetch: ["text", "meta"] } })]),
+    id: "example/multi",
+    name: "多平台",
     platforms: [
       { id: "bilibili", name: "B站" },
       { id: "youtube", name: "YouTube" },
     ],
     sites: [],
   };
-  serve({ plugins: [bili([guest]), ytdlp], notLoaded: [] }, [SITE], [], "/plugins/bilibili");
+  serve({ plugins: [bili([guest]), multi], notLoaded: [] }, [SITE], [], "/plugins/bilibili");
   expect(await screen.findByText(/的开关同时作用于 YouTube/)).toBeTruthy();
   cleanup();
 

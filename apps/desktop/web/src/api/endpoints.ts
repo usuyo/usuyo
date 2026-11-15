@@ -144,7 +144,7 @@ export const paths = {
   /** POST：删掉这个模型；之后要它的转换等着模型。 */
   modelRemove: (pluginId: string, name: string) => `/transforms/${pluginPath(pluginId)}/models/${encodeURIComponent(name)}/remove`,
 
-  // —— 手机（「手机」页，docs/platforms/phone.md §4、§12）。只在 macOS 上的内核有，别处回 404 `not-found`。——
+  // —— 手机（「手机连接」页，docs/platforms/phone.md §4、§12）。只在 macOS 上的内核有，别处回 404 `not-found`。——
   /** GET `PhoneView`：这台电脑上 iPhone 镜像那条路和安卓 adb 那条路各自怎样。看它不起任何程序（不起 adb 的服务）。用到手机的取法不在这里，在 `paths.plugins`。 */
   phone: "/phone",
   /** POST：装 mirroir（官方 release 的 `darwin-arm64` 包，钉版本、对 `SHA256SUMS`，放按机器目录），马上回 `PhoneView`（`installing`）；装好或没装上发 `phone-updated`。不登记「mirroir serve」：那一步改这台 Mac 的设置，写在 `PhoneDriver.step` 里交给你。 */
@@ -262,7 +262,7 @@ export type PlatformEvent =
   | { type: "transforms-updated" }
   /** 订阅源读到了新索引、加了或删了一个，插件开始装、在下、装好、没装上、删掉了。重新拉 `paths.catalog`。 */
   | { type: "catalog-updated" }
-  /** 手机那一页的事变了：mirroir 开始装、装好、没装上、卸掉，剪贴板试出了结果。重新拉 `paths.phone`。授权、镜像、adb 在 usuyo 外面变，不发这一条：页面看得见时自己隔一会儿重拉。 */
+  /** 「手机连接」那一页的事变了：mirroir 开始装、装好、没装上、卸掉，剪贴板试出了结果。重新拉 `paths.phone`。授权、镜像、adb 在 usuyo 外面变，不发这一条：页面看得见时自己隔一会儿重拉。 */
   | { type: "phone-updated" };
 
 /** 平台的显示名由获取插件给，内核不认识具体平台。 */

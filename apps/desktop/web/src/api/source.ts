@@ -180,7 +180,7 @@ export interface Exports {
   exportNow(): Promise<ExportRun>;
 }
 
-/** 「手机」页的读写（docs/platforms/phone.md §4）。用到手机的取法走 `Platforms.plugins`。 */
+/** 「手机连接」页的读写（docs/platforms/phone.md §4）。用到手机的取法走 `Platforms.plugins`。 */
 export interface Phone {
   phone(): Promise<PhoneView>;
   installDriver(): Promise<PhoneView>;
@@ -336,7 +336,7 @@ const MOCK_FORCED = import.meta.env.VITE_USUYO_MOCK === "1";
 const MOCK_FALLBACK = import.meta.env.MODE === "development";
 
 // 地址栏带 ?mock=empty 时样例库从空的开始；?mock=fresh 是资料库空着、获取插件装好了（第一次打开）；
-// ?mock=phone-<样子> 是「手机」页的几种样子（mock/phone.ts），不带时那一页和内核今天一样说一句。要在路由改写地址之前读。
+// ?mock=phone-<样子> 是「手机连接」页的几种样子（mock/phone.ts），不带时那一页和内核今天一样说一句。要在路由改写地址之前读。
 const MOCK_PARAM = (MOCK_FORCED || MOCK_FALLBACK) && typeof location !== "undefined" ? new URLSearchParams(location.search).get("mock") : null;
 const MOCK_EMPTY = MOCK_PARAM === "empty" || MOCK_PARAM === "fresh";
 const MOCK_NO_PLUGINS = MOCK_PARAM === "empty";

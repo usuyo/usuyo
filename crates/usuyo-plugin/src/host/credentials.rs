@@ -294,7 +294,7 @@ fn login_of(site: &impl CookieScope, record: Option<&SiteRecord>, now: f64) -> L
     }
 }
 
-/// cookies.txt（Netscape 格式），给 yt-dlp 一类工具。
+/// cookies.txt（Netscape 格式），给读这种文件的工具。
 fn netscape(cookies: &[Cookie]) -> String {
     let mut out = String::from("# Netscape HTTP Cookie File\n");
     for c in cookies {

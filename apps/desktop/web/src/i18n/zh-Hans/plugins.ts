@@ -1,4 +1,4 @@
-// 获取插件页（每个平台一页、转写与识别）上的话；条目页的「再转」、导入页、手机页也用其中几组。
+// 获取插件页（每个平台一页、转写与识别）上的话；条目页的「再转」、导入页、手机连接页也用其中几组。
 export default {
   jobs: {
     play: "合成可播放的视频",
@@ -213,7 +213,7 @@ export default {
     login: "在 usuyo 中登录{name}账号：{state}",
     visitor: "{name}访客身份：{state}",
     phone: "需要一台已登录{where} App 的手机",
-    goPhone: "前往「手机」页面",
+    goPhone: "前往「手机连接」页面",
     recheck: "重新检查",
     retryNow: "立即重试",
     secret: "填写{label}",

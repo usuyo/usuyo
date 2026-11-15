@@ -8,7 +8,7 @@ export default {
     changes: "更改记录",
     trash: "{trash}",
     plugins: "获取插件",
-    phone: "手机",
+    phone: "手机连接",
     settings: "设置",
   },
   theme: {

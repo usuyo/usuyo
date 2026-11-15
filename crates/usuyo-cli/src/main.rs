@@ -164,7 +164,7 @@ fn open(root: &std::path::Path, cli: &Cli) -> Result<Engine> {
     config.system_language = usuyo_core::Lang::from_system(sys_locale::get_locale().as_deref());
     // 登录的 cookie 和密钥：macOS、Windows 进系统钥匙串，别的系统是按机器目录里 0600 的文件。
     config.vault = usuyo_core::system_vault(root);
-    // 手机那一页只在 macOS 上管（iPhone 镜像那条路要它）。
+    // 「手机连接」那一页只在 macOS 上管（iPhone 镜像那条路要它）。
     #[cfg(target_os = "macos")]
     {
         let home = std::env::var_os("HOME").context("HOME is not set")?;

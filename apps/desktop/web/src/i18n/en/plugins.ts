@@ -217,7 +217,7 @@ export default mirror<typeof zh>()({
     login: "Sign in to {name} in usuyo: {state}",
     visitor: "{name} visitor identity: {state}",
     phone: "A phone signed in to the {where} app",
-    goPhone: "Go to Phone",
+    goPhone: "Go to Phone Connection",
     recheck: "Check Again",
     retryNow: "Retry Now",
     secret: "Enter {label}",

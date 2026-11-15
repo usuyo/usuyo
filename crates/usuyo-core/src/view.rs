@@ -916,7 +916,7 @@ pub enum Event {
     PluginsUpdated,
     /// 模型在下、下好了、没下成、删掉了。重新拉 `/transforms`。
     TransformsUpdated,
-    /// 手机那一页的事变了：驱动开始装、装好、没装上、卸掉，剪贴板试出了结果。重新拉 `/phone`。
+    /// 「手机连接」那一页的事变了：驱动开始装、装好、没装上、卸掉，剪贴板试出了结果。重新拉 `/phone`。
     PhoneUpdated,
     /// 订阅源读到了新索引、加了或删了一个，插件开始装、在下、装好、没装上、删掉了。重新拉 `/catalog`。
     CatalogUpdated,

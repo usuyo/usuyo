@@ -129,7 +129,7 @@ function atDefaults(u: Use): boolean {
 
 /**
  * 选了一项要拨的开关，只拨和现在不一样的：「自动」把拨过的收链接的方法的开关去掉（null），回到各平台各自那一层的默认，
- * 一个开关管几个平台、各平台默认不同的（yt-dlp 一类）也就各回各的；选一种是开它、关掉这个平台上别的收链接的方法。
+ * 一个开关管几个平台、各平台默认不同的也就各回各的；选一种是开它、关掉这个平台上别的收链接的方法。
  * 要开的排在前面，中途没成也不会一种都不开。只补上一样的、拿回存过的不碰。
  */
 export function linkSwitches(link: Use[], platform: string, choice: string): Switch[] {

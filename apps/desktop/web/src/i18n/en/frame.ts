@@ -10,7 +10,7 @@ export default mirror<typeof zh>()({
     changes: "Change History",
     trash: "{trash}",
     plugins: "Fetch Plugins",
-    phone: "Phone",
+    phone: "Phone Connection",
     settings: "Settings",
   },
   theme: {

@@ -1,4 +1,4 @@
-//! 「手机」那一页（docs/platforms/phone.md §4）：这台电脑上 iPhone 镜像那条路和安卓 adb 那条路各自怎样，
+//! 「手机连接」那一页（docs/platforms/phone.md §4）：这台电脑上 iPhone 镜像那条路和安卓 adb 那条路各自怎样，
 //! 装、换新、卸掉手机的驱动 mirroir（mirroir-mcp，Apache-2.0），试通用剪贴板，演练一次只读屏。
 //!
 //! 只读这台机器：每个外部程序、本机服务的调用都有时限；不碰任何平台。系统的授权只经驱动问，
@@ -44,7 +44,7 @@ const SCREEN_RECORDING_PANE: &str =
 const ACCESSIBILITY_PANE: &str =
     "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility";
 
-/// 手机那一页读什么、跑什么。出厂的是 [`PhoneConfig::system`]；测试换成假程序、假服务和本机的假 release。
+/// 「手机连接」那一页读什么、跑什么。出厂的是 [`PhoneConfig::system`]；测试换成假程序、假服务和本机的假 release。
 #[derive(Debug, Clone)]
 pub struct PhoneConfig {
     /// 驱动放在哪：按机器目录的 `drivers/mirroir-mcp/`。
@@ -133,7 +133,7 @@ impl PhoneConfig {
     }
 }
 
-/// 手机那一页这边出的错；每个配一句给人看的中文。
+/// 「手机连接」那一页这边出的错；每个配一句给人看的中文。
 #[derive(Debug, thiserror::Error)]
 pub enum PhoneError {
     #[error("this daemon does not manage phones")]

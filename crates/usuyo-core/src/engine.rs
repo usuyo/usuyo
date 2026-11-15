@@ -85,7 +85,7 @@ pub struct EngineConfig {
     pub transform_limits: TransformLimits,
     /// 按机器的 `network.proxy`：要联网的插件和模型下载怎么连出去（默认跟系统代理）。
     pub proxy: ProxySetting,
-    /// 手机那一页读什么、跑什么；`None`（默认）时 `/phone…` 回 `not-found`。守护进程换成 [`PhoneConfig::system`]。
+    /// 「手机连接」那一页读什么、跑什么；`None`（默认）时 `/phone…` 回 `not-found`。守护进程换成 [`PhoneConfig::system`]。
     pub phone: Option<crate::PhoneConfig>,
     /// 设置里没写 `pluginSources` 时的订阅源。默认没有；守护进程给 `usuyo-fetch/index`。
     pub default_sources: Vec<String>,
@@ -256,7 +256,7 @@ pub(crate) fn find_plugins(roots: &[PathBuf]) -> Result<Found> {
     Ok(out)
 }
 
-/// 平台插件的名字优先，通用网页插件的排后。管几个平台的插件（yt-dlp 一类）的名字不是哪个平台的名字：
+/// 平台插件的名字优先，通用网页插件的排后。管几个平台的插件的名字不是哪个平台的名字：
 /// 只有它管的平台照平台 id 叫。
 fn platform_names(plugins: &[usuyo_plugin::FetchPlugin]) -> BTreeMap<String, String> {
     let mut platforms = BTreeMap::new();
@@ -319,7 +319,7 @@ pub(crate) struct Inner {
     pub methods: crate::methods::Methods,
     /// 按机器的 `libraries/<libraryId>/imports/`：从文件导入时交进来的文件的副本，一次导入一个文件夹。
     pub import_copies: PathBuf,
-    /// 手机那一页；没配就是 `None`。
+    /// 「手机连接」那一页；没配就是 `None`。
     pub phone: Option<Arc<crate::phone::Phone>>,
     /// 内核给的话用哪种语言（设置里选的，`system` 照 [`EngineConfig::system_language`]）。
     pub language: std::sync::RwLock<crate::words::Lang>,

@@ -1,4 +1,4 @@
-//! 「手机」那一页的路由，对着假的一切：本机起的假 release 服务器、假的「mirroir serve」（MCP over HTTP）、
+//! 「手机连接」那一页的路由，对着假的一切：本机起的假 release 服务器、假的「mirroir serve」（MCP over HTTP）、
 //! 当 `sw_vers`、`pgrep`、`open`、剪贴板计数和 `adb` 用的 sh 脚本。不下真的驱动、不起真的驱动、
 //! 不打开系统设置、不调真的 adb。
 #![cfg(unix)]
