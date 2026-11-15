@@ -299,6 +299,30 @@ pub(crate) const PAUSED_ERROR: Words = w(
     "上次请求出错。{time}前不会使用。",
     "The last request failed. It won't be used until {time}.",
 );
+pub(crate) const STOPPED: Words = w(
+    "已于 {time} 停止获取。点按「继续获取」后才会再获取。",
+    "Fetching stopped at {time}. It resumes only after you click Continue Fetching.",
+);
+pub(crate) const STOPPED_BLOCKED: Words = w(
+    "平台出现了验证页或拦截提示，已停止获取。",
+    "The platform showed a verification page or blocked the request. Fetching stopped.",
+);
+pub(crate) const STOPPED_VISITOR: Words = w(
+    "更换访客身份后，网站仍不接受，已停止获取。",
+    "The website still refused after the visitor identity was replaced. Fetching stopped.",
+);
+pub(crate) const COOKIE_FILE_LINE: Words = w(
+    "无法读取此文件：第 {line} 行不是 Netscape 格式的 cookie。",
+    "Can't read this file: line {line} isn't a cookie in Netscape format.",
+);
+pub(crate) const COOKIE_FILE_NONE: Words = w(
+    "此文件中没有「{site}」登录后的有效 cookie。",
+    "This file has no valid signed-in cookies for “{site}”.",
+);
+pub(crate) const COOKIE_FILE_PROFILE: Words = w(
+    "「{site}」在 usuyo 的站点窗口中登录，无法从文件导入登录状态。",
+    "“{site}” signs in in a usuyo site window. Its sign-in can't be imported from a file.",
+);
 pub(crate) const PAUSED_WAITING: Words = w(
     "已暂停。点按「立即重试」以继续。",
     "Paused. Click Retry Now to continue.",

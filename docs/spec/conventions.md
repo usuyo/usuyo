@@ -182,6 +182,8 @@ SHA-256，小写十六进制，算存下来的字节。字段名叫 `sha256` 时
 | 获取访客身份 | Get Visitor Identity | 领访客身份 |
 | 可用、不可用、尚未提供 | Available, Unavailable, Not available yet | 现在能用、用不上、还没做 |
 | 暂停、立即重试 | Pause, Retry Now | 先别试、现在再试 |
+| 继续获取、已停止获取（被拦以后整个平台停下） | Continue Fetching, Fetching stopped | 接着取、恢复、解封 |
+| 从文件导入登录状态…、cookie 文件 | Import Sign-In from File…, cookie file | 导入 cookie、读浏览器的登录 |
 | 发送到 usuyo | Send to usuyo | 交给 usuyo |
 | 废纸篓（macOS）、回收站（Windows、Linux） | Trash (macOS, Linux), Recycle Bin (Windows) | — |
 | 访达（macOS）、文件资源管理器（Windows）、文件管理器（Linux） | Finder, File Explorer, file manager | — |

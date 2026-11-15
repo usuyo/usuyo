@@ -75,8 +75,9 @@ export function needsOf(u: Use, sites: SiteLogin[], visitors: VisitorIdentity[])
       out.push({ key: `secret:${s.key}`, ok: false, text: t("plugins.needs.secret", { label: s.label }), action: <SecretField pluginId={u.plugin.id} setting={s} /> });
     }
   }
-  for (const b of m.blockers.filter((x) => x.code === "paused")) {
-    out.push({ key: `paused:${b.hint}`, ok: false, text: b.hint, action: <TryAgain pluginId={u.plugin.id} label={t("plugins.needs.retryNow")} /> });
+  for (const b of m.blockers.filter((x) => x.code === "paused" || x.code === "stopped")) {
+    const label = b.code === "stopped" ? t("plugins.needs.resume") : t("plugins.needs.retryNow");
+    out.push({ key: `${b.code}:${b.hint}`, ok: false, text: b.hint, action: <TryAgain pluginId={u.plugin.id} label={label} /> });
   }
   return out;
 }

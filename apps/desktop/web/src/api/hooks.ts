@@ -479,6 +479,17 @@ export function useForgetLogin() {
   });
 }
 
+export function useImportLoginFile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { site: string; text: string }) => call((s) => s.importLoginFile(v.site, v.text)),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sites });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.plugins });
+    },
+  });
+}
+
 export function useForgetVisitor() {
   const queryClient = useQueryClient();
   return useMutation({

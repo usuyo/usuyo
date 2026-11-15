@@ -189,6 +189,82 @@ async fn a_refused_identity_is_replaced_and_the_item_tried_once_more() {
 }
 
 #[tokio::test]
+async fn a_replaced_identity_refused_again_stops_the_platform_until_you_continue() {
+    let f = Fixture::new();
+    let engine = f.engine(Duration::from_secs(90));
+    visitor(&engine, "stale");
+    let t = engine
+        .take("https://www.example.test/n/1", "link", Via::Cli)
+        .await
+        .unwrap();
+    engine.run_due().await.unwrap();
+    assert_eq!(wanted(&engine), [("www.example.test".to_owned(), true)]);
+    // 换来的这份也不被收：平台停下，不再要新的
+    visitor(&engine, "stale-again");
+    engine.run_due().await.unwrap();
+    assert_eq!(f.calls(), ["fetch visitor", "fetch visitor"]);
+    assert!(wanted(&engine).is_empty());
+    let plugins = engine.plugins().await.unwrap();
+    let stop = plugins.plugins[0]
+        .pauses
+        .iter()
+        .find(|p| p.stopped)
+        .expect("the platform is stopped");
+    assert_eq!(stop.code.as_deref(), Some("visitor-required"));
+    assert_eq!(stop.said.as_deref(), Some("sent home"));
+    assert!(stop.since.is_some());
+    assert!(
+        stop.hint.as_deref().unwrap().contains("更换访客身份后"),
+        "{stop:?}"
+    );
+    // 别的条目也不取，也不为它要访客身份
+    let t2 = engine
+        .take("https://www.example.test/n/2", "link", Via::Cli)
+        .await
+        .unwrap();
+    engine.run_due().await.unwrap();
+    assert_eq!(f.calls().len(), 2);
+    assert!(wanted(&engine).is_empty());
+    // 你点了「继续获取」，换上能用的一份：两条都取到
+    visitor(&engine, "good");
+    engine.try_plugin_now("fake/visit").unwrap();
+    engine.run_due().await.unwrap();
+    for id in [&t.id, &t2.id] {
+        assert_eq!(
+            engine.item(id, &Links::default()).unwrap().stored,
+            Stored::Complete
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_refused_identity_with_no_replacement_coming_stops_the_platform() {
+    let f = Fixture::new();
+    let engine = f.engine(Duration::from_millis(200));
+    visitor(&engine, "stale");
+    engine
+        .take("https://www.example.test/n/1", "link", Via::Cli)
+        .await
+        .unwrap();
+    engine.run_due().await.unwrap();
+    assert_eq!(wanted(&engine), [("www.example.test".to_owned(), true)]);
+    // 没有壳交来新的：到点再试一次又被拒，平台停下
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    engine.run_due().await.unwrap();
+    assert_eq!(f.calls().len(), 2);
+    for n in [2, 3] {
+        engine
+            .take(&format!("https://www.example.test/n/{n}"), "link", Via::Cli)
+            .await
+            .unwrap();
+    }
+    engine.run_due().await.unwrap();
+    assert_eq!(f.calls().len(), 2, "停着不再一条条去被拒");
+    let plugins = engine.plugins().await.unwrap();
+    assert!(plugins.plugins[0].pauses.iter().any(|p| p.stopped));
+}
+
+#[tokio::test]
 async fn without_a_shell_the_item_waits_once_then_says_what_it_needs() {
     let f = Fixture::new();
     let engine = f.engine(Duration::from_millis(200));

@@ -93,12 +93,13 @@ function reasonOf(code: string): string {
   }
 }
 
-/** 停着的那一行：为什么、到什么时候。平台挡住的停一小时就自己再试。`platforms` 用来把范围写成平台名。 */
+/** 停着的那一行：为什么、到什么时候。平台挡住的停一阵自己再试，或整个平台停下等你点「继续获取」。`platforms` 用来把范围写成平台名。 */
 export function pauseText(p: PluginPause, platforms: { id: string; name: string }[], now = new Date()): string {
   if (p.byYou) return t("plugins.pause.held");
   const why = p.hint ?? (p.code ? reasonOf(p.code) : t("plugins.reason.paused"));
   // 只有一个平台的插件不用再说是哪个。
   const reason = p.scope === "*" || platforms.length <= 1 ? why : t("plugins.pause.scoped", { reason: why, platform: platforms.find((x) => x.id === p.scope)?.name ?? p.scope });
+  if (p.stopped && p.since) return t("plugins.pause.stopped", { reason, time: timeText(p.since, now) });
   return p.until ? t("plugins.pause.until", { reason, time: timeText(p.until, now) }) : t("plugins.pause.manual", { reason });
 }
 
@@ -160,9 +161,9 @@ export function methodStatus(m: FetchMethod): string | null {
   return m.pauses.length > 0 ? null : t("plugins.usable");
 }
 
-/** 停着已经写成一条原因（`paused`）的，暂停不再另写一行。 */
+/** 停着已经写成一条原因（`paused`，平台停下是 `stopped`）的，暂停不再另写一行。 */
 export function pausedAsBlocker(m: FetchMethod): boolean {
-  return m.blockers.some((b) => b.code === "paused");
+  return m.blockers.some((b) => b.code === "paused" || b.code === "stopped");
 }
 
 /** 上一次调用：什么时候，没出错，或那一句错。 */

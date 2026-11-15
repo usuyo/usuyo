@@ -119,6 +119,8 @@ run:
 
     fn engine(&self) -> Engine {
         let mut config = EngineConfig::new(&self.library, self.machine());
+        // 间隔取 `interval` 本身，不随机
+        config.pace_draw = || 0.0;
         config.retry = RetryPolicy {
             base: Duration::ZERO,
             max_attempts: 3,

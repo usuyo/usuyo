@@ -24,7 +24,8 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 pub use credentials::{
-    DeclaredSite, DeclaredVisitor, LoginState, ProfileUse, Vault, refuse_credential_conflicts,
+    CookiesTxtError, DeclaredSite, DeclaredVisitor, LoginSource, LoginState, ProfileUse, Vault,
+    read_cookies_txt, refuse_credential_conflicts,
 };
 pub use network::{ProxySetting, behind_fake_ip_proxy, resolve_proxy};
 pub use outdir::OutFile;
@@ -442,7 +443,19 @@ impl PluginHost {
 
     /// 存下登录窗口读出的 cookie（只留属于这个站点的）。写钥匙串，会阻塞。
     pub fn save_site(&self, site: &str, state: &StorageState) -> Result<DeclaredSite, PluginError> {
-        self.logins.save(&self.plugins, site, state)
+        self.logins
+            .save(&self.plugins, site, state, LoginSource::LoginWindow)
+    }
+
+    /// 存下你选的 cookies.txt 里读出的 cookie（[`read_cookies_txt`]）：只留属于这个站点的，和登录窗口的存在同一处，
+    /// 记下从文件来。写钥匙串，会阻塞。
+    pub fn save_site_from_file(
+        &self,
+        site: &str,
+        state: &StorageState,
+    ) -> Result<DeclaredSite, PluginError> {
+        self.logins
+            .save(&self.plugins, site, state, LoginSource::CookieFile)
     }
 
     /// 忘掉一个站点的登录：`cookies` 站点删钥匙串里的；`browser-profile` 站点要说是哪个插件的，
@@ -542,6 +555,7 @@ impl PluginHost {
                     args,
                     input_file: None,
                     method: None,
+                    platform: None,
                     total: self.config.limits.canonicalize,
                 },
                 opts,
@@ -555,10 +569,32 @@ impl PluginHost {
         Ok(result)
     }
 
-    /// 取一条（§3.6、§3.7）。
+    /// 取一条（§3.6、§3.7）。不知道链接属于哪个平台：照 `ref` 取的算插件的第一个平台，照链接取的按方法所有层交凭据；
+    /// 知道平台时用 [`Self::fetch_on`]。
     pub async fn fetch(
         &self,
         plugin: &FetchPlugin,
+        request: FetchRequest,
+        opts: &CallOptions,
+    ) -> Result<FetchedSnapshot, PluginError> {
+        self.fetch_in(plugin, None, request, opts).await
+    }
+
+    /// 同 [`Self::fetch`]，链接属于 `platform`（条目 id 前面那段）：凭据只交这种方法在这个平台上列了的站点（§2.3.1）。
+    pub async fn fetch_on(
+        &self,
+        plugin: &FetchPlugin,
+        platform: &str,
+        request: FetchRequest,
+        opts: &CallOptions,
+    ) -> Result<FetchedSnapshot, PluginError> {
+        self.fetch_in(plugin, Some(platform), request, opts).await
+    }
+
+    async fn fetch_in(
+        &self,
+        plugin: &FetchPlugin,
+        platform: Option<&str>,
         request: FetchRequest,
         opts: &CallOptions,
     ) -> Result<FetchedSnapshot, PluginError> {
@@ -576,6 +612,12 @@ impl PluginHost {
             FetchInput::Url(u) => (FetchInputKind::Url, u.as_str().to_owned()),
             FetchInput::Ref(r) => (FetchInputKind::Ref, r.clone()),
         };
+        // `ref` 来自这个插件自己列的清单，照列清单时的平台算
+        let platform = platform.or_else(|| {
+            (kind == FetchInputKind::Ref)
+                .then(|| first_platform(plugin))
+                .flatten()
+        });
         if !cap.input.contains(&kind) {
             return Err(unsupported(format!("`fetch` does not take {kind:?} input")));
         }
@@ -615,6 +657,7 @@ impl PluginHost {
                     args,
                     input_file: request.input_file.as_deref(),
                     method: Some(method),
+                    platform,
                     total,
                 },
                 opts,
@@ -750,6 +793,7 @@ impl PluginHost {
                     args,
                     input_file: None,
                     method: Some(method),
+                    platform: first_platform(plugin),
                     total,
                 },
                 opts,
@@ -775,6 +819,7 @@ impl PluginHost {
                     args: vec!["health".into()],
                     input_file: None,
                     method: None,
+                    platform: None,
                     total: self.config.limits.health,
                 },
                 opts,
@@ -822,6 +867,7 @@ impl PluginHost {
                     args,
                     input_file: request.input_file.as_deref(),
                     method: Some(method),
+                    platform: first_platform(plugin),
                     total,
                 },
                 opts,
@@ -890,6 +936,7 @@ impl PluginHost {
             args,
             input_file,
             method,
+            platform,
             total,
         } = inv;
         let (program, mut command_args) = resolve_command(&plugin.header, &plugin.dir)
@@ -901,9 +948,12 @@ impl PluginHost {
             let logins = Arc::clone(&self.logins);
             let plugin = plugin.clone();
             let method = method.cloned();
-            tokio::task::spawn_blocking(move || logins.handover(&plugin, method.as_ref()))
-                .await
-                .map_err(|e| PluginError::Vault(format!("credentials: {e}")))??
+            let platform = platform.map(str::to_owned);
+            tokio::task::spawn_blocking(move || {
+                logins.handover(&plugin, method.as_ref(), platform.as_deref())
+            })
+            .await
+            .map_err(|e| PluginError::Vault(format!("credentials: {e}")))??
         };
         env.extend(handover.env.iter().cloned());
         if let Some(settings) = self.settings.get(plugin.id().as_str()) {
@@ -964,12 +1014,18 @@ impl PluginHost {
     }
 }
 
-/// 一次进程要的：参数、导入文件、这次用的方法（决定交哪些站点的凭据，`canonicalize`、`health` 没有）、总时长。
+/// 一次进程要的：参数、导入文件、这次用的方法和平台（决定交哪些站点的凭据，`canonicalize`、`health` 没有）、总时长。
 struct Invocation<'a> {
     args: Vec<OsString>,
     input_file: Option<&'a Path>,
     method: Option<&'a Method>,
+    platform: Option<&'a str>,
     total: Duration,
+}
+
+/// 列清单、列来源照插件的第一个平台算（§2.3.1），和节奏用的同一个。
+fn first_platform(plugin: &FetchPlugin) -> Option<&str> {
+    plugin.spec.platforms.first().map(|p| p.as_str())
 }
 
 fn list_of<'m>(

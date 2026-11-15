@@ -52,6 +52,93 @@ struct CookieName {
 struct SiteRecord {
     captured_at: String,
     cookies: Vec<CookieName>,
+    /// 登录状态从哪来；没写的是登录窗口（这一项以前存下的）。
+    #[serde(default)]
+    source: LoginSource,
+}
+
+/// 一个 `cookies` 站点的登录状态从哪来（协议 §6）。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LoginSource {
+    /// 在 usuyo 的登录窗口里登录。
+    #[default]
+    LoginWindow,
+    /// 你选的一个 cookies.txt（Netscape 格式）文件。
+    CookieFile,
+}
+
+impl LoginSource {
+    /// 交给插件的凭据文件里 `sites[].source` 写的。
+    fn as_str(self) -> &'static str {
+        match self {
+            LoginSource::LoginWindow => "login-window",
+            LoginSource::CookieFile => "cookie-file",
+        }
+    }
+}
+
+/// cookies.txt 读不了：第几行（从 1 数）、哪一栏不对。不带那一行的字，那里面是 cookie 的值。
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("line {line}: {field} is not valid in a Netscape cookies.txt")]
+pub struct CookiesTxtError {
+    pub line: usize,
+    pub field: &'static str,
+}
+
+/// 读一份 Netscape 格式的 cookies.txt：空行和 `#` 开头的是注释，`#HttpOnly_` 开头的是 HttpOnly 的 cookie；
+/// 每行七栏用 Tab 分开：域名、含子域（`TRUE`/`FALSE`）、路径、只走 https（`TRUE`/`FALSE`）、过期（Unix 秒，`0` 是会话）、名字、值。
+pub fn read_cookies_txt(text: &str) -> Result<StorageState, CookiesTxtError> {
+    let mut cookies = Vec::new();
+    for (i, raw) in text.lines().enumerate() {
+        let line = raw.strip_suffix('\r').unwrap_or(raw);
+        let bad = |field| CookiesTxtError { line: i + 1, field };
+        let (line, http_only) = match line.strip_prefix("#HttpOnly_") {
+            Some(rest) => (rest, true),
+            None if line.trim().is_empty() || line.starts_with('#') => continue,
+            None => (line, false),
+        };
+        let f: Vec<&str> = line.split('\t').collect();
+        if f.len() != 7 {
+            return Err(bad("the number of fields"));
+        }
+        let flag = |v: &str, field| match v.to_ascii_uppercase().as_str() {
+            "TRUE" => Ok(true),
+            "FALSE" => Ok(false),
+            _ => Err(bad(field)),
+        };
+        let host = f[0].trim_start_matches('.');
+        if host.is_empty() || host.contains(['/', ' ', ':']) {
+            return Err(bad("domain"));
+        }
+        let domain = if flag(f[1], "include subdomains")? {
+            format!(".{host}")
+        } else {
+            host.to_owned()
+        };
+        if !f[2].starts_with('/') {
+            return Err(bad("path"));
+        }
+        let secure = flag(f[3], "secure")?;
+        let expires: i64 = f[4].parse().map_err(|_| bad("expires"))?;
+        if f[5].is_empty() {
+            return Err(bad("name"));
+        }
+        cookies.push(Cookie {
+            name: f[5].to_owned(),
+            value: f[6].to_owned(),
+            domain,
+            path: f[2].to_owned(),
+            expires: if expires > 0 { expires as f64 } else { -1.0 },
+            http_only,
+            secure,
+            same_site: None,
+        });
+    }
+    Ok(StorageState {
+        cookies,
+        origins: Vec::new(),
+    })
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -99,6 +186,8 @@ pub struct DeclaredSite {
     pub captured_at: Option<String>,
     /// `browser-profile` 站点上次用站点窗口读的那一回。
     pub last_use: Option<ProfileUse>,
+    /// `cookies` 站点存着的登录状态从哪来；没存着时没有。
+    pub source: Option<LoginSource>,
 }
 
 /// 装着的插件声明过的一个访客身份，合起来看。
@@ -317,6 +406,40 @@ fn netscape(cookies: &[Cookie]) -> String {
     out
 }
 
+/// 一种方法在这次调用的平台上要交凭据的站点（协议 §2.3.1）：`perPlatform` 写了这个平台就照它的 `login`、`sites`，
+/// `platforms` 里别的平台照方法本身的；平台不知道、不在 `platforms` 里时照方法所有层合起来（同 [`Method::access_on`]）。
+/// `login: none` 的那一层不交。
+fn login_sites<'m>(
+    m: &'m Method,
+    platform: Option<&str>,
+    declared: &[crate::protocol::PlatformId],
+) -> Vec<&'m String> {
+    let own = || -> Vec<&'m String> {
+        if m.login == Login::None {
+            Vec::new()
+        } else {
+            m.sites.iter().collect()
+        }
+    };
+    if let Some(p) = platform {
+        if let Some((_, u)) = m.per_platform.iter().find(|(x, _)| x.as_str() == p) {
+            return if u.login == Login::None {
+                Vec::new()
+            } else {
+                u.sites.iter().collect()
+            };
+        }
+        if declared.iter().any(|x| x.as_str() == p) {
+            return own();
+        }
+    }
+    let mut names = own();
+    for u in m.per_platform.values().filter(|u| u.login != Login::None) {
+        names.extend(u.sites.iter());
+    }
+    names
+}
+
 /// 这次调用交出去的东西：目录随它删掉；`values` 用来把日志里的值洗掉。
 pub(crate) struct Handover {
     _dir: Option<tempfile::TempDir>,
@@ -467,6 +590,7 @@ impl Logins {
                         login: LoginState::Missing,
                         captured_at: None,
                         last_use: None,
+                        source: None,
                     }),
                 }
             }
@@ -488,6 +612,7 @@ impl Logins {
             let record = index.sites.get(&d.site.site);
             d.login = login_of(&d.site, record, now);
             d.captured_at = record.map(|r| r.captured_at.clone());
+            d.source = record.map(|r| r.source);
         }
         Ok(out)
     }
@@ -577,12 +702,13 @@ impl Logins {
         self.write_index(&index)
     }
 
-    /// 存下登录窗口交来的 cookie：只留属于这个站点（合起所有插件的声明）的。
+    /// 存下登录窗口交来的、或从 cookies.txt 读出的 cookie：只留属于这个站点（合起所有插件的声明）的，记下从哪来。
     pub fn save(
         &self,
         plugins: &[FetchPlugin],
         site: &str,
         state: &StorageState,
+        source: LoginSource,
     ) -> Result<DeclaredSite, PluginError> {
         let declared = self
             .declared(plugins)?
@@ -599,11 +725,20 @@ impl Logins {
                 message: "none of the cookies belong to this site".into(),
             });
         }
+        // 文件里没有登录后才有的那几个（导出时没登录、已过期）：存下也算没登录，不存
+        if source == LoginSource::CookieFile
+            && login_of(&declared.site, Some(&record(&kept)), now_secs()) != LoginState::Present
+        {
+            return Err(PluginError::Credentials {
+                target: site.into(),
+                message: "the file has no signed-in cookies for this site".into(),
+            });
+        }
         let guard = self
             .lock
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        self.store_site(site, &kept)?;
+        self.store_site(site, &kept, Some(source))?;
         drop(guard);
         self.declared(plugins)?
             .into_iter()
@@ -611,12 +746,21 @@ impl Logins {
             .ok_or_else(|| PluginError::Vault("site vanished while saving".into()))
     }
 
-    /// 写钥匙串和索引；调用方拿着锁。
-    fn store_site(&self, site: &str, state: &StorageState) -> Result<(), PluginError> {
+    /// 写钥匙串和索引；调用方拿着锁。`source` 空是照存着的那份（插件交回的 `credentialsUpdate`）。
+    fn store_site(
+        &self,
+        site: &str,
+        state: &StorageState,
+        source: Option<LoginSource>,
+    ) -> Result<(), PluginError> {
         let json = serde_json::to_string(state).map_err(|e| PluginError::Vault(e.to_string()))?;
         self.vault()?.write(&site_key(site), &json)?;
         let mut index = self.read_index()?;
-        index.sites.insert(site.into(), record(state));
+        let mut r = record(state);
+        r.source = source
+            .or_else(|| index.sites.get(site).map(|old| old.source))
+            .unwrap_or_default();
+        index.sites.insert(site.into(), r);
         self.write_index(&index)
     }
 
@@ -794,22 +938,19 @@ impl Logins {
             .unwrap_or_default())
     }
 
-    /// 准备这次调用要交的：`method` 是这次用的方法（`canonicalize`、`health` 没有）。
-    /// 凭据只交方法列了的站点，访客身份只交方法列了的。读钥匙串，会阻塞。
+    /// 准备这次调用要交的：`method` 是这次用的方法（`canonicalize`、`health` 没有），`platform` 是这次调用的平台。
+    /// 凭据只交方法在这个平台上列了的站点（[`login_sites`]），访客身份只交方法列了的。读钥匙串，会阻塞。
     pub fn handover(
         &self,
         plugin: &FetchPlugin,
         method: Option<&Method>,
+        platform: Option<&str>,
     ) -> Result<Handover, PluginError> {
         let index = self.read_index()?;
         let now = now_secs();
         let mut sites = Vec::new();
-        if let Some(m) = method.filter(|m| m.login != Login::None) {
-            let mut names: Vec<&String> = m.sites.iter().collect();
-            for p in m.per_platform.values().filter(|p| p.login != Login::None) {
-                names.extend(p.sites.iter());
-            }
-            for name in names {
+        if let Some(m) = method {
+            for name in login_sites(m, platform, &plugin.spec.platforms) {
                 let Some(site) = plugin.spec.sites.iter().find(|s| &s.site == name) else {
                     continue;
                 };
@@ -818,7 +959,7 @@ impl Logins {
                     || !index.sites.contains_key(&site.site)
                     || sites
                         .iter()
-                        .any(|(s, _): &(Site, StorageState)| s.site == site.site)
+                        .any(|(s, _, _): &(Site, StorageState, LoginSource)| s.site == site.site)
                 {
                     continue;
                 }
@@ -833,7 +974,7 @@ impl Logins {
                 })?;
                 let kept = restrict(site, &state, now);
                 if !kept.cookies.is_empty() {
-                    sites.push((site.clone(), kept));
+                    sites.push((site.clone(), kept, index.sites[&site.site].source));
                 }
             }
         }
@@ -893,7 +1034,7 @@ impl Logins {
         let mut values = Vec::new();
         if !sites.is_empty() {
             let mut all = StorageState::default();
-            for (_, s) in &sites {
+            for (_, s, _) in &sites {
                 all.cookies.extend(s.cookies.iter().cloned());
                 all.origins.extend(s.origins.iter().cloned());
             }
@@ -906,9 +1047,9 @@ impl Logins {
             let file = Credentials {
                 sites: sites
                     .iter()
-                    .map(|(s, _)| CredentialSite {
+                    .map(|(s, _, from)| CredentialSite {
                         site: s.site.clone(),
-                        source: "login-window".into(),
+                        source: from.as_str().into(),
                     })
                     .collect(),
                 storage_state: all.clone(),
@@ -963,7 +1104,7 @@ impl Logins {
             _dir: Some(dir),
             env,
             values,
-            sites: sites.into_iter().map(|(s, _)| s).collect(),
+            sites: sites.into_iter().map(|(s, _, _)| s).collect(),
         })
     }
 
@@ -997,7 +1138,7 @@ impl Logins {
                     .retain(|o| !(o.name == c.name && o.domain == c.domain && o.path == c.path));
                 stored.cookies.push(c);
             }
-            self.store_site(&site.site, &stored)?;
+            self.store_site(&site.site, &stored, None)?;
         }
         Ok(())
     }
@@ -1008,6 +1149,7 @@ const RUN_PREFIX: &str = "usuyo-cred-";
 /// 索引里的一条：名字、域名、过期时间，没有值。
 fn record(state: &StorageState) -> SiteRecord {
     SiteRecord {
+        source: LoginSource::default(),
         captured_at: jiff::Timestamp::now().to_string(),
         cookies: state
             .cookies
@@ -1097,6 +1239,7 @@ mod tests {
     fn login_follows_the_named_cookies() {
         let s = site(&[]);
         let rec = |name: &str, expires: f64| SiteRecord {
+            source: LoginSource::default(),
             captured_at: String::new(),
             cookies: vec![CookieName {
                 name: name.into(),

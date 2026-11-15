@@ -760,3 +760,43 @@ fn file_readers_say_what_they_read() {
         .join("\n");
     rejects(&without, "methods[0].capabilities.list.reads");
 }
+
+#[test]
+fn pacing_declares_a_random_range_and_what_blocked_does() {
+    use std::time::Duration;
+    use usuyo_plugin::protocol::{OnBlocked, PlatformId};
+    let d = douyin();
+    let line = "  douyin: {batch: true, interval: 8s, daily: 300}";
+    let pacing = |m: &PluginManifest| {
+        let PluginKind::Fetch(spec) = &m.kind else {
+            panic!("not a fetch plugin")
+        };
+        spec.pacing[&PlatformId::try_from("douyin".to_owned()).unwrap()]
+    };
+    // 老清单照常读，没有这两项
+    let old = pacing(&parse(&d).unwrap());
+    assert_eq!((old.interval_max, old.blocked), (None, None));
+
+    let stop = parse(&replace(
+        &d,
+        line,
+        "  douyin: {batch: true, interval: 8s, intervalMax: 20s, daily: 300, blocked: stop}",
+    ))
+    .unwrap();
+    let p = pacing(&stop);
+    assert_eq!(p.interval_max.unwrap().get(), Duration::from_secs(20));
+    assert_eq!(p.blocked, Some(OnBlocked::Stop));
+    let resume = parse(&replace(&d, line, "  douyin: {interval: 8s, blocked: 30m}")).unwrap();
+    assert!(
+        matches!(pacing(&resume).blocked, Some(OnBlocked::Resume(x)) if x.get() == Duration::from_secs(1800))
+    );
+
+    rejects(
+        &replace(&d, line, "  douyin: {interval: 8s, intervalMax: 5s}"),
+        "pacing.douyin.intervalMax",
+    );
+    for bad in ["2h", "0s", "later"] {
+        let r = parse(&replace(&d, line, &format!("  douyin: {{blocked: {bad}}}")));
+        assert!(r.is_err(), "{bad} parsed");
+    }
+}

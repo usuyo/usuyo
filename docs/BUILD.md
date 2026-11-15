@@ -100,7 +100,7 @@ flowchart LR
 
 - 壳起的内核，在壳没了（被信号杀掉、崩溃）以后该自己退出；现在留着接着跑，下次启动的壳找到它接着用（[apps/desktop/README.md](../apps/desktop/README.md#打开以后)）。
 - Safari 的 Userscripts 没有网站访问权限时先发 CORS 预检，投递接口（`/v1/…`）现在不答，请求就失败；这几条路径要答预检，只放扩展的来源。
-- SPEC 里标「11-11 还没做」、插件协议里写「还没做」的：联网后并进平台身份、`inputUrl` 记原链接、列表分页、`blocked` 现在只暂停一小时、沙箱（[012](#012-插件的安装和分发)）。回收站到期移除、凭据、节奏、「现在再试」已经做了，那几处正文还要照代码改。
+- SPEC 里标「11-11 还没做」、插件协议里写「还没做」的：联网后并进平台身份、`inputUrl` 记原链接、列表分页、沙箱（[012](#012-插件的安装和分发)）。回收站到期移除、凭据、节奏、「现在再试」已经做了，那几处正文还要照代码改；`blocked` 以后照清单暂停一阵或停下整个平台等你点「继续获取」（[协议 §3.1](protocol/fetch.md#31a-平台停下)）。
 - 和代码对不上的说明：`crates/usuyo-plugin-kit/README.md` 说 `Client::new` 不认环境变量，测试例子少两个字段；`crates/usuyo-plugin-kit/src/http/address.rs` 开头的注释说只用 `Policy::strict`，`crates/usuyo-api/src/lib.rs` 开头的说事件能用 `EventSource` 读。
 
 至今没人验过的：打包后的窗口本身、登录窗口、四个平台的真实请求。只有用户能试。

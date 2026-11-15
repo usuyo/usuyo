@@ -104,6 +104,8 @@ export interface Platforms {
   setStrategy(strategy: Strategy): Promise<StrategyView>;
   sites(): Promise<SiteLogin[]>;
   forgetLogin(site: string, plugin?: string): Promise<void>;
+  /** 从你选的 cookie 文件导入一个 `cookies` 站点的登录状态。 */
+  importLoginFile(site: string, text: string): Promise<SiteLogin>;
   visitors(): Promise<VisitorIdentity[]>;
   forgetVisitor(site: string): Promise<void>;
   imports(): Promise<ImportView[]>;
@@ -259,6 +261,7 @@ const daemon: Source = {
   setStrategy: (body) => request<StrategyView>(paths.strategy, { method: "PUT", body }),
   sites: () => request<SiteLogin[]>(paths.sites),
   forgetLogin: (site, plugin) => request<void>(paths.siteLogin(site, plugin), { method: "DELETE" }),
+  importLoginFile: (site, text) => request<SiteLogin>(paths.siteLoginFile(site), { method: "PUT", text }),
   visitors: () => request<VisitorIdentity[]>(paths.visitors),
   forgetVisitor: (site) => request<void>(paths.visitor(site), { method: "DELETE" }),
   imports: () => request<ImportView[]>(paths.imports),

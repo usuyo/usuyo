@@ -83,7 +83,7 @@
 - **先不带 cookie 请求**（`fetch.rs:82`），被送去 `/`、`/explore`、`/login`、`/website-login/*` 或页面没有这篇时，宿主交了访客身份就带上再请求一次（`fetch.rs:82-103`、`fetch.rs:219-224`）。
 - `/website-login/captcha`、HTTP 403/406/461、JSON 的 300012/300013/300015/461/-1、验证页字样回 `blocked`（`fetch.rs:142,216,253,283`）；`/404/sec_` 带 300031 回 `link-expired`。
 - 图片取 `urlDefault` → `url` → `infoList` 里 `WB_DFT`（`state.rs:316`）；视频只在 `h264`、`h265`、`av1`、`h266` 四个名字下挑（`state.rs:346`）；图片视频带 Referer 首页、不带 cookie（`http.rs:118`），只连 `*.xhscdn.com`（`site.rs:37`）。
-- 节奏 `interval: 15s`、`daily: 100`（`usuyo-plugin.yaml:106`）；宿主按固定间隔排，`blocked` 暂停一小时（[协议 §3.1](../protocol/fetch.md#31-运行器与节奏)）。
+- 节奏 `interval: 15s`、`daily: 100`（`usuyo-plugin.yaml:106`）；当时宿主按固定间隔排，`blocked` 暂停一小时（现在的做法见 [§10](#10-改动清单)）。
 - 两个脚本记下的链接是 `/explore/<id>?xsec_token=…`，没有 `xsec_source`（`userscript/src/window.js:56`、`userscript/src/manager.js:271`）。
 
 和参考项目比：
@@ -220,8 +220,8 @@ yt-dlp 调 `weibo.com/ajax/statuses/show?id=`，Referer `https://weibo.com/`，�
 
 **宿主和协议（为小红书提，不写平台名）**
 
-8. 节奏的间隔加随机：`pacing` 加一个抖动的字段，或宿主统一在 `interval` 上加随机（[协议 §3.1](../protocol/fetch.md#31-运行器与节奏)）。照 XHS-Downloader `source/module/tools.py:76-88`。
-9. `blocked` 的暂停可以由插件声明为「停到用户说接着」：小红书声明它，别的平台照旧一小时。照 XHS-Downloader PR #502 的「风控暂停」和 xhs-vault `scraper/fetch.py:168-171`。
+8. 已做（11-15）：`pacing` 加了 `intervalMax`，宿主每次在 `interval` 到它之间随机取，见[协议 §3.1](../protocol/fetch.md#31-运行器与节奏)；小红书写 15–25 秒。
+9. 已做（11-15）：`pacing` 的 `blocked: stop` 让整个平台停到你点「继续获取」，访客身份换过一次还被拒也这样停，见[协议 §3.1](../protocol/fetch.md#31a-平台停下)；小红书声明了它，别的平台照旧一小时。
 10. 导入取什么、链接多久失效：已记在 [BUILD 011](../BUILD.md#011-更多平台)「清单和协议还缺的」，不在这里重写。
 
 **B站（`bilibili`）**

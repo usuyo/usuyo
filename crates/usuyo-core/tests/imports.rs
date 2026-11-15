@@ -137,6 +137,8 @@ run:
 
     fn engine_logged_out(&self) -> Engine {
         let mut config = EngineConfig::new(&self.library, self.machine());
+        // 间隔取 `interval` 本身，不随机
+        config.pace_draw = || 0.0;
         config.retry = RetryPolicy {
             base: Duration::ZERO,
             max_attempts: 3,
@@ -491,6 +493,46 @@ async fn a_rate_limited_listing_waits_and_try_now_clears_it() {
     assert_eq!(engine.import(&imp.id).unwrap().state, ImportState::Ready);
 }
 
+/// 平台声明被拦以后停下：列清单被拦，整个平台停下（不再列，也不取单条），重启后仍停着；「继续获取」后接着列。
+#[tokio::test]
+async fn blocked_while_listing_stops_the_platform_until_you_continue() {
+    let f = Fixture::new("pacing:\n  example: {blocked: stop}");
+    f.set_cache(
+        "fail-list",
+        r#"{"ok": false, "error": {"code": "blocked", "message": "answered HTTP 461"}}"#,
+    );
+    let imp = {
+        let engine = f.engine();
+        let imp = engine
+            .start_import("fake/saved", "saved", "example:fav", "")
+            .unwrap();
+        engine.advance_imports().await.unwrap();
+        let w = engine.import(&imp.id).unwrap().waiting.unwrap();
+        assert_eq!((w.code.as_str(), w.until), ("blocked", None));
+        assert!(w.hint.unwrap().contains("验证页"), "没给原因时写宿主的一句");
+        engine.advance_imports().await.unwrap();
+        assert_eq!(f.cache("cursors").lines().count(), 1, "停着不再列");
+        // 列来源也不问平台
+        assert!(
+            engine
+                .plugin_sources("fake/saved", "saved", None)
+                .await
+                .is_err()
+        );
+        imp
+    };
+    let engine = f.engine();
+    engine.advance_imports().await.unwrap();
+    assert_eq!(f.cache("cursors").lines().count(), 1, "重启后仍停着");
+    let p = &engine.plugins().await.unwrap().plugins[0];
+    let stop = p.pauses.iter().find(|x| x.stopped).unwrap();
+    assert_eq!(stop.said.as_deref(), Some("answered HTTP 461"));
+    std::fs::remove_file(f.machine().join("cache/plugins/fake/saved/fail-list")).unwrap();
+    engine.try_plugin_now("fake/saved").unwrap();
+    list_all(&engine, &imp.id).await;
+    assert_eq!(engine.import(&imp.id).unwrap().state, ImportState::Ready);
+}
+
 #[tokio::test]
 async fn login_or_visitor_required_stops_until_you_resume() {
     for (code, hint) in [
@@ -553,7 +595,7 @@ async fn the_registry_shows_labels_sites_and_pacing() {
     assert_eq!(json["sites"], serde_json::json!(["www.example.test"]));
     assert_eq!(
         json["pacing"],
-        serde_json::json!([{"platform": "example", "batch": true, "intervalSec": 5, "daily": 500}])
+        serde_json::json!([{"platform": "example", "batch": true, "intervalSec": 5, "intervalMaxSec": 8, "daily": 500}])
     );
     assert_eq!(json["sources"][0]["source"], "example:fav");
     let sites = serde_json::to_value(engine.sites().unwrap()).unwrap();

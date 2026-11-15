@@ -81,7 +81,7 @@ function basePlugins(): FetchPlugin[] {
       access: "official-export",
       login: "none",
       canList: true,
-      pacing: [{ platform: "x", batch: true, intervalSec: 10, daily: 200 }],
+      pacing: [{ platform: "x", batch: true, intervalSec: 10, intervalMaxSec: 15, daily: 200 }],
       methods: [
         // 照 usuyo-fetch/x 的 README：四种做好了，四种写了做法、还在等。
         method({
@@ -129,7 +129,7 @@ function basePlugins(): FetchPlugin[] {
       login: "none",
       canList: true,
       visitors: ["www.xiaohongshu.com"],
-      pacing: [{ platform: "rednote", batch: true, intervalSec: 15, daily: 100 }],
+      pacing: [{ platform: "rednote", batch: true, intervalSec: 15, intervalMaxSec: 25, daily: 100, stopsWhenBlocked: true }],
       methods: [
         // 要访客身份、这台电脑上还没有的一种。
         method({
@@ -186,7 +186,7 @@ function basePlugins(): FetchPlugin[] {
       login: "required",
       canList: false,
       sites: ["yuanbao.tencent.com"],
-      pacing: [{ platform: "wechat-channels", batch: true, intervalSec: 30, daily: 50 }],
+      pacing: [{ platform: "wechat-channels", batch: true, intervalSec: 30, intervalMaxSec: 45, daily: 50 }],
       methods: [
         // 插件的本机检查没过的一种。
         method({
@@ -232,7 +232,7 @@ function basePlugins(): FetchPlugin[] {
       canList: true,
       sources: [{ source: "bilibili:toview", title: "稍后再看", action: "favorite", method: "favorites" }],
       sites: ["www.bilibili.com"],
-      pacing: [{ platform: "bilibili", batch: true, intervalSec: 5, daily: 500 }],
+      pacing: [{ platform: "bilibili", batch: true, intervalSec: 5, intervalMaxSec: 8, daily: 500 }],
       methods: [
         method({
           id: "view",
@@ -616,6 +616,15 @@ export function createMockPlatforms(empty = false): Platforms {
         s.login = "missing";
         delete s.capturedAt;
       }
+    },
+    async importLoginFile(site) {
+      await wait(60);
+      const s = sites.find((x) => x.site === site && x.credential === "cookies");
+      if (!s) throw new Error(`no cookies site ${site}`);
+      s.login = "present";
+      s.source = "cookie-file";
+      s.capturedAt = new Date().toISOString();
+      return { ...s };
     },
     async visitors() {
       await wait(40);

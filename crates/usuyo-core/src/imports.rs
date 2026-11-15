@@ -66,6 +66,29 @@ pub struct DeliveredLink {
     pub acted_at: Option<String>,
 }
 
+/// 插件报的错以后这种方法、这个平台怎么样。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Halt {
+    /// 不暂停。
+    None,
+    /// 这种方法暂停到这个时候。
+    Pause(i64),
+    /// 整个平台停下，等你说接着。
+    Stop,
+}
+
+/// 插件给日志的那句里，链接 `?`、`#` 以后的换成 `…`，最多留 300 字：它会显示在界面上。
+fn without_query(text: &str) -> String {
+    let cut: Vec<String> = text
+        .split(' ')
+        .map(|w| match w.find(['?', '#']) {
+            Some(i) if w.contains('/') => format!("{}…", &w[..i]),
+            _ => w.to_owned(),
+        })
+        .collect();
+    cut.join(" ").chars().take(300).collect()
+}
+
 /// 一件事现在为什么不能做。`until` 为空是等你动手。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Wait {
@@ -330,6 +353,18 @@ impl Engine {
     ) -> Result<Vec<SourceView>> {
         let plugin = self.fetch_plugin(plugin_id)?;
         let m = self.list_method(&plugin, method, Listing::Platform(None))?;
+        // 列来源要问平台：平台停着时不问（开始导入可以，列的时候等你点「继续获取」）
+        let platform = pace_scope(&plugin);
+        if let Some(p) = self.inner.jobs.stopped(&platform)? {
+            return Err(Error::UnsupportedInput(format!(
+                "{} {method}: fetching from {platform} is stopped",
+                plugin.id()
+            ))
+            .hinted(words::METHOD_BLOCKED.with_said(&[
+                ("method", &Said::plain(&m.name)),
+                ("why", &crate::registry::pause_blocker(&p).hint),
+            ])));
+        }
         if link.is_some()
             && m.capabilities
                 .list
@@ -452,18 +487,29 @@ impl Engine {
         Ok(r?)
     }
 
-    /// 被限流、被拦：这种方法在这里暂停（被拦也按最长的暂停，到点自己解开）。回暂停到什么时候。
+    /// 被限流、被拦：这种方法在这里暂停（被拦的照平台声明的 `blocked`：暂停一阵，或整个平台停下等你），
+    /// 回暂停到什么时候；平台停下时回 [`Halt::Stop`]。
     pub(crate) fn pause_for(
         &self,
         plugin: &FetchPlugin,
         method: &str,
         scope: &str,
         failure: &usuyo_plugin::protocol::CallFailure,
-    ) -> Result<Option<i64>> {
+    ) -> Result<Halt> {
         let d = match failure.pause() {
             Some(Pause::For(d)) => d,
-            Some(Pause::UntilResumed) => usuyo_plugin::protocol::MAX_PAUSE,
-            None => return Ok(None),
+            Some(Pause::UntilResumed) => match self.after_blocked(plugin, scope) {
+                pace::AfterBlocked::Pause(d) => d,
+                pace::AfterBlocked::Stop => {
+                    let hint = failure
+                        .hint
+                        .as_deref()
+                        .map_or_else(|| words::STOPPED_BLOCKED.said(), Said::plain);
+                    self.stop_platform(scope, failure, &hint)?;
+                    return Ok(Halt::Stop);
+                }
+            },
+            None => return Ok(Halt::None),
         };
         let until = now_ms().saturating_add(i64::try_from(d.as_millis()).unwrap_or(i64::MAX));
         self.inner.jobs.pause(
@@ -475,7 +521,38 @@ impl Engine {
             failure.hint.as_deref(),
         )?;
         self.emit(Event::PluginsUpdated);
-        Ok(Some(until))
+        Ok(Halt::Pause(until))
+    }
+
+    /// 平台声明的被拦以后怎么办（协议 §3.1）。通用网页插件按网站暂停，没有平台的声明。
+    fn after_blocked(&self, plugin: &FetchPlugin, scope: &str) -> pace::AfterBlocked {
+        if plugin.spec.is_web() {
+            return pace::AfterBlocked::Pause(usuyo_plugin::protocol::MAX_PAUSE);
+        }
+        self.loaded().pacing.get(scope).map_or(
+            pace::AfterBlocked::Pause(usuyo_plugin::protocol::MAX_PAUSE),
+            |p| p.blocked,
+        )
+    }
+
+    /// 整个平台停下，等你点「继续获取」：记下什么时候、`hint` 是给人看的原因，插件说平台回了什么（去掉链接的参数）。
+    pub(crate) fn stop_platform(
+        &self,
+        platform: &str,
+        failure: &usuyo_plugin::protocol::CallFailure,
+        hint: &Said,
+    ) -> Result<()> {
+        let said = without_query(&failure.message);
+        tracing::warn!(platform, code = %failure.code, said = %said, "fetching from this platform stopped until the user continues");
+        self.inner.jobs.stop_platform(
+            platform,
+            now_ms(),
+            failure.code.as_str(),
+            Some(&hint.to_stored()),
+            Some(&said),
+        )?;
+        self.emit(Event::PluginsUpdated);
+        Ok(())
     }
 
     /// 在这个平台上按节奏调一次：拿平台的锁，等到间隔够了再调，调完记账。
@@ -499,9 +576,13 @@ impl Engine {
             tokio::time::sleep(wait).await;
         }
         let out = call.await;
-        self.inner
-            .jobs
-            .record_call(platform, now_ms(), &pace::today(), batch)?;
+        self.inner.jobs.record_call(
+            platform,
+            now_ms(),
+            &pace::today(),
+            batch,
+            (self.inner.pace_draw)(),
+        )?;
         Ok(Ok(out))
     }
 
@@ -661,6 +742,9 @@ impl Engine {
         if r.kind == "file" {
             return Ok(None);
         }
+        if let Some(p) = self.inner.jobs.stopped(&scope)? {
+            return Ok(Some(pause_wait(&p)));
+        }
         let loaded = self.loaded();
         let pacing = loaded.pacing.get(scope.as_str());
         match pace::ready_at(pacing, &self.inner.jobs, &scope, true, now)? {
@@ -789,6 +873,10 @@ impl Engine {
             // 停着的方法不列；到点（或你点了「现在再试」）再来
             return Ok(p.until);
         }
+        // 平台停着：读文件的照常（只读本机的副本），别的等你点「继续获取」
+        if r.kind != "file" && jobs.stopped(&scope)?.is_some() {
+            return Ok(None);
+        }
         let input_file = self.import_copy(r);
         if let Some(copy) = &input_file
             && !copy.is_file()
@@ -836,8 +924,11 @@ impl Engine {
             Err(PluginError::Call { failure, .. }) => {
                 self.record_method_call(&plugin, &method, None, Err(&failure))?;
                 // 被限流、被拦：只记在这种方法的暂停上（导入照它显示原因），「现在再试」一去掉就接着列
-                if let Some(until) = self.pause_for(&plugin, &method, &scope, &failure)? {
-                    return Ok(Some(until));
+                match self.pause_for(&plugin, &method, &scope, &failure)? {
+                    Halt::Pause(until) => return Ok(Some(until)),
+                    // 平台停下了：等你点「继续获取」
+                    Halt::Stop => return Ok(None),
+                    Halt::None => {}
                 }
                 let transient = matches!(
                     failure.code,
@@ -1131,6 +1222,10 @@ impl Engine {
         }
         let platform = platform_of(&job.item_id);
         let batch = job.import_id.is_some();
+        // 平台停着（被拦以后等你）：单条和导入的都等，到你点「继续获取」
+        if let Some(p) = self.inner.jobs.stopped(platform)? {
+            return Ok(Some(pause_wait(&p)));
+        }
         let loaded = self.loaded();
         let pacing = loaded.pacing.get(platform);
         if batch && pacing.is_some_and(|p| !p.batch) {

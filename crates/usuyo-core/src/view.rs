@@ -675,6 +675,11 @@ pub struct PacingView {
     pub platform: String,
     pub batch: bool,
     pub interval_sec: u64,
+    /// 间隔的上限：每次在 `intervalSec` 到它之间随机取。
+    pub interval_max_sec: u64,
+    /// 被拦以后整个平台停下，等你点「继续获取」（不写是暂停一阵自己接着）。
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub stops_when_blocked: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub daily: Option<u32>,
 }
@@ -682,7 +687,7 @@ pub struct PacingView {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PauseView {
-    /// 停的是哪种方法；`*` 是你点的「先别试」，整个插件。
+    /// 停的是哪种方法；`*` 是你点的「先别试」或平台停下，整个插件。
     pub method: String,
     /// 平台，或通用网页插件的网站；`*` 是你点的「先别试」。
     pub scope: String,
@@ -694,6 +699,15 @@ pub struct PauseView {
     pub code: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hint: Option<String>,
+    /// 整个平台停下了，等你点「继续获取」（「现在再试」同一个接口）。
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub stopped: bool,
+    /// 平台停下的时间。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub since: Option<String>,
+    /// 平台停下时插件说平台回了什么（插件给日志的那句，不翻译）。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub said: Option<String>,
 }
 
 /// 没加载的插件和原因。
@@ -734,6 +748,9 @@ pub struct SiteView {
     /// `browser-profile` 站点上一回用站点窗口读的情况。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_use: Option<SiteUseView>,
+    /// `cookies` 站点存着的登录状态从哪来：`login-window` 或 `cookie-file`（`capturedAt` 是那时的时间）。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<usuyo_plugin::LoginSource>,
 }
 
 /// 上一回用站点窗口读：什么时候、哪种方法（名字照清单）、记下了多少条链接。

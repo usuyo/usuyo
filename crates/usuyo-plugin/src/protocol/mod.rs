@@ -28,9 +28,9 @@ pub use manifest::{
     Delivers, Device, Drives, ExportSpec, ExportWrites, FetchCapability, FetchInputKind, FetchSpec,
     FsPermissions, Inject, Install, Interaction, Limits, ListCapability, ListOrder, Login,
     MANIFEST_FILE, MatchPattern, Method, ModelFormat, ModelSpec, NetworkMode, NetworkPermissions,
-    Pacing, Permissions, PlatformUse, PluginHeader, PluginKind, PluginKindTag, PluginManifest,
-    Produce, ProviderNeed, Risk, RiskSource, Run, RuntimeRequirement, SUPPORTED_PROTOCOLS, Setting,
-    SettingType, Site, TransformSpec, Upstream, Visitor,
+    OnBlocked, Pacing, Permissions, PlatformUse, PluginHeader, PluginKind, PluginKindTag,
+    PluginManifest, Produce, ProviderNeed, Risk, RiskSource, Run, RuntimeRequirement,
+    SUPPORTED_PROTOCOLS, Setting, SettingType, Site, TransformSpec, Upstream, Visitor,
 };
 pub use schema::schemas;
 pub use transform::{

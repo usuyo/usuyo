@@ -94,6 +94,8 @@ pub struct EngineConfig {
     /// 一条为访客身份等多久（[`crate::visitor_wanted`]）：桌面壳在这段时间里取一份交来就马上再试，
     /// 没交来就到点再试。默认 90 秒。
     pub visitor_wait: Duration,
+    /// 节奏的随机间隔用的数（0 到 1，协议 §3.1）：默认每次新抽；测试换成固定的。
+    pub pace_draw: fn() -> f64,
 }
 
 impl EngineConfig {
@@ -121,6 +123,7 @@ impl EngineConfig {
             default_sources: Vec::new(),
             dev_loopback_sources: false,
             visitor_wait: Duration::from_secs(90),
+            pace_draw: crate::pace::random_draw,
         }
     }
 }
@@ -329,6 +332,7 @@ pub(crate) struct Inner {
     /// 在要的访客身份和等着它的条目（[`crate::visitor_wanted`]）。
     pub visitors_wanted: crate::visitor_wanted::Wanted,
     pub visitor_wait: Duration,
+    pub pace_draw: fn() -> f64,
 }
 
 #[derive(Clone)]
@@ -437,6 +441,7 @@ impl Engine {
                 locale,
                 visitors_wanted: crate::visitor_wanted::Wanted::default(),
                 visitor_wait: config.visitor_wait,
+                pace_draw: config.pace_draw,
             }),
         };
         if engine.inner.index.needs_rebuild() {

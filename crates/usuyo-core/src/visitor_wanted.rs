@@ -38,6 +38,10 @@ struct State {
     parked: BTreeMap<String, BTreeSet<String>>,
     /// 已经为访客身份等过一回的条目。
     waited: HashSet<String>,
+    /// 站点不收存着的那份、已经为它要了一份新的，还没交来。
+    refusing: BTreeSet<String>,
+    /// 被拒以后换过一份新的，之后还没有一次取到。再被拒就整个平台停下。
+    replaced: BTreeSet<String>,
 }
 
 #[derive(Debug, Default)]
@@ -106,11 +110,49 @@ impl Wanted {
             .collect()
     }
 
-    /// 交来了一份：不再要，等着它的条目回给调用方马上再排。
+    /// 站点不收存着的访客身份。换过一份以后又不收，回 `true`：不再换，整个平台停下。
+    /// 不然记下这一回，调用方去要一份新的。
+    pub(crate) fn refused(&self, site: &str) -> bool {
+        let mut s = self.lock();
+        if s.replaced.contains(site) {
+            return true;
+        }
+        s.refusing.insert(site.to_owned());
+        false
+    }
+
+    /// 这个站点现在要不来新的访客身份：上一回要的过了时间没交来，或取不到以后还在歇着。
+    pub(crate) fn resting(&self, site: &str, now: i64, wait_ms: i64) -> bool {
+        let mut s = self.lock();
+        if let Some((at, _)) = s.asked.get(site)
+            && now - at >= wait_ms
+        {
+            s.asked.remove(site);
+            s.failed.insert(site.to_owned(), now);
+        }
+        s.failed.get(site).is_some_and(|at| now - at < COOL_DOWN_MS)
+    }
+
+    /// 用这份访客身份取到了一条：换过的那份管用，之后再被拒又能换一回。
+    pub(crate) fn accepted(&self, site: &str) {
+        let mut s = self.lock();
+        s.refusing.remove(site);
+        s.replaced.remove(site);
+    }
+
+    /// 你点了「继续获取」：从头算。
+    pub(crate) fn forget_refusals(&self, site: &str) {
+        self.accepted(site);
+    }
+
+    /// 交来了一份：不再要，等着它的条目回给调用方马上再排。被拒以后交来的这份算换过一回。
     pub(crate) fn arrived(&self, site: &str) -> Vec<String> {
         let mut s = self.lock();
         s.asked.remove(site);
         s.failed.remove(site);
+        if s.refusing.remove(site) {
+            s.replaced.insert(site.to_owned());
+        }
         s.parked
             .remove(site)
             .map(|p| p.into_iter().collect())
@@ -124,6 +166,13 @@ impl Wanted {
 }
 
 impl Engine {
+    /// 这个站点现在要不来新的访客身份（[`Wanted::resting`]）。
+    pub(crate) fn visitor_resting(&self, site: &str) -> bool {
+        self.inner
+            .visitors_wanted
+            .resting(site, now_ms(), self.visitor_wait_ms())
+    }
+
     fn visitor_wait_ms(&self) -> i64 {
         i64::try_from(self.inner.visitor_wait.as_millis()).unwrap_or(i64::MAX)
     }
@@ -216,6 +265,25 @@ mod tests {
         assert!(!w.park("a.test", "i3", false, WAIT + 1, WAIT));
         // 歇过了再要
         assert!(w.park("a.test", "i3", false, WAIT + COOL_DOWN_MS + 1, WAIT));
+    }
+
+    #[test]
+    fn a_replaced_identity_refused_again_stops_until_one_is_accepted() {
+        let w = Wanted::default();
+        // 第一回被拒：去换一份
+        assert!(!w.refused("a.test"));
+        // 还没交来时别的条目也被拒：仍是去换，不停
+        assert!(!w.refused("a.test"));
+        w.arrived("a.test");
+        // 换过以后又被拒：停
+        assert!(w.refused("a.test"));
+        // 取到过一条，从头算
+        w.accepted("a.test");
+        assert!(!w.refused("a.test"));
+        // 没被拒时交来的（第一次取）不算换过
+        w.accepted("a.test");
+        w.arrived("a.test");
+        assert!(!w.refused("a.test"));
     }
 
     #[test]

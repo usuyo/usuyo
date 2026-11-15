@@ -143,6 +143,15 @@ ALTER TABLE import_entries ADD COLUMN ref TEXT;
 PRAGMA user_version = 4;
 ";
 
+/// 版本 5：节奏的间隔带随机（协议 §3.1），一次调用结束时抽的数记在 `pace.draw`；被拦以后整个平台停下
+/// 记成插件、方法都是 `*` 的一行暂停，`since` 是停下的时间，`said` 是插件说平台回了什么（日志那句，去掉链接的参数）。
+const SCHEMA_V5: &str = "
+ALTER TABLE pace ADD COLUMN draw REAL NOT NULL DEFAULT 0;
+ALTER TABLE pauses ADD COLUMN since INTEGER;
+ALTER TABLE pauses ADD COLUMN said TEXT;
+PRAGMA user_version = 5;
+";
+
 /// 手动收下的排在导入前面（协议 §3.1 的队列顺序）。
 pub(crate) const PRIORITY_MANUAL: i64 = 0;
 pub(crate) const PRIORITY_IMPORT: i64 = 2;
@@ -191,16 +200,28 @@ impl JobState {
     }
 }
 
-/// 一个插件在一个范围上的暂停。`until` 为空是你点了「先别试」，到你点「现在再试」为止。
+/// 一个插件在一个范围上的暂停。`until` 为空是你点了「先别试」，或者整个平台停下了（`since` 有值），
+/// 到你点「现在再试」「继续获取」为止。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PauseRow {
-    /// 停的是哪种方法；`*` 是你点的「先别试」，整个插件。
+    /// 停的是哪种方法；`*` 是你点的「先别试」或平台停下，整个插件。
     pub method: String,
     pub scope: String,
     pub until: Option<i64>,
     pub code: Option<String>,
     pub hint: Option<String>,
     pub held: bool,
+    /// 整个平台停下的时间；别的暂停没有。
+    pub since: Option<i64>,
+    /// 平台停下时插件说平台回了什么。
+    pub said: Option<String>,
+}
+
+impl PauseRow {
+    /// 整个平台停下了，等你说接着。
+    pub fn stopped(&self) -> bool {
+        self.since.is_some()
+    }
 }
 
 /// 一种方法上一次调用：什么时候结束、成没成（`code` 空是成了）。
@@ -213,11 +234,13 @@ pub struct MethodCall {
 }
 
 /// 一个平台的节奏记账：上次调用什么时候结束，今天（本地日期）批量调用了几次。
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct PaceRow {
     pub last_end_at: i64,
     pub day: String,
     pub batch_calls: u32,
+    /// 上次调用结束时抽的数（0 到 1），决定这一回的间隔。
+    pub draw: f64,
 }
 
 /// 一次导入。`kind`：`source`（插件的 `list`）、`delivered`（交进来的一批链接）或 `file`（插件读交进来的文件）。
@@ -310,6 +333,9 @@ impl Jobs {
         if version < 4 {
             conn.execute_batch(&format!("BEGIN; {SCHEMA_V4} COMMIT;"))?;
         }
+        if version < 5 {
+            conn.execute_batch(&format!("BEGIN; {SCHEMA_V5} COMMIT;"))?;
+        }
         conn.execute(
             "UPDATE fetch_jobs SET state = 'queued' WHERE state = 'running'",
             [],
@@ -319,7 +345,7 @@ impl Jobs {
             [],
         )?;
         conn.execute(
-            "DELETE FROM pauses WHERE (until_at IS NULL AND held = 0) OR until_at > ?1",
+            "DELETE FROM pauses WHERE plugin <> '*' AND ((until_at IS NULL AND held = 0) OR until_at > ?1)",
             params![now.saturating_add(ms(MAX_PAUSE))],
         )?;
         conn.execute(
@@ -488,7 +514,7 @@ impl Jobs {
         let conn = self.conn();
         let held = conn
             .query_row(
-                "SELECT method, platform, until_at, code, hint, held FROM pauses
+                "SELECT method, platform, until_at, code, hint, held, since, said FROM pauses
                  WHERE plugin = ?1 AND method = '*' AND platform = '*' AND held = 1",
                 params![plugin],
                 row_to_pause,
@@ -499,7 +525,7 @@ impl Jobs {
         }
         let row = conn
             .query_row(
-                "SELECT method, platform, until_at, code, hint, held FROM pauses
+                "SELECT method, platform, until_at, code, hint, held, since, said FROM pauses
                  WHERE plugin = ?1 AND method = ?2 AND platform = ?3",
                 params![plugin, method, scope],
                 row_to_pause,
@@ -522,11 +548,51 @@ impl Jobs {
     pub fn pauses_of(&self, plugin: &str, now: i64) -> Result<Vec<PauseRow>> {
         let conn = self.conn();
         let mut stmt = conn.prepare(
-            "SELECT method, platform, until_at, code, hint, held FROM pauses
+            "SELECT method, platform, until_at, code, hint, held, since, said FROM pauses
              WHERE plugin = ?1 AND (held = 1 OR until_at > ?2) ORDER BY method, platform",
         )?;
         let rows = stmt.query_map(params![plugin, now], row_to_pause)?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// 整个平台停下（协议 §3.1）：单条和导入都不取，到你点「继续获取」为止；重启以后仍停着。已经停着的不改时间。
+    pub fn stop_platform(
+        &self,
+        platform: &str,
+        since: i64,
+        code: &str,
+        hint: Option<&str>,
+        said: Option<&str>,
+    ) -> Result<()> {
+        self.conn().execute(
+            "INSERT INTO pauses (plugin, method, platform, until_at, code, hint, held, since, said)
+             VALUES ('*', '*', ?1, NULL, ?2, ?3, 0, ?4, ?5)
+             ON CONFLICT (plugin, method, platform) DO NOTHING",
+            params![platform, code, hint, since, said],
+        )?;
+        Ok(())
+    }
+
+    /// 这个平台停着没有。
+    pub fn stopped(&self, platform: &str) -> Result<Option<PauseRow>> {
+        Ok(self
+            .conn()
+            .query_row(
+                "SELECT method, platform, until_at, code, hint, held, since, said FROM pauses
+                 WHERE plugin = '*' AND method = '*' AND platform = ?1",
+                params![platform],
+                row_to_pause,
+            )
+            .optional()?)
+    }
+
+    /// 「继续获取」：这个平台不再停着。
+    pub fn resume_platform(&self, platform: &str) -> Result<()> {
+        self.conn().execute(
+            "DELETE FROM pauses WHERE plugin = '*' AND method = '*' AND platform = ?1",
+            params![platform],
+        )?;
+        Ok(())
     }
 
     // —— 每种方法上一次调用 ——
@@ -571,13 +637,14 @@ impl Jobs {
         Ok(self
             .conn()
             .query_row(
-                "SELECT last_end_at, day, batch_calls FROM pace WHERE platform = ?1",
+                "SELECT last_end_at, day, batch_calls, draw FROM pace WHERE platform = ?1",
                 params![platform],
                 |r| {
                     Ok(PaceRow {
                         last_end_at: r.get(0)?,
                         day: r.get(1)?,
                         batch_calls: r.get(2)?,
+                        draw: r.get(3)?,
                     })
                 },
             )
@@ -585,16 +652,24 @@ impl Jobs {
             .unwrap_or_default())
     }
 
-    /// 一次计入节奏的调用结束了；`batch` 的算进今天的次数。
-    pub fn record_call(&self, platform: &str, end: i64, today: &str, batch: bool) -> Result<()> {
+    /// 一次计入节奏的调用结束了；`batch` 的算进今天的次数，`draw`（0 到 1）定下一回的间隔。
+    pub fn record_call(
+        &self,
+        platform: &str,
+        end: i64,
+        today: &str,
+        batch: bool,
+        draw: f64,
+    ) -> Result<()> {
         let add = i64::from(batch);
         self.conn().execute(
-            "INSERT INTO pace (platform, last_end_at, day, batch_calls) VALUES (?1, ?2, ?3, ?4)
+            "INSERT INTO pace (platform, last_end_at, day, batch_calls, draw) VALUES (?1, ?2, ?3, ?4, ?5)
              ON CONFLICT (platform) DO UPDATE SET
                 last_end_at = excluded.last_end_at,
                 batch_calls = CASE WHEN pace.day = excluded.day THEN pace.batch_calls + ?4 ELSE ?4 END,
-                day = excluded.day",
-            params![platform, end, today, add],
+                day = excluded.day,
+                draw = excluded.draw",
+            params![platform, end, today, add, draw],
         )?;
         Ok(())
     }
@@ -1368,6 +1443,8 @@ fn row_to_pause(r: &rusqlite::Row<'_>) -> rusqlite::Result<PauseRow> {
         code: r.get(3)?,
         hint: r.get(4)?,
         held: r.get(5)?,
+        since: r.get(6)?,
+        said: r.get(7)?,
     })
 }
 
@@ -1441,6 +1518,32 @@ mod tests {
         jobs.enqueue("web-a", "https://a.test/", 60).unwrap();
         let j = jobs.job("web-a").unwrap().unwrap();
         assert_eq!((j.state, j.attempts), (JobState::Queued, 0));
+    }
+
+    #[test]
+    fn a_stopped_platform_stays_stopped_across_reopening_until_resumed() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("jobs.db");
+        {
+            let jobs = Jobs::open(&path, 0).unwrap();
+            jobs.stop_platform("a", 5, "blocked", Some("要验证"), Some("HTTP 461"))
+                .unwrap();
+            // 已经停着的不改时间和原因
+            jobs.stop_platform("a", 9, "visitor-required", None, None)
+                .unwrap();
+            // 只是一时的暂停：重开时过远的照旧丢掉
+            jobs.pause("x/y", "page", "a", i64::MAX, "rate-limited", None)
+                .unwrap();
+        }
+        let jobs = Jobs::open(&path, 1_000).unwrap();
+        let p = jobs.stopped("a").unwrap().unwrap();
+        assert!(p.stopped());
+        assert_eq!((p.since, p.code.as_deref()), (Some(5), Some("blocked")));
+        assert_eq!(p.said.as_deref(), Some("HTTP 461"));
+        assert_eq!(jobs.stopped("b").unwrap(), None);
+        assert_eq!(jobs.paused("x/y", "page", "a", 1_000).unwrap(), None);
+        jobs.resume_platform("a").unwrap();
+        assert_eq!(jobs.stopped("a").unwrap(), None);
     }
 
     #[test]
@@ -1620,18 +1723,19 @@ mod tests {
     fn pace_counts_batch_calls_per_day() {
         let dir = tempfile::tempdir().unwrap();
         let jobs = Jobs::open(&dir.path().join("jobs.db"), 0).unwrap();
-        jobs.record_call("p", 10, "2026-11-11", true).unwrap();
-        jobs.record_call("p", 20, "2026-11-11", false).unwrap();
-        jobs.record_call("p", 30, "2026-11-11", true).unwrap();
+        jobs.record_call("p", 10, "2026-11-11", true, 0.1).unwrap();
+        jobs.record_call("p", 20, "2026-11-11", false, 0.2).unwrap();
+        jobs.record_call("p", 30, "2026-11-11", true, 0.75).unwrap();
         assert_eq!(
             jobs.pace("p").unwrap(),
             PaceRow {
                 last_end_at: 30,
                 day: "2026-11-11".into(),
-                batch_calls: 2
+                batch_calls: 2,
+                draw: 0.75,
             }
         );
-        jobs.record_call("p", 40, "2026-11-12", true).unwrap();
+        jobs.record_call("p", 40, "2026-11-12", true, 0.0).unwrap();
         assert_eq!(jobs.pace("p").unwrap().batch_calls, 1, "换了一天重新数");
     }
 }

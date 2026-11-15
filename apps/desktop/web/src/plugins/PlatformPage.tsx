@@ -84,13 +84,16 @@ function PacingRow({ plugin, platform, titled }: { plugin: FetchPlugin; platform
   const pace = plugin.pacing.find((x) => x.platform === platform);
   const pauses = plugin.pauses.filter((x) => x.byYou || x.scope === platform || x.scope === "*");
   const held = plugin.pauses.some((x) => x.byYou);
-  const words = !pace
+  // 被拦以后整个平台停下：等你点「继续获取」（和「立即重试」同一个接口）
+  const stopped = pauses.some((x) => x.stopped);
+  const range = pace ? { count: pace.intervalSec, max: pace.intervalMaxSec } : null;
+  const words = !pace || !range
     ? t("plugins.pacing.none")
-    : pace.batch
-      ? pace.daily
-        ? t("plugins.pacing.batchDaily", { count: pace.intervalSec, daily: pace.daily })
-        : t("plugins.pacing.batch", { count: pace.intervalSec })
-      : t("plugins.pacing.noBatch", { count: pace.intervalSec });
+    : (pace.batch
+        ? pace.daily
+          ? t("plugins.pacing.batchDaily", { ...range, daily: pace.daily })
+          : t("plugins.pacing.batch", range)
+        : t("plugins.pacing.noBatch", range)) + (pace.stopsWhenBlocked ? ` ${t("plugins.pacing.stops")}` : "");
   return (
     <CardRow
       title={titled ? plugin.name : t("plugins.pacing.row")}
@@ -99,7 +102,7 @@ function PacingRow({ plugin, platform, titled }: { plugin: FetchPlugin; platform
         <>
           {pauses.length > 0 ? (
             <Button variant="outline" size="sm" onPress={() => change.mutate({ kind: "try-now" })} isDisabled={change.isPending}>
-              {t("plugins.pacing.retryNow")}
+              {stopped ? t("plugins.pacing.resume") : t("plugins.pacing.retryNow")}
             </Button>
           ) : null}
           {!held ? (
@@ -113,8 +116,9 @@ function PacingRow({ plugin, platform, titled }: { plugin: FetchPlugin; platform
       {pauses.length > 0 || change.error ? (
         <>
           {pauses.map((x) => (
-            <p key={`${x.method}-${x.scope}-${x.byYou ? "you" : "platform"}`} className="m-0 text-small text-label">
+            <p key={`${x.method}-${x.scope}-${x.byYou ? "you" : x.stopped ? "stopped" : "platform"}`} className="m-0 text-small text-label">
               {pauseText(x, plugin.platforms)}
+              {x.said ? <span className="mono block text-tag text-sub">{t("plugins.pause.said", { said: x.said })}</span> : null}
             </p>
           ))}
           {change.error ? <ErrorLine error={change.error} className="mt-1" /> : null}

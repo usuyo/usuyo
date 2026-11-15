@@ -579,6 +579,10 @@
         }
       }
     },
+    "OnBlocked": {
+      "type": "string",
+      "pattern": "^(stop|[0-9]+(ms|s|m|h))$"
+    },
     "OutputKind": {
       "description": "`outputs` 的固定词表（协议 §2.3；`comments` 照 §13 第 31 项）。",
       "type": "string",
@@ -604,6 +608,17 @@
           ],
           "default": null
         },
+        "blocked": {
+          "description": "插件回 `blocked` 以后这个平台怎么办；不写是暂停一小时以后自己接着。",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OnBlocked"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "daily": {
           "type": [
             "integer",
@@ -623,6 +638,17 @@
             }
           ],
           "default": null
+        },
+        "intervalMax": {
+          "description": "两次调用之间最长隔多久：宿主每次在 `interval` 到它之间随机取一个间隔。不小于 `interval`。",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Duration"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },

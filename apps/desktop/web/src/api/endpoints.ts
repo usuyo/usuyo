@@ -135,6 +135,8 @@ export const paths = {
   /** `plugin`：`browser-profile` 站点的登录一个插件一份，退出登录要说是哪个插件的。 */
   siteLogin: (site: string, plugin?: string) =>
     `/sites/${encodeURIComponent(site)}/login${plugin ? `?plugin=${encodeURIComponent(plugin)}` : ""}`,
+  /** PUT 文件全文（Netscape 格式的 cookies.txt，至多 256 KiB）：只留这个 `cookies` 站点的，存进钥匙串，回 `SiteLogin`（`source: cookie-file`）。 */
+  siteLoginFile: (site: string) => `/sites/${encodeURIComponent(site)}/login/file`,
   // —— 转换插件和模型（feature 003 §8.1）——
   /**
    * POST `TransformRequest`，回 202 `{queued: true}`。`{jobs: "pending"}`：这一条还没做好的转换（没转出来的也算）都挪到最前，
@@ -854,7 +856,11 @@ export interface PluginPacing {
   platform: string;
   batch: boolean;
   intervalSec: number;
+  /** 间隔的上限：每次在 `intervalSec` 到它之间随机取。 */
+  intervalMaxSec: number;
   daily?: number;
+  /** 被拦以后整个平台停下，等你点「继续获取」。 */
+  stopsWhenBlocked?: boolean;
 }
 
 /** 插件停在哪儿、为什么、到什么时候。 */
@@ -871,6 +877,12 @@ export interface PluginPause {
   code?: string;
   /** 插件给你的一句话。 */
   hint?: string;
+  /** 整个平台停下了（被拦以后），等你点「继续获取」（和「现在再试」同一个接口）。 */
+  stopped?: boolean;
+  /** 平台停下的时间，RFC 3339。 */
+  since?: string;
+  /** 平台停下时插件说平台回了什么（插件给日志的那句，不翻译）。 */
+  said?: string;
 }
 
 export interface FetchPlugin {
@@ -1082,6 +1094,8 @@ export interface SiteLogin {
   credential: "cookies" | "browser-profile" | "app";
   /** `browser-profile` 站点上一回用站点窗口读的情况。 */
   lastUse?: { at: string; plugin: string; method: string; methodName: string; noted: number };
+  /** `cookies` 站点存着的登录状态从哪来：登录窗口，或你选的 cookie 文件（`capturedAt` 是导入的时间）。 */
+  source?: "login-window" | "cookie-file";
 }
 
 /**

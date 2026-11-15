@@ -3,7 +3,7 @@
 //! 「现在再试」「先别试」、存下和忘掉登录和访客身份、填密钥设置也在这里。
 
 use usuyo_plugin::protocol::{Account, Method, StorageState};
-use usuyo_plugin::{DeclaredSite, DeclaredVisitor, FetchPlugin};
+use usuyo_plugin::{DeclaredSite, DeclaredVisitor, FetchPlugin, PluginError};
 
 use crate::engine::Engine;
 use crate::fetch::now_ms;
@@ -43,6 +43,7 @@ fn site_view(d: DeclaredSite, plugins: &[FetchPlugin]) -> SiteView {
         plugins: d.plugins.into_iter().map(|p| p.to_string()).collect(),
         credential: d.site.credential,
         last_use,
+        source: d.source,
     }
 }
 
@@ -65,15 +66,19 @@ fn visitor_view(d: DeclaredVisitor) -> VisitorView {
 }
 
 fn pause_view(x: PauseRow, lang: Lang) -> PauseView {
+    let at = |t: i64| {
+        jiff::Timestamp::from_millisecond(t)
+            .ok()
+            .map(usuyo_library::time::format)
+    };
     PauseView {
+        stopped: x.stopped(),
+        since: x.since.and_then(at),
+        said: x.said,
         method: x.method,
         scope: x.scope,
         by_you: x.held,
-        until: x.until.and_then(|t| {
-            jiff::Timestamp::from_millisecond(t)
-                .ok()
-                .map(usuyo_library::time::format)
-        }),
+        until: x.until.and_then(at),
         code: x.code,
         hint: x
             .hint
@@ -83,7 +88,16 @@ fn pause_view(x: PauseRow, lang: Lang) -> PauseView {
 }
 
 /// 停着的一句话：为什么、到什么时候。
-fn pause_blocker(x: &PauseRow) -> Why {
+pub(crate) fn pause_blocker(x: &PauseRow) -> Why {
+    if x.stopped() {
+        return Why {
+            code: "stopped".into(),
+            hint: words::STOPPED.with_said(&[(
+                "time",
+                &crate::pace::local_time(x.since.unwrap_or_default()),
+            )]),
+        };
+    }
     let hint = match x.until {
         _ if x.held => words::PAUSED_BY_YOU.said(),
         Some(until) => {
@@ -230,7 +244,13 @@ impl Engine {
         let host = &self.loaded().host;
         let lang = self.lang();
         let filled = host.secrets_set(p.id())?;
-        let pauses = self.inner.jobs.pauses_of(p.id().as_str(), now)?;
+        let mut pauses = self.inner.jobs.pauses_of(p.id().as_str(), now)?;
+        // 停着的平台（协议 §3.1）：这个插件管的平台停下了，算进它的暂停
+        for pl in &p.spec.platforms {
+            if let Some(x) = self.inner.jobs.stopped(pl.as_str())? {
+                pauses.push(x);
+            }
+        }
         let calls = self.inner.jobs.method_calls(p.id().as_str())?;
         let sites = host.sites()?;
         let visitors = host.visitors()?;
@@ -244,6 +264,8 @@ impl Engine {
                     platform: pl.as_str().to_owned(),
                     batch: x.batch,
                     interval_sec: x.interval.as_secs(),
+                    interval_max_sec: x.interval_max.as_millis().div_ceil(1000) as u64,
+                    stops_when_blocked: x.blocked == crate::pace::AfterBlocked::Stop,
                     daily: x.daily,
                 })
             })
@@ -413,10 +435,16 @@ impl Engine {
             .ok_or_else(|| Error::NotFound(format!("plugin {id}")))
     }
 
-    /// 「现在再试」：这个插件的暂停全去掉，排着的任务和导入马上再看。
+    /// 「现在再试」「继续获取」：这个插件的暂停全去掉，它管的平台停着的也接着，排着的任务和导入马上再看。
     pub fn try_plugin_now(&self, id: &str) -> Result<PluginView> {
         let p = self.plugin_ref(id)?;
         self.inner.jobs.clear_pauses(id)?;
+        for pl in &p.spec.platforms {
+            self.inner.jobs.resume_platform(pl.as_str())?;
+        }
+        for v in &p.spec.visitors {
+            self.inner.visitors_wanted.forget_refusals(&v.site);
+        }
         self.inner.methods.forget_health(id);
         // 因为它停着而往后排的任务（它能取的链接）马上再排
         let now = now_ms();
@@ -453,6 +481,41 @@ impl Engine {
     pub fn save_site(&self, site: &str, state: &StorageState) -> Result<SiteView> {
         let host = &self.loaded().host;
         let d = host.save_site(site, state)?;
+        self.inner.wake.notify_one();
+        self.inner.imports_wake.notify_one();
+        self.emit(Event::PluginsUpdated);
+        Ok(site_view(d, host.plugins()))
+    }
+
+    /// 从你选的 cookies.txt 导入一个 `cookies` 站点的登录状态（协议 §6）：只留这个站点声明的域的 cookie，
+    /// 和登录窗口的存在同一处（钥匙串），文件本身不留。报错里不带文件里的字。会阻塞。
+    pub fn import_site_file(&self, site: &str, text: &str) -> Result<SiteView> {
+        let host = &self.loaded().host;
+        let declared = host
+            .sites()?
+            .into_iter()
+            .find(|d| d.site.site == site)
+            .ok_or_else(|| Error::NotFound(format!("site {site}")))?;
+        let name = declared.site.name.clone();
+        if declared.site.credential != usuyo_plugin::protocol::Credential::Cookies {
+            return Err(Error::UnsupportedInput(
+                "this site signs in in a site window, not with cookies".into(),
+            )
+            .hinted(words::COOKIE_FILE_PROFILE.with(&[("site", &name)])));
+        }
+        let state = usuyo_plugin::read_cookies_txt(text).map_err(|e| {
+            Error::InvalidArgs(e.to_string())
+                .hinted(words::COOKIE_FILE_LINE.with(&[("line", &e.line)]))
+        })?;
+        let d = host
+            .save_site_from_file(site, &state)
+            .map_err(|e| match e {
+                PluginError::Credentials { .. } => {
+                    Error::InvalidArgs(format!("no cookie in the file belongs to {site}"))
+                        .hinted(words::COOKIE_FILE_NONE.with(&[("site", &name)]))
+                }
+                e => e.into(),
+            })?;
         self.inner.wake.notify_one();
         self.inner.imports_wake.notify_one();
         self.emit(Event::PluginsUpdated);

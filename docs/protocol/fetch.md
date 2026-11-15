@@ -8,12 +8,13 @@
 
 - **身份**：收下一个链接时，宿主在 `match` 命中的插件上按用户排的顺序调 `canonicalize`，取第一个 `match: true` 的结果作为身份（[SPEC §0.4](../spec/conventions.md#04-id)）。`identity.contentId` 要符合平台列表里的格式（[§2.3](manifest.md#23-获取插件的字段)），不符合的按 `invalid-output` 处理（平台列表还没有，宿主现在只查非空、不超过 256 字节、没有控制字符）。
 - **顺序**：取一条链接时，宿主把 `match` 命中的插件里能用的方法排好一种种试，什么时候换下一种、什么时候补缺，见 [§2.3.1](manifest.md#231-方法-methods)。平台插件和 `platforms` 含 `web` 的插件都命中时，先把平台插件的方法试完，再轮到 `web` 插件。都没取到停在 `link`，记下排在最前的原因。
-- **暂停单种方法**：一种方法返回 `rate-limited` 时，宿主在 `retryAfter` 之内（没给就 15 分钟）不再在这个平台上调它；返回 `blocked` 时，暂停一小时，用户在插件那一行点「现在再试」可以更早去掉，这一条不因这次暂停重试。`retryAfter` 最多算一小时（更长的按一小时）；`platforms` 含 `web` 的插件按链接的主机暂停，别的按平台；`jobs.db` 打开时丢掉比现在晚一小时以上的旧暂停。别的方法照常按顺序试，包括同一个插件里的、用同一个账号的：平台的限流常按接口分开计，换一个接口可能还取得到（推断）。「先别试」「现在再试」管整个插件的所有方法。
+- **暂停单种方法**：一种方法返回 `rate-limited` 时，宿主在 `retryAfter` 之内（没给就 15 分钟）不再在这个平台上调它；返回 `blocked` 时照这个平台节奏里的 `blocked`（[§2.3](manifest.md#23-获取插件的字段)）：没写或写了时长，暂停那么久（没写是一小时），用户在插件那一行点「现在再试」可以更早去掉，这一条不因这次暂停重试；写了 `stop`，整个平台停下（下一条）。`retryAfter` 最多算一小时（更长的按一小时）；`platforms` 含 `web` 的插件按链接的主机暂停，别的按平台；`jobs.db` 打开时丢掉比现在晚一小时以上的旧暂停。别的方法照常按顺序试，包括同一个插件里的、用同一个账号的：平台的限流常按接口分开计，换一个接口可能还取得到（推断）。「先别试」「现在再试」管整个插件的所有方法。
+- <a id="31a-平台停下"></a>**平台停下，等你说接着**（2026-11-15）。两种情况下宿主停下整个平台：插件回 `blocked`、这个平台的节奏写了 `blocked: stop`；或者插件回 `visitor-required`（带着访客身份仍被拒），宿主已经为它换过一份访客身份（[§2.5.1](manifest.md#251-访客身份-visitors)），换来的那份在这个平台上还没取到过一条就又被拒——这时不论清单写没写 `stop` 都停，不再一份份地换。停下的是这个平台上所有插件的所有方法：单条和导入的任务都等着、不耗重试次数，导入不再列，列来源回 422；从文件导入回到读文件的插件取的那一路只读本机的副本，照常。宿主不自己接着，重启以后仍停着，到你在获取插件页点「继续获取」（和「现在再试」同一个接口，[本机接口](../spec/local-api.md#本机接口第-2-层11-11-照代码)）为止；那时被拦的那一条和别的排着的一起马上再看，访客身份被拒的次数从头算。界面写明停下的时间、原因（插件给的 `hint`，没给时宿主的一句；访客身份那种是「更换访客身份后，网站仍不接受」）和插件说平台回了什么（错误的 `message`，链接里 `?`、`#` 以后的换成 `…`，最多 300 字），不计数、不催。
 - **完整度只升不降**：宿主给每个快照记下实际拿到的输出集合（`outputs` 词表里的值）。新快照算不算升级、用户改了「只留文字」之类的设置后要不要再取，比的是这个集合，不比 `full`、`partial` 这两个字样。失败不降级。
 
 **节奏。** 每个平台一组上限，该平台所有获取插件共用（目的是不被限流、能一直用）：
 
-- **计入节奏的调用**：`fetch`、`list` 的一页、`sources`、`unfavorite`。同一平台同一时间只跑其中一个；`interval` 是上一次调用结束到下一次调用开始的最短间隔。一次调用内部的请求怎么排，由插件自己控制，例如视觉层插件在 `list` 的一页里逐条复制链接的间隔。
+- **计入节奏的调用**：`fetch`、`list` 的一页、`sources`、`unfavorite`。同一平台同一时间只跑其中一个；上一次调用结束到下一次调用开始至少隔 `interval`，每次在 `interval` 到 `intervalMax` 之间随机取一个间隔（均匀分布）：随机数在一次调用结束时抽一回、记进 `jobs.db`，等的时候不再抽，重启后照旧。没有插件写 `intervalMax` 时，上限是 `interval` 的 1.5 倍；手动收下的和导入的都照它。一次调用内部的请求怎么排，由插件自己控制，例如视觉层插件在 `list` 的一页里逐条复制链接的间隔。
 - **`daily`** 按上面这些调用的次数计，只限批量导入、跟着收和取消收藏；用户手动收下的单条不计入 `daily`，但照样排队、照样隔 `interval`。
 - **`batch: false`**：只接受用户一条条收下，不做批量导入和跟着收。
 - **不计入节奏的**：`canonicalize` 不占单调用锁，不计 `interval` 和 `daily`，展开短链另有每平台每分钟上限（默认 30 次），所以正在下大视频时，新贴的链接照样几秒内拿到身份；`health` 不计（`--probe` 只在用户点「检查登录」时发一次）；`access: official-export` 且 `network.mode: none` 的能力只读本机文件，不受节奏限制，可以并行。
@@ -160,9 +161,9 @@
 | `unsupported-input` | 不是这个插件能处理的链接、文件或来源（例如直播） | 换下一个 |
 | `not-found` | 内容不存在、已删除或当前身份看不到；能分清时填 `reason` | 换下一个。只有全部是 `not-found` 且 `reason` 都是 `deleted` 时，条目才记「平台上已看不到」；有 `link-expired` 时提示用户重新分享或重新导出链接；其余记「取不到」并列出原因 |
 | `login-required` | 没登录，或登录已过期 | 换下一个；插件那一行提示重新登录 `site` |
-| `visitor-required` | 站点要一份访客身份（[§2.5.1](manifest.md#251-访客身份-visitors)）：没有交来，或交来的页面仍不收 | 换下一个；界面写成要取或要换访客身份，不说登录；和 `login-required` 一样不自己暂停 |
+| `visitor-required` | 站点要一份访客身份（[§2.5.1](manifest.md#251-访客身份-visitors)）：没有交来，或交来的页面仍不收 | 交来的仍不收时先要一份新的、这一条等一回；换过一份以后又不收，停下这个平台（[§3.1](#31a-平台停下)）。别的时候换下一个；界面写成要取或要换访客身份，不说登录 |
 | `rate-limited` | 被平台限流 | 这一轮不换，照节奏等；这种方法在这个平台暂停到 `retryAfter`，下一轮跳过它 |
-| `blocked` | 平台出现验证页、风控提示或拦截 | 换下一个；这种方法在这个平台暂停一小时，用户点「现在再试」可更早解开（[§3.1](#31-运行器与节奏)） |
+| `blocked` | 平台出现验证页、风控提示或拦截 | 照平台节奏里的 `blocked`：暂停这种方法（默认一小时）然后换下一个，或停下整个平台（[§3.1](#31a-平台停下)） |
 | `upstream-changed` | 页面或接口改版，解析不出 | 换下一个；记进插件的最近失败 |
 | `network` | 网络不通、DNS、TLS 或插件自己的请求超时 | 这一轮不换，退避后再试 |
 | `dependency-missing` | 缺运行时、外部程序、设备、设置、系统授权、本机服务，或要用户处理的状态 | 换下一个；界面列出 `needs` |
@@ -461,7 +462,7 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip" --method
 - **环境变量**：先清空，再放 `permissions.env` 里列的、宿主自己环境里有的，再放宿主设的（同名的以宿主为准，清单也不许列它们，[§2.7](manifest.md#27-权限-permissions)）。宿主设：`USUYO_PROTOCOL=1`、`USUYO_PLUGIN_DIR`、`USUYO_CACHE_DIR`（按机器目录的 `cache/plugins/<owner>/<repo>/`）、`USUYO_CALL_ID`（UUIDv7）、`USUYO_LOCALE`、导入时的 `USUYO_INPUT`、`HOME`、`XDG_CONFIG_HOME`、`XDG_CACHE_HOME`、`TMPDIR`、`TMP`、`TEMP`、`PATH`（`${TMP}/bin` 加系统目录）。工作目录是 `${TMP}`，stdin 是空的。
 - **`USUYO_SETTINGS`**：按机器 `settings.json` 里 `plugins.<插件 id>.settings` 有值时，宿主把它写成这次调用文件夹里的 `settings.json`，变量指向它；没有就不设。
 - **`USUYO_NETWORK`**：宿主查 `example.com`、`example.org` 两个名字（两秒内），两个都有回答、回答全在 `198.18.0.0/15` 里时设成 `fake-ip`，结果缓存一分钟；查不到、超时都算不是。不看要取的那个域名自己的回答。
-- **节奏做了一部分**：[§3.1](#31-运行器与节奏) 的 `interval`、`daily`、`batch: false`、每平台一个调用的锁有了（取最严的一组，记账在 `jobs.db`，重启后照旧）；整机锁和设备锁还没做；任务一次只跑一个。「现在再试」「先别试」有了（`POST /plugins/{owner}/{repo}/try-now`、`…/hold`），用户改节奏的设置还没做。
+- **节奏做了一部分**：[§3.1](#31-运行器与节奏) 的 `interval`、`intervalMax`（随机间隔）、`daily`、`batch: false`、`blocked`（暂停或平台停下）、每平台一个调用的锁有了（取最严的一组，记账在 `jobs.db`，重启后照旧）；整机锁和设备锁还没做；任务一次只跑一个。「现在再试」「先别试」有了（`POST /plugins/{owner}/{repo}/try-now`、`…/hold`），用户改节奏的设置还没做。
 - **凭据和密钥**：`credential: cookies` 的站点经 `USUYO_CREDENTIALS`、`USUYO_COOKIES_TXT`，密钥设置经 `USUYO_SECRETS`，访客身份经 `USUYO_VISITOR`（[§2.5.1](manifest.md#251-访客身份-visitors)）。值在系统钥匙串里（没有钥匙串的系统上是按机器目录的 0600 文件），按机器目录的 `logins.json` 只记名字、域名和过期时间；文件放在按机器目录 `run/` 下这次调用自己的 0700 目录里，0600，进程结束就删；交出去的值从 stderr、插件的错误和宿主拼的错误里洗掉（包括 JSON、Debug 转义过的写法）。plugin-kit 的 `http::Cookie::visitor` 把访客身份读成只发给给定主机、只走 https 的 Cookie。
 - **`USUYO_PROXY`**（11-12）：现在交的是用户的代理，本机代理做出来以后改成指向本机代理、用户的代理由它转发（上面的「网络出口」）。路线是按机器设置 `network.proxy`：`system`（没写时）、`direct`、或一个代理地址。`system` 在 macOS 上读 `scutil --proxy`（两秒内，结果留一分钟），先取 https 的，再 SOCKS，再 http 的；别的系统暂时读环境变量；读不到就直连，记一条日志。只有清单里有网络权限的插件拿到这个变量；宿主自己下模型走同一条路。
 - **还没传的**：`USUYO_BROWSER_PROFILE`、`USUYO_PROVIDER`、`ADB_SERVER_SOCKET`、`ANDROID_SERIAL`、`HTTP_PROXY` 一类的代理变量。本机代理和沙箱（[§7](isolation.md#7-权限与隔离)）都还没做；插件的出站现在靠 plugin-kit 的客户端自己把关（[§10.1](plugin-kit.md#101-plugin-kit-的-http-客户端11-11)）。
@@ -471,4 +472,4 @@ USUYO_INPUT=<副本路径> <command> list "file:twitter-2026-10-30.zip" --method
 - **信封里的字**：错误的 `detail` 洗掉凭据后截到 4096 字节，多行照留。标题、作者的 `name`、`platformId`、`url`，错误的 `message`、`hint`、`site`，`missingReason`、`evidence.site`，`list` 条目的标题和作者，`sources` 的标题：各截到 1024 字节（按字符边界），控制字符（含换行）换成空格。`platformTags` 最多 64 个，每个截到 100 字节。正文 `text` 不动。这些是截断，不拒。
 - **会拒的**：插件给的链接（`identity.url`、`resolvedUrl`、`list` 的 `items[].url`）超过 4096 字节或有控制字符；`contentId` 空、超过 256 字节或有控制字符；身份的 `platform` 不在清单的 `platforms` 里；`comments` 不是 `comments.json`；同一个文件引用两次、引用的文件不在；输出目录不合 [§3.6](#36-fetch-与输出目录)（最多 10,000 项，默认 8 GiB）；插件报宿主才用的码（`timeout`、`crashed`、`invalid-output`、`profile-busy`）；`dependency-missing` 不带 `needs`。都记 `invalid-output`。
 - **完整度**：宿主照 `--want` 和实际输出重算，和插件报的不一样记警告；算出来是 `link` 按 `unsupported-input`。
-- **暂停**：`rate-limited` 按 `retryAfter`，没给 15 分钟，最多一小时；`blocked` 一小时；通用网页插件按主机暂停，别的按平台（[§3.1](#31-运行器与节奏)）。重试按 30 秒乘 4 的次方退后，最多 6 小时、6 次。
+- **暂停**：`rate-limited` 按 `retryAfter`，没给 15 分钟，最多一小时；`blocked` 照平台的声明（[§3.1](#31a-平台停下)）；通用网页插件按主机暂停，别的按平台（[§3.1](#31-运行器与节奏)）。重试按 30 秒乘 4 的次方退后，最多 6 小时、6 次。

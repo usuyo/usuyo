@@ -23,18 +23,30 @@ interface Served {
   strategies: unknown[];
   revealed: string[];
   created: unknown[];
+  /** 交上去的 cookie 文件：站点的路径和全文。 */
+  files: { path: string; text: unknown }[];
+  /** 点了「立即重试」「继续获取」的插件路径。 */
+  tried: string[];
 }
 
 const isStrategy = (v: unknown): v is Strategy => typeof v === "object" && v !== null && "preset" in v;
 
 function serve(view: Omit<PluginsView, "failureLog">, sites: SiteLogin[], visitors: VisitorIdentity[] = [], at = "/plugins", readers: FileReader[] = []): Served {
-  const served: Served = { switched: [], strategies: [], revealed: [], created: [] };
+  const served: Served = { switched: [], strategies: [], revealed: [], created: [], files: [], tried: [] };
   let strategy: Strategy = { preset: "no-account-first" };
   vi.stubGlobal("scrollTo", vi.fn());
   vi.stubGlobal(
     "fetch",
     vi.fn((input: URL, init?: RequestInit) => {
       const path = new URL(input).pathname;
+      if (path.endsWith("/login/file")) {
+        served.files.push({ path, text: init?.body });
+        return Promise.resolve(Response.json({ ...sites[0], login: "present", source: "cookie-file", capturedAt: "2026-11-15T08:00:00.000Z" }));
+      }
+      if (path.endsWith("/try-now")) {
+        served.tried.push(path);
+        return Promise.resolve(Response.json(view.plugins[0]));
+      }
       const body: unknown = typeof init?.body === "string" ? JSON.parse(init.body) : null;
       if (path.endsWith("/script/reveal")) {
         served.revealed.push(path);
@@ -107,7 +119,7 @@ const bili = (methods: FetchMethod[], extra: Partial<FetchPlugin> = {}): FetchPl
   sites: ["www.bilibili.com"],
   visitors: [],
   settings: [],
-  pacing: [{ platform: "bilibili", batch: true, intervalSec: 5, daily: 500 }],
+  pacing: [{ platform: "bilibili", batch: true, intervalSec: 5, intervalMaxSec: 8, daily: 500 }],
   pauses: [],
   methods,
   ...extra,
@@ -162,7 +174,7 @@ it("writes the platform page in English when English is chosen, with plurals and
   expect(screen.getByRole("region", { name: "Fetch Strategy" })).toBeTruthy();
   expect((await screen.findAllByText("访客接口 (no account)")).length).toBeGreaterThan(0);
   const pacing = screen.getByRole("region", { name: "Request Rate" });
-  expect(within(pacing).getByText("At least 5 seconds between requests; daily import limit: 500.")).toBeTruthy();
+  expect(within(pacing).getByText("5–8 seconds between requests, chosen at random each time; daily import limit: 500.")).toBeTruthy();
   expect(screen.getByRole("region", { name: "Keys & Logs" })).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Technical Information" }));
   const tech = screen.getByRole("region", { name: "Technical Information" });
@@ -357,13 +369,49 @@ it("lists logins and visitor identities with the methods that use them, the paci
   expect(within(accounts).getByText(/使用它的获取方式：会话接口/)).toBeTruthy();
   expect(within(accounts).getByText(/使用它的获取方式：访客身份接口/)).toBeTruthy();
   const pacing = screen.getByRole("region", { name: "请求频率" });
-  expect(within(pacing).getByText("每两次请求至少间隔 5 秒，每天最多导入 500 次。")).toBeTruthy();
+  expect(within(pacing).getByText("每两次请求间隔 5–8 秒，每次随机；每天最多导入 500 次。")).toBeTruthy();
   expect(within(pacing).getByText(/平台提示请求过于频繁/)).toBeTruthy();
   expect(within(pacing).getByRole("button", { name: "立即重试" })).toBeTruthy();
   const about = screen.getByRole("region", { name: "密钥与日志" });
   expect(within(about).getByText("/m/logs/fetch-failures.jsonl")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "技术信息" }));
   expect(within(screen.getByRole("region", { name: "技术信息" })).getByText("parse-video（MIT）")).toBeTruthy();
+});
+
+it("a stopped platform says since when and what the platform returned, and continues when you say so", async () => {
+  const served = serve(
+    {
+      plugins: [
+        bili([guest], {
+          pacing: [{ platform: "bilibili", batch: true, intervalSec: 15, intervalMaxSec: 25, daily: 100, stopsWhenBlocked: true }],
+          pauses: [{ method: "*", scope: "bilibili", byYou: false, stopped: true, since: "2026-11-15T07:00:00.000Z", code: "blocked", hint: "平台出现了验证页", said: "note page answered HTTP 461" }],
+        }),
+      ],
+      notLoaded: [],
+    },
+    [SITE],
+    [],
+    "/plugins/bilibili",
+  );
+  const pacing = await screen.findByRole("region", { name: "请求频率" });
+  expect(within(pacing).getByText(/每两次请求间隔 15–25 秒.*点按「继续获取」后才会再获取/)).toBeTruthy();
+  expect(within(pacing).getByText(/起已停止获取：平台出现了验证页/)).toBeTruthy();
+  expect(within(pacing).getByText("平台返回：note page answered HTTP 461")).toBeTruthy();
+  expect(within(pacing).queryByText(/立即重试/)).toBeNull();
+  fireEvent.click(within(pacing).getByRole("button", { name: "继续获取" }));
+  await waitFor(() => expect(served.tried).toEqual(["/api/plugins/usuyo-fetch/bilibili/try-now"]));
+});
+
+it("imports a sign-in from a cookie file you choose and says where it came from", async () => {
+  const served = serve({ plugins: [bili([guest, session])], notLoaded: [] }, [SITE], [], "/plugins/bilibili");
+  const accounts = await screen.findByRole("region", { name: "账号与访客身份" });
+  expect(within(accounts).getByText(/选择 Netscape 格式的 cookies.txt。只保留属于B站的 cookie/)).toBeTruthy();
+  fireEvent.click(within(accounts).getByRole("button", { name: "从文件导入登录状态…" }));
+  const input = accounts.querySelector<HTMLInputElement>('input[type="file"]');
+  if (!input) throw new Error("the login card has no file input");
+  const text = ".bilibili.com\tTRUE\t/\tTRUE\t0\tSESSDATA\tv\n";
+  fireEvent.change(input, { target: { files: [new File([text], "cookies.txt", { type: "text/plain" })] } });
+  await waitFor(() => expect(served.files).toEqual([{ path: "/api/sites/www.bilibili.com/login/file", text }]));
 });
 
 it("with two plugins on one platform, each method carries its plugin's name", async () => {

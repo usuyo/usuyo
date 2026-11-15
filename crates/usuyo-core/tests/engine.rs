@@ -85,6 +85,8 @@ run:
 
     fn engine(&self) -> Engine {
         let mut config = EngineConfig::new(&self.library, self.machine());
+        // 间隔取 `interval` 本身，不随机
+        config.pace_draw = || 0.0;
         config.retry = RetryPolicy {
             base: Duration::ZERO,
             max_attempts: 3,
@@ -388,6 +390,173 @@ echo '{"ok": false, "error": {"code": "blocked", "message": "captcha"}}'; exit 1
     let calls = std::fs::read_to_string(f.machine().join("cache/plugins/fake/platform/calls"))
         .unwrap_or_default();
     assert_eq!(calls.lines().count(), 1, "被拦以后这个平台暂停，不再调它");
+}
+
+/// 认 `example.test/<id>` 的平台插件：身份是 `example` 平台的 `<id>`，`pacing` 是清单里这个平台的那一行。
+fn install_example(f: &Fixture, script: &str, pacing: &str) {
+    f.install("fake/platform", "example", "example.test/*", "");
+    let dir = f.machine().join("plugins/fake/platform/1.0.0");
+    let yaml = dir.join("usuyo-plugin.yaml");
+    let mut text = std::fs::read_to_string(&yaml).unwrap();
+    text.push_str(&format!("pacing:\n  example: {pacing}\n"));
+    std::fs::write(&yaml, text).unwrap();
+    let body = format!(
+        r#"#!/bin/sh
+out=""
+if [ "$1" = fetch ]; then out="$4"; fi
+case "$1" in
+  canonicalize)
+    id=${{2##*/}}
+    printf '{{"ok": true, "match": true, "identity": {{"platform": "example", "contentId": "%s", "url": "https://example.test/%s"}}}}' "$id" "$id"
+    exit 0 ;;
+  health) echo '{{"ok": true, "ready": true, "protocol": 1, "version": "1.0.0"}}'; exit 0 ;;
+esac
+{script}
+"#
+    );
+    std::fs::write(dir.join("plugin.sh"), body).unwrap();
+}
+
+/// 取到 `example` 平台的一条。
+fn fetch_example() -> String {
+    FETCH_OK.replace(
+        r#""identity": {"platform": "web", "url": "$2"}"#,
+        r#""identity": {"platform": "example", "contentId": "${2##*/}"}"#,
+    )
+}
+
+/// 平台声明 `blocked: stop`：被拦以后整个平台停下，单条也不取、通用网页也不顶上；重启以后仍停着；
+/// 你点「继续获取」以后接着取，被拦的那一条也再取。
+#[tokio::test]
+async fn blocked_on_a_platform_that_stops_waits_for_you_even_after_a_restart() {
+    let f = Fixture::new();
+    install_example(
+        &f,
+        &format!(
+            r#"if [ "$1" = fetch ]; then echo x >> "$USUYO_CACHE_DIR/calls"; fi
+if [ "$1" = fetch ] && [ -f "$USUYO_CACHE_DIR/ok" ]; then
+{}
+exit 0
+fi
+echo '{{"ok": false, "error": {{"code": "blocked", "message": "redirected to /website-login/captcha?token=secret-1", "hint": "平台要验证"}}}}'; exit 1"#,
+            fetch_example()
+        ),
+        "{blocked: stop}",
+    );
+    f.install("fake/web", "web", "*", FETCH_OK);
+    let calls = || {
+        std::fs::read_to_string(f.machine().join("cache/plugins/fake/platform/calls"))
+            .unwrap_or_default()
+            .lines()
+            .count()
+    };
+    let a = {
+        let engine = f.engine();
+        let a = engine
+            .take("https://example.test/a", "link", Via::Cli)
+            .await
+            .unwrap();
+        engine.run_due().await.unwrap();
+        assert_eq!(calls(), 1);
+        assert_ne!(
+            engine.item(&a.id, &Links::default()).unwrap().stored,
+            Stored::Complete,
+            "通用网页插件不顶上"
+        );
+        let view = engine.plugins().await.unwrap();
+        let p = view
+            .plugins
+            .iter()
+            .find(|p| p.id == "fake/platform")
+            .unwrap();
+        let stop = p.pauses.iter().find(|x| x.stopped).unwrap();
+        assert_eq!(stop.scope, "example");
+        assert_eq!(stop.hint.as_deref(), Some("平台要验证"));
+        assert_eq!(
+            stop.said.as_deref(),
+            Some("redirected to /website-login/captcha…")
+        );
+        assert!(stop.since.is_some() && stop.until.is_none() && !stop.by_you);
+        assert_eq!(p.methods[0].blockers[0].code, "stopped");
+        // 单条也等着
+        engine
+            .take("https://example.test/b", "link", Via::Cli)
+            .await
+            .unwrap();
+        engine.run_due().await.unwrap();
+        assert_eq!(calls(), 1);
+        a
+    };
+    // 重启以后仍停着
+    let engine = f.engine();
+    engine.run_due().await.unwrap();
+    assert_eq!(calls(), 1);
+    let view = engine.plugins().await.unwrap();
+    let p = view
+        .plugins
+        .iter()
+        .find(|p| p.id == "fake/platform")
+        .unwrap();
+    assert!(p.pauses.iter().any(|x| x.stopped));
+    // 你点了「继续获取」：两条都取
+    std::fs::write(f.machine().join("cache/plugins/fake/platform/ok"), "").unwrap();
+    engine.try_plugin_now("fake/platform").unwrap();
+    engine.run_due().await.unwrap();
+    assert_eq!(calls(), 3);
+    assert_eq!(
+        engine.item(&a.id, &Links::default()).unwrap().stored,
+        Stored::Complete
+    );
+    let view = engine.plugins().await.unwrap();
+    let p = view
+        .plugins
+        .iter()
+        .find(|p| p.id == "fake/platform")
+        .unwrap();
+    assert!(p.pauses.is_empty());
+}
+
+/// 两次调用之间的间隔在 `interval` 到 `intervalMax` 之间，随机数在调用结束时抽一回、记下来。
+#[tokio::test]
+async fn the_gap_between_calls_is_drawn_once_per_call() {
+    let f = Fixture::new();
+    install_example(&f, &fetch_example(), "{interval: 5s, intervalMax: 13s}");
+    let mut config = EngineConfig::new(&f.library, f.machine());
+    config.pace_draw = || 0.25;
+    let engine = Engine::open(config).unwrap();
+    let view = engine.plugins().await.unwrap();
+    let json = serde_json::to_value(&view.plugins[0].pacing).unwrap();
+    assert_eq!(json[0]["intervalSec"], 5);
+    assert_eq!(json[0]["intervalMaxSec"], 13);
+    engine
+        .take("https://example.test/a", "link", Via::Cli)
+        .await
+        .unwrap();
+    engine.run_due().await.unwrap();
+    let db = rusqlite::Connection::open(machine_dir(&f).join("jobs.db")).unwrap();
+    let (end, draw): (i64, f64) = db
+        .query_row(
+            "SELECT last_end_at, draw FROM pace WHERE platform = 'example'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(draw, 0.25);
+    // 下一条要等到 5 秒 + 8 秒的四分之一（7 秒）以后：过了 `interval` 还不取
+    let b = engine
+        .take("https://example.test/b", "link", Via::Cli)
+        .await
+        .unwrap();
+    let past_interval = end + 5500 - now_ms();
+    if past_interval > 0 {
+        tokio::time::sleep(Duration::from_millis(u64::try_from(past_interval).unwrap())).await;
+    }
+    assert!(now_ms() < end + 7000, "机器太慢，量不出来");
+    assert_eq!(engine.run_due().await.unwrap(), 0);
+    assert_ne!(
+        engine.item(&b.id, &Links::default()).unwrap().stored,
+        Stored::Complete
+    );
 }
 
 #[tokio::test]

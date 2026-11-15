@@ -5,7 +5,7 @@ use std::path::Path as FsPath;
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::extract::rejection::{JsonRejection, QueryRejection};
+use axum::extract::rejection::{JsonRejection, QueryRejection, StringRejection};
 use axum::extract::{DefaultBodyLimit, Path, Query, Request, State};
 use axum::http::{HeaderName, HeaderValue, Method, StatusCode, header};
 use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
@@ -178,6 +178,10 @@ pub(crate) fn build(engine: Engine, gate: Arc<Gate>, origins: &[String]) -> Rout
             put(site_login)
                 .delete(site_forget)
                 .layer(DefaultBodyLimit::max(LOGIN_BODY_LIMIT)),
+        )
+        .route(
+            "/sites/{site}/login/file",
+            put(site_login_file).layer(DefaultBodyLimit::max(LOGIN_BODY_LIMIT)),
         )
         .route("/imports", get(imports).post(start_import))
         .route("/imports/{id}", get(import).delete(delete_import))
@@ -1020,6 +1024,32 @@ async fn site_login(
     let state = cookies_body(req)?;
     Ok(Json(
         blocking(move || s.engine.save_site(&site, &state)).await?,
+    ))
+}
+
+/// 从你选的 cookies.txt 导入登录状态：请求体是文件的全文（UTF-8，至多 [`LOGIN_BODY_LIMIT`]）。
+/// 报错里不带文件里的字。
+async fn site_login_file(
+    State(s): State<AppState>,
+    Path(site): Path<String>,
+    body: Result<String, StringRejection>,
+) -> ApiResult<SiteView> {
+    let text = match body {
+        Ok(t) => t,
+        Err(e) if e.status() == StatusCode::PAYLOAD_TOO_LARGE => {
+            return Err(Problem::new(
+                "too-large",
+                format!("the file is larger than {} KiB", LOGIN_BODY_LIMIT >> 10),
+            )
+            .with_hint(words::COOKIE_FILE_TOO_LARGE.with(&[("max", &(LOGIN_BODY_LIMIT >> 10))])));
+        }
+        Err(_) => {
+            return Err(Problem::new("invalid-args", "the file is not UTF-8 text")
+                .with_hint(words::COOKIE_FILE_NOT_TEXT.said()));
+        }
+    };
+    Ok(Json(
+        blocking(move || s.engine.import_site_file(&site, &text)).await?,
     ))
 }
 

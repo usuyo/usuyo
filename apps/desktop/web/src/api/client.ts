@@ -113,6 +113,8 @@ export async function request<T>(
   init: {
     method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
     body?: unknown;
+    /** 原样交的文字（`text/plain`），不和 `body` 一起用。 */
+    text?: string;
     query?: Record<string, string>;
     /** 调插件的慢请求（列来源）要等得久一些。 */
     timeoutMs?: number;
@@ -130,9 +132,9 @@ export async function request<T>(
       method: init.method ?? "GET",
       headers: {
         ...authHeaders(c),
-        ...(init.body === undefined ? {} : { "Content-Type": "application/json" }),
+        ...(init.text !== undefined ? { "Content-Type": "text/plain; charset=utf-8" } : init.body === undefined ? {} : { "Content-Type": "application/json" }),
       },
-      body: init.body === undefined ? undefined : JSON.stringify(init.body),
+      body: init.text ?? (init.body === undefined ? undefined : JSON.stringify(init.body)),
       signal: AbortSignal.timeout(init.timeoutMs ?? REQUEST_TIMEOUT_MS),
     });
   } catch (error) {

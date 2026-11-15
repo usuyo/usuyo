@@ -14,14 +14,14 @@ use usuyo_library::{
     normalize_web_url,
 };
 use usuyo_plugin::protocol::{
-    Account, CallFailure, Canonicalized, ErrorCode, FetchOutput, MAX_PAUSE, Method, OutputKind,
-    Pause,
+    Account, CallFailure, Canonicalized, ErrorCode, FetchOutput, Method, OutputKind,
 };
 use usuyo_plugin::{
     CallOptions, FetchInput, FetchPlugin, FetchRequest, FetchedSnapshot, PluginError,
 };
 
 use crate::engine::{Engine, Via};
+use crate::imports::Halt;
 use crate::jobs::FetchJob;
 use crate::methods::Candidate;
 use crate::pace;
@@ -367,14 +367,21 @@ impl Engine {
             let result = self
                 .loaded()
                 .host
-                .fetch(plugin, request, &CallOptions::default())
+                .fetch_on(plugin, platform, request, &CallOptions::default())
                 .await;
-            self.inner
-                .jobs
-                .record_call(platform, now_ms(), &pace::today(), batch)?;
+            self.inner.jobs.record_call(
+                platform,
+                now_ms(),
+                &pace::today(),
+                batch,
+                (self.inner.pace_draw)(),
+            )?;
             match result {
                 Ok(snap) => {
                     self.record_method_call(plugin, &method.id, url.host_str(), Ok(()))?;
+                    for site in &method.visitors {
+                        self.inner.visitors_wanted.accepted(site);
+                    }
                     plan.got(ci, want.as_ref(), &snap.output.missing);
                     self.store_snapshot(&id, plugin, Some(method), job, snap)
                         .await?;
@@ -383,37 +390,38 @@ impl Engine {
                 Err(PluginError::Call { failure, .. }) => {
                     tracing::info!(plugin = %pid, method = %method.id, item = %id, failure = %failure, "fetch failed");
                     self.record_method_call(plugin, &method.id, url.host_str(), Err(&failure))?;
-                    // 站点不收存着的访客身份：换一份，这条等一回再试（每条只等这一回）
+                    // 站点不收存着的访客身份：换一份，这条等一回再试（每条只等这一回）；
+                    // 换过一份以后还不收，整个平台停下等你，不再一份份地换
+                    let mut stopped = false;
                     if failure.code == ErrorCode::VisitorRequired
+                        && !plugin.spec.is_web()
                         && let Some(site) = method.visitors.first()
-                        && self.wait_for_visitor(id.as_str(), site, true)?
                     {
-                        return Ok(());
+                        // 要不来新的（壳没交来、站点在歇着）也算换过：不然每条都再被拒一次
+                        if self.inner.visitors_wanted.refused(site) {
+                            self.stop_platform(scope, &failure, &words::STOPPED_VISITOR.said())?;
+                            stopped = true;
+                        } else if self.wait_for_visitor(id.as_str(), site, true)? {
+                            return Ok(());
+                        } else if self.visitor_resting(site) {
+                            self.stop_platform(scope, &failure, &words::STOPPED_VISITOR.said())?;
+                            stopped = true;
+                        }
                     }
                     if !plugin.spec.is_web() && failure.code != ErrorCode::UnsupportedInput {
                         platform_refused = true;
                     }
-                    // 被拦也按最长的暂停记，到点自己解开；被拦的这一条不因暂停重试，只有限流的到点再试。
-                    let (pause, retry_after_pause) = match failure.pause() {
-                        Some(Pause::For(d)) => (Some(d), true),
-                        Some(Pause::UntilResumed) => (Some(MAX_PAUSE), false),
-                        None => (None, false),
-                    };
-                    if let Some(d) = pause {
-                        let ms = i64::try_from(d.as_millis()).unwrap_or(i64::MAX);
-                        let until = now_ms().saturating_add(ms);
-                        self.inner.jobs.pause(
-                            &pid,
-                            &method.id,
-                            scope,
-                            until,
-                            failure.code.as_str(),
-                            failure.hint.as_deref(),
-                        )?;
-                        self.emit(Event::PluginsUpdated);
-                        if retry_after_pause {
+                    // 限流的到点再试这一条；被拦的照平台的声明：暂停一阵（这一条不因暂停重试），
+                    // 或整个平台停下（这一条和别的一起等你点「继续获取」）
+                    match self.pause_for(plugin, &method.id, scope, &failure)? {
+                        Halt::Pause(_) if failure.code == ErrorCode::RateLimited => {
                             paused_any = true;
                         }
+                        Halt::Stop => stopped = true,
+                        Halt::Pause(_) | Halt::None => {}
+                    }
+                    if stopped {
+                        paused_any = true;
                     }
                     let waits = matches!(
                         failure.code,
@@ -423,7 +431,7 @@ impl Engine {
                         retryable |= failure.code.retryable();
                         first.get_or_insert(*failure);
                     }
-                    if waits {
+                    if waits || stopped {
                         break;
                     }
                     plan.drop(ci);

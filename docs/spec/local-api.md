@@ -68,11 +68,12 @@
 | `GET /plugins/{owner}/{repo}/methods/{method}/window` | 在站点窗口里读的方法（[协议 §2.3.1](../protocol/manifest.md#231a-在站点窗口里读)）：`{plugin, pluginName, method, methodName, site, siteName, loginUrl, domains, guide?, script}`，壳照它开窗口；`script` 是脚本全文，找文件同上。别的方法回 404 |
 | `POST /plugins/{owner}/{repo}/methods/{method}/window/signed-in` | 窗口里认出登录了：记下这个 `browser-profile` 站点登录好的时间（已经记着的不改），204。cookie 不经过这里 |
 | `POST /plugins/{owner}/{repo}/methods/{method}/window/links` | 窗口里找到的链接 `{sources: [{action, links: [{url, title?}]}]}`，一共至多 2 万条、48 MiB；只留合插件 `match` 的、去掉重复的，每个 `action` 落成一次（或几次，一次至多 5000 条）`delivered` 导入，`client` 记方法的名字；记下这一回用了站点窗口。回 `{imports: [{id, action, links}], noted, dropped}` |
-| `POST /plugins/{owner}/{repo}/try-now` | 「现在再试」：去掉这个插件所有的暂停（包括「先别试」），排着的任务和导入马上再看 |
+| `POST /plugins/{owner}/{repo}/try-now` | 「现在再试」，平台停着时界面上叫「继续获取」：去掉这个插件所有的暂停（包括「先别试」），它的平台停着的也接着（[协议 §3.1](../protocol/fetch.md#31a-平台停下)），排着的任务和导入马上再看 |
 | `POST /plugins/{owner}/{repo}/hold` | 「先别试」：到你点「现在再试」为止哪儿都不调它，别的插件照常 |
 | `PUT /plugins/{owner}/{repo}/secrets/{key}`；`DELETE …` | 填一个密钥设置 `{value}`（空的回 400），存进钥匙串；`DELETE` 去掉。值从不回出来，回的是插件 |
-| `GET /sites` | 装着的插件会用到的账号站点和登录状态，带 `credential`（`cookies` 或 `browser-profile`）；`browser-profile` 站点的登录状态照站点窗口记下的算，`capturedAt` 是窗口里登录好的时间，`lastUse` 是上一回用站点窗口读的 `{at, plugin, method, methodName, noted}` |
+| `GET /sites` | 装着的插件会用到的账号站点和登录状态，带 `credential`（`cookies` 或 `browser-profile`）；`cookies` 站点存着登录状态时带 `source`：`login-window` 或 `cookie-file`，`capturedAt` 是那时的时间；`browser-profile` 站点的登录状态照站点窗口记下的算，`capturedAt` 是窗口里登录好的时间，`lastUse` 是上一回用站点窗口读的 `{at, plugin, method, methodName, noted}` |
 | `PUT /sites/{site}/login`；`DELETE …` | 壳的登录窗口交来 storageState，只留属于这个站点的，存进钥匙串，回的里面没有值（`browser-profile` 站点不收，回错误）；`DELETE` 忘掉登录（`browser-profile` 站点是忘掉窗口记下的时间和上一回的使用；网页数据由壳删掉），204 |
+| `PUT /sites/{site}/login/file` | 从你选的 cookie 文件导入这个 `cookies` 站点的登录状态（[协议 §6](../protocol/credentials.md#6-凭据)）：请求体是 Netscape 格式 cookies.txt 的全文（UTF-8，任何 `Content-Type`），至多 256 KiB（超了 413 `too-large`）。只留属于这个站点的、没过期的 cookie，存进钥匙串，同 `PUT …/login` 回 `SiteLogin`（`source: cookie-file`），发 `plugins-updated`。不是 UTF-8、某一行读不了、一个属于这个站点的都没有回 400 `invalid-args`，`hint` 说是第几行或没有这个站点的；`browser-profile` 站点回 422 `unsupported-input`；没有插件声明这个站点 404。报错里不带文件里的字；文件本身不留，存下的照常用 `DELETE …/login` 去掉 |
 | `GET /visitors` | 装着的插件在清单里声明的访客身份，和有没有存着、最早什么时候过期；不出现在 `/sites` 里 |
 | `GET /visitors/wanted` | 内核在要的访客身份 `[{site, replace}]`（[协议 §2.5.1](../protocol/manifest.md#251-访客身份-visitors)）：桌面壳照它开看不见的访客窗口；`replace` 为真时先清掉那份网页数据 |
 | `PUT /visitors/{site}`；`DELETE …` | 同上，存成 `visitor:<站点>`，和同一主机的账号分开；`DELETE` 去掉，账号不动 |
@@ -139,13 +140,13 @@
 - `POST /v1/file-imports?reader=&name=`：浏览器脚本交它在页面里读到的内容，装在一个文件里，请求体就是文件。只认 `extension` 类投递令牌和主令牌，`mobile`、`api` 类回 403 `forbidden`。照 `POST /file-imports` 落成一次 `file` 类导入（`client` 是令牌名），回 202 `{id}`，只有 id：投递令牌读不了导入，你在导入页上看、确认。读不了的文件回 400 `invalid-args` 带 `hint`。
 - `POST /v1/batches`，`{name?, action?, links: [{url, title?, actedAt?}]}`，进导入的预览，你确认了才按节奏去收。`links` 1 到 5000 条；`action` 取 `favorite`、`like`、`share`、`view`、`unknown`；每条 `url` 要是带主机的 http(s)、不带用户名密码，`actedAt` 要是 RFC 3339，`title` 超过 500 字截掉；`name` 不给写「交进来的一批」，最多 200 字。不合的回 400 `invalid-args`，说是第几条。回 202 `{id}`，是新建的导入的 id（`kind: delivered`，`client` 是令牌名）。每条的身份由宿主重新算，不信交来的；认不出的这一条去掉，记日志；清单里身份相同的合成一条。
 
-**获取插件**（`GET /plugins` 的 `plugins[]`，[协议 §2.3.1](../protocol/manifest.md#231-方法-methods)）：`{id, name, description?, version, platforms, access, login, canList, sources, sites, visitors, settings, pacing, upstream?, pauses, methods}`。`upstream` 是清单 `upstream` 的 `{name, license}`，没写时不给；`GET /plugins` 另带 `failureLog`，失败日志 `logs/fetch-failures.jsonl` 在这台电脑上的路径。`access`、`login` 是做了的方法里最高的；`canList` 是有做了的方法能列；`sources` 是清单里写死的来源，每项带 `method`；`sites` 是做了的方法用到的登录站点；`pauses` 是所有方法的暂停，每项 `{method, scope, byYou, until?, code?, hint?}`，你点的「先别试」`method`、`scope` 都是 `*`。`methods` 是清单里每一种方法，照清单的顺序，没做的也在：
+**获取插件**（`GET /plugins` 的 `plugins[]`，[协议 §2.3.1](../protocol/manifest.md#231-方法-methods)）：`{id, name, description?, version, platforms, access, login, canList, sources, sites, visitors, settings, pacing, upstream?, pauses, methods}`。`upstream` 是清单 `upstream` 的 `{name, license}`，没写时不给；`GET /plugins` 另带 `failureLog`，失败日志 `logs/fetch-failures.jsonl` 在这台电脑上的路径。`access`、`login` 是做了的方法里最高的；`canList` 是有做了的方法能列；`sources` 是清单里写死的来源，每项带 `method`；`sites` 是做了的方法用到的登录站点；`pauses` 是所有方法的暂停，每项 `{method, scope, byYou, until?, code?, hint?, stopped?, since?, said?}`，你点的「先别试」`method`、`scope` 都是 `*`；平台停下（[协议 §3.1](../protocol/fetch.md#31a-平台停下)）是 `method: *`、`scope` 是平台、`stopped: true`，`since` 是停下的时间，`said` 是插件说平台回了什么，没有 `until`。`pacing` 每项 `{platform, batch, intervalSec, intervalMaxSec, daily?, stopsWhenBlocked?}`：间隔在 `intervalSec` 到 `intervalMaxSec` 之间随机，`stopsWhenBlocked` 是被拦以后停下整个平台。`methods` 是清单里每一种方法，照清单的顺序，没做的也在：
 - `{id, name, access, login, account: {kind, sites?, where?}, interaction, drives?, perPlatform?, gets: {fetch?, list?, link?, delivers?}, built, enabled, usable, blockers, lastCall?, pauses, riskNote?, script?}`。
 - `account.kind` 是清单的 `account`（`none`、`visitor`、`own-browser`、`own-phone`、`own-app`、`in-usuyo`、`developer`）；`sites` 是 `in-usuyo` 的登录站点或 `visitor` 的访客身份站点；`where` 是账号所在的地方给人看的名字：`visitor` 是访客身份的名字，`in-usuyo`、`own-browser`、`own-phone`、`own-app`（做没做都算）是方法列的站点的名字，没列站点时是插件的名字；`none`、`developer` 没有。
 - `drives` 是清单的 `drives`：`iphone`、`android`、`desktop-app`，手机连接页照它说要哪种手机。
 - `perPlatform` 是层级和方法本身不同的平台（清单的 `perPlatform`），每项 `{platform, access, login, enabled}`；`enabled` 是这种方法在那个平台上开没开：没拨过开关时照那一层的默认（[协议 §2.3.1](../protocol/manifest.md#231-方法-methods)），拨过就和方法的 `enabled` 一样。方法的 `enabled` 照方法本身那一层。没有这样的平台时不给。
 - `gets.fetch` 是输出的词表（`text`、`images`、`media:video`…），`gets.list` 是清单里写死的来源名，`gets.link` 是来源从链接开始时链接框上的那句，`gets.delivers` 是 `links`。没做的方法清单里写了能力的也给。
-- `usable` 是这台机器上现在用得上；`blockers` 是用不上的原因，每项 `{code, hint}`，`code` 取 `not-built`、`off`、`login-missing`、`login-expired`、`visitor-missing`、`visitor-expired`、`check-failed`（插件的本机检查没过）、`health-failed`（插件没能自查）、`paused`（停着：被限流、被拦，`hint` 写到几点，例如「平台提示请求过于频繁。11月12日 15:30前不会使用。」；或你点的「暂停」，写到你点「立即重试」为止；通用网页一类按网站停的不算），`hint` 照设置的语言写，名字取自清单。
+- `usable` 是这台机器上现在用得上；`blockers` 是用不上的原因，每项 `{code, hint}`，`code` 取 `not-built`、`off`、`login-missing`、`login-expired`、`visitor-missing`、`visitor-expired`、`check-failed`（插件的本机检查没过）、`health-failed`（插件没能自查）、`paused`（停着：被限流、被拦，`hint` 写到几点，例如「平台提示请求过于频繁。11月12日 15:30前不会使用。」；或你点的「暂停」，写到你点「立即重试」为止；通用网页一类按网站停的不算）、`stopped`（平台停下了，`hint` 写停下的时间，到你点「继续获取」为止），`hint` 照设置的语言写，名字取自清单。
 - `lastCall` 是上一次调用 `{at, ok, code?, hint?}`，没调过就没有；`pauses` 是这种方法的暂停加上「先别试」；`riskNote` 是清单的 `risk`；`script` 只在清单写了 `script` 的方法上有，`{path, present}`：文件在这台电脑上的路径，`present` 是它在插件文件夹里、是个普通文件。
 
 **导入**：一次导入的状态不单独存，由几项现算：`listing`（还在列）、`ready`（列完了，等你看一眼）、`taking`（确认了，还有排着的任务）、`done`（确认了，没有排着的了），`held` 盖过其余，是你点了「先停下」。走向：
@@ -154,13 +155,13 @@
 3. 确认后，挑中的每条排一个取内容的任务，优先级低于你手动收下的；按平台的节奏一条条来。轮到时先收下（入口 `import`，`takenBy: user`，同一批共用 `importBatch`，带 `action`、`actedAt`），再取内容。这一条已经有任务（你刚手动收过）的不动。轮到时发现已经进了回收站、而你没挑回收站那一组的，不收，`skipped` 加一；私密条目批量导入照收（[§1.7](library.md#17-删掉) 的表）。`taken` 是收下的条数，`notStored` 是收下了但内容取不到的。
 4. `POST /imports/{id}/hold` 随时可以，不再列、不再收，已经收下的不动；`resume` 从停的地方接着，停在要你处理的原因上（例如重新登录以后）也从这里再试。导入页只说事实（列了几页、各几条、收下几条、为什么在等和什么时候），不给还剩多少。
 
-列的时候的错：联网、超时、插件崩了这一类，等 60 秒乘 2 的次方再试，试满 6 次就停下等你；被限流、被拦住记在这种方法的暂停上（见下），导入照它显示原因，暂停一去掉就接着列；别的错停在这次导入上，`waiting.code` 是错误码（例如 `login-required`，或页面把没有访客身份的请求送回首页时插件报的 `visitor-required`），没有 `until`，等你重新登录或取到访客身份以后点「接着导入」。`waiting.code` 还可能是 `pacing`（等间隔）、`daily-limit`（今天批量的次数用完了）、`held`（你让插件先别试）、`batch-off`（这个平台不做导入）。
+列的时候的错：联网、超时、插件崩了这一类，等 60 秒乘 2 的次方再试，试满 6 次就停下等你；被限流、被拦住记在这种方法的暂停上（见下），导入照它显示原因，暂停一去掉就接着列；平台停下时导入的 `waiting` 是停下的原因（`code` 是 `blocked` 或 `visitor-required`，没有 `until`），点「继续获取」以后接着列，不用「接着导入」；别的错停在这次导入上，`waiting.code` 是错误码（例如 `login-required`，或页面把没有访客身份的请求送回首页时插件报的 `visitor-required`），没有 `until`，等你重新登录或取到访客身份以后点「接着导入」。`waiting.code` 还可能是 `pacing`（等间隔）、`daily-limit`（今天批量的次数用完了）、`held`（你让插件先别试）、`batch-off`（这个平台不做导入）。
 
 **节奏和暂停**（[协议 §3.1](../protocol/fetch.md#31-运行器与节奏)）：
 - 节奏来自装着的插件清单里的 `pacing`，同一平台的几个插件取最严的：间隔取最长的，`daily` 取最小的，有一个写了 `batch: false` 就不做导入。没声明的平台不等。
-- `interval`：上一次调用结束到下一次开始的最短间隔，`fetch`、`list` 的一页、`sources` 都算，你手动收下的也守，导入的和手动的在同一个平台上排队。`daily`：批量（导入）的调用一个本地日期最多几次，到本地零点重新数；你手动收下的单条不计入，也不被它挡住，只守间隔。同一平台同一时间只跑一个调用。记账在 `jobs.db`，重启后照旧。`canonicalize` 不计。
+- `interval`、`intervalMax`：上一次调用结束到下一次开始隔多久，每次在两者之间随机取（[协议 §3.1](../protocol/fetch.md#31-运行器与节奏)），`fetch`、`list` 的一页、`sources` 都算，你手动收下的也守，导入的和手动的在同一个平台上排队。`daily`：批量（导入）的调用一个本地日期最多几次，到本地零点重新数；你手动收下的单条不计入，也不被它挡住，只守间隔。同一平台同一时间只跑一个调用。记账在 `jobs.db`，重启后照旧。`canonicalize` 不计。
 - 列一页要等的超过 60 秒就不等，记下到点的时间，到点再来。
-- 插件报 `rate-limited`：这种方法暂停到 `retryAfter` 以后（没给 15 分钟，最多算 1 小时）。报 `blocked`：现在也只暂停 1 小时，到点自己解开；你点「现在再试」更早去掉它。暂停只管这个插件的这种方法在这个平台上（web 插件按主机），别的方法、别的插件照常；暂停期间它不被调用，排着的任务往后排，不白白耗掉重试次数。`hold`（「先别试」）没有 `until`，是 `byYou`，一直到「现在再试」。暂停和它的错误码、一句话原因在 `GET /plugins` 的 `pauses` 和各方法的 `pauses` 里。每次调插件失败，另记一行失败日志（[协议 §2.3.1](../protocol/manifest.md#231-方法-methods)）。
+- 插件报 `rate-limited`：这种方法暂停到 `retryAfter` 以后（没给 15 分钟，最多算 1 小时）。报 `blocked`：照平台节奏里的 `blocked` 暂停这种方法（默认 1 小时，到点自己解开，你点「现在再试」更早去掉它），或停下整个平台等你点「继续获取」（[协议 §3.1](../protocol/fetch.md#31a-平台停下)）。暂停只管这个插件的这种方法在这个平台上（web 插件按主机），别的方法、别的插件照常；暂停期间它不被调用，排着的任务往后排，不白白耗掉重试次数。`hold`（「先别试」）没有 `until`，是 `byYou`，一直到「现在再试」。暂停和它的错误码、一句话原因在 `GET /plugins` 的 `pauses` 和各方法的 `pauses` 里。每次调插件失败，另记一行失败日志（[协议 §2.3.1](../protocol/manifest.md#231-方法-methods)）。
 
 **命令行**：`add`、`get`、`search`、`reindex` 先读 `daemon.json` 和 `api-token`，握手，再 `GET /health`；都成了就经守护进程，不然在本进程里直接开库。握手没过不发令牌。`init` 总在本进程。
 

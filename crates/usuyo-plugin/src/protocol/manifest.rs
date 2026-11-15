@@ -383,14 +383,66 @@ pub struct Run {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct Pacing {
     /// `false` 表示只接受用户一条条收下。
     #[serde(default)]
     pub batch: Option<bool>,
     #[serde(default)]
     pub interval: Option<DurationSpec>,
+    /// 两次调用之间最长隔多久：宿主每次在 `interval` 到它之间随机取一个间隔。不小于 `interval`。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub interval_max: Option<DurationSpec>,
     #[serde(default)]
     pub daily: Option<u32>,
+    /// 插件回 `blocked` 以后这个平台怎么办；不写是暂停一小时以后自己接着。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocked: Option<OnBlocked>,
+}
+
+/// 被拦以后（`blocked`）：过一段时间自己接着（最长 [`super::MAX_PAUSE`]），或者整个平台停下，等用户说接着。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub enum OnBlocked {
+    /// 这种方法在这个平台上暂停这么久，到点自己接着。
+    Resume(DurationSpec),
+    /// 整个平台停下（单条和导入都停），到用户点「继续获取」为止。
+    Stop,
+}
+
+impl TryFrom<String> for OnBlocked {
+    type Error = String;
+    fn try_from(text: String) -> Result<Self, String> {
+        if text == "stop" {
+            return Ok(Self::Stop);
+        }
+        let d = DurationSpec::try_from(text.clone())
+            .map_err(|_| format!("`{text}` is neither `stop` nor a duration like `30m`"))?;
+        if d.get().is_zero() || d.get() > super::MAX_PAUSE {
+            return Err(format!(
+                "`{text}`: a pause after `blocked` is longer than zero and at most 1h; write `stop` to wait for the user"
+            ));
+        }
+        Ok(Self::Resume(d))
+    }
+}
+
+impl From<OnBlocked> for String {
+    fn from(v: OnBlocked) -> String {
+        match v {
+            OnBlocked::Stop => "stop".into(),
+            OnBlocked::Resume(d) => d.into(),
+        }
+    }
+}
+
+impl JsonSchema for OnBlocked {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "OnBlocked".into()
+    }
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({"type": "string", "pattern": "^(stop|[0-9]+(ms|s|m|h))$"})
+    }
 }
 
 /// 要宿主下载的模型（协议 §2.9）。宿主下，插件不联网；放进 `${MODELS}/<name>/`。
@@ -1484,11 +1536,21 @@ fn fetch_spec(w: &WireManifest) -> Check<FetchSpec> {
     };
 
     let pacing = w.pacing.clone().unwrap_or_default();
-    for key in pacing.keys() {
+    for (key, p) in &pacing {
         if !platforms.contains(key) {
             return Err(invalid(
                 format!("pacing.{key}"),
                 "is not one of `platforms`",
+            ));
+        }
+        if let Some(max) = p.interval_max
+            && max.get()
+                < p.interval
+                    .map_or(std::time::Duration::ZERO, DurationSpec::get)
+        {
+            return Err(invalid(
+                format!("pacing.{key}.intervalMax"),
+                "is shorter than `interval`",
             ));
         }
     }

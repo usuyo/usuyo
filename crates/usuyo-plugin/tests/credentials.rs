@@ -864,3 +864,236 @@ fn a_site_with_two_credential_types_loads_only_the_first_plugin() {
         assert!(why.contains(part), "{why}");
     }
 }
+
+/// 管两个平台的插件：`get` 在 example 上用 www.example.com、在 other 上用 www.other.test；
+/// `lifted` 本身不登录，只在 other 上登录；`dropped` 本身要登录，在 other 上不登录。
+const MULTI_MANIFEST: &str = r#"protocol: 1
+id: fake/multi
+kind: fetch
+name: Fake multi
+version: 1.0.0
+license: MIT
+maintainers: [someone]
+platforms: [example, other]
+match: ["example.com/*"]
+sites:
+  - {site: www.example.com, name: 甲, credential: cookies, loginUrl: "https://www.example.com/", cookies: [sid], domains: [".example.com"]}
+  - {site: www.other.test, name: 乙, credential: cookies, loginUrl: "https://www.other.test/", cookies: [sid]}
+methods:
+  - id: get
+    name: 取单条
+    access: session-api
+    login: optional
+    account: in-usuyo
+    sites: [www.example.com]
+    perPlatform:
+      other: {sites: [www.other.test]}
+    capabilities:
+      fetch: {outputs: [text, meta]}
+  - id: lifted
+    name: 只在乙上登录
+    access: public-web
+    login: none
+    account: in-usuyo
+    perPlatform:
+      other: {access: session-api, login: optional, sites: [www.other.test]}
+    capabilities:
+      fetch: {outputs: [text, meta]}
+  - id: dropped
+    name: 在乙上不登录
+    access: session-api
+    login: required
+    account: in-usuyo
+    sites: [www.example.com]
+    perPlatform:
+      other: {login: none, sites: []}
+    capabilities:
+      fetch: {outputs: [text, meta]}
+permissions:
+  fs: {write: ["${OUT}"]}
+run:
+  command: ["${PLUGIN_DIR}/plugin.sh"]
+"#;
+
+#[tokio::test]
+async fn a_call_gets_only_the_sites_its_method_uses_on_that_platform() {
+    let f = fixture();
+    f.login();
+    let plugins = f.tmp.path().join("multi-plugins");
+    install(&plugins, "fake/multi", MULTI_MANIFEST);
+    let found = discover(&plugins).unwrap();
+    assert!(found.rejected.is_empty(), "{:?}", found.rejected);
+    let host = PluginHost::new(
+        HostConfig {
+            work_dir: f.tmp.path().join("lib/.usuyo/tmp"),
+            cache_dir: f.tmp.path().join("cache"),
+            locale: usuyo_plugin::Locale::new("zh-Hans"),
+            limits: Default::default(),
+        },
+        found.fetch,
+    )
+    .with_vault(f.vault.clone(), &f.tmp.path().join("machine"));
+    let plugin = host.plugin("fake/multi").unwrap();
+    let f = &f;
+    let sites_seen = |platform: Option<&str>, method: &str| {
+        let host = &host;
+        let method = method.to_owned();
+        let platform = platform.map(str::to_owned);
+        async move {
+            let request = FetchRequest {
+                method,
+                ..fetch_request()
+            };
+            let opts = CallOptions::default();
+            match platform {
+                Some(p) => host.fetch_on(plugin, &p, request, &opts).await,
+                None => host.fetch(plugin, request, &opts).await,
+            }
+            .unwrap();
+            let seen = f.seen("fake/multi", "fetch");
+            let mut sites: Vec<String> = seen["credentials"]["sites"]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .map(|s| s["site"].as_str().unwrap().to_owned())
+                        .collect()
+                })
+                .unwrap_or_default();
+            sites.sort();
+            sites
+        }
+    };
+    assert_eq!(
+        sites_seen(Some("example"), "get").await,
+        ["www.example.com"]
+    );
+    assert_eq!(sites_seen(Some("other"), "get").await, ["www.other.test"]);
+    assert!(sites_seen(Some("example"), "lifted").await.is_empty());
+    assert_eq!(
+        sites_seen(Some("other"), "lifted").await,
+        ["www.other.test"]
+    );
+    assert_eq!(
+        sites_seen(Some("example"), "dropped").await,
+        ["www.example.com"]
+    );
+    assert!(sites_seen(Some("other"), "dropped").await.is_empty());
+    // 平台不知道（不是这个插件的平台）：照方法所有层合起来
+    assert_eq!(
+        sites_seen(Some("web"), "get").await,
+        ["www.example.com", "www.other.test"]
+    );
+    assert_eq!(
+        sites_seen(None, "get").await,
+        ["www.example.com", "www.other.test"]
+    );
+}
+
+#[tokio::test]
+async fn a_cookie_file_keeps_only_the_sites_domains_and_reaches_calls_like_a_login() {
+    use usuyo_plugin::{LoginSource, read_cookies_txt};
+    let f = fixture();
+    let text = "# Netscape HTTP Cookie File\n\
+        \n\
+        .example.com\tTRUE\t/\tTRUE\t4102444800\tsid\tfile-sid-value\n\
+        #HttpOnly_api.example.com\tFALSE\t/\tTRUE\t0\tapi\tfile-api-value\r\n\
+        .other.test\tTRUE\t/\tFALSE\t4102444800\tsid\tforeign-file-value\n\
+        .example.com\tTRUE\t/\tFALSE\t1000\told\texpired-file-value\n";
+    let state = read_cookies_txt(text).unwrap();
+    assert_eq!(state.cookies.len(), 4);
+    assert!(state.cookies[1].http_only && state.cookies[1].expires < 0.0);
+    let site = f
+        .host
+        .save_site_from_file("www.example.com", &state)
+        .unwrap();
+    assert_eq!(site.login, LoginState::Present);
+    assert_eq!(site.source, Some(LoginSource::CookieFile));
+    // 存下的只有这个站点的、没过期的
+    let stored = f.vault.0.lock().unwrap()["site:www.example.com"].clone();
+    assert!(stored.contains("file-sid-value") && stored.contains("file-api-value"));
+    assert!(!stored.contains("foreign-file-value") && !stored.contains("expired-file-value"));
+    // 调用时和登录窗口存下的一样交出去，来源写的是文件
+    f.host
+        .fetch(f.plugin("fake/a"), fetch_request(), &CallOptions::default())
+        .await
+        .unwrap();
+    let seen = f.seen("fake/a", "fetch");
+    assert_eq!(
+        seen["credentials"]["sites"],
+        json!([{"site": "www.example.com", "source": "cookie-file"}])
+    );
+    // 插件交回的更新不改来源；再用登录窗口登录就改成窗口
+    let again = f.host.sites().unwrap();
+    let s = again
+        .iter()
+        .find(|s| s.site.site == "www.example.com")
+        .unwrap();
+    assert_eq!(s.source, Some(LoginSource::CookieFile));
+    f.login();
+    let s = f
+        .host
+        .sites()
+        .unwrap()
+        .into_iter()
+        .find(|s| s.site.site == "www.example.com")
+        .unwrap();
+    assert_eq!(s.source, Some(LoginSource::LoginWindow));
+    // 退出登录就删掉
+    f.host.forget_site("www.example.com", None).unwrap();
+    assert!(
+        !f.vault
+            .0
+            .lock()
+            .unwrap()
+            .contains_key("site:www.example.com")
+    );
+}
+
+#[test]
+fn a_bad_cookie_file_says_which_line_but_not_what_is_on_it() {
+    use usuyo_plugin::read_cookies_txt;
+    for (text, line, field) in [
+        (
+            "# c\n.example.com\tTRUE\t/\tTRUE\tsoon\tsid\tsecret-in-line-2\n",
+            2,
+            "expires",
+        ),
+        (
+            ".example.com TRUE / TRUE 0 sid secret-with-spaces\n",
+            1,
+            "the number of fields",
+        ),
+        (
+            ".example.com\tYES\t/\tTRUE\t0\tsid\tsecret-flag\n",
+            1,
+            "include subdomains",
+        ),
+        (
+            "\n\n.example.com\tTRUE\tpath\tTRUE\t0\tsid\tsecret-path\n",
+            3,
+            "path",
+        ),
+    ] {
+        let e = read_cookies_txt(text).unwrap_err();
+        assert_eq!((e.line, e.field), (line, field));
+        assert!(!e.to_string().contains("secret"), "{e}");
+    }
+    // 一个属于站点的 cookie 都没有：存不进去，报错里也没有值
+    let f = fixture();
+    let state =
+        read_cookies_txt(".other.test\tTRUE\t/\tFALSE\t0\tsid\tforeign-only-value\n").unwrap();
+    let e = f
+        .host
+        .save_site_from_file("www.example.com", &state)
+        .unwrap_err();
+    assert!(!e.to_string().contains("foreign-only-value"), "{e}");
+    // 有站点的 cookie，但没有登录后才有的 `sid`（导出时没登录）：也不存
+    let state =
+        read_cookies_txt(".example.com\tTRUE\t/\tFALSE\t0\tguest\tguest-only-value\n").unwrap();
+    let e = f
+        .host
+        .save_site_from_file("www.example.com", &state)
+        .unwrap_err();
+    assert!(!e.to_string().contains("guest-only-value"), "{e}");
+    assert!(f.vault.0.lock().unwrap().is_empty());
+}

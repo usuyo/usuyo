@@ -47,3 +47,11 @@ pub(crate) const FILE_TOO_LARGE: Words = Words::new(
 pub(crate) const FILE_EMPTY: Words = Words::new("文件是空的。", "The file is empty.");
 pub(crate) const BAD_LINK_AT: Words =
     Words::new("第 {n} 个链接无法使用。", "Link {n} can't be used.");
+pub(crate) const COOKIE_FILE_TOO_LARGE: Words = Words::new(
+    "此文件超过 {max} KB，不像是 cookie 文件。",
+    "This file is larger than {max} KB. It doesn't look like a cookie file.",
+);
+pub(crate) const COOKIE_FILE_NOT_TEXT: Words = Words::new(
+    "此文件不是文本文件。请选择 Netscape 格式的 cookies.txt。",
+    "This file isn't a text file. Choose a cookies.txt in Netscape format.",
+);
