@@ -1145,3 +1145,52 @@ async fn plugins_list_every_method_with_what_blocks_it_and_switches_one() {
     )
     .await;
 }
+
+#[tokio::test]
+async fn the_fetch_strategy_is_read_replaced_and_checked() {
+    let f = fixture();
+    let s = json_of(send(&f.app, authed("/strategy")).await).await;
+    assert_eq!(s["preset"], "no-account-first");
+    assert_eq!(s["presets"].as_array().unwrap().len(), 3);
+    assert_eq!(
+        s["presets"][0],
+        json!({"preset": "no-account-only", "rules": [{"use": [{"accounts": ["none", "visitor"]}]}]})
+    );
+    assert!(s["routes"].is_array());
+
+    let custom = json!({
+        "preset": "custom",
+        "rules": [
+            {"function": "video", "use": []},
+            {"use": [{"accounts": ["none"]}, {"access": ["private-api"]}]}
+        ],
+        "platforms": {"example": {"preset": "account-first", "functions": {"comments": "skip"}}}
+    });
+    let res = send(&f.app, with_body("PUT", "/strategy", custom.clone())).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let back = json_of(res).await;
+    assert_eq!(back["rules"], custom["rules"]);
+    assert_eq!(back["platforms"], custom["platforms"]);
+    let stored: Value = serde_json::from_slice(
+        &std::fs::read(f._tmp.path().join("machine/settings.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(stored["fetchStrategy"], custom);
+
+    // 兜底不在最后、不认识的词、平台另选「自定义」都回 400，存着的不变
+    for bad in [
+        json!({"preset": "custom", "rules": [{"function": "video", "use": []}]}),
+        json!({"preset": "quick"}),
+        json!({"platforms": {"example": {"preset": "custom"}}}),
+        json!({"preset": "custom", "rules": [{"use": [{"method": "a/b#c", "accounts": ["none"]}]}]}),
+    ] {
+        problem(
+            send(&f.app, with_body("PUT", "/strategy", bad)).await,
+            StatusCode::BAD_REQUEST,
+            "invalid-args",
+        )
+        .await;
+    }
+    let s = json_of(send(&f.app, authed("/strategy")).await).await;
+    assert_eq!(s["preset"], "custom");
+}

@@ -10,7 +10,7 @@ import { Button } from "../ui/Button";
 import { Card, CardRow } from "../ui/Card";
 import { FlashLine, useFlash } from "../ui/Flash";
 import { Select, type SelectOption } from "../ui/Select";
-import { SmallSwitch } from "./LinkCard";
+import { SmallSwitch } from "./StrategyCard";
 import { Needs } from "./Needs";
 import { onByDefault, savedKind, scriptPages, keyOf, type PlatformPage, type SavedKind, type Use } from "./platforms";
 import { rich, t } from "../i18n";

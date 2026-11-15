@@ -11,6 +11,7 @@
 //!
 //! 列的时候被限流、被拦，等到点再列；要登录、插件改版这一类停在那里，等你处理完点「接着导入」。
 
+use std::collections::BTreeSet;
 use std::future::Future;
 use std::time::Duration;
 
@@ -21,8 +22,9 @@ use usuyo_plugin::{CallOptions, FetchPlugin, ListRequest, PluginError};
 use crate::engine::Engine;
 use crate::fetch::{now_ms, platform_of};
 use crate::jobs::{EntryRow, ImportRow};
-use crate::methods::blockers;
+use crate::methods::{blockers, lists_for};
 use crate::pace;
+use crate::strategy::Function;
 use crate::view::{
     Event, ImportEntryView, ImportFileView, ImportKind, ImportState, ImportView, PreviewCounts,
     SourceView, Waiting,
@@ -88,7 +90,7 @@ impl Engine {
         title: &str,
     ) -> Result<ImportView> {
         let plugin = self.fetch_plugin(plugin_id)?;
-        self.list_method(&plugin, method)?;
+        self.list_method(&plugin, method, Listing::Platform(Some(source)))?;
         if source.trim().is_empty() || source.len() > 512 {
             return Err(Error::InvalidArgs("source is empty or too long".into())
                 .hinted(words::SOURCE_EMPTY.said()));
@@ -327,7 +329,7 @@ impl Engine {
         link: Option<&url::Url>,
     ) -> Result<Vec<SourceView>> {
         let plugin = self.fetch_plugin(plugin_id)?;
-        let m = self.list_method(&plugin, method)?;
+        let m = self.list_method(&plugin, method, Listing::Platform(None))?;
         if link.is_some()
             && m.capabilities
                 .list
@@ -370,8 +372,14 @@ impl Engine {
             .collect())
     }
 
-    /// 这种方法能列：做了、在插件进程里跑、有 `list`、开着、这台机器上用得上。
-    pub(crate) fn list_method(&self, plugin: &FetchPlugin, method: &str) -> Result<Method> {
+    /// 这种方法能列：做了、在插件进程里跑、有 `list`、开着、这台机器上用得上；列平台的还要获取策略用它
+    /// （协议 §2.3.2，见 [`Listing`]）。
+    pub(crate) fn list_method(
+        &self,
+        plugin: &FetchPlugin,
+        method: &str,
+        listing: Listing<'_>,
+    ) -> Result<Method> {
         let m = plugin
             .spec
             .method(method)
@@ -383,10 +391,24 @@ impl Engine {
                 ))
                 .hinted(words::NO_LIST_METHOD.with(&[("plugin", &plugin.header.name)]))
             })?;
-        let enabled = self
-            .inner
-            .methods
-            .enabled_on(plugin, m, &pace_scope(plugin));
+        let platform = pace_scope(plugin);
+        if let Listing::Platform(source) = listing
+            && !self.routes(&platform, None).admits(
+                plugin.id().as_str(),
+                method,
+                &lists_for(m, source),
+            )
+        {
+            return Err(Error::UnsupportedInput(format!(
+                "{} {method}: not used by the fetch strategy",
+                plugin.id()
+            ))
+            .hinted(words::METHOD_BLOCKED.with_said(&[
+                ("method", &Said::plain(&m.name)),
+                ("why", &words::BLOCK_STRATEGY.said()),
+            ])));
+        }
+        let enabled = self.inner.methods.enabled_on(plugin, m, &platform);
         let health = self.inner.methods.health_seen(plugin.id().as_str());
         let host = &self.loaded().host;
         if let Some(b) = blockers(
@@ -730,7 +752,12 @@ impl Engine {
             return Ok(false);
         };
         let method = r.method.as_deref().unwrap_or_default();
-        let Err(e) = self.list_method(&plugin, method) else {
+        let listing = if r.kind == "file" {
+            Listing::File
+        } else {
+            Listing::Platform(r.source.as_deref())
+        };
+        let Err(e) = self.list_method(&plugin, method, listing) else {
             return Ok(false);
         };
         let hint = e.hint().unwrap_or_else(|| Said::plain(e.to_string()));
@@ -1027,6 +1054,14 @@ impl Engine {
 }
 
 /// 节奏按插件的第一个平台算（一个获取插件的 `list` 只列一个平台的）。
+/// 列什么：平台上的一个来源（获取策略管；`None` 是这种方法列的任何一项），或你交来的一个文件（只读本机的副本，
+/// 不碰平台，策略不管）。
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Listing<'a> {
+    Platform(Option<&'a str>),
+    File,
+}
+
 pub(crate) fn pace_scope(plugin: &FetchPlugin) -> String {
     plugin
         .spec
@@ -1085,7 +1120,7 @@ impl Engine {
             )? {
                 return Ok(Some(pause_wait(&p)));
             }
-            return Ok(match self.list_method(plugin, &by.method) {
+            return Ok(match self.list_method(plugin, &by.method, Listing::File) {
                 Ok(_) => None,
                 Err(e) => Some(Wait {
                     until: None,
@@ -1120,6 +1155,9 @@ impl Engine {
         };
         let mut found: Option<Wait> = None;
         let loaded = self.loaded();
+        let routes = self.routes(platform, Some(&url));
+        let fetches: BTreeSet<Function> =
+            Function::ALL.into_iter().filter(|f| !f.is_list()).collect();
         let fetching = loaded.host.candidates(&url).into_iter().flat_map(|plugin| {
             plugin
                 .spec
@@ -1127,6 +1165,7 @@ impl Engine {
                 .iter()
                 .filter(|m| m.callable() && m.capabilities.fetch.is_some())
                 .filter(|m| self.inner.methods.enabled_on(plugin, m, platform))
+                .filter(|m| routes.admits(plugin.id().as_str(), &m.id, &fetches))
                 .map(move |m| (plugin, m))
         });
         for (plugin, method) in fetching {

@@ -13,6 +13,8 @@ import {
   type PluginsView,
   type SiteLogin,
   type StartImportRequest,
+  type Strategy,
+  type StrategyView,
   type Health,
   type Item,
   type ModelDownload,
@@ -96,6 +98,10 @@ export interface Platforms {
   revealScript(pluginId: string, methodId: string): Promise<void>;
   /** 填一个密钥设置。 */
   setSecret(pluginId: string, key: string, value: string): Promise<FetchPlugin>;
+  /** 获取策略和每个平台每项功能照它会用哪几种方式。 */
+  strategy(): Promise<StrategyView>;
+  /** 换掉整个获取策略。 */
+  setStrategy(strategy: Strategy): Promise<StrategyView>;
   sites(): Promise<SiteLogin[]>;
   forgetLogin(site: string, plugin?: string): Promise<void>;
   visitors(): Promise<VisitorIdentity[]>;
@@ -249,6 +255,8 @@ const daemon: Source = {
   methodScript: (id, method) => request<{ text: string }>(paths.methodScript(id, method)).then((r) => r.text),
   revealScript: (id, method) => request<void>(paths.methodScriptReveal(id, method), { method: "POST" }),
   setSecret: (id, key, value) => request<FetchPlugin>(paths.pluginSecret(id, key), { method: "PUT", body: { value } }),
+  strategy: () => request<StrategyView>(paths.strategy),
+  setStrategy: (body) => request<StrategyView>(paths.strategy, { method: "PUT", body }),
   sites: () => request<SiteLogin[]>(paths.sites),
   forgetLogin: (site, plugin) => request<void>(paths.siteLogin(site, plugin), { method: "DELETE" }),
   visitors: () => request<VisitorIdentity[]>(paths.visitors),

@@ -140,7 +140,7 @@ impl Engine {
             ))
             .hinted(words::NO_READ_METHOD.with(&[("plugin", &plugin.header.name)])));
         }
-        self.list_method(&plugin, method)?;
+        self.list_method(&plugin, method, crate::imports::Listing::File)?;
         let name = display_name(name);
         let id = usuyo_library::uuid7();
         let dir = self.inner.import_copies.join(&id);

@@ -3,7 +3,7 @@ import { useFileReaders, usePluginChange } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
 import { Button } from "../ui/Button";
 import { Card, CardRow } from "../ui/Card";
-import { LinkCard } from "./LinkCard";
+import { StrategyCard } from "./StrategyCard";
 import { SecretField } from "./Needs";
 import type { PlatformPage as Page, Use } from "./platforms";
 import { SavedCard } from "./SavedCard";
@@ -15,7 +15,7 @@ import { formatList } from "../i18n/format";
 import { pauseText } from "./words";
 
 /**
- * 一个平台的一页：收一条链接、拿回存过的、账号和访客身份、节奏、关于，各一张卡片。
+ * 一个平台的一页：获取策略（每项内容用哪种方式）、拿回存过的、账号和访客身份、节奏、关于，各一张卡片。
  * 档位和记下的风险只是给你挑的信息，不拦什么。
  */
 export function PlatformPage({ page, sites, visitors, failureLog }: { page: Page; sites: SiteLogin[]; visitors: Visitor[]; failureLog: string }) {
@@ -29,7 +29,7 @@ export function PlatformPage({ page, sites, visitors, failureLog }: { page: Page
           {t("plugins.page.header", { count: page.plugins.length, plugins: formatList(page.plugins.map((p) => p.name)) })}
         </p>
       </header>
-      <LinkCard page={page} sites={sites} visitors={visitors} />
+      <StrategyCard page={page} sites={sites} visitors={visitors} />
       <SavedCard page={page} sites={sites} visitors={visitors} readers={readers.data ?? []} />
       <AccountsCard page={page} sites={sites} visitors={visitors} />
       <PacingCard page={page} />

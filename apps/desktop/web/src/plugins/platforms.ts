@@ -1,6 +1,6 @@
-// 获取插件页按平台分：一个平台一页。一种方法放在哪一张卡片上、「用哪种方法」那个选择框现在是哪一项、
-// 换一项要拨哪几个开关，都在这里算；页面只照着摆。
-import type { Access, FetchMethod, FetchPlugin, MethodAccount, PluginsView } from "../api/endpoints";
+// 获取插件页按平台分：一个平台一页。一种方法放在哪一张卡片上在这里算；每项功能用哪几种方式由内核照获取策略算
+// （`plugins/strategy.ts`），页面只照着摆。
+import type { Access, FetchMethod, FetchPlugin, PluginsView } from "../api/endpoints";
 import enPlugins from "../i18n/en/plugins";
 import zhPlugins from "../i18n/zh-Hans/plugins";
 import { canList } from "./words";
@@ -21,13 +21,13 @@ export interface PlatformPage {
   plugins: FetchPlugin[];
   /** 收一条链接的方法，照清单的顺序，没做的也在。 */
   link: Use[];
-  /** 只补上一样（不取正文、标题这一类）的方法：「自动」下列成「补上：…」。 */
+  /** 只补上一样（不取正文、标题这一类）的方法。 */
   parts: Use[];
   /** 列出你存过的、由浏览器交链接进来的、读文件的方法。 */
   saved: Use[];
 }
 
-/** `owner/repo#方法 id`：选择框的值、导入页的 `pick`、读文件的方法的 id 都是它。 */
+/** `owner/repo#方法 id`：选择框的值、导入页的 `pick`、读文件的方法的 id、获取策略里的一种方式都是它。 */
 export function keyOf(u: Use): string {
   return `${u.plugin.id}#${u.method.id}`;
 }
@@ -76,76 +76,6 @@ export function enabledOn(u: Use, platform: string): boolean {
 /** 这一层默认开着没有：`private-api`、`client-hook` 关着，别的开着（协议 §2.3.1）。 */
 export function onByDefault(access: Access): boolean {
   return access !== "private-api" && access !== "client-hook";
-}
-
-const ACCESS_RANK: Access[] = ["official-export", "public-web", "vision-ui", "browser-session", "session-api", "private-api", "client-hook"];
-const ACCOUNT_RANK: MethodAccount["kind"][] = ["none", "visitor", "own-browser", "own-phone", "own-app", "in-usuyo", "developer"];
-
-/**
- * 内核取一条链接时的先后：平台插件的在前、通用网页的在后，各自里先层级低的，同一层先不带账号的，再照插件和清单的顺序。
- * 只排做了的；开没开、用不用得上由调用处看。
- */
-export function autoOrder(link: Use[], platform: string): Use[] {
-  const generic = (u: Use) => (u.plugin.platforms.some((p) => p.id === "web") ? 1 : 0);
-  return link
-    .filter((u) => u.method.built)
-    .map((u, i) => ({ u, i }))
-    .sort(
-      (a, b) =>
-        generic(a.u) - generic(b.u) ||
-        ACCESS_RANK.indexOf(accessOn(a.u, platform)) - ACCESS_RANK.indexOf(accessOn(b.u, platform)) ||
-        ACCOUNT_RANK.indexOf(a.u.method.account.kind) - ACCOUNT_RANK.indexOf(b.u.method.account.kind) ||
-        a.i - b.i,
-    )
-    .map((x) => x.u);
-}
-
-/**
- * 「用哪种方法」现在是哪一项，照开关读出来：每种做了的都是它那一层的默认是「自动」；只有一种开着是那一种；
- * 别的样子（在旧的页面上一个个拨过的）照实说是「照你拨过的开关」。
- */
-export type LinkChoice = { kind: "auto" } | { kind: "only"; key: string } | { kind: "mixed"; on: Use[] };
-
-export function linkChoice(link: Use[], platform: string): LinkChoice {
-  const built = link.filter((u) => u.method.built);
-  if (built.every((u) => enabledOn(u, platform) === onByDefault(accessOn(u, platform)))) return { kind: "auto" };
-  const on = built.filter((u) => enabledOn(u, platform));
-  const only = on[0];
-  return on.length === 1 && only ? { kind: "only", key: keyOf(only) } : { kind: "mixed", on };
-}
-
-/** 一个开关：开、关，或 null 去掉拨过的（回到各平台各自那一层的默认）。 */
-export interface Switch {
-  pluginId: string;
-  methodId: string;
-  enabled: boolean | null;
-}
-
-/** 每个平台上都是它那一层的默认：没拨过，或拨的正好和默认一样。 */
-function atDefaults(u: Use): boolean {
-  const m = u.method;
-  return m.enabled === onByDefault(m.access) && (m.perPlatform ?? []).every((t) => t.enabled === onByDefault(t.access));
-}
-
-/**
- * 选了一项要拨的开关，只拨和现在不一样的：「自动」把拨过的收链接的方法的开关去掉（null），回到各平台各自那一层的默认，
- * 一个开关管几个平台、各平台默认不同的也就各回各的；选一种是开它、关掉这个平台上别的收链接的方法。
- * 要开的排在前面，中途没成也不会一种都不开。只补上一样的、拿回存过的不碰。
- */
-export function linkSwitches(link: Use[], platform: string, choice: string): Switch[] {
-  const built = link.filter((u) => u.method.built);
-  const id = (u: Use) => ({ pluginId: u.plugin.id, methodId: u.method.id });
-  if (choice === "auto") return built.filter((u) => !atDefaults(u)).map((u) => ({ ...id(u), enabled: null }));
-  const wanted = built
-    .map((u) => ({ u, enabled: keyOf(u) === choice }))
-    .filter((x) => x.enabled !== enabledOn(x.u, platform))
-    .map((x) => ({ ...id(x.u), enabled: x.enabled }));
-  return [...wanted.filter((s) => s.enabled), ...wanted.filter((s) => !s.enabled)];
-}
-
-/** 开关只有一种方法一个：插件还管别的平台时，拨它那几个平台也跟着变。回那几个平台的名字。 */
-export function alsoMoves(u: Use, platform: string): string[] {
-  return u.plugin.platforms.filter((p) => p.id !== platform).map((p) => p.name);
 }
 
 /** 拿回存过的那几种，各自的步骤照哪一类走。 */

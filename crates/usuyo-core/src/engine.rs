@@ -648,8 +648,42 @@ impl Engine {
             note: c.takeaway.clone(),
             facets,
             pending: self.pending(id)?,
+            fetched_by: self.fetched_by(m),
+            held_back: self.held_back(crate::fetch::platform_of(id), m),
             trashed_at: None,
         })
+    }
+
+    /// 每份快照是哪个插件的哪种方法、带没带账号取到的。名字照现在装着的，卸掉了写 id。
+    fn fetched_by(&self, m: &Manifest) -> Vec<crate::view::FetchedBy> {
+        let loaded = self.loaded();
+        m.snapshots
+            .iter()
+            .map(|s| {
+                let plugin = loaded.host.plugin(&s.plugin);
+                let functions: std::collections::BTreeSet<crate::strategy::Function> = s
+                    .outputs
+                    .iter()
+                    .filter_map(|o| usuyo_plugin::protocol::OutputKind::parse(o))
+                    .map(crate::strategy::Function::of_output)
+                    .collect();
+                crate::view::FetchedBy {
+                    functions: functions.into_iter().collect(),
+                    plugin: plugin.map_or_else(|| s.plugin.clone(), |p| p.header.name.clone()),
+                    method: s.method.as_ref().map(|id| {
+                        plugin
+                            .and_then(|p| p.spec.method(id))
+                            .map_or_else(|| id.clone(), |x| x.name.clone())
+                    }),
+                    account: s.account.as_ref().and_then(|a| {
+                        serde_json::from_value(serde_json::Value::String(a.clone())).ok()
+                    }),
+                    site: s.site.clone(),
+                    access: s.access.clone(),
+                    at: s.at.clone(),
+                }
+            })
+            .collect()
     }
 
     /// 搜索：每条一个命中，带命中的那一层。

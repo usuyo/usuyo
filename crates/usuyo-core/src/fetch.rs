@@ -4,7 +4,7 @@
 //! 任务：按插件顺序 fetch（平台插件在前、通用网页在后）；能换下一个的错就换，
 //! 暂停照插件报的记下；都没取到、又有能重试的，按退避再排；取到了交给资料库当快照。
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
 use serde_json::Value;
@@ -14,7 +14,8 @@ use usuyo_library::{
     normalize_web_url,
 };
 use usuyo_plugin::protocol::{
-    CallFailure, Canonicalized, ErrorCode, FetchOutput, MAX_PAUSE, OutputKind, Pause,
+    Account, CallFailure, Canonicalized, ErrorCode, FetchOutput, MAX_PAUSE, Method, OutputKind,
+    Pause,
 };
 use usuyo_plugin::{
     CallOptions, FetchInput, FetchPlugin, FetchRequest, FetchedSnapshot, PluginError,
@@ -22,6 +23,7 @@ use usuyo_plugin::{
 
 use crate::engine::{Engine, Via};
 use crate::jobs::FetchJob;
+use crate::methods::Candidate;
 use crate::pace;
 use crate::view::{Event, TakeResponse};
 use crate::words::{self, Said};
@@ -300,30 +302,21 @@ impl Engine {
         // 平台方法调过没有；有没有哪一种不是回「这种链接我不取」（被拦、要登录、要访客身份、没找到、停着……）
         let mut platform_called = false;
         let mut platform_refused = false;
-        // 取到第一份以后还缺的；`None` 是还没取到。
-        let mut missing: Option<BTreeSet<OutputKind>> = None;
-        for c in &candidates {
+        // 取到过一份没有：之后的调用只补缺。
+        let mut got = false;
+        let mut plan = Plan::new(&candidates);
+        while let Some((ci, want)) = plan.next(&candidates, got) {
+            let c = &candidates[ci];
             let (plugin, method) = (&c.plugin, &c.method);
             let pid = plugin.id().to_string();
-            let Some(cap) = method.capabilities.fetch.as_ref() else {
-                continue;
-            };
-            let want = match &missing {
-                None => None,
-                // 补缺的不找通用网页插件：它的快照是另一个身份的网页。
-                Some(_) if plugin.spec.is_web() => continue,
-                Some(m) => {
-                    let w: BTreeSet<OutputKind> = m.intersection(&cap.outputs).copied().collect();
-                    if w.is_empty() {
-                        continue;
-                    }
-                    Some(w)
-                }
-            };
+            // 补缺的不找通用网页插件：它的快照是另一个身份的网页。
             // 平台插件认了这条链接（条目的平台不是 web）：通用网页插件只在平台方法都说「这种链接我不取」
             // 时才上。平台方法被拦、要登录、没找到、停着的，不再用通用网页去请求同一个地址：
             // 那只会再撞一次校验页，还把校验页存成一份快照。
-            if plugin.spec.is_web() && platform != "web" && (!platform_called || platform_refused) {
+            if plugin.spec.is_web()
+                && (got || (platform != "web" && (!platform_called || platform_refused)))
+            {
+                plan.drop(ci);
                 continue;
             }
             let scope = pause_scope(plugin, &url, platform);
@@ -338,7 +331,7 @@ impl Engine {
                 } else {
                     &mut paused_note
                 };
-                if missing.is_none() {
+                if !got {
                     note.get_or_insert_with(|| {
                         let mut f = CallFailure::new(
                             ErrorCode::RateLimited,
@@ -350,6 +343,7 @@ impl Engine {
                         f
                     });
                 }
+                plan.drop(ci);
                 continue;
             }
             let first = if plugin.spec.is_web() {
@@ -363,7 +357,7 @@ impl Engine {
             let request = FetchRequest {
                 method: method.id.clone(),
                 input: FetchInput::Url(url.clone()),
-                want,
+                want: want.clone(),
                 input_file: None,
             };
             called = true;
@@ -381,16 +375,10 @@ impl Engine {
             match result {
                 Ok(snap) => {
                     self.record_method_call(plugin, &method.id, url.host_str(), Ok(()))?;
-                    let still: BTreeSet<OutputKind> = match &missing {
-                        None => snap.output.missing.iter().copied().collect(),
-                        Some(m) => m.difference(&snap.obtained).copied().collect(),
-                    };
-                    self.store_snapshot(&id, plugin, job, snap).await?;
-                    if still.is_empty() {
-                        missing = Some(still);
-                        break;
-                    }
-                    missing = Some(still);
+                    plan.got(ci, want.as_ref(), &snap.output.missing);
+                    self.store_snapshot(&id, plugin, Some(method), job, snap)
+                        .await?;
+                    got = true;
                 }
                 Err(PluginError::Call { failure, .. }) => {
                     tracing::info!(plugin = %pid, method = %method.id, item = %id, failure = %failure, "fetch failed");
@@ -431,26 +419,28 @@ impl Engine {
                         failure.code,
                         ErrorCode::RateLimited | ErrorCode::Network | ErrorCode::Cancelled
                     );
-                    if missing.is_none() {
+                    if !got {
                         retryable |= failure.code.retryable();
                         first.get_or_insert(*failure);
                     }
                     if waits {
                         break;
                     }
+                    plan.drop(ci);
                 }
                 Err(e @ PluginError::Unsupported { .. }) => {
-                    if missing.is_none() {
+                    if !got {
                         first.get_or_insert_with(|| {
                             CallFailure::new(ErrorCode::UnsupportedInput, e.to_string())
                         });
                     }
+                    plan.drop(ci);
                 }
                 Err(e) => return Err(e.into()),
             }
         }
 
-        if missing.is_some() {
+        if got {
             self.inner.visitors_wanted.done(id.as_str());
             self.inner.jobs.finish(id.as_str())?;
             self.emit(Event::ItemUpdated { id: id.to_string() });
@@ -572,7 +562,8 @@ impl Engine {
                 match result {
                     Ok(snap) => {
                         self.record_method_call(plugin, &by.method, None, Ok(()))?;
-                        self.store_snapshot(&id, plugin, job, snap).await?;
+                        let method = plugin.spec.method(&by.method);
+                        self.store_snapshot(&id, plugin, method, job, snap).await?;
                         Ok(())
                     }
                     Err(PluginError::Call { failure, .. }) => {
@@ -641,6 +632,7 @@ impl Engine {
         &self,
         id: &ItemId,
         plugin: &FetchPlugin,
+        method: Option<&Method>,
         job: &FetchJob,
         snap: FetchedSnapshot,
     ) -> Result<()> {
@@ -650,15 +642,12 @@ impl Engine {
             .map_err(|e| Error::Task(e.to_string()))??;
         let this = self.clone();
         let plugin = plugin.clone();
-        // 只有 `ref` 的（从文件导入）没有原链接
-        let input_url = (!job.url.is_empty()).then(|| job.url.clone());
         let item = id.clone();
-        let imported = job.import_id.is_some();
-        tokio::task::spawn_blocking(move || {
-            this.attach(&item, &plugin, input_url, snap, files, imported)
-        })
-        .await
-        .map_err(|e| Error::Task(e.to_string()))?
+        let job = job.clone();
+        let way = method.map(|m| (m.id.clone(), m.account));
+        tokio::task::spawn_blocking(move || this.attach(&item, &plugin, way, &job, snap, files))
+            .await
+            .map_err(|e| Error::Task(e.to_string()))?
     }
 
     /// 导入里的一条轮到了：先收下（只有链接，记 `entry: import`），再取内容。
@@ -748,16 +737,19 @@ impl Engine {
     }
 
     /// 取到的输出目录交给资料库当一份快照，再重写 `content.md` 和索引，排上转换。
-    /// `imported`：这次取是导入、交进来的一批里的一条，转换排在你手动收的后面。
+    /// 导入、交进来的一批里的一条，转换排在你手动收的后面。`way`：这份是哪种方法取的、它的账号类型。
     fn attach(
         &self,
         id: &ItemId,
         plugin: &FetchPlugin,
-        input_url: Option<String>,
+        way: Option<(String, Account)>,
+        job: &FetchJob,
         snap: FetchedSnapshot,
         files: Vec<usuyo_contract::FileHash>,
-        imported: bool,
     ) -> Result<()> {
+        // 只有 `ref` 的（从文件导入）没有原链接
+        let input_url = (!job.url.is_empty()).then(|| job.url.clone());
+        let imported = job.import_id.is_some();
         let out = &snap.output;
         let fetch = fetch_record(out)?;
         let missing = out.missing.iter().map(|o| o.as_str().to_owned()).collect();
@@ -771,9 +763,18 @@ impl Engine {
             .as_ref()
             .map(serde_json::to_value)
             .transpose()?;
+        let (method, account) = match way {
+            Some((m, a)) => (
+                Some(m),
+                serde_json::to_value(a)?.as_str().map(str::to_owned),
+            ),
+            None => (None, None),
+        };
         let new = NewSnapshot {
             plugin: plugin.id().to_string(),
             plugin_version: Some(plugin.header.version.to_string()),
+            method,
+            account,
             input_url,
             resolved_url: None,
             access,
@@ -797,6 +798,79 @@ impl Engine {
         // 输出目录已经移进 raw/；`snap` 到这里才丢掉，剩下的暂存一起删。
         drop(snap);
         Ok(())
+    }
+}
+
+/// 一条里还要哪几样、各自还有哪几种方法可试（协议 §2.3.2）：每一样照获取策略有自己的先后，
+/// 一次调用只要那种方法排在最前的那几样。
+struct Plan {
+    /// 一样 → 还没试的方法（`candidates` 的下标），照这一样的先后。
+    lists: BTreeMap<OutputKind, Vec<usize>>,
+    /// 还要的几样：还不知道这一条有没有的，和知道它缺的。
+    wanted: BTreeSet<OutputKind>,
+}
+
+impl Plan {
+    fn new(candidates: &[Candidate]) -> Plan {
+        let mut lists: BTreeMap<OutputKind, Vec<(usize, usize)>> = BTreeMap::new();
+        for (i, c) in candidates.iter().enumerate() {
+            for (k, rank) in &c.ranks {
+                lists.entry(*k).or_default().push((*rank, i));
+            }
+        }
+        let lists: BTreeMap<OutputKind, Vec<usize>> = lists
+            .into_iter()
+            .map(|(k, mut l)| {
+                l.sort_unstable();
+                (k, l.into_iter().map(|(_, i)| i).collect())
+            })
+            .collect();
+        let wanted = lists.keys().copied().collect();
+        Plan { lists, wanted }
+    }
+
+    fn head(&self, k: &OutputKind) -> Option<usize> {
+        self.lists.get(k).and_then(|l| l.first().copied())
+    }
+
+    /// 下一次调哪种、要哪几样：还要的几样各自排在最前的方法里，整体先后（`candidates` 的顺序）最靠前的那种，
+    /// 只要它排在最前的那几样。还没取到过、它能取的正好都要它时不给 `--want`（`missing` 才说得出别的方法能补的）。
+    fn next(
+        &self,
+        candidates: &[Candidate],
+        got: bool,
+    ) -> Option<(usize, Option<BTreeSet<OutputKind>>)> {
+        let ci = self.wanted.iter().filter_map(|k| self.head(k)).min()?;
+        let want: BTreeSet<OutputKind> = self
+            .wanted
+            .iter()
+            .filter(|k| self.head(k) == Some(ci))
+            .copied()
+            .collect();
+        let all = candidates[ci]
+            .method
+            .capabilities
+            .fetch
+            .as_ref()
+            .is_none_or(|f| f.outputs.is_subset(&want));
+        Some((ci, (got || !all).then_some(want)))
+    }
+
+    /// 取到了一份：要了的几样里不在 `missing` 里的不再要（取到了，或这一条本来没有）；没给 `--want` 时什么都算要了。
+    fn got(&mut self, ci: usize, want: Option<&BTreeSet<OutputKind>>, missing: &[OutputKind]) {
+        self.wanted
+            .retain(|k| missing.contains(k) || want.is_some_and(|w| !w.contains(k)));
+        self.drop(ci);
+    }
+
+    /// 这种方法这一条不再试（调过、停着、轮不到它）。
+    fn drop(&mut self, ci: usize) {
+        for l in self.lists.values_mut() {
+            l.retain(|&i| i != ci);
+        }
+        let lists = &self.lists;
+        self.wanted
+            .retain(|k| lists.get(k).is_some_and(|l| !l.is_empty()));
     }
 }
 

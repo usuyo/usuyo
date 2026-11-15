@@ -134,6 +134,12 @@ pub struct Snapshot {
     pub plugin: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plugin_version: Option<String>,
+    /// 插件里的哪种方法（插件协议 §2.3.1）；交来的没有。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub method: Option<String>,
+    /// 那种方法的账号类型（`none`、`visitor`、`in-usuyo`……），取的时候照清单记下。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account: Option<String>,
     pub at: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input_url: Option<String>,

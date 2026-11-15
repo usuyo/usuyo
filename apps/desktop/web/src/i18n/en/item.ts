@@ -116,6 +116,7 @@ export default mirror<typeof zh>()({
     createdAndAdded: "Created “{name}” and added this item",
     newTopicLabel: "New topic name",
     newTopicPlaceholder: "New topic",
+    fetchedBy: "Fetched By",
   },
   actions: {
     restoreMedia: "Restore Video and Cover",

@@ -24,6 +24,7 @@ mod registry;
 mod reveal;
 mod settings;
 mod share_text;
+pub mod strategy;
 mod transcripts;
 mod transform;
 mod trash;

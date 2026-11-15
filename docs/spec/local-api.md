@@ -30,7 +30,7 @@
 | `item-removed` | 回收站里的条目到期、或你「立即清除」，从资料库里移除了；再拉它是 404 | `id` |
 | `topic-updated` | 建了主题，或改了关注 | `id` |
 | `import-updated` | 一次导入变了：列了一页、认了一段身份、确认了、停下或接着、收下了一条、删掉了 | `id`（导入的） |
-| `plugins-updated` | 插件的暂停变了（被限流或拦住、「现在再试」「先别试」）、开关了一种方法、站点的登录、访客身份、密钥设置、设置里的 `network` 变了 | 无 |
+| `plugins-updated` | 插件的暂停变了（被限流或拦住、「现在再试」「先别试」）、开关了一种方法、换了获取策略、站点的登录、访客身份、密钥设置、设置里的 `network` 变了 | 无 |
 | `transforms-updated` | 模型开始下、下好了、没下成、删掉了；设置里的 `transforms.auto` 变了 | 无 |
 | `phone-updated` | 手机的驱动开始装、装好、没装上、卸掉；剪贴板试出了结果。授权、镜像、adb 的变化不发，窗口回到前面时和页面看得见时隔一会儿重拉 | 无 |
 | `catalog-updated` | 订阅源开始读、读到了新索引或没读成，加了或去掉一个订阅源；插件开始装、下载每过 2%、在校验、解开、载入、装好、没装上、删掉了。装好、删掉以后插件换上了，另发 `plugins-updated`、`transforms-updated` | 无 |
@@ -89,6 +89,7 @@
 | `POST /transforms/{owner}/{repo}/models/{name}/download` | 下这个模型（[§1.1](library.md#11-目录树) 按机器目录的 `models/`）：已经在了回 200 `{state: "present"}`，开始下或已经在下回 202 `{state: "downloading"}`；插件或模型不在回 404。下完以后等它的转换回到排着，那些条目发 `item-updated` |
 | `POST /transforms/{owner}/{repo}/models/{name}/remove` | 删掉这个模型，204；正在下回 409 `conflict`。插件的进程在后台关掉，之后要它的转换等模型 |
 | `GET /settings`；`PATCH /settings` | 见下「设置」 |
+| `GET /strategy`；`PUT /strategy` | 获取策略（[协议 §2.3.2](../protocol/manifest.md#232-获取策略)）。`GET` 回 `StrategyView`：存着的 `{preset, rules?, platforms?}`，`presets`（三个预设各自的 `{preset, rules}`），`routes`（装着的插件声明的每个平台 `{platform: {id, name}, functions}`，`functions` 是这个平台上有方式做的每一项 `{function, from, skip, ways, choices}`：`from` 是 `function`（在这里指定的）、`platform`（平台另选的预设）、`strategy`（总策略），`skip` 是规则说不获取，`ways` 是照先后要试的几种 `{plugin, method}`（开没开、用不用得上看 `GET /plugins`），`choices` 是这一项能选的几种）。`PUT` 的请求体是整份 `{preset, rules?, platforms?}`，写进按机器的 `settings.json`，马上生效，回 `StrategyView`，发 `plugins-updated`；不认识的字段、写坏的（自定义没有规则、最后一条不是兜底、一段同时写了方法和组、平台另选 `custom`）回 400 `invalid-args`，存着的不变 |
 | `GET /phone` 和 `/phone/…` 七条 | 见下「手机」 |
 | `GET /catalog`、`/catalog/{owner}/{repo}…`、`/plugin-sources…` | 见下「插件目录和订阅源」 |
 | `GET /v1/ping` | 投递：`{name: "usuyo", version, protocol: 1, client}`，`client` 是投递令牌的名字，主令牌是 `null` |
@@ -100,7 +101,7 @@
 - `{jobs: "pending"}`：条目页打开时调。这一条还没做好的转换都挪到最前（点名），在电池上、`transforms.auto` 关着时也转。
 - `{job, plugin?, options?}`：再转一次，或换一个插件、换一组参数转；`job` 是 `play`、`asr`、`keyframes`、`ocr`、`frames`。做好了也再做一次，新的和旧的并排，`redoOf` 指现在最新的那一次。这一样正在转回 409 `conflict`；没有这种 `job`、`plugin` 做不了它、没装能做它的插件回 400 `invalid-args`；只留文字以后回 422 `unsupported-input`；条目不在回 404。
 
-`GET /items/{id}` 的 `facets` 一层可以有几份，每份带 `key`（在一条里唯一）；`asr`、`ocr`、`frames` 三层每份带 `source`（`by: platform` 是平台字幕，`by: machine` 带 `tool`、`plugin`（做这一份的转换插件 id，即 `run.json` 的 `by`；宿主自己判的没有）、`runId`、`at`；有语言时 `lang`），段带 `position`。口播是每份平台字幕和每次 `asr` 转录，平台的在前，机器的新的在前；`ocr` 是每次图里的字的转录，`frames` 是每次关键帧上的字的转录，连着几帧一样的一行合成一段；`video` 的 `frames` 是最新一次 `keyframes` 的帧。`remark` 只写量出来的事：「没有音轨」「未检测到语音」「画面几乎不变」「未识别到文字」「有重复的图片」（照设置的语言）。`pending` 是还没转出来的那几面，一面一句：`layer` 是 `asr`、`ocr`、`frames`、`video`（`play`、`keyframes` 都算画面），`state` 是 `now`（在转）、`needs-model`（带 `model: {plugin, name, size, license}`）、`failed`（带 `hint`，例如「这台电脑上没有可转写的插件」）、`on-power`（在电池上，接上电源时转）、`later`（排着），同一面有几行时取前面那个。没有计数。`GET /search` 命中 `asr`、`ocr`、`frames` 时带 `position`：口播和画面上的字是 `{kind: "time", sec, endSec?, snapshotId, xywh?}`，图里的字是 `{kind: "image", imageKey, xywh}`。
+`GET /items/{id}` 另带 `fetchedBy`：每份快照一项，旧的在前，`{functions, plugin, method?, account?, site?, access, at}`，`functions` 是这份取到的几项功能（[协议 §2.3.2](../protocol/manifest.md#232-获取策略)），`plugin`、`method` 是现在装着的那个插件、那种方法的名字（卸掉了写 id），`account` 是取的时候记下的账号类型，旧快照和交来的没有 `method`、`account`；只有链接时不给。`heldBack` 是照现在的获取策略没去取的那几项功能（怎么算见[协议 §2.3.2](../protocol/manifest.md#232-获取策略)），没有时不给。`facets` 一层可以有几份，每份带 `key`（在一条里唯一）；`asr`、`ocr`、`frames` 三层每份带 `source`（`by: platform` 是平台字幕，`by: machine` 带 `tool`、`plugin`（做这一份的转换插件 id，即 `run.json` 的 `by`；宿主自己判的没有）、`runId`、`at`；有语言时 `lang`），段带 `position`。口播是每份平台字幕和每次 `asr` 转录，平台的在前，机器的新的在前；`ocr` 是每次图里的字的转录，`frames` 是每次关键帧上的字的转录，连着几帧一样的一行合成一段；`video` 的 `frames` 是最新一次 `keyframes` 的帧。`remark` 只写量出来的事：「没有音轨」「未检测到语音」「画面几乎不变」「未识别到文字」「有重复的图片」（照设置的语言）。`pending` 是还没转出来的那几面，一面一句：`layer` 是 `asr`、`ocr`、`frames`、`video`（`play`、`keyframes` 都算画面），`state` 是 `now`（在转）、`needs-model`（带 `model: {plugin, name, size, license}`）、`failed`（带 `hint`，例如「这台电脑上没有可转写的插件」）、`on-power`（在电池上，接上电源时转）、`later`（排着），同一面有几行时取前面那个。没有计数。`GET /search` 命中 `asr`、`ocr`、`frames` 时带 `position`：口播和画面上的字是 `{kind: "time", sec, endSec?, snapshotId, xywh?}`，图里的字是 `{kind: "image", imageKey, xywh}`。
 
 **设置**：
 - `GET /settings` 回 `{library, trashDays, trashHeld?, network: {mode, proxy?, fakeIp}, transforms: {auto}, window: {systemTitleBar}, language, logs}`。`window.systemTitleBar` 是按机器的 `settings.json` 的同名项，没写是 `false`。`language` 是同一个文件的 `language`：`system`（没写时，跟随系统：守护进程启动时看系统的首选语言，中文开头的用简体中文，别的用英文）、`zh-Hans` 或 `en`。`trashDays` 是资料库的（[§1.1](library.md#11-目录树)），`null` 是一直；`trashHeld: {count, since}` 只在时钟守卫现在拦着到期的项时有，`since` 是记下的最晚时间；`network.mode` 是 `system`、`direct`、`custom`，`custom` 的 `proxy` 不带密码；`fakeIp` 是这台电脑开着假 IP 模式的代理；`logs` 是按机器目录的 `logs/daemon.log`。
@@ -148,7 +149,7 @@
 - `lastCall` 是上一次调用 `{at, ok, code?, hint?}`，没调过就没有；`pauses` 是这种方法的暂停加上「先别试」；`riskNote` 是清单的 `risk`；`script` 只在清单写了 `script` 的方法上有，`{path, present}`：文件在这台电脑上的路径，`present` 是它在插件文件夹里、是个普通文件。
 
 **导入**：一次导入的状态不单独存，由几项现算：`listing`（还在列）、`ready`（列完了，等你看一眼）、`taking`（确认了，还有排着的任务）、`done`（确认了，没有排着的了），`held` 盖过其余，是你点了「先停下」。走向：
-1. 开始（`POST /imports`、`POST /v1/batches`、`POST /file-imports` 或 `POST /v1/file-imports`）：`file` 类和 `source` 类一样一页页调插件的 `list`，只是读本机的副本，不守节奏，第一页在交的时候就列（见上）。`source` 类要这个插件的这种方法能列、开着、这台机器上用得上（不然回 422 `unsupported-input`，原因写明缺什么），来源非空、最多 512 字节，平台没声明 `batch: false`（声明了回 422）。`source` 类按平台的节奏一页页调插件的 `list`，`delivered` 类每轮认 50 条的身份。每条按身份分成 `new`、`stored`（库里已经有）、`trashed`（在回收站里）；认不出来的是 `unresolved`。这一步不建任何条目。
+1. 开始（`POST /imports`、`POST /v1/batches`、`POST /file-imports` 或 `POST /v1/file-imports`）：`file` 类和 `source` 类一样一页页调插件的 `list`，只是读本机的副本，不守节奏，第一页在交的时候就列（见上）。`source` 类要这个插件的这种方法能列、获取策略选中它（[协议 §2.3.2](../protocol/manifest.md#232-获取策略)）、开着、这台机器上用得上（不然回 422 `unsupported-input`，原因写明缺什么），来源非空、最多 512 字节，平台没声明 `batch: false`（声明了回 422）。`source` 类按平台的节奏一页页调插件的 `list`，`delivered` 类每轮认 50 条的身份。每条按身份分成 `new`、`stored`（库里已经有）、`trashed`（在回收站里）；认不出来的是 `unresolved`。这一步不建任何条目。
 2. 列完是 `ready`。`POST /imports/{id}/confirm`，请求体 `{new, trashed, except?}`（不认识的字段回 400）：`new` 是「新的」整组收不收；`trashed` 是「回收站里的」整组收不收，收下就是拿回来；`except` 是 `seq` 的数组，这些条目和自己那组选得反着来（整组收的，它不收；整组不收的，它收）。只交例外：预览按页看，没翻到的条目跟着整组走。`stored` 和 `unresolved` 的不收，也不能出现在 `except` 里，出现了回 400。还在列的、或已经确认过的再确认，回 400。
 3. 确认后，挑中的每条排一个取内容的任务，优先级低于你手动收下的；按平台的节奏一条条来。轮到时先收下（入口 `import`，`takenBy: user`，同一批共用 `importBatch`，带 `action`、`actedAt`），再取内容。这一条已经有任务（你刚手动收过）的不动。轮到时发现已经进了回收站、而你没挑回收站那一组的，不收，`skipped` 加一；私密条目批量导入照收（[§1.7](library.md#17-删掉) 的表）。`taken` 是收下的条数，`notStored` 是收下了但内容取不到的。
 4. `POST /imports/{id}/hold` 随时可以，不再列、不再收，已经收下的不动；`resume` 从停的地方接着，停在要你处理的原因上（例如重新登录以后）也从这里再试。导入页只说事实（列了几页、各几条、收下几条、为什么在等和什么时候），不给还剩多少。

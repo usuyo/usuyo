@@ -58,6 +58,9 @@ pub struct NewOrigin {
 pub struct NewSnapshot {
     pub plugin: String,
     pub plugin_version: Option<String>,
+    /// 插件里的哪种方法和它的账号类型；交来的没有。
+    pub method: Option<String>,
+    pub account: Option<String>,
     pub input_url: Option<String>,
     pub resolved_url: Option<String>,
     pub access: String,
@@ -709,6 +712,8 @@ impl Library {
             id: sid.clone(),
             plugin: s.plugin,
             plugin_version: s.plugin_version,
+            method: s.method,
+            account: s.account,
             at,
             input_url: s.input_url,
             resolved_url: s.resolved_url,

@@ -1,6 +1,7 @@
 // 样例库：和内核同一套接口，数据在内存里，刷新页面就回到原样。
 // empty 为真时从空资料库开始，看空资料库那一页用（地址栏带 ?mock=empty）。
 import type {
+  FetchedBy,
   Facet,
   Item,
   MapPoint,
@@ -214,6 +215,19 @@ function pictured(item: Item): Item {
   };
 }
 
+/** 样例里每条是怎么取到的：正文和图走不带账号的那种；视频号的视频要登录才取得到，样例写成用了账号的那种。 */
+function fetchedOf(raw: RawItem): Pick<Item, "fetchedBy"> {
+  const at = takenAt(raw);
+  const plugin = PLATFORMS[raw.p].name;
+  const text: FetchedBy = { functions: ["text", "images"], plugin, method: said("公开页面", "Public page"), account: "none", access: "public-web", at };
+  if (raw.kind !== "video") return { fetchedBy: [text] };
+  const video: FetchedBy =
+    raw.p === "sph"
+      ? { functions: ["video"], plugin, method: said("腾讯元宝", "Tencent Yuanbao"), account: "in-usuyo", access: "session-api", at }
+      : { ...text, functions: ["video"] };
+  return { fetchedBy: [text, video] };
+}
+
 /** 一条和它还没放出来的几面：在 `pending` 里的层先收着，样例库「转好了」时放出来。 */
 function toItem(raw: RawItem): { item: Item; withheld: Facet[] } {
   const platform = PLATFORMS[raw.p];
@@ -232,6 +246,7 @@ function toItem(raw: RawItem): { item: Item; withheld: Facet[] } {
     ...(raw.note ? { note: raw.note } : {}),
     facets: all.filter((f) => !waiting.has(f.layer)),
     pending: raw.pending ?? [],
+    ...(raw.link ? {} : fetchedOf(raw)),
   };
   return { item, withheld: all.filter((f) => waiting.has(f.layer)) };
 }

@@ -1,9 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { SettingsView } from "../api/endpoints";
+import type { FetchPlugin, SettingsView, Strategy } from "../api/endpoints";
 import { setLanguageChoice } from "../i18n";
+import { method as sampleMethod } from "../mock/platforms";
+import { strategyView } from "../mock/strategy";
 import { createAppRouter } from "../router";
 import { heldText, proxyProblem, trashText } from "./words";
 // 路由是用到才载入这一页的；先载入，免得第一次转译的时间算进等页面出现的那一秒里。
@@ -25,8 +27,11 @@ const VIEW: SettingsView = {
   logs: "/Users/someone/Library/Application Support/usuyo/logs/daemon.log",
 };
 
-function serve(settings: SettingsView) {
+const isStrategy = (v: unknown): v is Strategy => typeof v === "object" && v !== null && "preset" in v;
+
+function serve(settings: SettingsView, plugins: FetchPlugin[] = []) {
   let language = settings.language;
+  let strategy: Strategy = { preset: "no-account-first" };
   const sent: { path: string; method: string; body: unknown }[] = [];
   vi.stubGlobal("scrollTo", vi.fn());
   vi.stubGlobal(
@@ -43,6 +48,12 @@ function serve(settings: SettingsView) {
         }
         return Promise.resolve(Response.json(method === "PATCH" ? { ...settings, trashDays: 90, language } : { ...settings, language }));
       }
+      if (path.endsWith("/strategy")) {
+        const asked: unknown = typeof init?.body === "string" ? JSON.parse(init.body) : null;
+        if (method === "PUT" && isStrategy(asked)) strategy = asked;
+        return Promise.resolve(Response.json(strategyView(strategy, plugins)));
+      }
+      if (path.endsWith("/plugins")) return Promise.resolve(Response.json({ plugins, notLoaded: [], failureLog: "" }));
       if (path.endsWith("/release-held")) return Promise.resolve(Response.json({ removed: 3 }));
       if (path.endsWith("/map")) return Promise.resolve(Response.json({ regions: [], points: [], unreadable: [{ id: "019a", reason: "manifest.json 读不了" }] }));
       if (path.endsWith("/events")) return new Promise(() => {});
@@ -126,4 +137,51 @@ it("switches the whole page to English at once and stores the choice with the da
   await waitFor(() => expect(screen.getByRole("radio", { name: "System" })).toBeTruthy());
   expect(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeTruthy();
   setLanguageChoice("zh-Hans");
+});
+
+const BILI: FetchPlugin = {
+  id: "usuyo-fetch/bilibili",
+  name: "B站",
+  version: "0.1.0",
+  platforms: [{ id: "bilibili", name: "B站" }],
+  access: "session-api",
+  login: "required",
+  canList: false,
+  sources: [],
+  sites: [],
+  visitors: [],
+  settings: [],
+  pacing: [],
+  pauses: [],
+  methods: [
+    sampleMethod({ id: "view", name: "公开接口", access: "public-web", account: { kind: "none" }, gets: { fetch: ["text", "media:video"] } }),
+    sampleMethod({ id: "session", name: "会话接口", access: "session-api", account: { kind: "in-usuyo" }, gets: { fetch: ["media:video"] } }),
+  ],
+};
+
+it("the fetch strategy starts a custom table from the preset in use, and each change is sent at once", async () => {
+  const sent = serve(VIEW, [BILI]);
+  const section = await screen.findByRole("region", { name: "获取策略" });
+  const pick = async (label: string, option: string) => {
+    fireEvent.click(await within(section).findByRole("button", { name: new RegExp(label) }));
+    fireEvent.click(await screen.findByRole("option", { name: new RegExp(`^${option}`) }));
+  };
+  const puts = () => sent.filter((x) => x.path === "/api/strategy").map((x) => x.body);
+  await pick("策略", "自定义");
+  await waitFor(() => expect(puts()).toEqual([{ preset: "custom", rules: [{ use: [{}] }] }]));
+  // 兜底那一条不能删、不能挪
+  expect(await within(section).findByText("其余情况")).toBeTruthy();
+  expect(within(section).queryByRole("button", { name: "删除这条规则" })).toBeNull();
+  fireEvent.click(within(section).getByRole("button", { name: "添加规则" }));
+  await waitFor(() => expect(puts()[1]).toEqual({ preset: "custom", rules: [{ use: [{}] }, { use: [{}] }] }));
+  await pick("内容", "视频");
+  await waitFor(() => expect(puts()[2]).toEqual({ preset: "custom", rules: [{ function: "video", use: [{}] }, { use: [{}] }] }));
+  // 这一条只用指定的那种：去掉组、加上会话接口
+  const rule1 = await within(section).findByRole("listitem", { name: "第 1 条规则" });
+  fireEvent.click(within(rule1).getByRole("button", { name: /移除「所有方式/ }));
+  await waitFor(() => expect(puts()[3]).toEqual({ preset: "custom", rules: [{ function: "video", use: [] }, { use: [{}] }] }));
+  expect((await within(section).findAllByText("不获取")).length).toBeGreaterThan(0);
+  fireEvent.click(within(await within(section).findByRole("listitem", { name: "第 1 条规则" })).getByRole("button", { name: /添加方式/ }));
+  fireEvent.click(await screen.findByRole("option", { name: /^会话接口（使用账号）/ }));
+  await waitFor(() => expect(puts()[4]).toEqual({ preset: "custom", rules: [{ function: "video", use: [{ method: "usuyo-fetch/bilibili#session" }] }, { use: [{}] }] }));
 });

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
-import type { PhoneView, SettingsPane, ChangesView, FollowPatch, FollowTrialRequest, NewFollowRequest, Draft, DraftPatch, NewDraftRequest, CiteRequest, PagePatch, TopicMatch, TopicPage, SettingsPatch, TransformRequest, ConfirmImportRequest, CreateDeliverTokenRequest, ImportEntry, ImportView, Item, StartImportRequest, TakeRequest } from "./endpoints";
+import type { PhoneView, SettingsPane, ChangesView, FollowPatch, FollowTrialRequest, NewFollowRequest, Draft, DraftPatch, NewDraftRequest, CiteRequest, PagePatch, TopicMatch, TopicPage, SettingsPatch, Strategy, TransformRequest, ConfirmImportRequest, CreateDeliverTokenRequest, ImportEntry, ImportView, Item, StartImportRequest, TakeRequest } from "./endpoints";
 import { ApiError, DaemonUnreachableError, isNotServed } from "./client";
 import { call } from "./source";
 
@@ -12,6 +12,7 @@ export const queryKeys = {
   search: (q: string) => ["search", q] as const,
   trash: ["trash"] as const,
   plugins: ["plugins"] as const,
+  strategy: ["strategy"] as const,
   sites: ["sites"] as const,
   visitors: ["visitors"] as const,
   sources: (pluginId: string, method: string, link?: string) => ["sources", pluginId, method, link ?? ""] as const,
@@ -361,6 +362,23 @@ export function usePurge() {
 
 export function usePlugins() {
   return useQuery({ queryKey: queryKeys.plugins, queryFn: () => call((s) => s.plugins()) });
+}
+
+export function useStrategy() {
+  return useQuery({ queryKey: queryKeys.strategy, queryFn: () => call((s) => s.strategy()) });
+}
+
+/** 换掉整个获取策略；条目上「按当前策略未获取」跟着变，重新拉条目。 */
+export function useSetStrategy() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (strategy: Strategy) => call((s) => s.setStrategy(strategy)),
+    onMutate: () => queryClient.cancelQueries({ queryKey: queryKeys.strategy }),
+    onSuccess: (view) => {
+      queryClient.setQueryData(queryKeys.strategy, view);
+      void queryClient.invalidateQueries({ queryKey: ["items"] });
+    },
+  });
 }
 
 export function useSites() {

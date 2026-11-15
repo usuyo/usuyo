@@ -17,6 +17,8 @@ export function applyEvent(queryClient: QueryClient, e: DaemonEvent): void {
   switch (e.type) {
     case "plugins-updated":
       refresh(queryKeys.plugins);
+      // 策略换了、插件装上或删掉，每项功能会用的方式跟着变。
+      refresh(queryKeys.strategy);
       refresh(queryKeys.sites);
       refresh(queryKeys.visitors);
       // 设置里的出口变了也发这一条。

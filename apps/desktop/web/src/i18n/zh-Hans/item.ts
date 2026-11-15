@@ -114,6 +114,7 @@ export default {
     createdAndAdded: "已新建「{name}」并添加",
     newTopicLabel: "新主题名称",
     newTopicPlaceholder: "新建主题",
+    fetchedBy: "获取方式",
   },
   actions: {
     restoreMedia: "恢复视频和封面",

@@ -134,6 +134,11 @@ JSON"#;
 
 const RATE_LIMITED: &str = r#"echo '{"ok": false, "error": {"code": "rate-limited", "message": "429", "retryAfter": 600}}'; exit 1"#;
 
+/// 只有这几条规则的自定义策略。
+fn custom(rules: serde_json::Value) -> usuyo_core::strategy::Strategy {
+    serde_json::from_value(serde_json::json!({"preset": "custom", "rules": rules})).unwrap()
+}
+
 struct Fixture {
     tmp: TempDir,
     library: PathBuf,
@@ -402,7 +407,17 @@ async fn switches_have_defaults_and_turning_one_on_makes_it_a_candidate() {
     engine.set_method("fake/multi", "tool", false).unwrap();
     engine.refetch(&t.id, &Links::default()).unwrap();
     engine.run_due().await.unwrap();
-    assert_eq!(f.calls()[2..], ["guest all", "hooked all"]);
+    // 开关开着也不调：预设里没有 client-hook 这一层
+    assert_eq!(f.calls()[2..], ["guest all"]);
+    // 自定义的规则里写明了才调
+    engine
+        .set_strategy(custom(
+            serde_json::json!([{"use": [{}, {"access": ["client-hook"]}]}]),
+        ))
+        .unwrap();
+    engine.refetch(&t.id, &Links::default()).unwrap();
+    engine.run_due().await.unwrap();
+    assert_eq!(f.calls()[3..], ["guest all", "hooked all"]);
     assert_eq!(
         engine.item(&t.id, &Links::default()).unwrap().stored,
         Stored::Complete
@@ -414,6 +429,7 @@ async fn switches_have_defaults_and_turning_one_on_makes_it_a_candidate() {
         settings["plugins"]["fake/multi"]["methods"],
         serde_json::json!({"hooked": {"enabled": true}, "tool": {"enabled": false}})
     );
+    assert_eq!(settings["fetchStrategy"]["preset"], "custom");
     assert!(engine.set_method("fake/multi", "nope", true).is_err());
     drop(engine);
     let engine = f.engine();
@@ -737,8 +753,13 @@ async fn a_higher_tier_on_one_platform_is_off_there_by_default() {
     );
     assert_eq!(phone["account"]["where"], "包的工具");
 
-    // 拨过开关以后各平台都照它
+    // 拨过开关、策略里写明了 private-api 以后各平台都照它
     engine.set_method("fake/tiered", "tool", true).unwrap();
+    engine
+        .set_strategy(custom(
+            serde_json::json!([{"use": [{}, {"access": ["private-api"]}]}]),
+        ))
+        .unwrap();
     engine.refetch(&other.id, &Links::default()).unwrap();
     engine.run_due().await.unwrap();
     assert!(calls().contains("https://other.test/2"), "{}", calls());
@@ -771,4 +792,178 @@ async fn a_paused_method_does_not_hide_the_next_ones_failure() {
         }
     }
     assert_eq!(hint.as_deref(), Some("包的工具改版了"));
+}
+
+/// 只换这个平台上的几项。
+fn picks(functions: serde_json::Value) -> usuyo_core::strategy::Strategy {
+    serde_json::from_value(serde_json::json!({"platforms": {"example": {"functions": functions}}}))
+        .unwrap()
+}
+
+#[tokio::test]
+async fn without_accounts_only_the_video_is_left_and_the_item_says_it_was_the_strategy() {
+    let f = Fixture::new();
+    f.answer("guest", &text_answer(r#""media:video""#));
+    f.answer("session", VIDEO_ANSWER);
+    let engine = f.engine();
+    f.sign_in(&engine);
+    let only: usuyo_core::strategy::Strategy =
+        serde_json::from_value(serde_json::json!({"preset": "no-account-only"})).unwrap();
+    engine.set_strategy(only).unwrap();
+    let t = engine
+        .take("https://example.test/1", "link", Via::Cli)
+        .await
+        .unwrap();
+    engine.run_due().await.unwrap();
+    // 登录了也不调带账号的那种
+    assert_eq!(f.calls(), ["guest all"]);
+    let v = serde_json::to_value(engine.item(&t.id, &Links::default()).unwrap()).unwrap();
+    assert_eq!(v["stored"], "partial");
+    assert_eq!(v["heldBack"], serde_json::json!(["video"]));
+    assert_eq!(
+        v["fetchedBy"][0],
+        serde_json::json!({"functions": ["text", "images"], "plugin": "例子", "method": "公开接口",
+            "account": "none", "access": "public-web", "at": v["fetchedBy"][0]["at"]})
+    );
+    // 换回默认马上生效：已经取到的不动，条目上不再说是策略没取
+    engine
+        .set_strategy(usuyo_core::strategy::Strategy::default())
+        .unwrap();
+    let v = serde_json::to_value(engine.item(&t.id, &Links::default()).unwrap()).unwrap();
+    assert!(v.get("heldBack").is_none(), "{v}");
+    assert_eq!(v["fetchedBy"].as_array().unwrap().len(), 1);
+    let settings: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(f.machine().join("settings.json")).unwrap()).unwrap();
+    assert!(settings.get("fetchStrategy").is_none(), "{settings}");
+}
+
+#[tokio::test]
+async fn a_function_pick_and_skip_narrow_what_each_method_is_asked_for() {
+    let f = Fixture::new();
+    f.answer("guest", &text_answer(""));
+    f.answer("visitor", &text_answer(""));
+    f.answer("session", VIDEO_ANSWER);
+    let engine = f.engine();
+    f.sign_in(&engine);
+    engine
+        .set_strategy(picks(
+            serde_json::json!({"text": "fake/multi#visitor", "video": "skip"}),
+        ))
+        .unwrap();
+    let t = engine
+        .take("https://example.test/1", "link", Via::Cli)
+        .await
+        .unwrap();
+    engine.run_due().await.unwrap();
+    // 公开接口只拿来取图；正文和作者只问访客页；视频谁都不问
+    assert_eq!(f.calls(), ["guest images", "visitor text,meta  visitor"]);
+    let s = engine.strategy();
+    let routes = serde_json::to_value(&s.routes).unwrap();
+    let example = routes
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["platform"]["id"] == "example")
+        .unwrap();
+    let video = example["functions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|x| x["function"] == "video")
+        .unwrap();
+    assert_eq!(
+        (&video["from"], &video["skip"]),
+        (&serde_json::json!("function"), &serde_json::json!(true))
+    );
+    assert_eq!(video["ways"], serde_json::json!([]));
+    // 能选的里有不在预设里的 client-hook 那种
+    assert!(
+        video["choices"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|w| w["method"] == "hooked"),
+        "{video}"
+    );
+    let v = serde_json::to_value(engine.item(&t.id, &Links::default()).unwrap()).unwrap();
+    // 「不获取」不知道这一条有没有视频：不说缺
+    assert!(v.get("heldBack").is_none(), "{v}");
+}
+
+#[tokio::test]
+async fn a_picked_method_that_cannot_be_used_is_not_swapped_for_another() {
+    let f = Fixture::new();
+    f.answer("guest", &text_answer(""));
+    let mut config = EngineConfig::new(&f.library, f.machine());
+    config.visitor_wait = Duration::ZERO;
+    let engine = Engine::open(config).unwrap();
+    engine
+        .set_strategy(picks(
+            serde_json::json!({"text": "fake/multi#visitor", "images": "skip"}),
+        ))
+        .unwrap();
+    let t = engine
+        .take("https://example.test/1", "link", Via::Cli)
+        .await
+        .unwrap();
+    engine.run_due().await.unwrap();
+    // 访客页没有访客身份：不换成公开接口
+    assert!(f.calls().is_empty(), "{:?}", f.calls());
+    let v = serde_json::to_value(engine.item(&t.id, &Links::default()).unwrap()).unwrap();
+    assert!(v["missing"].as_str().unwrap().contains("访客身份"), "{v}");
+}
+
+#[tokio::test]
+async fn a_list_the_strategy_does_not_use_cannot_start() {
+    let f = Fixture::new();
+    let engine = f.engine();
+    engine
+        .set_strategy(picks(serde_json::json!({"list": "skip"})))
+        .unwrap();
+    let e = engine
+        .start_import("fake/multi", "saved", "example:fav:7", "")
+        .unwrap_err();
+    assert_eq!(e.code(), "unsupported-input");
+    let link = url::Url::parse("https://space.example.test/7/favlist").unwrap();
+    assert!(
+        engine
+            .plugin_sources("fake/multi", "saved", Some(&link))
+            .await
+            .is_err()
+    );
+    assert!(f.calls().is_empty(), "{:?}", f.calls());
+    // 写坏的策略不收，存着的不变
+    let bad: usuyo_core::strategy::Strategy =
+        serde_json::from_value(serde_json::json!({"preset": "custom"})).unwrap();
+    assert!(engine.set_strategy(bad).is_err());
+    assert!(engine.strategy().strategy.platforms.contains_key("example"));
+}
+
+#[tokio::test]
+async fn a_method_kept_from_the_video_is_asked_for_less_and_the_item_says_the_strategy_left_it() {
+    let f = Fixture::new();
+    f.answer("hooked", &text_answer(""));
+    let mut config = EngineConfig::new(&f.library, f.machine());
+    config.visitor_wait = Duration::ZERO;
+    let engine = Engine::open(config).unwrap();
+    engine.set_method("fake/multi", "hooked", true).unwrap();
+    engine.set_method("fake/multi", "tool", false).unwrap();
+    let mut s = custom(serde_json::json!([{"use": [{}, {"access": ["client-hook"]}]}]));
+    s.platforms = picks(serde_json::json!({"video": "fake/multi#session"})).platforms;
+    engine.set_strategy(s).unwrap();
+    let t = engine
+        .take("https://example.test/1", "link", Via::Cli)
+        .await
+        .unwrap();
+    engine.run_due().await.unwrap();
+    // 改客户端的那种声明了视频，策略让视频只走没登录的那种：它只被要正文、图和作者
+    assert_eq!(f.calls(), ["guest all", "hooked text,images,meta"]);
+    let v = serde_json::to_value(engine.item(&t.id, &Links::default()).unwrap()).unwrap();
+    assert_eq!(v["heldBack"], serde_json::json!(["video"]), "{v}");
+    // 视频设成「不获取」是你定的，不再说
+    let mut s = custom(serde_json::json!([{"use": [{}, {"access": ["client-hook"]}]}]));
+    s.platforms = picks(serde_json::json!({"video": "skip"})).platforms;
+    engine.set_strategy(s).unwrap();
+    let v = serde_json::to_value(engine.item(&t.id, &Links::default()).unwrap()).unwrap();
+    assert!(v.get("heldBack").is_none(), "{v}");
 }

@@ -2,14 +2,25 @@ import { Link } from "@tanstack/react-router";
 import { FileText, Plus, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Button as AriaButton, Dialog, DialogTrigger, Input, Popover, TextField, ToggleButton } from "react-aria-components";
-import type { Item, Topic } from "../api/endpoints";
+import type { FetchedBy, Item, Topic } from "../api/endpoints";
 import { useItemChange } from "../api/hooks";
 import { openExternal, webUrl } from "../shell";
 import { TopicPill } from "../ui/Chip";
 import { FlashLine, useFlash } from "../ui/Flash";
 import { t } from "../i18n";
 import { dayText, keepText, savedText, sentences, type MediaKeep } from "./format";
+import { formatList } from "../i18n/format";
 import { PlatformName } from "../plugins/names";
+import { accountShort, functionName } from "../plugins/strategy";
+
+/** 每份快照一行：「正文、图片：访客接口（不使用账号）」；一样的几行只写一次。 */
+function fetchedLines(by: FetchedBy[]): string[] {
+  const lines = by.map((b) => {
+    const way = b.method ? (b.account ? t("plugins.strategy.wayName", { name: b.method, account: accountShort(b.account) }) : b.method) : b.plugin;
+    return t("plugins.strategy.summary", { what: formatList(b.functions.map(functionName)), way });
+  });
+  return [...new Set(lines)];
+}
 
 function Row({ label, top, children }: { label: string; top?: boolean; children: ReactNode }) {
   return (
@@ -52,7 +63,24 @@ export function ItemMeta({ item, topics, keep }: { item: Item; topics: Topic[]; 
       <Row label={t("item.meta.saved")}>
         {savedText(item, keep)}
         {item.missing ? <span className="text-warn">{item.missing}</span> : null}
+        {item.heldBack && item.heldBack.length > 0 ? (
+          <span className="block">
+            <span className="text-warn">{t("plugins.strategy.held", { what: formatList(item.heldBack.map(functionName)) })}</span>{" "}
+            <Link to="/plugins/$platform" params={{ platform: item.platform.id }} className="text-label underline decoration-border2 underline-offset-4 hover:text-text">
+              {t("plugins.strategy.change")}
+            </Link>
+          </span>
+        ) : null}
       </Row>
+      {item.fetchedBy && item.fetchedBy.length > 0 ? (
+        <Row label={t("item.meta.fetchedBy")}>
+          {fetchedLines(item.fetchedBy).map((line) => (
+            <span key={line} className="block">
+              {line}
+            </span>
+          ))}
+        </Row>
+      ) : null}
       <Row label={t("item.meta.topics")} top>
         <div className="flex min-h-ctl-sm flex-wrap items-center gap-1.5">
           {item.topicIds.map((id) => (

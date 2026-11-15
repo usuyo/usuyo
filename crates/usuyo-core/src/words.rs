@@ -311,6 +311,10 @@ pub(crate) const SCRIPT_MISSING: Words = w(
 // methods.rs：一种获取方式这台电脑上为什么不可用
 pub(crate) const BLOCK_NOT_BUILT: Words = w("尚未提供", "Not available yet");
 pub(crate) const BLOCK_OFF: Words = w("已关闭此获取方式", "This fetch method is turned off");
+pub(crate) const BLOCK_STRATEGY: Words = w(
+    "当前的获取策略不使用此方式",
+    "The current fetch strategy does not use this method",
+);
 pub(crate) const BLOCK_LOGIN_MISSING: Words =
     w("需要在 usuyo 中登录{site}", "Sign in to {site} in usuyo");
 pub(crate) const BLOCK_LOGIN_EXPIRED: Words = w(

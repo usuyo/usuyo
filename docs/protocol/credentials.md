@@ -1,6 +1,8 @@
 <a id="6-凭据"></a>
 ## 6. 凭据
 
+登录状态只存在 usuyo 自己的地方：登录窗口和站点窗口各自那份网页数据，和系统钥匙串（Linux 上暂时是按机器目录里 0600 的 `secrets.json`，[按机器的目录](../spec/machine.md#按机器的目录)）；只在调用时交给获取策略选中的、列了那个站点的方法（[§2.3.2](manifest.md#232-获取策略)）；不从别的浏览器读，也不导出（2026-11-15 核对代码：宿主只认登录窗口这一种来源，下面表里的「复用日常浏览器」「cookie 文件」都没做）。
+
 做到的见 [§3.13](fetch.md#313-宿主和-plugin-kit-现在做到的11-11)：只有登录窗口这一种来源、只传 `credential: cookies` 的站点；`credentialsUpdate` 写回这次交出去的站点，存进 `usuyo.fetch.json` 前去掉。
 
 - **只由宿主在调用时传入**，只传清单 `sites` 里声明、这次的方法列了的站点（[§2.3.1](manifest.md#231-方法-methods)）；`login: none` 的方法不传任何平台账号凭据，`canonicalize`、`health`（不带 `--probe`）也不传。插件自己的密钥设置不算平台凭据，另经 `USUYO_SECRETS` 传（[§2.11](manifest.md#211-插件设置-settings)）。

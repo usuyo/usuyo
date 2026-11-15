@@ -48,6 +48,8 @@ export default mirror<typeof zh>()({
     deliveredFrom: "Sent from {client}",
     file: "{reader} · Reading “{file}”",
     plugin: "{plugin} · {method}",
+    pluginAccount: "{plugin} · {method} ({account})",
+    fetches: "Content of the items taken is fetched by the fetch strategy: {list}",
     meta: "{from} · {day}",
     pages: { one: "{count} page", other: "{count} pages" },
     listingFile: { one: "Reading: {count} item found", other: "Reading: {count} items found" },

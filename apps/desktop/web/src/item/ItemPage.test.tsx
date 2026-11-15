@@ -142,3 +142,22 @@ it("opens at the second a quotation points back to", async () => {
   const slider = await screen.findByRole("slider");
   expect(slider.getAttribute("aria-valuetext")).toMatch(/^02:3/);
 });
+
+it("says which method fetched each part, with or without an account, and what the strategy left out with a way to change it", async () => {
+  const base = await createMockLibrary(false).item("w3");
+  const item: Item = {
+    ...base,
+    stored: "partial",
+    fetchedBy: [
+      { functions: ["text", "images"], plugin: "B站", method: "公开接口", account: "none", access: "public-web", at: "2026-11-15T08:00:00.000Z" },
+      { functions: ["audio"], plugin: "B站", access: "public-web", at: "2026-11-15T08:00:05.000Z" },
+    ],
+    heldBack: ["video"],
+  };
+  serve(item, { trashDays: 30, entries: [] });
+  expect(await screen.findByText("正文和图片：公开接口（不使用账号）")).toBeTruthy();
+  expect(screen.getByText("音频：B站")).toBeTruthy();
+  expect(screen.getByText("按当前策略未获取：视频")).toBeTruthy();
+  const change = screen.getByRole("link", { name: "更改获取策略" });
+  expect(change.getAttribute("href")).toBe(`/plugins/${item.platform.id}`);
+});

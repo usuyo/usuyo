@@ -46,6 +46,8 @@ export default {
     deliveredFrom: "发送自 {client}",
     file: "{reader} · 读取「{file}」",
     plugin: "{plugin} · {method}",
+    pluginAccount: "{plugin} · {method}（{account}）",
+    fetches: "收下的内容按获取策略获取：{list}",
     meta: "{from} · {day}",
     pages: "{count} 页",
     listingFile: "正在读取：已读出 {count} 条",

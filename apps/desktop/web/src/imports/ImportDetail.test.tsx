@@ -2,11 +2,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import type { ConfirmImportRequest, ImportEntry, ImportView } from "../api/endpoints";
+import type { ConfirmImportRequest, FetchPlugin, ImportEntry, ImportView } from "../api/endpoints";
 import { setLanguageChoice } from "../i18n";
 import { createAppRouter } from "../router";
 // 路由是用到才载入这一页的；先载入，免得第一次转译的时间算进等页面出现的那一秒里。
 import "./ImportPage";
+import { strategyView } from "../mock/strategy";
 
 afterEach(() => {
   cleanup();
@@ -141,7 +142,7 @@ it("counts in whole English sentences, singular and plural", async () => {
 
 it("puts the step a stopped listing waits for right under it: sign in, then continue", async () => {
   const posted: string[] = [];
-  const plugin = { id: "example/site", name: "示例", version: "0.1.0", platforms: [{ id: "site", name: "示例" }], access: "session-api", login: "required", canList: true, sources: [], sites: ["www.example.com"], visitors: [], settings: [], pacing: [], pauses: [], methods: [] };
+  const plugin: FetchPlugin = { id: "example/site", name: "示例", version: "0.1.0", platforms: [{ id: "site", name: "示例" }], access: "session-api", login: "required", canList: true, sources: [], sites: ["www.example.com"], visitors: [], settings: [], pacing: [], pauses: [], methods: [] };
   const site = { site: "www.example.com", name: "示例", loginUrl: "https://www.example.com/login", cookies: [], domains: [], login: "expired", plugins: [plugin.id], credential: "cookies" };
   const v = view({ kind: "source", state: "listing", pluginId: plugin.id, method: "saved", waiting: { code: "login-required" } });
   vi.stubGlobal("scrollTo", vi.fn());
@@ -155,6 +156,7 @@ it("puts the step a stopped listing waits for right under it: sign in, then cont
       if (path.endsWith("/imports")) return Promise.resolve(Response.json([v]));
       if (path.endsWith("/plugins")) return Promise.resolve(Response.json({ plugins: [plugin], notLoaded: [] }));
       if (path.endsWith("/sites")) return Promise.resolve(Response.json([site]));
+      if (path.endsWith("/strategy")) return Promise.resolve(Response.json(strategyView({ preset: "no-account-first" }, [plugin])));
       if (path.endsWith("/catalog")) return Promise.resolve(Response.json({ sources: [], plugins: [] }));
       if (path.endsWith("/events")) return new Promise(() => {});
       return Promise.resolve(Response.json([]));

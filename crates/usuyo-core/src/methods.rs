@@ -1,23 +1,27 @@
-//! 获取插件里的方法（协议 §2.3.1）：开关、这台机器上用不用得上、取一条链接时挑哪几种，
+//! 获取插件里的方法（协议 §2.3.1）：开关、这台机器上用不用得上、照获取策略（§2.3.2）取一条链接时挑哪几种，
 //! 每种上一次调用的结果和失败日志。
 //!
-//! 开关记在按机器的 `settings.json`（`plugins.<插件 id>.methods.<方法 id>.enabled`），没写的照默认。
+//! 开关记在按机器的 `settings.json`（`plugins.<插件 id>.methods.<方法 id>.enabled`），没写的照默认；
+//! 获取策略记在同一个文件的 `fetchStrategy`。
 //! 插件自己报的本机检查（`health`）缓存一阵，不为每次取内容、每次看插件页都起一个进程。
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, PoisonError, RwLock};
 use std::time::Duration;
 
 use serde_json::{Map, Value};
 use usuyo_plugin::protocol::{
-    Account, CallFailure, ErrorCode, FetchHealth, FetchInputKind, Login, Method,
+    Account, CallFailure, ErrorCode, FetchHealth, FetchInputKind, Login, Method, OutputKind,
 };
 use usuyo_plugin::{CallOptions, DeclaredSite, DeclaredVisitor, FetchPlugin, LoginState};
 
 use crate::engine::Engine;
 use crate::fetch::now_ms;
-use crate::view::{Blocker, Event, PluginView};
+use crate::strategy::{Decision, Function, Preset, Strategy, Way};
+use crate::view::{
+    Blocker, Event, FunctionRoute, PlatformRoutes, PluginView, PresetView, StrategyView, WayRef,
+};
 use crate::words::{self, Lang, Said};
 use crate::{Error, Result};
 
@@ -37,6 +41,8 @@ pub(crate) struct HealthSeen {
 pub(crate) struct Methods {
     /// 写了的开关：(插件 id, 方法 id) → 开着没有。没写的照 [`Method::on_by_default`]。
     switches: RwLock<BTreeMap<(String, String), bool>>,
+    /// 获取策略（`fetchStrategy`）。
+    strategy: RwLock<Strategy>,
     /// 插件 id → 上次的本机检查。
     health: Mutex<BTreeMap<String, HealthSeen>>,
     /// `logs/fetch-failures.jsonl`。
@@ -68,8 +74,16 @@ impl Methods {
                 }
             }
         }
+        let strategy = match map.get("fetchStrategy") {
+            None => Strategy::default(),
+            Some(v) => serde_json::from_value::<Strategy>(v.clone())
+                .map_err(|e| e.to_string())
+                .and_then(Strategy::checked)
+                .map_err(|e| Error::InvalidArgs(format!("settings.json: fetchStrategy: {e}")))?,
+        };
         Ok(Methods {
             switches: RwLock::new(switches),
+            strategy: RwLock::new(strategy),
             health: Mutex::new(BTreeMap::new()),
             failure_log: machine_root.join("logs").join("fetch-failures.jsonl"),
         })
@@ -82,6 +96,13 @@ impl Methods {
             .unwrap_or_else(PoisonError::into_inner)
             .get(&(plugin.id().to_string(), m.id.clone()))
             .copied()
+    }
+
+    pub(crate) fn strategy(&self) -> Strategy {
+        self.strategy
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 
     pub(crate) fn failure_log(&self) -> &Path {
@@ -259,11 +280,78 @@ pub(crate) fn blockers(
     out
 }
 
-/// 取一条链接时挑出来的一种方法。
+/// 取一条链接时挑出来的一种方法；`ranks` 是它在每一样（`outputs` 里策略许它取的）的顺序里排第几。
 #[derive(Debug, Clone)]
 pub(crate) struct Candidate {
     pub plugin: FetchPlugin,
     pub method: Method,
+    pub ranks: BTreeMap<OutputKind, usize>,
+}
+
+/// 一个平台上的方式和每项功能照获取策略求出的顺序（协议 §2.3.2）。
+pub(crate) struct Routes {
+    /// 做了、在插件进程里跑、做得了至少一项功能的方法，照挑方法的先后：平台插件的在前、通用网页的在后，
+    /// 各自里先层级低的，同一层先不带账号的，再照插件和清单的顺序。
+    pub ways: Vec<(FetchPlugin, Method)>,
+    /// 这个平台上有方式做的每一项功能。
+    pub decisions: BTreeMap<Function, Decision>,
+}
+
+impl Routes {
+    /// 这种方法照策略用不用来做 `fs` 里的哪一项。
+    pub fn admits(&self, plugin: &str, method: &str, fs: &BTreeSet<Function>) -> bool {
+        let Some(i) = self
+            .ways
+            .iter()
+            .position(|(p, m)| p.id().as_str() == plugin && m.id == method)
+        else {
+            return false;
+        };
+        fs.iter()
+            .filter_map(|f| self.decisions.get(f))
+            .any(|d| d.order.contains(&i))
+    }
+}
+
+/// 这种方法做的几项功能：`fetch` 接链接的照 `outputs` 归并；`list` 照清单里来源的 `action`，
+/// 一个都没写 `action` 的是「列出存过的」。
+pub(crate) fn serves(m: &Method) -> BTreeSet<Function> {
+    let mut out = BTreeSet::new();
+    if let Some(f) = &m.capabilities.fetch
+        && f.input.contains(&FetchInputKind::Url)
+    {
+        out.extend(f.outputs.iter().map(|k| Function::of_output(*k)));
+    }
+    if let Some(l) = &m.capabilities.list {
+        let actions: BTreeSet<Function> = l
+            .sources
+            .iter()
+            .filter(|s| s.action.is_some())
+            .map(|s| Function::of_action(s.action))
+            .collect();
+        if actions.is_empty() {
+            out.insert(Function::List);
+        } else {
+            out.extend(actions);
+        }
+    }
+    out
+}
+
+/// 这种方法列的几项：清单里写死的这个来源的那一项；不在清单里的（运行时列出来的）算这种方法列的任何一项。
+pub(crate) fn lists_for(m: &Method, source: Option<&str>) -> BTreeSet<Function> {
+    let named = source.and_then(|s| {
+        m.capabilities
+            .list
+            .as_ref()?
+            .sources
+            .iter()
+            .find(|x| x.source == s && x.action.is_some())
+    });
+    match named {
+        Some(x) => [Function::of_action(x.action)].into(),
+        None => serves(m).into_iter().filter(|f| f.is_list()).collect(),
+    }
 }
 
 impl Engine {
@@ -299,8 +387,60 @@ impl Engine {
         seen
     }
 
-    /// 取这条链接的方法，照 §2.3.1 排好：平台插件的在前、通用网页的在后；各自里先层级低的，同一层先不带账号的，
-    /// 再照插件和清单的顺序。只留做了、开着、这台机器上用得上、有能接链接的 `fetch` 的。
+    /// 这个平台上的方式，和每项功能照获取策略（§2.3.2）求出的顺序。`url` 给了时只看 `match` 对得上这条链接的插件
+    /// （取一条），不给时看声明了这个平台的插件。`perPlatform` 照 `platform` 取层级。
+    pub(crate) fn routes(&self, platform: &str, url: Option<&url::Url>) -> Routes {
+        let host = &self.loaded().host;
+        let plugins: Vec<&FetchPlugin> = match url {
+            Some(u) => host.candidates(u),
+            None => host
+                .plugins()
+                .iter()
+                .filter(|p| p.spec.platforms.iter().any(|x| x.as_str() == platform))
+                .collect(),
+        };
+        let mut ranked = Vec::new();
+        for (pi, plugin) in plugins.into_iter().enumerate() {
+            for (mi, m) in plugin.spec.methods.iter().enumerate() {
+                let serves = serves(m);
+                if m.callable() && !serves.is_empty() {
+                    let key = (
+                        plugin.spec.is_web(),
+                        m.rank_on(platform, &plugin.spec.platforms),
+                        pi,
+                        mi,
+                    );
+                    ranked.push((key, plugin, m, serves));
+                }
+            }
+        }
+        ranked.sort_by_key(|(key, ..)| *key);
+        let ways: Vec<Way> = ranked
+            .iter()
+            .map(|(_, p, m, serves)| Way {
+                key: format!("{}#{}", p.id(), m.id),
+                account: m.account,
+                access: m.access_on(platform, &p.spec.platforms),
+                serves: serves.clone(),
+            })
+            .collect();
+        let strategy = self.inner.methods.strategy();
+        let decisions = Function::ALL
+            .into_iter()
+            .filter(|f| ways.iter().any(|w| w.serves.contains(f)))
+            .map(|f| (f, strategy.decide(platform, f, &ways)))
+            .collect();
+        Routes {
+            ways: ranked
+                .into_iter()
+                .map(|(_, p, m, _)| (p.clone(), m.clone()))
+                .collect(),
+            decisions,
+        }
+    }
+
+    /// 取这条链接的方法：照获取策略（§2.3.2），每一样有自己的先后（[`Candidate::ranks`]）；策略一样都不许的不调，
+    /// 也不拿来当原因、不为它去要访客身份。只留开着、这台机器上用得上的；整体照 [`Routes::ways`] 的先后。
     /// 一种都用不上时回第二项：排在最前的那种为什么用不上，拿来告诉你。
     /// 第三项：开着、只差一份访客身份（没有或过期）、排在所有用得上的方法前面的那种要的站点，
     /// 宿主可以先去取一份（[`crate::visitor_wanted`]）。
@@ -310,34 +450,31 @@ impl Engine {
         url: &url::Url,
         platform: &str,
     ) -> Result<(Vec<Candidate>, Option<CallFailure>, Option<String>)> {
+        let routes = self.routes(platform, Some(url));
         let host = &self.loaded().host;
         let sites = host.sites()?;
         let visitors = host.visitors()?;
-        let mut ranked = Vec::new();
-        for (pi, plugin) in host.candidates(url).into_iter().enumerate() {
-            for (mi, m) in plugin.spec.methods.iter().enumerate() {
-                let takes_url = m.callable()
-                    && m.capabilities
-                        .fetch
-                        .as_ref()
-                        .is_some_and(|f| f.input.contains(&FetchInputKind::Url));
-                if takes_url {
-                    ranked.push((
-                        plugin.spec.is_web(),
-                        m.rank_on(platform, &plugin.spec.platforms),
-                        pi,
-                        mi,
-                        plugin,
-                        m,
-                    ));
-                }
-            }
-        }
-        ranked.sort_by_key(|(web, rank, pi, mi, _, _)| (*web, *rank, *pi, *mi));
         let mut out = Vec::new();
         let mut why: Option<CallFailure> = None;
         let mut visitor: Option<String> = None;
-        for (_, _, _, _, plugin, m) in ranked {
+        for (i, (plugin, m)) in routes.ways.iter().enumerate() {
+            let mut ranks = BTreeMap::new();
+            if let Some(cap) = &m.capabilities.fetch
+                && cap.input.contains(&FetchInputKind::Url)
+            {
+                for k in &cap.outputs {
+                    let pos = routes
+                        .decisions
+                        .get(&Function::of_output(*k))
+                        .and_then(|d| d.order.iter().position(|&x| x == i));
+                    if let Some(pos) = pos {
+                        ranks.insert(*k, pos);
+                    }
+                }
+            }
+            if ranks.is_empty() {
+                continue;
+            }
             let enabled = self.inner.methods.enabled_on(plugin, m, platform);
             let health = if enabled {
                 Some(self.fetch_health(plugin).await)
@@ -357,6 +494,7 @@ impl Engine {
                 None => out.push(Candidate {
                     plugin: plugin.clone(),
                     method: m.clone(),
+                    ranks,
                 }),
                 // 你关掉的不拿来当原因：说一个你能去补的（登录、访客身份、缺的程序）
                 Some(b) if why.is_none() && b.code != "off" => {
@@ -366,6 +504,52 @@ impl Engine {
             }
         }
         Ok((out, why, visitor))
+    }
+
+    /// 照现在的获取策略没去取的几项功能，条目上要说清楚（§2.3.2）。一项算在里面，是条目的哪份快照都没取到它，而且
+    /// 二者之一：条目缺它（插件说的），策略一种方式都不选；或者取过这一条的方法声明了它，策略却不让那种方法取它
+    /// （那次调用收窄了 `--want`，插件不再说这一条有没有它）。设成「不获取」的那一项不算：那是你定的。
+    pub(crate) fn held_back(&self, platform: &str, m: &usuyo_contract::Manifest) -> Vec<Function> {
+        let routes = self.routes(platform, None);
+        let obtained: BTreeSet<Function> = m
+            .snapshots
+            .iter()
+            .flat_map(|s| s.outputs.iter())
+            .filter_map(|k| OutputKind::parse(k))
+            .map(Function::of_output)
+            .collect();
+        let missing: BTreeSet<Function> = m
+            .missing
+            .iter()
+            .filter_map(|k| OutputKind::parse(k))
+            .map(Function::of_output)
+            .collect();
+        // 取过这一条的方法各自声明了哪几项，和它在 `routes.ways` 里排第几
+        let callers: Vec<(usize, BTreeSet<Function>)> = m
+            .snapshots
+            .iter()
+            .filter_map(|s| {
+                let method = s.method.as_deref()?;
+                let i = routes
+                    .ways
+                    .iter()
+                    .position(|(p, x)| p.id().as_str() == s.plugin && x.id == method)?;
+                Some((i, serves(&routes.ways[i].1)))
+            })
+            .collect();
+        routes
+            .decisions
+            .iter()
+            .filter(|(f, d)| {
+                !d.skip
+                    && !obtained.contains(f)
+                    && ((missing.contains(f) && d.order.is_empty())
+                        || callers
+                            .iter()
+                            .any(|(i, fs)| fs.contains(f) && !d.order.contains(i)))
+            })
+            .map(|(f, _)| *f)
+            .collect()
     }
 
     /// 记下这种方法这一次调用的结果；失败的另记一行失败日志。
@@ -399,6 +583,98 @@ impl Engine {
             });
         }
         Ok(())
+    }
+
+    /// 获取策略和每个平台每项功能照它会用哪几种方式。
+    pub fn strategy(&self) -> StrategyView {
+        let mut platforms: Vec<String> = Vec::new();
+        for p in self.loaded().host.plugins() {
+            for pl in &p.spec.platforms {
+                if !platforms.iter().any(|x| x == pl.as_str()) {
+                    platforms.push(pl.as_str().to_owned());
+                }
+            }
+        }
+        let refs = |routes: &Routes, idx: &mut dyn Iterator<Item = usize>| -> Vec<WayRef> {
+            idx.map(|i| {
+                let (p, m) = &routes.ways[i];
+                WayRef {
+                    plugin: p.id().to_string(),
+                    method: m.id.clone(),
+                }
+            })
+            .collect()
+        };
+        let routes = platforms
+            .iter()
+            .map(|pl| {
+                let r = self.routes(pl, None);
+                let functions = r
+                    .decisions
+                    .iter()
+                    .map(|(f, d)| FunctionRoute {
+                        function: *f,
+                        from: d.from,
+                        skip: d.skip,
+                        ways: refs(&r, &mut d.order.iter().copied()),
+                        choices: refs(
+                            &r,
+                            &mut (0..r.ways.len()).filter(|&i| serves(&r.ways[i].1).contains(f)),
+                        ),
+                    })
+                    .collect();
+                PlatformRoutes {
+                    platform: self.platform(pl),
+                    functions,
+                }
+            })
+            .collect();
+        StrategyView {
+            strategy: self.inner.methods.strategy(),
+            presets: [
+                Preset::NoAccountOnly,
+                Preset::NoAccountFirst,
+                Preset::AccountFirst,
+            ]
+            .into_iter()
+            .map(|preset| PresetView {
+                preset,
+                rules: crate::strategy::preset_rules(preset),
+            })
+            .collect(),
+            routes,
+        }
+    }
+
+    /// 换掉整个获取策略，写进按机器的 `settings.json` 的 `fetchStrategy`（回到默认时去掉这一项），马上生效；
+    /// 已经取到的内容不动。
+    pub fn set_strategy(&self, strategy: Strategy) -> Result<StrategyView> {
+        let strategy = strategy.checked().map_err(Error::InvalidArgs)?;
+        {
+            let _guard = self
+                .inner
+                .settings_lock
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            let root = &self.inner.machine_root;
+            let mut map = crate::settings::read(root)?;
+            if strategy == Strategy::default() {
+                map.remove("fetchStrategy");
+            } else {
+                map.insert("fetchStrategy".into(), serde_json::to_value(&strategy)?);
+            }
+            crate::settings::write(root, &map)?;
+            *self
+                .inner
+                .methods
+                .strategy
+                .write()
+                .unwrap_or_else(PoisonError::into_inner) = strategy;
+        }
+        self.inner.wake.notify_one();
+        self.inner.imports_wake.notify_one();
+        self.emit(Event::PluginsUpdated);
+        Ok(self.strategy())
     }
 
     /// 开或关插件的一种方法，写进按机器的 `settings.json`，马上生效。没做的方法没有开关。

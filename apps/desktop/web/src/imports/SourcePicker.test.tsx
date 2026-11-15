@@ -137,7 +137,7 @@ it("groups what can be imported under each platform, gives a list method that st
   expect(ask?.url.searchParams.get("link")).toBe("https://space.bilibili.com/1/favlist?fid=2");
   expect(start?.body).toEqual({ pluginId: BILI.id, method: "favorites-public", source: SOURCE.source, title: "胶片" });
   // 开始以后那一次导入写着是哪种取法列的。
-  expect(await screen.findByText(/B站 · 公开收藏夹 · /)).toBeTruthy();
+  expect(await screen.findByText(/B站 · 公开收藏夹（不使用账号） · /)).toBeTruthy();
 });
 
 it("sets up a browser script with one press: a token named after the platform, the script and the token", async () => {

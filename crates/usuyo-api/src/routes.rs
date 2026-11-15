@@ -21,11 +21,12 @@ use tower::ServiceExt;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::services::ServeFile;
 use tower_http::set_header::SetResponseHeaderLayer;
+use usuyo_core::strategy::Strategy;
 use usuyo_core::view::{
     CatalogPlugin, CatalogView, FileReaderView, ImportEntryView, ImportView, ItemView, MapView,
     PhoneDryRun, PhoneView, PluginSourceView, PluginView, PluginsView, SearchHit, SettingsPane,
-    SettingsView, SiteView, SourceView, TakeResponse, Topic, TransformsView, TrashView,
-    VisitorView,
+    SettingsView, SiteView, SourceView, StrategyView, TakeResponse, Topic, TransformsView,
+    TrashView, VisitorView,
 };
 use usuyo_core::{DeliveredLink, DriverAction, Engine, ImportChoice, Links, SettingsPatch, Via};
 use usuyo_plugin::protocol::StorageState;
@@ -120,6 +121,7 @@ pub(crate) fn build(engine: Engine, gate: Arc<Gate>, origins: &[String]) -> Rout
         .route("/phone/ios/dry-run", post(phone_dry_run))
         .route("/phone/android/devices", post(phone_android_devices))
         .route("/settings", get(settings).patch(patch_settings))
+        .route("/strategy", get(strategy).put(put_strategy))
         .route("/trash/release-held", post(release_held))
         .route("/search", get(search))
         .route("/reindex", post(reindex))
@@ -602,6 +604,21 @@ async fn patch_settings(
     let patch = body(req)?;
     Ok(Json(
         blocking(move || s.engine.patch_settings(patch, Via::App)).await?,
+    ))
+}
+
+async fn strategy(State(s): State<AppState>) -> ApiResult<StrategyView> {
+    Ok(Json(blocking(move || Ok(s.engine.strategy())).await?))
+}
+
+/// 换掉整个获取策略（协议 §2.3.2），回整份。
+async fn put_strategy(
+    State(s): State<AppState>,
+    req: Result<Json<Strategy>, JsonRejection>,
+) -> ApiResult<StrategyView> {
+    let strategy = body(req)?;
+    Ok(Json(
+        blocking(move || s.engine.set_strategy(strategy)).await?,
     ))
 }
 

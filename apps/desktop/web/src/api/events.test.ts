@@ -28,13 +28,13 @@ describe("daemon events", () => {
     expect(spy.mock.calls.map((c) => c[0]?.queryKey)).toEqual([queryKeys.phone]);
   });
 
-  it("refreshes plugins, sites, visitors and settings, or the one import, when told", () => {
+  it("refreshes plugins, the strategy, sites, visitors and settings, or the one import, when told", () => {
     const qc = new QueryClient();
     const spy = vi.spyOn(qc, "invalidateQueries");
     applyEvent(qc, { type: "plugins-updated" });
     applyEvent(qc, { type: "import-updated", id: "x" });
     const keys = spy.mock.calls.map((c) => c[0]?.queryKey);
-    expect(keys).toEqual([queryKeys.plugins, queryKeys.sites, queryKeys.visitors, queryKeys.settings, queryKeys.imports, queryKeys.import("x"), queryKeys.importEntries("x")]);
+    expect(keys).toEqual([queryKeys.plugins, queryKeys.strategy, queryKeys.sites, queryKeys.visitors, queryKeys.settings, queryKeys.imports, queryKeys.import("x"), queryKeys.importEntries("x")]);
   });
 
   it("follows an item removed from the trash: the map, search results, that item and the trash page refresh", () => {

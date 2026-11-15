@@ -57,6 +57,8 @@
       "id": "0193f2b0-1d2e-7f3a-8b4c-5d6e7f8a9b0c",
       "plugin": "douyin",
       "pluginVersion": "1.2.0",
+      "method": "share-page",
+      "account": "none",
       "at": "2026-11-05T03:00:02.000Z",
       "inputUrl": "https://v.douyin.com/abc/",
       "resolvedUrl": "https://www.douyin.com/video/7431234567890123456",

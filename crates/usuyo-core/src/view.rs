@@ -228,6 +228,12 @@ pub struct ItemView {
     pub facets: Vec<Facet>,
     /// 还没转出来的面。
     pub pending: Vec<Pending>,
+    /// 每份快照是怎么取到的，旧的在前。
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub fetched_by: Vec<FetchedBy>,
+    /// 照现在的获取策略没去取的那几项功能（协议 §2.3.2）。
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub held_back: Vec<crate::strategy::Function>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub trashed_at: Option<String>,
 }
@@ -822,6 +828,69 @@ fn model_state<S: serde::Serializer>(s: &crate::ModelState, ser: S) -> Result<S:
         crate::ModelState::Present => "present",
         crate::ModelState::Failed(_) => "failed",
     })
+}
+
+/// 获取策略（`GET /strategy`，协议 §2.3.2）：存着的策略，三个预设各自的规则表，
+/// 和每个平台每项功能照现在的策略会用哪几种方式。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StrategyView {
+    #[serde(flatten)]
+    pub strategy: crate::strategy::Strategy,
+    /// 选「自定义」时从这里抄起。
+    pub presets: Vec<PresetView>,
+    /// 装着的插件声明的每个平台，照第一次出现的顺序。
+    pub routes: Vec<PlatformRoutes>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct PresetView {
+    pub preset: crate::strategy::Preset,
+    pub rules: Vec<crate::strategy::Rule>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct PlatformRoutes {
+    pub platform: Platform,
+    pub functions: Vec<FunctionRoute>,
+}
+
+/// 一项功能：照哪一层定的、是不是「不获取」、照先后要试的几种（`ways`）和这一项能选的几种（`choices`）。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct FunctionRoute {
+    pub function: crate::strategy::Function,
+    pub from: crate::strategy::Decided,
+    pub skip: bool,
+    pub ways: Vec<WayRef>,
+    pub choices: Vec<WayRef>,
+}
+
+/// 一种方式：插件 id 和方法 id，名字、账号、用不用得上看 `GET /plugins`。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct WayRef {
+    pub plugin: String,
+    pub method: String,
+}
+
+/// 条目的一份快照是怎么取到的（`GET /items/{id}` 的 `fetchedBy`）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FetchedBy {
+    /// 这份取到的几项功能。
+    pub functions: Vec<crate::strategy::Function>,
+    /// 插件的名字（卸掉了是 id）。
+    pub plugin: String,
+    /// 方法的名字（卸掉了、方法没了是 id）；交来的、旧快照没记的没有。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub method: Option<String>,
+    /// 方法的账号类型，取的时候记下的；旧快照没记的没有。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account: Option<usuyo_plugin::protocol::Account>,
+    /// 带去的登录站点（插件报的）。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub site: Option<String>,
+    pub access: String,
+    pub at: String,
 }
 
 /// 设置页要的内核那边的设置（`GET /settings`）。

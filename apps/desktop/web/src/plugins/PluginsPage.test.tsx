@@ -2,9 +2,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import type { CatalogView, FetchMethod, FetchPlugin, FileReader, PluginsView, SiteLogin, VisitorIdentity } from "../api/endpoints";
+import type { CatalogView, FetchMethod, FetchPlugin, FileReader, PluginsView, SiteLogin, Strategy, VisitorIdentity } from "../api/endpoints";
 import { setLanguageChoice, t } from "../i18n";
 import { method } from "../mock/platforms";
+import { strategyView } from "../mock/strategy";
 import { createAppRouter } from "../router";
 // 路由是用到才载入这一页的；先载入，免得第一次转译的时间算进等页面出现的那一秒里。
 import "./PluginsPage";
@@ -18,12 +19,17 @@ const SCRIPT = "// ==UserScript==\n// @description  在你自己的「收藏夹�
 
 interface Served {
   switched: { path: string; method?: string; body: unknown }[];
+  /** 交回去的获取策略，一次一份。 */
+  strategies: unknown[];
   revealed: string[];
   created: unknown[];
 }
 
+const isStrategy = (v: unknown): v is Strategy => typeof v === "object" && v !== null && "preset" in v;
+
 function serve(view: Omit<PluginsView, "failureLog">, sites: SiteLogin[], visitors: VisitorIdentity[] = [], at = "/plugins", readers: FileReader[] = []): Served {
-  const served: Served = { switched: [], revealed: [], created: [] };
+  const served: Served = { switched: [], strategies: [], revealed: [], created: [] };
+  let strategy: Strategy = { preset: "no-account-first" };
   vi.stubGlobal("scrollTo", vi.fn());
   vi.stubGlobal(
     "fetch",
@@ -35,6 +41,13 @@ function serve(view: Omit<PluginsView, "failureLog">, sites: SiteLogin[], visito
         return Promise.resolve(new Response(null, { status: 204 }));
       }
       if (path.endsWith("/script")) return Promise.resolve(Response.json({ text: SCRIPT }));
+      if (path.endsWith("/strategy")) {
+        if (init?.method === "PUT" && isStrategy(body)) {
+          served.strategies.push(body);
+          strategy = body;
+        }
+        return Promise.resolve(Response.json(strategyView(strategy, view.plugins)));
+      }
       if (path.includes("/methods/")) {
         served.switched.push(init?.method === "DELETE" ? { path, method: "DELETE", body } : { path, body });
         return Promise.resolve(Response.json(view.plugins[0]));
@@ -146,7 +159,8 @@ it("writes the platform page in English when English is chosen, with plurals and
   expect(await screen.findByText(/^Fetched by the B站 plugin\./)).toBeTruthy();
   expect(screen.getAllByRole("link", { name: "Fetch Plugins" }).length).toBeGreaterThan(0);
   expect(screen.getByText("Development 0.1.0")).toBeTruthy();
-  expect(screen.getByRole("region", { name: "Add Link" })).toBeTruthy();
+  expect(screen.getByRole("region", { name: "Fetch Strategy" })).toBeTruthy();
+  expect((await screen.findAllByText("访客接口 (no account)")).length).toBeGreaterThan(0);
   const pacing = screen.getByRole("region", { name: "Request Rate" });
   expect(within(pacing).getByText("At least 5 seconds between requests; daily import limit: 500.")).toBeTruthy();
   expect(screen.getByRole("region", { name: "Keys & Logs" })).toBeTruthy();
@@ -158,46 +172,46 @@ it("writes the platform page in English when English is chosen, with plurals and
   expect(within(accounts).getByRole("button", { name: "Get Visitor Identity" })).toBeTruthy();
 });
 
-it("explains 自动 in the daemon's order, with the unbuilt one disabled and parts as 补上 lines", async () => {
+it("lists each kind of content with the methods the daemon would use, in order, and whether they use an account", async () => {
   serve({ plugins: [bili([guest, session, signed, video, unbuilt])], notLoaded: [] }, [SITE], [], "/plugins/bilibili");
-  const card = await screen.findByRole("region", { name: "添加链接" });
-  expect(within(card).getByText("可用")).toBeTruthy();
-  expect(within(card).getAllByText("在 usuyo 中登录B站账号：未登录")[0]).toBeTruthy();
-  expect(within(card).getByText(/已关闭：签名接口（此层级默认关闭）/)).toBeTruthy();
-  expect(within(card).getByText("补充：视频")).toBeTruthy();
-  expect(within(card).getByRole("switch", { name: "补充：视频文件" })).toBeTruthy();
-  fireEvent.click(within(card).getByRole("button", { name: /获取方式/ }));
-  const option = await screen.findByRole("option", { name: /^客户端/ });
-  expect(option.getAttribute("aria-disabled")).toBe("true");
+  const card = await screen.findByRole("region", { name: "获取策略" });
+  expect(await within(card).findByText("正文")).toBeTruthy();
+  // 正文先用不带账号的访客接口，再用要登录的会话接口；签名接口那一层不在预设里，不列
+  const text = within(card).getByRole("list", { name: "正文会使用的获取方式" });
+  expect(text.children).toHaveLength(2);
+  expect(text.textContent).toMatch(/^1访客接口（不使用账号）.*2会话接口（使用账号）/);
+  expect(within(text).getAllByText("在 usuyo 中登录B站账号：未登录")[0]).toBeTruthy();
+  expect(within(text).queryByText(/签名接口/)).toBeNull();
+  expect(within(within(card).getByRole("list", { name: "视频会使用的获取方式" })).getByText("视频文件（使用账号）")).toBeTruthy();
+  // 选择框里能选签名接口，没做好的不在
+  fireEvent.click(within(card).getByRole("button", { name: /正文的获取方式/ }));
+  expect(await screen.findByRole("option", { name: /^签名接口/ })).toBeTruthy();
+  expect(screen.queryByRole("option", { name: /^客户端/ })).toBeNull();
 });
 
-it("choosing one method switches it on and the platform's other link methods off; 自动 puts each back to its default", async () => {
+it("choosing a method for one kind sends the whole strategy back, and an off tier then shows with its switch", async () => {
   const served = serve({ plugins: [bili([guest, session, signed, video])], notLoaded: [] }, [SITE], [], "/plugins/bilibili");
-  await choose("获取方式", "签名接口");
-  await waitFor(() =>
-    expect(served.switched).toEqual([
-      { path: "/api/plugins/usuyo-fetch/bilibili/methods/signed", body: { enabled: true } },
-      { path: "/api/plugins/usuyo-fetch/bilibili/methods/guest", body: { enabled: false } },
-      { path: "/api/plugins/usuyo-fetch/bilibili/methods/session", body: { enabled: false } },
-    ]),
-  );
-  cleanup();
-
-  const back = serve({ plugins: [bili([{ ...guest, enabled: false }, { ...session, enabled: false }, { ...signed, enabled: true }, video])], notLoaded: [] }, [SITE], [], "/plugins/bilibili");
-  // 现在只有签名接口开着：选择框里是它，说明是它的
-  expect(await screen.findByText("模拟平台客户端调用未公开的接口。平台通常不允许这种方式，因此默认关闭。")).toBeTruthy();
-  await choose("获取方式", "自动");
-  // 「自动」去掉拨过的开关（DELETE，不带身子），回到各自那一层的默认
-  await waitFor(() =>
-    expect(back.switched).toEqual([
-      { path: "/api/plugins/usuyo-fetch/bilibili/methods/guest", method: "DELETE", body: null },
-      { path: "/api/plugins/usuyo-fetch/bilibili/methods/session", method: "DELETE", body: null },
-      { path: "/api/plugins/usuyo-fetch/bilibili/methods/signed", method: "DELETE", body: null },
-    ]),
-  );
+  await choose("正文的获取方式", "签名接口");
+  await waitFor(() => expect(served.strategies).toEqual([{ preset: "no-account-first", platforms: { bilibili: { functions: { text: "usuyo-fetch/bilibili#signed" } } } }]));
+  expect(await screen.findByText("在这里指定")).toBeTruthy();
+  expect(screen.getByText("此层级默认关闭")).toBeTruthy();
+  fireEvent.click(screen.getByRole("switch", { name: "开启签名接口" }));
+  await waitFor(() => expect(served.switched).toEqual([{ path: "/api/plugins/usuyo-fetch/bilibili/methods/signed", body: { enabled: true } }]));
+  // 不获取
+  await choose("视频的获取方式", "不获取");
+  await waitFor(() => expect(served.strategies[1]).toEqual({ preset: "no-account-first", platforms: { bilibili: { functions: { text: "usuyo-fetch/bilibili#signed", video: "skip" } } } }));
+  expect(await screen.findByText("这一项不获取。")).toBeTruthy();
 });
 
-it("a specific method's explanation has its needs with one action each, risk and last call", async () => {
+it("a preset for this platform only changes what is used here, and says when nothing is left", async () => {
+  const served = serve({ plugins: [bili([guest, session, video])], notLoaded: [] }, [SITE], [], "/plugins/bilibili");
+  await choose("这个平台的策略", "仅不使用账号");
+  await waitFor(() => expect(served.strategies).toEqual([{ preset: "no-account-first", platforms: { bilibili: { preset: "no-account-only" } } }]));
+  expect((await screen.findAllByText("按这个平台的策略")).length).toBeGreaterThan(0);
+  expect(screen.getAllByText("按当前策略没有可用的方式，这一项不获取。").length).toBeGreaterThan(0);
+});
+
+it("a method's line has its needs with one action each, risk and last call", async () => {
   serve(
     {
       plugins: [
@@ -220,13 +234,16 @@ it("a specific method's explanation has its needs with one action each, risk and
     [],
     "/plugins/bilibili",
   );
-  const needs = await screen.findByRole("list", { name: "会话接口需要的项目" });
+  const needs = (await screen.findAllByRole("list", { name: "会话接口需要的项目" }))[0];
+  if (!needs) throw new Error("no needs");
   expect(within(needs).getByText("在 usuyo 中登录B站账号：未登录")).toBeTruthy();
   expect(within(needs).getByRole("button", { name: "登录" })).toBeTruthy();
   expect(within(needs).getByText("没找到 ffmpeg：brew install ffmpeg")).toBeTruthy();
   expect(within(needs).getByRole("button", { name: "重新检查" })).toBeTruthy();
-  expect(screen.getByText(/只读，不改。/)).toBeTruthy();
-  expect(screen.getByText(/上次使用：.*，失败：登录过期了/)).toBeTruthy();
+  expect(screen.getAllByText(/只读，不改。/)[0]).toBeTruthy();
+  expect(screen.getAllByText(/上次使用：.*，失败：登录过期了/)[0]).toBeTruthy();
+  // 关掉的那种带开关
+  expect(screen.getAllByRole("switch", { name: "开启访客接口" })[0]).toBeTruthy();
 });
 
 it("steps for a list that needs a login: log in, then 去导入 with the method chosen", async () => {
@@ -349,11 +366,11 @@ it("lists logins and visitor identities with the methods that use them, the paci
   expect(within(screen.getByRole("region", { name: "技术信息" })).getByText("parse-video（MIT）")).toBeTruthy();
 });
 
-it("names the other platforms a multi-platform method's one switch moves, and offers no lone option that equals 自动", async () => {
+it("with two plugins on one platform, each method carries its plugin's name", async () => {
   const multi: FetchPlugin = {
     ...bili([method({ id: "clip", name: "多平台", access: "public-web", account: { kind: "none" }, gets: { fetch: ["text", "meta"] } })]),
     id: "example/multi",
-    name: "多平台",
+    name: "多平台插件",
     platforms: [
       { id: "bilibili", name: "B站" },
       { id: "youtube", name: "YouTube" },
@@ -361,12 +378,6 @@ it("names the other platforms a multi-platform method's one switch moves, and of
     sites: [],
   };
   serve({ plugins: [bili([guest]), multi], notLoaded: [] }, [SITE], [], "/plugins/bilibili");
-  expect(await screen.findByText(/的开关同时作用于 YouTube/)).toBeTruthy();
-  cleanup();
-
-  serve({ plugins: [bili([guest, unbuilt])], notLoaded: [] }, [SITE], [], "/plugins/bilibili");
-  fireEvent.click(await screen.findByRole("button", { name: /获取方式/ }));
-  expect(await screen.findByRole("option", { name: /^自动/ })).toBeTruthy();
-  expect(screen.getAllByText("目前只提供访客接口").length).toBeGreaterThan(0);
-  expect(screen.queryByRole("option", { name: /^访客接口/ })).toBeNull();
+  expect((await screen.findAllByText("访客接口（不使用账号） · B站")).length).toBeGreaterThan(0);
+  expect(screen.getAllByText("多平台（不使用账号） · 多平台插件").length).toBeGreaterThan(0);
 });

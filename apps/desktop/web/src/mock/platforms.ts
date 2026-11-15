@@ -8,12 +8,14 @@ import type {
   ImportEntry,
   ImportView,
   SiteLogin,
+  Strategy,
   VisitorIdentity,
 } from "../api/endpoints";
 import { ApiError } from "../api/client";
 import type { Platforms } from "../api/source";
 import { formatDayTime } from "../i18n/format";
 import { said } from "./said";
+import { checked, strategyView } from "./strategy";
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const inMinutes = (m: number) => new Date(Date.now() + m * 60_000).toISOString();
@@ -438,6 +440,7 @@ export function createMockPlatforms(empty = false): Platforms {
   // 拨过开关以后，各平台都照它。
   const switched = (m: FetchMethod, enabled: boolean): FetchMethod =>
     m.perPlatform ? { ...m, enabled, perPlatform: m.perPlatform.map((t) => ({ ...t, enabled })) } : { ...m, enabled };
+  let strategy: Strategy = { preset: "no-account-first" };
   const sites = empty ? [] : baseSites();
   const visitors = empty ? [] : baseVisitors();
   const imports = new Map<string, MockImport>();
@@ -522,6 +525,15 @@ export function createMockPlatforms(empty = false): Platforms {
         notLoaded: [],
         failureLog: "~/Library/Application Support/usuyo/logs/fetch-failures.jsonl",
       };
+    },
+    async strategy() {
+      await wait(40);
+      return strategyView(strategy, plugins);
+    },
+    async setStrategy(next) {
+      await wait(60);
+      strategy = checked(next);
+      return strategyView(strategy, plugins);
     },
     async sources(pluginId, methodId, link) {
       await wait(600);

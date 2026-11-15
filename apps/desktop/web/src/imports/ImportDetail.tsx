@@ -3,7 +3,8 @@ import { Check } from "lucide-react";
 import { useState } from "react";
 import { Checkbox, ToggleButton, ToggleButtonGroup } from "react-aria-components";
 import type { FetchPlugin, ImportEntry, ImportView, ImportWaiting, VisitorIdentity } from "../api/endpoints";
-import { useImport, useImportChange, useImportEntries, usePlugins, useSites, useVisitors } from "../api/hooks";
+import { useImport, useImportChange, useImportEntries, usePlugins, useSites, useStrategy, useVisitors } from "../api/hooks";
+import { accountShort, fetchSummary } from "../plugins/strategy";
 import { ErrorLine } from "../components/ErrorLine";
 import { rich, t } from "../i18n";
 import { dayText } from "../item/format";
@@ -11,7 +12,7 @@ import { useNames } from "../plugins/names";
 import { TryAgain } from "../plugins/Needs";
 import { SiteLoginButton } from "../plugins/SiteLoginRow";
 import { VisitorTake } from "../plugins/VisitorIdentity";
-import { timeText } from "../plugins/words";
+import { clauses, timeText } from "../plugins/words";
 import { Button } from "../ui/Button";
 import { NotStored } from "./NotStored";
 import { waitingText } from "./words";
@@ -23,6 +24,7 @@ const MORE = 40;
 export function ImportDetail({ id, onGone }: { id: string; onGone: () => void }) {
   const view = useImport(id);
   const plugins = usePlugins();
+  const strategy = useStrategy();
   const visitors = useVisitors();
   const names = useNames();
   if (view.error) return <ErrorLine error={view.error} />;
@@ -42,9 +44,12 @@ export function ImportDetail({ id, onGone }: { id: string; onGone: () => void })
         : t("imports.detail.delivered")
       : v.kind === "file" && v.file
         ? t("imports.detail.file", { reader: v.file.reader, file: v.file.name })
-        : methodName
-          ? t("imports.detail.plugin", { plugin: pluginName, method: methodName })
-          : pluginName;
+        : methodName && found
+          ? t("imports.detail.pluginAccount", { plugin: pluginName, method: methodName, account: accountShort(found.account.kind) })
+          : methodName
+            ? t("imports.detail.plugin", { plugin: pluginName, method: methodName })
+            : pluginName;
+  const fetches = strategy.data && first && plugins.data ? fetchSummary(strategy.data, first.id, plugins.data.plugins) : [];
 
   return (
     <div className="animate-fade">
@@ -54,6 +59,13 @@ export function ImportDetail({ id, onGone }: { id: string; onGone: () => void })
           {t("imports.detail.meta", { from, day: dayText(v.createdAt) })}
         </span>
       </div>
+      {fetches.length > 0 ? (
+        <p className="m-0 mt-1 text-small text-sub">
+          <Link to="/plugins/$platform" params={{ platform: first?.id ?? "" }} className="text-sub no-underline hover:text-text">
+            {t("imports.detail.fetches", { list: clauses(fetches) })}
+          </Link>
+        </p>
+      ) : null}
       {v.state === "listing" ? <Listing v={v} visitor={visitor} plugin={plugin} /> : null}
       {v.state === "ready" ? <Ready v={v} platform={platform} /> : null}
       {v.state === "taking" || v.state === "held" || v.state === "done" ? <Running v={v} platform={platform} visitor={visitor} plugin={plugin} /> : null}

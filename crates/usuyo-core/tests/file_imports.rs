@@ -403,3 +403,20 @@ async fn reading_back_waits_while_the_reader_is_held_and_never_touches_stored_it
         "存着的没动"
     );
 }
+
+#[tokio::test]
+async fn a_file_you_hand_in_is_read_whatever_the_fetch_strategy_says_about_lists() {
+    let f = Fixture::new();
+    let engine = f.engine();
+    // 「喜欢」和别的列出都不获取：读你交来的文件不碰平台，照样读
+    let s: usuyo_core::strategy::Strategy = serde_json::from_value(serde_json::json!({
+        "preset": "custom",
+        "rules": [{"function": "list:like", "use": []}, {"function": "list", "use": []}, {"use": [{}]}]
+    }))
+    .unwrap();
+    engine.set_strategy(s).unwrap();
+    let v = upload(&engine, "export.json", "hello export file")
+        .await
+        .unwrap();
+    assert_eq!(v.state, ImportState::Ready);
+}

@@ -66,6 +66,8 @@ fn snapshot(lib: &Library, url: &str, text: &str) -> NewSnapshot {
     NewSnapshot {
         plugin: "web".into(),
         plugin_version: Some("0.1.0".into()),
+        method: None,
+        account: None,
         input_url: Some(url.into()),
         resolved_url: Some(url.into()),
         access: "public-web".into(),

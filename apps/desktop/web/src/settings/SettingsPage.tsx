@@ -7,6 +7,7 @@ import { Diagnostics } from "./Diagnostics";
 import { General } from "./General";
 import { Network } from "./Network";
 import { Storage } from "./Storage";
+import { StrategySection } from "./StrategySection";
 import { TextSection } from "./TextSection";
 import { WindowSection } from "./WindowSection";
 import { t, type MessageKey } from "../i18n";
@@ -16,6 +17,7 @@ const SECTIONS = [
   { id: "appearance", name: "settings.appearance.name" },
   { id: "window", name: "settings.window.name" },
   { id: "network", name: "settings.network.name" },
+  { id: "strategy", name: "settings.strategy.name" },
   { id: "storage", name: "settings.storage.name" },
   { id: "text", name: "settings.text.name" },
   { id: "diagnostics", name: "settings.diagnostics.name" },
@@ -65,6 +67,9 @@ export function SettingsPage() {
                 // 内核那边的出口变了（别处改的、事件来的）就照新的重新摆。
                 <Network key={`${v.network.mode} ${v.network.proxy ?? ""}`} view={v} />
               ))}
+            </Section>
+            <Section id="strategy" name={t("settings.strategy.name")} sub={t("settings.strategy.sub")}>
+              <StrategySection />
             </Section>
             <Section id="storage" name={t("settings.storage.name")} sub={t("settings.storage.sub")}>
               {gate((v) => <Storage view={v} />)}

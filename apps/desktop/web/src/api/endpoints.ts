@@ -100,6 +100,11 @@ export const paths = {
    * 只在 `SettingsView.trashHeld` 有的时候给点。
    */
   trashReleaseHeld: "/trash/release-held",
+  /**
+   * GET `StrategyView`：获取策略（协议 §2.3.2），三个预设的规则表，每个平台每项功能照它会用哪几种方式。
+   * PUT `Strategy`：换掉整个策略，回 `StrategyView`，马上生效；写坏的（自定义没有规则、兜底不在最后）回 `invalid-args`。
+   */
+  strategy: "/strategy",
 
   // —— 获取插件（「获取插件」页）——
   /** GET：装着的获取插件、各自的标签和节奏、停着没有；还有没加载的和原因。 */
@@ -415,8 +420,26 @@ export interface Item extends ItemSummary {
   facets: Facet[];
   /** 还没转出来的面。 */
   pending: Pending[];
+  /** 每份快照是哪种方式取到的，旧的在前；只有链接时没有。 */
+  fetchedBy?: FetchedBy[];
+  /** 缺的几样里，照现在的获取策略没有方式去取的那几项。 */
+  heldBack?: FetchFunction[];
   /** 在回收站里时有；RFC 3339。 */
   trashedAt?: string;
+}
+
+/** 一份快照是怎么取到的。`method`、`account` 是取的时候记下的，旧的快照、交来的没有。 */
+export interface FetchedBy {
+  functions: FetchFunction[];
+  /** 插件的名字（卸掉了是 id）。 */
+  plugin: string;
+  /** 方法的名字。 */
+  method?: string;
+  account?: MethodAccount["kind"];
+  /** 带去的登录站点。 */
+  site?: string;
+  access: string;
+  at: string;
 }
 
 export interface Topic {
@@ -957,6 +980,67 @@ export interface FetchMethod {
   window: boolean;
   /** 插件写的一句：这种方法的脚本在窗口里做什么。 */
   guide?: string;
+}
+
+/**
+ * 用户看得懂的一项功能（协议 §2.3.2）：正文（`text`、`html`、`meta`）、图片、视频（`media:video`、`subtitle`）、音频、评论，
+ * 列出收藏、赞过、分享过、看过的，和没写动作的「列出已保存的内容」。
+ */
+export type FetchFunction = "text" | "images" | "video" | "audio" | "comments" | "list:favorite" | "list:like" | "list:share" | "list:view" | "list";
+
+/** 总策略选哪一张规则表：三个预设，或你自己的（`custom`）。 */
+export type StrategyPreset = "no-account-only" | "no-account-first" | "account-first" | "custom";
+
+/**
+ * 去向里的一段：某一种方式（`method` 是 `<插件 id>#<方法 id>`），或一组：账号类型和层级都对得上的方式。
+ * `accounts` 不写是任何账号类型，`access` 不写是 `private-api` 以下的几层。
+ */
+export interface StrategyStep {
+  method?: string;
+  accounts?: MethodAccount["kind"][];
+  access?: Access[];
+}
+
+/** 一条规则：平台、功能不写是任意；`use` 空是「不获取」。最后一条是兜底，两样都不写。 */
+export interface StrategyRule {
+  platform?: string;
+  function?: FetchFunction;
+  use: StrategyStep[];
+}
+
+/** 一个平台自己的：另选一个预设（不写是跟随总策略），每项功能上指定的：`skip` 是不获取，别的是 `<插件 id>#<方法 id>`。 */
+export interface PlatformStrategy {
+  preset?: Exclude<StrategyPreset, "custom">;
+  functions?: Partial<Record<FetchFunction, string>>;
+}
+
+export interface Strategy {
+  preset: StrategyPreset;
+  /** 自定义的规则表；选了预设也留着。 */
+  rules?: StrategyRule[];
+  platforms?: Record<string, PlatformStrategy>;
+}
+
+export interface WayRef {
+  plugin: string;
+  method: string;
+}
+
+/**
+ * 一项功能现在照什么取：`from` 是照哪一层定的（功能上指定的、平台另选的预设、总策略），`skip` 是规则说不获取；
+ * `ways` 是照先后要试的几种（用不用得上看 `GET /plugins`），`choices` 是这一项能选的几种。
+ */
+export interface FunctionRoute {
+  function: FetchFunction;
+  from: "function" | "platform" | "strategy";
+  skip: boolean;
+  ways: WayRef[];
+  choices: WayRef[];
+}
+
+export interface StrategyView extends Strategy {
+  presets: { preset: Exclude<StrategyPreset, "custom">; rules: StrategyRule[] }[];
+  routes: { platform: Platform; functions: FunctionRoute[] }[];
 }
 
 export interface PluginsView {

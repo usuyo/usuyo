@@ -249,7 +249,11 @@ SHA-256，小写十六进制，算存下来的字节。字段名叫 `sha256` 时
 | 登录、重新登录、退出登录、完成登录 | Sign In, Sign In Again, Sign Out, Done Signing In | 登录好了 |
 | 网站数据 | website data | 网页数据 |
 | 在{fileManager}中显示 | Show in {fileManager} | — |
-| 自动（获取方式的选择）、单独设置 | Automatic, Custom | — |
+| 获取策略、总策略、这个平台的策略、跟随总策略、跟随策略、不获取 | Fetch Strategy, general strategy, Strategy for This Platform, Use the General Strategy, Use the Strategy, Don't Fetch | 取法、路线、分流、跳过 |
+| 仅不使用账号、优先不使用账号、优先使用账号、自定义 | Without an Account Only, Without an Account First, With an Account First, Custom | 免登录、安全模式、全量模式 |
+| 规则、其余情况、添加规则、添加方式 | Rules, Everything Else, Add Rule, Add Method | 兜底、去向 |
+| 不使用账号、使用账号（一种方式带不带账号） | no account, uses an account | 匿名、登录态 |
+| 按当前策略未获取：{what}、更改获取策略 | Not fetched under the current strategy: {what}, Change Fetch Strategy | 被策略挡掉 |
 | 已记录（记下的风险） | On record | 记下的 |
 | 接通电源 | connected to power | 接着电源 |
 | 使用系统代理、不使用代理、自定义代理、连接方式 | Use system proxy, No proxy, Custom proxy, Connection | 跟系统代理、直连、自己填一个代理、插件出门 |
