@@ -36,12 +36,14 @@ pub enum PluginError {
     #[error("secret store: {0}")]
     Vault(String),
 
-    /// 一次调用失败了。`stderr` 是最后几行日志，给诊断用。
+    /// 一次调用失败了。`stderr` 是最后几行日志，给诊断用；`cookies` 是这次交给插件的 cookie 的名字
+    /// （账号的和访客身份的，不含值），给失败日志用。
     #[error("plugin {plugin} call {call_id} failed: {failure}")]
     Call {
         plugin: PluginId,
         call_id: String,
         failure: Box<CallFailure>,
         stderr: Vec<String>,
+        cookies: Vec<String>,
     },
 }

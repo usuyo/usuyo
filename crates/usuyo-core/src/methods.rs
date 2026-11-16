@@ -161,6 +161,8 @@ struct FailureLine<'a> {
     hint: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     detail: Option<&'a str>,
+    /// 这次交给插件的 cookie 的名字（账号的和访客身份的），不含值；没交就是空的。
+    cookies: &'a [String],
 }
 
 fn append_failure(path: &Path, line: &FailureLine<'_>) -> std::io::Result<()> {
@@ -552,23 +554,23 @@ impl Engine {
             .collect()
     }
 
-    /// 记下这种方法这一次调用的结果；失败的另记一行失败日志。
+    /// 记下这种方法这一次调用的结果；失败的另记一行失败日志，带上这次交给插件的 cookie 的名字。
     pub(crate) fn record_method_call(
         &self,
         plugin: &FetchPlugin,
         method: &str,
         host: Option<&str>,
-        result: std::result::Result<(), &CallFailure>,
+        result: std::result::Result<(), (&CallFailure, &[String])>,
     ) -> Result<()> {
         let now = now_ms();
         let (code, hint) = match result {
             Ok(()) => (None, None),
-            Err(f) => (Some(f.code.as_str()), f.hint.as_deref()),
+            Err((f, _)) => (Some(f.code.as_str()), f.hint.as_deref()),
         };
         self.inner
             .jobs
             .record_method_call(plugin.id().as_str(), method, now, code, hint)?;
-        if let Err(f) = result {
+        if let Err((f, cookies)) = result {
             self.inner.methods.log_failure(&FailureLine {
                 at: jiff::Timestamp::from_millisecond(now)
                     .map(usuyo_library::time::format)
@@ -580,6 +582,7 @@ impl Engine {
                 message: &f.message,
                 hint: f.hint.as_deref(),
                 detail: f.detail.as_deref().map(String::as_str),
+                cookies,
             });
         }
         Ok(())
@@ -823,6 +826,7 @@ mod tests {
             message,
             hint: None,
             detail: Some("<html>\nverify"),
+            cookies: &[],
         }
     }
 

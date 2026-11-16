@@ -42,6 +42,16 @@ struct State {
     refusing: BTreeSet<String>,
     /// 被拒以后换过一份新的，之后还没有一次取到。再被拒就整个平台停下。
     replaced: BTreeSet<String>,
+    /// 站点 → 访客窗口上一回没取到时页面里有的 cookie 名字（不含值）、窗口的 UA、什么时候。存下一份就清掉。
+    missed: BTreeMap<String, Missed>,
+}
+
+/// 访客窗口一回没取到：时间（毫秒）、页面里有的 cookie 的名字、窗口的 UA。只在内存里，给诊断看。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Missed {
+    pub at: i64,
+    pub names: Vec<String>,
+    pub user_agent: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -150,6 +160,7 @@ impl Wanted {
         let mut s = self.lock();
         s.asked.remove(site);
         s.failed.remove(site);
+        s.missed.remove(site);
         if s.refusing.remove(site) {
             s.replaced.insert(site.to_owned());
         }
@@ -162,6 +173,15 @@ impl Wanted {
     /// 取到了：这条以后再要访客身份时还能再等一回。
     pub(crate) fn done(&self, item: &str) {
         self.lock().waited.remove(item);
+    }
+
+    /// 访客窗口这一回没取到（声明的名字没到齐就关了）：记下页面里有哪些名字。
+    pub(crate) fn missed(&self, site: &str, missed: Missed) {
+        self.lock().missed.insert(site.to_owned(), missed);
+    }
+
+    pub(crate) fn last_missed(&self, site: &str) -> Option<Missed> {
+        self.lock().missed.get(site).cloned()
     }
 }
 
@@ -215,6 +235,38 @@ impl Engine {
         self.inner
             .visitors_wanted
             .asked(now_ms(), self.visitor_wait_ms())
+    }
+
+    /// `POST /visitors/{site}/missed`：壳的访客窗口没取到就关了，交来页面里有的 cookie 名字（不含值）和窗口的 UA。
+    /// 访客身份的列表上照它写缺了哪几个名字。
+    pub fn visitor_missed(
+        &self,
+        site: &str,
+        names: Vec<String>,
+        user_agent: Option<String>,
+    ) -> Result<()> {
+        if !self
+            .loaded()
+            .host
+            .visitors()?
+            .iter()
+            .any(|v| v.visitor.site == site)
+        {
+            return Err(crate::Error::NotFound(format!("visitor identity {site}")));
+        }
+        let mut names = names;
+        names.sort();
+        names.dedup();
+        self.inner.visitors_wanted.missed(
+            site,
+            Missed {
+                at: now_ms(),
+                names,
+                user_agent,
+            },
+        );
+        self.emit(Event::PluginsUpdated);
+        Ok(())
     }
 
     /// 存下了一份访客身份：等着它的条目马上再排。

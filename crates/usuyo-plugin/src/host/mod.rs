@@ -494,8 +494,10 @@ impl PluginHost {
         &self,
         site: &str,
         state: &StorageState,
+        user_agent: Option<&str>,
     ) -> Result<DeclaredVisitor, PluginError> {
-        self.logins.save_visitor(&self.plugins, site, state)
+        self.logins
+            .save_visitor(&self.plugins, site, state, user_agent)
     }
 
     /// 去掉一个访客身份。同一主机的账号不动。
@@ -1008,6 +1010,7 @@ impl PluginHost {
             credentials::scrub(line, &handover.values);
         }
         finished.scrub = handover.values.clone();
+        finished.cookies = handover.cookie_names.clone();
         let sites = handover.sites.clone();
         drop(handover);
         Ok((finished, sites))
@@ -1056,6 +1059,7 @@ impl Call {
             call_id: self.id.clone(),
             failure: Box::new(failure),
             stderr,
+            cookies: Vec::new(),
         }
     }
 
@@ -1074,7 +1078,35 @@ impl Call {
             stdout,
             stderr,
             scrub,
+            cookies,
         } = finished;
+        self.decode_envelope(plugin, ending, &stdout, stderr, &scrub)
+            .map_err(|e| match e {
+                PluginError::Call {
+                    plugin,
+                    call_id,
+                    failure,
+                    stderr,
+                    ..
+                } => PluginError::Call {
+                    plugin,
+                    call_id,
+                    failure,
+                    stderr,
+                    cookies,
+                },
+                other => other,
+            })
+    }
+
+    fn decode_envelope<T: DeserializeOwned>(
+        &self,
+        plugin: &FetchPlugin,
+        ending: Ending,
+        stdout: &[u8],
+        stderr: Vec<String>,
+        scrub: &[String],
+    ) -> Result<T, PluginError> {
         let host = |code: ErrorCode, message: String| CallFailure::new(code, message);
         let status = match ending {
             Ending::TimedOut => {
@@ -1103,7 +1135,7 @@ impl Call {
             }
             Ending::Exited(status) => status,
         };
-        let value: Value = match serde_json::from_slice(&stdout) {
+        let value: Value = match serde_json::from_slice(stdout) {
             Ok(v) => v,
             Err(e) => {
                 let failure = if status.code() == Some(2) {
@@ -1156,12 +1188,12 @@ impl Call {
                     Ok(Failed { mut error }) => Err(match error.check_from_plugin() {
                         Ok(()) => {
                             // 先洗再截：截短以后被切开的值就认不出来了
-                            credentials::scrub(&mut error.message, &scrub);
+                            credentials::scrub(&mut error.message, scrub);
                             if let Some(h) = &mut error.hint {
-                                credentials::scrub(h, &scrub);
+                                credentials::scrub(h, scrub);
                             }
                             if let Some(d) = &mut error.detail {
-                                credentials::scrub(d, &scrub);
+                                credentials::scrub(d, scrub);
                             }
                             envelope_text::failure(&mut error);
                             error
@@ -1182,9 +1214,9 @@ impl Call {
         }
         result.map_err(|mut failure| {
             // 宿主拼的错误里也可能带着插件给的字（栏名、平台名），在这里再过一遍。
-            credentials::scrub(&mut failure.message, &scrub);
+            credentials::scrub(&mut failure.message, scrub);
             if let Some(hint) = &mut failure.hint {
-                credentials::scrub(hint, &scrub);
+                credentials::scrub(hint, scrub);
             }
             self.fail(plugin, failure, stderr)
         })

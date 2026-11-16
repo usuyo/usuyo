@@ -24,6 +24,7 @@ const site: SiteLogin = {
   login: "present",
   capturedAt: "2026-11-14T08:00:00.000Z",
   plugins: ["someone/example"],
+  storedCookies: [],
   credential: "browser-profile",
   lastUse: { at: "2026-11-14T09:00:00.000Z", plugin: "someone/example", method: "in-usuyo", methodName: "在 usuyo 中登录并读取", noted: 312 },
 };

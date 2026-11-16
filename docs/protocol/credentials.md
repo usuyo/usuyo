@@ -6,7 +6,8 @@
 做到的见 [§3.13](fetch.md#313-宿主和-plugin-kit-现在做到的11-11)：`credential: cookies` 的站点有登录窗口和 cookie 文件两种来源（下表），只传这种站点；`credentialsUpdate` 写回这次交出去的站点，存进 `usuyo.fetch.json` 前去掉。
 
 - **只由宿主在调用时传入**，只传清单 `sites` 里声明、这次的方法在这次调用的平台上列了的站点（[§2.3.1](manifest.md#231-方法-methods)：`perPlatform` 写了这个平台就照它的 `login`、`sites`；平台认不出时照方法所有层合起来；列清单、列来源、按 `ref` 取照插件的第一个平台）；`login: none` 的方法不传任何平台账号凭据，`canonicalize`、`health`（不带 `--probe`）也不传。插件自己的密钥设置不算平台凭据，另经 `USUYO_SECRETS` 传（[§2.11](manifest.md#211-插件设置-settings)）。
-- **访客身份不是账号凭据**（[§2.5.1](manifest.md#251-访客身份-visitors)）：只传给列了它的方法，经 `USUYO_VISITOR`，文件和 `USUYO_CREDENTIALS` 同一个形状、同样 0600、调用结束即删；和同一主机的账号分开存、分开传，`credentialsUpdate` 不写回它。
+- **访客身份不是账号凭据**（[§2.5.1](manifest.md#251-访客身份-visitors)）：只传给列了它的方法，经 `USUYO_VISITOR`，文件和 `USUYO_CREDENTIALS` 同一个形状、同样 0600、调用结束即删；和同一主机的账号分开存、分开传，`credentialsUpdate` 不写回它。`sites[]` 那一项多一个 `userAgent`：取它的那个窗口的 UA（窗口上面那条 usuyo 自己的页面报来的，和下面的网页同一个；以前存下的没有）。站点可能把访客 cookie 和取它的浏览器对上，所以插件请求时用这个 UA 和配它的请求头：Safari 一类配 Safari 的 Accept，不发 `sec-ch-ua` 这类只有 Chromium 才发的头（plugin-kit 的 `Visitor::from_env` 一并读出）。
+- **窗口的 UA。** 登录窗口、访客窗口、站点窗口在 macOS 上用和这台电脑的 Safari 一样的完整 UA（读 Safari 的版本号，`Version/<版本> Safari/605.1.15`）：WKWebView 自己的 UA 没有这一截，站点常把它当成 App 里的网页。读不出 Safari 的版本、别的系统上用 webview 自己的。
 - **这些限制靠沙箱的文件读权限落实。** 在文件读取只能「仅告知」的平台上（Windows，以及 Linux 上 bubblewrap 和 Landlock 都不可用时），任何插件都可能读到别的调用的凭据文件、别的站点的资料目录和日常浏览器的 cookie 库，这几条只是约定，不是隔离；界面的权限页按 [§7](isolation.md#7-权限与隔离) 的三档如实标出。
 - **形式**：`USUYO_CREDENTIALS` 指向一个临时 JSON 文件（权限 0600，放在这次调用的临时目录里，调用结束即删除）；`credential: cookies` 时另有 `USUYO_COOKIES_TXT`，内容相同、格式是 Netscape cookies.txt。常驻模式下路径放在每个请求的 `context` 里。
 

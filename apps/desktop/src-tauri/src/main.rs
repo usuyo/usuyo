@@ -110,6 +110,12 @@ fn reading_control(webview: tauri::Webview, reads: tauri::State<'_, Arc<Reads>>,
     reads.control(webview.label(), control);
 }
 
+/// 登录窗口上面那条自己的页面报来的 User-Agent：访客身份随它交给内核，插件请求时用同一个。只认那条自己的页面。
+#[tauri::command]
+fn login_agent(webview: tauri::Webview, logins: tauri::State<'_, Arc<Logins>>, user_agent: String) {
+    logins.agent(webview.label(), user_agent);
+}
+
 /// 登录窗口上面那条里的「登录好了」。只认那条自己的页面。
 #[tauri::command]
 fn login_done(webview: tauri::Webview, logins: tauri::State<'_, Arc<Logins>>) {
@@ -201,6 +207,7 @@ fn main() {
             open_reading,
             reading_control,
             login_done,
+            login_agent,
             clear_login,
             clear_profile,
             clear_visitor,

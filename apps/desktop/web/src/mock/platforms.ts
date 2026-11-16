@@ -278,6 +278,7 @@ function baseVisitors(): VisitorIdentity[] {
       domains: [],
       state: "missing",
       plugins: ["usuyo-fetch/rednote"],
+      storedCookies: [],
     },
   ];
 }
@@ -293,6 +294,7 @@ function baseSites(): SiteLogin[] {
       login: "present",
       capturedAt: "2026-11-10T12:30:00.000Z",
       plugins: ["usuyo-fetch/bilibili"],
+      storedCookies: [],
       credential: "cookies",
     },
     {
@@ -303,6 +305,7 @@ function baseSites(): SiteLogin[] {
       domains: [],
       login: "missing",
       plugins: ["usuyo-fetch/wechat-channels"],
+      storedCookies: [],
       credential: "cookies",
     },
     {
@@ -313,6 +316,7 @@ function baseSites(): SiteLogin[] {
       domains: [".xiaohongshu.com"],
       login: "missing",
       plugins: ["usuyo-fetch/rednote"],
+      storedCookies: [],
       credential: "browser-profile",
     },
   ];

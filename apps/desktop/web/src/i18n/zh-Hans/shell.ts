@@ -14,8 +14,19 @@ export default {
     handing: "正在发送到 usuyo…",
     handed: "已发送到 usuyo：{count} 条链接。在 usuyo 的导入页面确认后开始获取。可以关闭此窗口。",
     handedNone: "没有找到链接。可以关闭此窗口。",
+    handedSoFar: "已发送到 usuyo：{count} 条链接。",
     dropped: "{count} 条不符合插件的链接格式，已略过。",
-    failed: "无法发送到 usuyo 服务。点按「完成」重试。",
+    failed: "无法发送到 usuyo 服务。稍后会自动重试。",
+    listSkipped: "未读取「{list}」：{reason}",
+    list: {
+      favorite: "收藏",
+      like: "赞过",
+    },
+    listReason: {
+      notab: "页面中找不到这个列表。",
+      quiet: "滚动到底部也没有看到这个列表。",
+      unknown: "无法识别页面返回的列表。可以拷贝诊断信息发给插件作者。",
+    },
     counts: "请求 {requests} · 识别的列表回复 {recognised} · 找到链接 {noted}（收藏 {favorite}，赞过 {like}）",
     skipped: "略过 {count} 条：{kinds}",
     skipKind: {

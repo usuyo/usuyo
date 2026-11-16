@@ -4375,6 +4375,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "nix",
+ "plist",
  "psl",
  "serde",
  "serde_json",

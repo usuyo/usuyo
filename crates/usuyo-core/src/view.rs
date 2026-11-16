@@ -753,6 +753,8 @@ pub struct SiteView {
     /// `cookies` 站点存着的登录状态从哪来：`login-window` 或 `cookie-file`（`capturedAt` 是那时的时间）。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<usuyo_plugin::LoginSource>,
+    /// 存着的 cookie 的名字（不含值），给诊断看；`browser-profile` 站点的 cookie 不读出来，总是空的。
+    pub stored_cookies: Vec<String>,
 }
 
 /// 上一回用站点窗口读：什么时候、哪种方法（名字照清单）、记下了多少条链接。
@@ -785,6 +787,25 @@ pub struct VisitorView {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expires_at: Option<String>,
     pub plugins: Vec<String>,
+    /// 存着的 cookie 的名字（不含值），给诊断看。
+    pub stored_cookies: Vec<String>,
+    /// 取它的那个窗口的 User-Agent；调用时随它交给插件。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_agent: Option<String>,
+    /// 访客窗口上一回没取到（这次运行里，存下一份就清掉）。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_missed: Option<VisitorMissView>,
+}
+
+/// 访客窗口一回没取到：页面里有哪些 cookie 名字、`cookies` 里声明的缺了哪几个、窗口的 UA。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VisitorMissView {
+    pub at: String,
+    pub seen: Vec<String>,
+    pub missing: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_agent: Option<String>,
 }
 
 /// `GET /transforms`：装着的转换插件，和 `transforms.auto`。

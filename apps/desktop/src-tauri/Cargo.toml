@@ -32,6 +32,10 @@ ureq = "3.5.1"
 # 只要握手的客户端一半，不链内核。
 usuyo-api = { path = "../../../crates/usuyo-api", default-features = false, features = ["client"] }
 
+# 读这台电脑的 Safari 版本（`Info.plist` 是二进制的），给站点窗口写和 Safari 一样的 UA。
+[target.'cfg(target_vendor = "apple")'.dependencies]
+plist = "1.10.3"
+
 [dev-dependencies]
 tempfile = "3.27.0"
 # `tauri::test`：对着假的运行时核对站点网页的权限（src/channel.rs）。

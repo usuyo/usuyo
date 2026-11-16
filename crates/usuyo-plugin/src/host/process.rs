@@ -43,6 +43,8 @@ pub(crate) struct Finished {
     pub stderr: Vec<String>,
     /// 这次交出去的凭据和密钥的值：插件报的错里出现时洗掉。由调用方填。
     pub scrub: Vec<String>,
+    /// 这次交出去的 cookie 的名字：失败时记进失败日志。由调用方填。
+    pub cookies: Vec<String>,
 }
 
 pub(crate) async fn run(
@@ -162,6 +164,7 @@ pub(crate) async fn run(
         stdout,
         stderr,
         scrub: Vec::new(),
+        cookies: Vec::new(),
     })
 }
 

@@ -91,11 +91,15 @@ pub struct StorageState {
     pub origins: Vec<OriginState>,
 }
 
-/// 凭据文件里的一个站点和它的来源（`login-window`、`cookie-file`、`daily-browser`）。
+/// 凭据文件里的一个站点和它的来源（`login-window`、`cookie-file`、`visitor-window`）。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct CredentialSite {
     pub site: String,
     pub source: String,
+    /// 取这份 cookie 的那个网页窗口的 User-Agent（只有 `visitor-window` 有，以前存下的没有）。
+    /// 插件请求时用同一个 UA 和配它的请求头（协议 §6）。
+    #[serde(default, rename = "userAgent", skip_serializing_if = "Option::is_none")]
+    pub user_agent: Option<String>,
 }
 
 /// `USUYO_CREDENTIALS` 指的文件；`USUYO_VISITOR` 指的访客身份文件也是这个形状。

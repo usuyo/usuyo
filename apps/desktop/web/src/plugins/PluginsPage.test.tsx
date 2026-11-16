@@ -105,7 +105,7 @@ function catalogOf(plugins: FetchPlugin[]): CatalogView {
   };
 }
 
-const SITE: SiteLogin = { site: "www.bilibili.com", name: "B站", loginUrl: "https://passport.bilibili.com/login", cookies: ["SESSDATA"], domains: [], login: "missing", plugins: ["usuyo-fetch/bilibili"], credential: "cookies" };
+const SITE: SiteLogin = { site: "www.bilibili.com", name: "B站", loginUrl: "https://passport.bilibili.com/login", cookies: ["SESSDATA"], domains: [], login: "missing", plugins: ["usuyo-fetch/bilibili"], credential: "cookies", storedCookies: [] };
 
 const bili = (methods: FetchMethod[], extra: Partial<FetchPlugin> = {}): FetchPlugin => ({
   id: "usuyo-fetch/bilibili",
@@ -165,7 +165,7 @@ it("writes the platform page in English when English is chosen, with plurals and
   serve(
     { plugins: [bili([guest, session, visitor], { upstream: [{ name: "parse-video", license: "MIT" }] })], notLoaded: [] },
     [SITE],
-    [{ site: "www.bilibili.com", name: "Bilibili", url: "https://www.bilibili.com/", cookies: [], domains: [], state: "missing", plugins: ["usuyo-fetch/bilibili"] }],
+    [{ site: "www.bilibili.com", name: "Bilibili", url: "https://www.bilibili.com/", cookies: [], domains: [], state: "missing", plugins: ["usuyo-fetch/bilibili"], storedCookies: [] }],
     "/plugins/bilibili",
   );
   expect(await screen.findByText(/^Fetched by the B站 plugin\./)).toBeTruthy();
@@ -305,7 +305,7 @@ it("steps for a browser script: where the file is, reveal and copy, an inline to
 });
 
 it("steps for a window method: what it does, the plugin script named before first use, sign in here, confirm on the Import page", async () => {
-  const site: SiteLogin = { site: "www.example.test", name: "例子", loginUrl: "https://www.example.test/login", cookies: [], domains: [], login: "missing", plugins: ["usuyo-fetch/bilibili"], credential: "browser-profile" };
+  const site: SiteLogin = { site: "www.example.test", name: "例子", loginUrl: "https://www.example.test/login", cookies: [], domains: [], login: "missing", plugins: ["usuyo-fetch/bilibili"], credential: "browser-profile", storedCookies: [] };
   const reading = method({
     id: "in-usuyo",
     name: "在 usuyo 中登录并读取",
@@ -362,7 +362,7 @@ it("lists logins and visitor identities with the methods that use them, the paci
       notLoaded: [],
     },
     [SITE],
-    [{ site: "www.bilibili.com", name: "B站", url: "https://www.bilibili.com/", cookies: [], domains: [], state: "present", plugins: ["usuyo-fetch/bilibili"] }],
+    [{ site: "www.bilibili.com", name: "B站", url: "https://www.bilibili.com/", cookies: [], domains: [], state: "present", plugins: ["usuyo-fetch/bilibili"], storedCookies: [] }],
     "/plugins/bilibili",
   );
   const accounts = await screen.findByRole("region", { name: "账号与访客身份" });

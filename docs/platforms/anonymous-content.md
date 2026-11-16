@@ -19,7 +19,7 @@
 
 | 平台 | 单条内容 | 图片 | 视频 | 收藏等清单 | 我们做到哪 |
 |---|---|---|---|---|---|
-| 小红书 | 能：笔记页 HTML，带 `xsec_token`、`xsec_source`，要访客身份；今天同一出口上空 cookie 只通了一次，原因是推断（[§2.2](#22-访客身份是什么)） | 能：CDN 直接下，带 Referer，不带 cookie | 能：同上；`originVideoKey` 原片 2026-01 起页面不给了 | 只能带账号；最低风险是你自己的浏览器里自己往下翻、脚本只截获页面自己的请求 | `note-page` 先不带 cookie 请求、被送走再带访客身份；不记 `xsec_source`；节奏固定 15 秒；没对真平台跑过（[§2.5](#25-我们的-note-page-差在哪)） |
+| 小红书 | 能：笔记页 HTML，带 `xsec_token`、`xsec_source`，要访客身份；今天同一出口上空 cookie 只通了一次，原因是推断（[§2.2](#22-访客身份是什么)） | 能：CDN 直接下，带 Referer，不带 cookie | 能：同上；`originVideoKey` 原片 2026-01 起页面不给了 | 只能带账号；最低风险是你自己的浏览器里自己往下翻、脚本只截获页面自己的请求 | `note-page` 第一个请求就带访客身份和取它时的 UA，被拒再用手机版页面、不带 cookie 取一次；11-15 真跑两次都被送去 `/login`（[§11](#11-要真跑一次才知道的)）；改之前的差别见 [§2.5](#25-我们的-note-page-差在哪) |
 | 微信视频号 | 部分：匿名 `get_feed_info` 只给作者、描述、封面、时间 | 封面能 | 不能：要元宝账号换 `generalToken`，或改客户端 | 只能带账号，网页版普通浏览器里拿不到 | `feed-info`、`yuanbao` 和参考项目一致（[§3](#3-微信视频号)） |
 | B站 | 能：视频页 HTML 或接口；接口有的要 WBI 签名，不带 cookie 时有 412、-352 | 能 | 能，不登录约 480p，最多 720p | 公开收藏夹不带账号能列；自己的私密收藏夹、稍后再看要账号 | `view` 调不带签名的 `x/web-interface/view`，有人报告 2026-09 起它一律 412（[§4](#4-b站)） |
 | X | 能：访客令牌调 GraphQL，或 syndication 嵌入接口；敏感内容、受保护账号要登录 | 能，`name=orig` | 能，最高码率的 mp4 | 只能带账号；官方归档有喜欢 | `guest`、`embed` 和 gallery-dl、yt-dlp 一致（[§5](#5-x)） |
@@ -77,7 +77,7 @@
 <a id="25-我们的-note-page-差在哪"></a>
 ### 2.5 我们的 note-page 差在哪
 
-`note-page` 实际做的（`rednote/src/`）：
+`note-page` 在 11-15 改之前做的（`rednote/src/`；改了哪些见 [§10](#10-改动清单)，现在的做法在 [rednote §2.4](rednote.md#24-插件做成的样子)）：
 
 - 请求 `https://www.xiaohongshu.com/<原路径>?xsec_token=…&xsec_source=…`，只留这两个参数（`link.rs:57`）；桌面 Chrome 142 UA 配 Chrome 的 Accept（`http.rs`）。
 - **先不带 cookie 请求**（`fetch.rs:82`），被送去 `/`、`/explore`、`/login`、`/website-login/*` 或页面没有这篇时，宿主交了访客身份就带上再请求一次（`fetch.rs:82-103`、`fetch.rs:219-224`）。
@@ -199,7 +199,7 @@ yt-dlp 调 `weibo.com/ajax/statuses/show?id=`，Referer `https://weibo.com/`，�
 | 4 | 取内容 | 应用 | `note-page` 在自己的进程里请求笔记页，**第一个请求就带访客身份**，只带 `xsec_token`、`xsec_source`；不碰登录的标签页、不读账号的 cookie |
 | 5 | 节奏 | 应用 | 同一平台一次一条，间隔 15 秒上下随机（例如 12–25 秒），每天 100 条；先 3–5 条，隔一天看账号有没有提示，再放大（[README §4](README.md#4-怎么相对安全地试)） |
 | 6 | 媒体 | 应用 | 在同一次调用里下图片、视频（和字幕），带 Referer 首页、不带 cookie；主地址失败试备用地址 |
-| 7 | 碰到 `/login` | 应用 | 带着访客身份还被送去 `/login`：这份访客身份不管用，换一份新的再试一次；还不行就停下整个平台，回 `visitor-required` |
+| 7 | 碰到 `/login` | 应用 | 带着访客身份还被送去 `/login`：插件在同一次调用里再用手机版页面、不带 cookie 请求一次（ParseHub 的第三段）；也不行就回 `visitor-required`，这份访客身份不管用，换一份新的再试一次；还不行就停下整个平台 |
 | 8 | 碰到验证页 | 应用停，用户决定 | `/website-login/captcha`、461、471、300011–300013：马上停下整个平台的队列，不自动在一小时后接着取；界面说清楚是匿名请求被拦，你的账号没参与 |
 | 9 | 过验证、恢复 | 只有用户 | 验证只在你自己的浏览器里过；接着取等至少半天，你点了才接着；账号收到提示或被登出时，整批停到你说接着 |
 
@@ -216,7 +216,7 @@ yt-dlp 调 `weibo.com/ajax/statuses/show?id=`，Referer `https://weibo.com/`，�
 4. 视频分档不写死名字：`video.media.stream` 下凡是列表都当候选，按高度、码率挑，h264 优先的规则留着（`src/state.rs:346`）。照 MediaCrawler `media_platform/xhs/media.py:61-75`。
 5. 媒体主机加 `*.rednotecdn.com`（`src/site.rs:37`、清单 `permissions.network.hosts`）。照 ParseHub PR #198 记下的新地址。推断：这个主机要不要 Referer 没人写过。
 6. 取平台字幕：`video.media.video.subtitles`，按 `source`、`zh-CN`、`en-US` 挑一个，同一次调用里下载，存成字幕文件，`outputs` 加 `subtitle`。照 xhs-vault `scraper/build_corpus.py:39-59`、`scraper/fetch.py:96-117`。
-7. 访客身份声明 `cookies`：等 `a1`、`webId` 出现才算取到（清单 `visitors`）。这两个名字照 ParseHub `provider_api/xhs.py:56`；访客窗口里实际有哪几个要真跑一次再写。
+7. 已做（11-15）：访客身份声明 `cookies: [a1, webId, web_session]`，三个都出现了才算取到（清单 `visitors`）。`a1`、`webId` 照 ParseHub `provider_api/xhs.py:56`；`web_session` 是 ParseHub 游客那一段带去笔记页的唯一一个 cookie（`provider_api/xhs.py:53-78`），MediaCrawler 在没登录的浏览器里也读到它（`media_platform/xhs/login.py:191-193`）。别的名字没有出处，不写。
 
 **宿主和协议（为小红书提，不写平台名）**
 
@@ -255,7 +255,11 @@ yt-dlp 调 `weibo.com/ajax/statuses/show?id=`，Referer `https://weibo.com/`，�
 都是推断，按 [BUILD §2](../BUILD.md#2-干活的规矩) 只走不带账号、不带签名的路，一个平台一次一个会话、几次请求为限：
 
 - 小红书：访客窗口在这台机器上取到的是哪几个 cookie；带着它，今天被 302 到 `/login` 的那个出口上笔记页回不回完整页面；同一份访客身份连着取几十条会不会被换掉；`xsec_token` 从收藏页拿到后多久失效；`rednotecdn.com` 的图要不要 Referer。
-  - 2026-11-15 傍晚在一个独立的实例里跑了一次（策略「仅不使用账号」）：访客窗口约 8 秒交回访客身份；带着它取一条笔记，请求被转到 `/login`，只发了这一次就停了。那条链接里的 `xsec_token` 是 11 小时前从收藏页拿的，所以分不清是令牌过期、访客身份不被接受，还是这个出口仍被转去登录；要用刚拿到的链接再试一条才分得开。
+  - 2026-11-15 跑了两次（策略「仅不使用账号」）：一次用 11 小时前从收藏页拿的链接，一次用刚在站点窗口里读到的链接。两次都是访客窗口约 8 秒交回访客身份，带着它请求笔记页被 302 到 `/login`（失败日志 `visitor-required: sent to /login (visitor cookie used: true)`），各只发了这一次。新链接也一样，所以不是令牌过期。之后只做了离线排查，结论分三类：
+    - **确定的差异。** ① UA：访客窗口是 WKWebView，用的是它自己的默认 UA（`…AppleWebKit/605.1.15 (KHTML, like Gecko)`，没有 `Version/… Safari/…` 那一截），插件请求笔记页用的是写死的桌面 Chrome 142 UA 配 Chrome 的 Accept，取身份和用身份的不是同一个「浏览器」。宿主当时也没有把取身份时的 UA 交给插件。② 收下的时机：清单没声明访客 cookie 的名字，壳等「名字连着 3 次没变」就收；8 秒里收下的是哪几个名字没有记录，没有任何东西保证 `web_session` 在里面。③ 插件的 TLS 和 HTTP 指纹（rustls、HTTP/1.1）和 WebKit 的不一样，这一条没改。
+    - **推断。** ParseHub 游客那一段只带一个 `web_session` 就取得到笔记页（`provider_api/xhs.py:53-78`），所以它是要紧的那个；页面要等 `login/activate` 回来才有它，首屏出来、名字停了 3 秒时它可能还没生成。另外两种解释同样没排除：站点把访客 cookie 和取它的 UA 对上，或者这个出口被标记了（[§2.2](#22-访客身份是什么)）。
+    - **已改（11-15）。** 访客身份要 `a1`、`webId`、`web_session` 都出现才收（[§10](#10-改动清单)）；窗口在 macOS 上用和系统 Safari 一样的完整 UA，取身份时记下 UA，插件用同一个 UA 和配它的 Accept（[协议 §6](../protocol/credentials.md#6-凭据)）；访客身份被拒时插件再用手机版页面、不带 cookie 取一次（[rednote §2.4](rednote.md#24-插件做成的样子)）；`GET /visitors` 和插件页「诊断信息」写存着的 cookie 名字和 UA，失败日志记这次带了哪些 cookie 名（[协议 §2.3.1](../protocol/manifest.md#231-方法-methods) 的「试跑和失败」）。
+  - **下次真跑看这几样。** 先在插件页小红书下面「更换」访客身份：以前存下的那份没有 UA，名字也是没等 `web_session` 就收的。请求数照这个算：一条笔记一次调用，访客那一段被拒时同一次调用里接着发手机版那一个，宿主换一份访客身份再试一回，最多四个请求；手机版取到了，宿主当访客身份被收了，之后每条都是两个。插件页小红书的访客身份「诊断信息」：存着的名字里有没有 `web_session`，UA 是不是带 `Version/… Safari/…` 的那个；60 秒没取到时「未能获取」那一行缺了哪个名字。`fetch-failures.jsonl` 那一行的 `cookies` 和 `message`：开头的 `visitor-page:`、`mobile-page:` 各被送去了哪。手机版那一段取到了而访客那一段被拒，问题在访客身份或 UA；两段都被送去 `/login`，更像是出口被标记，先停下，隔一阵再试一条。
 - B站：不签名的 `x/web-interface/view` 现在是不是一律 412；视频页 HTML 里还有没有 `__playinfo__`；访客窗口取不取得到 `buvid3`、`buvid4`。
 - 抖音：访客窗口里打开作品页时，页面自己的详情请求在不在、回答能不能读到。
 - 快手：带上跳转 cookie 后网页版 `/f/` 链接能不能取到。

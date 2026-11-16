@@ -387,9 +387,16 @@ impl Engine {
                         .await?;
                     got = true;
                 }
-                Err(PluginError::Call { failure, .. }) => {
+                Err(PluginError::Call {
+                    failure, cookies, ..
+                }) => {
                     tracing::info!(plugin = %pid, method = %method.id, item = %id, failure = %failure, "fetch failed");
-                    self.record_method_call(plugin, &method.id, url.host_str(), Err(&failure))?;
+                    self.record_method_call(
+                        plugin,
+                        &method.id,
+                        url.host_str(),
+                        Err((&failure, &cookies)),
+                    )?;
                     // 站点不收存着的访客身份：换一份，这条等一回再试（每条只等这一回）；
                     // 换过一份以后还不收，整个平台停下等你，不再一份份地换
                     let mut stopped = false;
@@ -574,8 +581,15 @@ impl Engine {
                         self.store_snapshot(&id, plugin, method, job, snap).await?;
                         Ok(())
                     }
-                    Err(PluginError::Call { failure, .. }) => {
-                        self.record_method_call(plugin, &by.method, None, Err(&failure))?;
+                    Err(PluginError::Call {
+                        failure, cookies, ..
+                    }) => {
+                        self.record_method_call(
+                            plugin,
+                            &by.method,
+                            None,
+                            Err((&failure, &cookies)),
+                        )?;
                         Err(*failure)
                     }
                     Err(e @ PluginError::Unsupported { .. }) => {

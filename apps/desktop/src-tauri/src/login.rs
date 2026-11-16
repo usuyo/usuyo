@@ -5,7 +5,9 @@
 //! cookie 的值只经过壳和内核：不进前端、不写日志、不落盘。
 //!
 //! 访客身份（插件清单的 `visitors`，不是账号）用同一套窗口，不登录：打开清单写的那一页，
-//! 等声明的 cookie 都出现（没声明名字的等名字不再变），交给内核 `PUT /visitors/{site}`。
+//! 等声明的 cookie 都出现（没声明名字的等名字不再变），连同这个窗口的 User-Agent（macOS 上是壳给窗口定的那个，
+//! 别的系统上是上面那条自己的页面报来的 webview 自己的）交给内核 `PUT /visitors/{site}`；插件请求时用同一个 UA。
+//! 看不见的访客窗口到点没取到，把页面里有的 cookie 名字（不含值）交给内核 `POST /visitors/{site}/missed`。
 //! 访客身份的网页数据是 `visitor:<站点>` 那一份，和同一主机的账号分开。
 //! 内核要一份访客身份时（`GET /visitors/wanted`），壳自己开一个看不见的访客窗口去取，取不到一分钟后关掉。
 //!
@@ -57,6 +59,8 @@ struct Session {
     window: String,
     /// 你点了「登录好了」。
     pressed: Arc<AtomicBool>,
+    /// 上面那条自己的页面报来的 User-Agent（`navigator.userAgent`）。
+    agent: Option<String>,
 }
 
 pub struct Logins {
@@ -82,6 +86,60 @@ pub fn visitor_store(site: &str) -> String {
 /// 和账号登录窗口（站点名）、访客窗口、同一站点别的插件的都分开。从不读出 cookie 交给插件。
 pub fn profile_store(plugin: &str, site: &str) -> String {
     format!("profile:{plugin}:{site}")
+}
+
+/// macOS 上 Safari 的 UA：系统和 WebKit 两段 Safari 自己就是冻住的这两个数，只有 `Version/` 跟着 Safari 变。
+fn safari_agent(version: &str) -> String {
+    format!(
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/{version} Safari/605.1.15"
+    )
+}
+
+/// 这台电脑上 Safari 的版本（`CFBundleShortVersionString`），只认数字和点。
+#[cfg(target_vendor = "apple")]
+fn safari_version() -> Option<String> {
+    let path = "/Applications/Safari.app/Contents/Info.plist";
+    let v = match plist::Value::from_file(path) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("usuyo: cannot read the Safari version from {path}: {e}");
+            return None;
+        }
+    };
+    let version = v
+        .as_dictionary()
+        .and_then(|d| d.get("CFBundleShortVersionString"))
+        .and_then(plist::Value::as_string)?;
+    let ok = !version.is_empty() && version.chars().all(|c| c.is_ascii_digit() || c == '.');
+    ok.then(|| version.to_owned())
+}
+
+/// 登录窗口、访客窗口、站点窗口（上面那条和下面的网页一样）用的 UA。macOS 上 WKWebView 自己的那个
+/// 没有 `Version/… Safari/…` 一截，站点常当它是 App 里的网页，所以照这台电脑的 Safari 写完整的；
+/// 读不出 Safari 的版本、别的系统上，用 webview 自己的（`None`）。访客身份随上面那条报来的 UA 交给内核，
+/// 两块用的是同一个，插件拿到的就是网页实际用的那个。
+pub(crate) fn window_agent() -> Option<&'static str> {
+    static AGENT: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+    AGENT
+        .get_or_init(|| {
+            #[cfg(target_vendor = "apple")]
+            {
+                safari_version().map(|v| safari_agent(&v))
+            }
+            #[cfg(not(target_vendor = "apple"))]
+            {
+                None
+            }
+        })
+        .as_deref()
+}
+
+/// 换上 [`window_agent`]（有的话）。
+pub(crate) fn with_agent(builder: WebviewBuilder<tauri::Wry>) -> WebviewBuilder<tauri::Wry> {
+    match window_agent() {
+        Some(ua) => builder.user_agent(ua),
+        None => builder,
+    }
 }
 
 /// 只开网页地址；`http` 只给本机（开发时的测试页）。
@@ -348,6 +406,7 @@ impl Logins {
             Session {
                 window: label.to_owned(),
                 pressed: Arc::clone(&pressed),
+                agent: None,
             },
         );
         pressed
@@ -381,17 +440,19 @@ impl Logins {
             .focused(!hidden)
             .build()?;
         let bar_view = window.add_child(
-            WebviewBuilder::new(
-                format!("{label}-bar"),
-                WebviewUrl::App("login-bar.html".into()),
-            )
-            .initialization_script(format!("window.usuyoLogin = {bar};")),
+            with_agent(
+                WebviewBuilder::new(
+                    format!("{label}-bar"),
+                    WebviewUrl::App("login-bar.html".into()),
+                )
+                .initialization_script(format!("window.usuyoLogin = {bar};")),
+            ),
             LogicalPosition::new(0.0, 0.0),
             LogicalSize::new(width, BAR_HEIGHT),
         )?;
         let site_label = format!("{label}-site");
         let site_builder = self.with_store(
-            WebviewBuilder::new(&site_label, WebviewUrl::External(url)),
+            with_agent(WebviewBuilder::new(&site_label, WebviewUrl::External(url))),
             &store,
         );
         let site_view = window.add_child(
@@ -403,7 +464,7 @@ impl Logins {
         let pressed = self.hold(&store, &label);
         let me = Arc::clone(self);
         std::thread::spawn(move || {
-            me.watch(&window, &bar_view, &site_view, &goal, &pressed, &closed);
+            me.watch(&bar_view, &site_view, &goal, &pressed, &closed, &store);
             me.release(&store, &label);
         });
         Ok(())
@@ -412,14 +473,17 @@ impl Logins {
     /// 窗口开着时每秒看一次 cookie（不在主线程上读：Windows 上在主线程读会卡死）。
     fn watch(
         &self,
-        window: &Window,
         bar: &Webview,
         site: &Webview,
         goal: &Goal,
         pressed: &AtomicBool,
         closed: &AtomicBool,
+        store: &str,
     ) {
+        let window = site.window();
         let mut settle = Settle::default();
+        // 访客页面上一次有的 cookie 名字：到点没取到时交给内核看
+        let mut seen: Vec<String> = Vec::new();
         let mut failed_at: Option<std::time::Instant> = None;
         let opened = std::time::Instant::now();
         while !closed.load(Ordering::SeqCst) {
@@ -431,6 +495,17 @@ impl Logins {
                 && opened.elapsed() > HIDDEN_VISITOR_LIMIT
             {
                 eprintln!("usuyo: the hidden visitor window got no identity in time; closing it");
+                if let Goal::Visitor { spec, .. } = goal
+                    && let Err(e) = self.api(
+                        "POST",
+                        &["visitors", &spec.site, "missed"],
+                        Some(json!({ "cookieNames": seen, "userAgent": self.agent_of(store) })),
+                    )
+                {
+                    eprintln!(
+                        "usuyo: cannot tell the daemon what the visitor window lacked: {e:#}"
+                    );
+                }
                 let _ = window.destroy();
                 return;
             }
@@ -475,6 +550,7 @@ impl Logins {
                 }
                 Goal::Visitor { spec: v, .. } => {
                     let selected = site_cookies::select(&v.site, &v.domains, all, now_secs());
+                    seen = selected.iter().map(|c| c.name.clone()).collect();
                     let ready = if v.cookies.is_empty() {
                         settle.see(&selected)
                     } else {
@@ -483,10 +559,16 @@ impl Logins {
                     if !ready {
                         continue;
                     }
+                    let agent = self.agent_of(store);
+                    if agent.is_none() {
+                        eprintln!(
+                            "usuyo: the visitor window's bar has not told its user agent; saving the visitor identity without it"
+                        );
+                    }
                     self.api(
                         "PUT",
                         &["visitors", &v.site],
-                        Some(json!({ "cookies": selected })),
+                        Some(visitor_body(&selected, agent.as_deref())),
                     )
                 }
             };
@@ -502,6 +584,23 @@ impl Logins {
                 }
             }
         }
+    }
+
+    /// 上面那条自己的页面报来的 User-Agent：和下面的网页同一个引擎、同一个 UA。
+    pub fn agent(&self, bar_label: &str, user_agent: String) {
+        let Some(window) = bar_label.strip_suffix("-bar") else {
+            return;
+        };
+        if let Some(s) = lock(&self.open).values_mut().find(|s| s.window == window) {
+            s.agent = Some(user_agent);
+        }
+    }
+
+    /// 这个窗口用的 UA：壳自己定了的（[`window_agent`]）就是它；没定时用上面那条报来的 webview 自己的。
+    fn agent_of(&self, store: &str) -> Option<String> {
+        window_agent()
+            .map(str::to_owned)
+            .or_else(|| lock(&self.open).get(store).and_then(|s| s.agent.clone()))
     }
 
     /// 上面那条里的「登录好了」。
@@ -570,6 +669,15 @@ pub(crate) fn follow_size(
     closed
 }
 
+/// 交给内核的访客身份：cookie 和取它的那个窗口的 UA（没报来时不写）。
+fn visitor_body(cookies: &[Jar], agent: Option<&str>) -> Value {
+    let mut body = json!({ "cookies": cookies });
+    if let Some(a) = agent {
+        body["userAgent"] = json!(a);
+    }
+    body
+}
+
 /// 在上面那条里说一句。
 impl Logins {
     fn lang(&self) -> Lang {
@@ -611,6 +719,34 @@ mod tests {
         assert!(!s.see(&named(&["webId", "a1"])));
         assert!(!s.see(&named(&["a1", "webId"])));
         assert!(s.see(&named(&["a1", "webId"])));
+    }
+
+    #[test]
+    fn the_window_user_agent_is_safari_s_and_never_a_chrome_one() {
+        let ua = safari_agent("26.5");
+        assert_eq!(
+            ua,
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Safari/605.1.15"
+        );
+        assert!(!ua.contains("Chrome"));
+        // 这台电脑上读得出 Safari 的版本时，窗口用的就是这一个
+        #[cfg(target_vendor = "apple")]
+        if let Some(v) = safari_version() {
+            assert_eq!(window_agent(), Some(safari_agent(&v).as_str()));
+        }
+    }
+
+    #[test]
+    fn the_visitor_identity_goes_with_the_window_user_agent() {
+        let ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Safari/605.1.15";
+        let body = visitor_body(&named(&["a1"]), Some(ua));
+        assert_eq!(body["userAgent"], ua);
+        assert_eq!(body["cookies"][0]["name"], "a1");
+        assert!(
+            visitor_body(&named(&["a1"]), None)
+                .get("userAgent")
+                .is_none()
+        );
     }
 
     #[test]

@@ -12,8 +12,9 @@ use crate::methods::{Why, blockers};
 use crate::view::{
     AccountView, Bundled, Event, GetsView, LastCall, MethodView, NotLoaded, PacingView, PauseView,
     PlatformTierView, PluginView, PluginsView, ScriptView, SettingView, SiteUseView, SiteView,
-    SourceView, VisitorView,
+    SourceView, VisitorMissView, VisitorView,
 };
+use crate::visitor_wanted::Missed;
 use crate::words::{self, Lang, Said};
 use crate::{Error, Result};
 
@@ -44,10 +45,25 @@ fn site_view(d: DeclaredSite, plugins: &[FetchPlugin]) -> SiteView {
         credential: d.site.credential,
         last_use,
         source: d.source,
+        stored_cookies: d.cookie_names,
     }
 }
 
-fn visitor_view(d: DeclaredVisitor) -> VisitorView {
+fn visitor_view(d: DeclaredVisitor, missed: Option<Missed>) -> VisitorView {
+    let last_missed = missed.map(|m| VisitorMissView {
+        at: jiff::Timestamp::from_millisecond(m.at)
+            .map(usuyo_library::time::format)
+            .unwrap_or_default(),
+        missing: d
+            .visitor
+            .cookies
+            .iter()
+            .filter(|n| !m.names.contains(n))
+            .cloned()
+            .collect(),
+        seen: m.names,
+        user_agent: m.user_agent,
+    });
     VisitorView {
         site: d.visitor.site,
         name: d.visitor.name,
@@ -62,6 +78,9 @@ fn visitor_view(d: DeclaredVisitor) -> VisitorView {
                 .map(usuyo_library::time::format)
         }),
         plugins: d.plugins.into_iter().map(|p| p.to_string()).collect(),
+        stored_cookies: d.cookie_names,
+        user_agent: d.user_agent,
+        last_missed,
     }
 }
 
@@ -536,18 +555,27 @@ impl Engine {
             .host
             .visitors()?
             .into_iter()
-            .map(visitor_view)
+            .map(|d| {
+                let missed = self.inner.visitors_wanted.last_missed(&d.visitor.site);
+                visitor_view(d, missed)
+            })
             .collect())
     }
 
-    /// 存下访客窗口读出的 cookie：只留属于这个访客身份的，存进钥匙串。会阻塞。
-    pub fn save_visitor(&self, site: &str, state: &StorageState) -> Result<VisitorView> {
-        let d = self.loaded().host.save_visitor(site, state)?;
+    /// 存下访客窗口读出的 cookie：只留属于这个访客身份的，存进钥匙串；`user_agent` 是那个窗口的 UA，
+    /// 记在索引里，调用时随访客身份交给插件。会阻塞。
+    pub fn save_visitor(
+        &self,
+        site: &str,
+        state: &StorageState,
+        user_agent: Option<&str>,
+    ) -> Result<VisitorView> {
+        let d = self.loaded().host.save_visitor(site, state, user_agent)?;
         self.visitor_arrived(site)?;
         self.inner.wake.notify_one();
         self.inner.imports_wake.notify_one();
         self.emit(Event::PluginsUpdated);
-        Ok(visitor_view(d))
+        Ok(visitor_view(d, None))
     }
 
     /// 去掉一个访客身份。同一主机的账号不动。会阻塞。

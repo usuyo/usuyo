@@ -1,5 +1,6 @@
 // 登录窗口上面那一条（login-bar.html）。壳在页面加载前放好 `window.usuyoLogin`，
 // 之后经 `window.usuyoSay` 往这里说一句（壳按语言写好）；「完成登录」交回壳。这一条不碰 cookie。
+// 访客窗口里这一条把 `navigator.userAgent` 报给壳（`login_agent`），访客身份连同它交给 usuyo。
 // 站点窗口（`mode: "reading"`）多一块面板：壳经 `window.usuyoPanel` 送来读到哪了和几个计数（只有数和固定的词），
 // 按钮经 `reading_control` 交回壳。诊断信息是插件脚本给的回复结构，不含内容；「拷贝诊断信息」只拷到剪贴板。
 // 语言：壳在 `lang` 里给它按设置定好的语言（这个网页窗口看不到主窗口记下的选择）；不记在这台电脑上。
@@ -16,9 +17,16 @@ interface BarSetup {
 
 /** 壳送来的面板（src-tauri/src/reading.rs 的 `Session::view`）。 */
 export interface PanelView {
-  phase: "signing-in" | "reading" | "stopped" | "handing" | "handed" | "failed";
+  phase: "signing-in" | "reading" | "stopped" | "ended";
   reason: string | null;
-  handed: { imports: number; noted: number; dropped: number } | null;
+  /** 已经交给 usuyo 的：落成几次导入、收下几条、几条不合插件的链接格式。 */
+  handed: { imports: number; noted: number; dropped: number };
+  /** 记下了、还没交的。 */
+  unsent: number;
+  /** 上一回没交成，壳过一会儿自己再交。 */
+  failed: boolean;
+  /** 读过了的列表；`reason` 不为空是跳过了。 */
+  lists: { action: string; reason: string | null }[];
   auto: boolean;
   paused: boolean;
   requests: number;
@@ -43,6 +51,10 @@ function barText(setup: BarSetup): string {
 }
 
 const REASONS = ["end", "verify", "signin", "unknown", "errorCode", "quiet", "notab", "notYours"] as const;
+const LIST_REASONS = ["notab", "quiet", "unknown"] as const;
+type ListReason = (typeof LIST_REASONS)[number];
+const isListReason = (w: string): w is ListReason => (LIST_REASONS as readonly string[]).includes(w);
+const isList = (a: string): a is "favorite" | "like" => a === "favorite" || a === "like";
 type Reason = (typeof REASONS)[number];
 const isReason = (w: string): w is Reason => (REASONS as readonly string[]).includes(w);
 
@@ -54,8 +66,10 @@ export function reasonText(word: string | null): string {
 
 /** 面板第一行：读到哪了。 */
 export function phaseText(v: PanelView, site: string): string {
-  const handed = () => {
-    const h = v.handed ?? { imports: 0, noted: 0, dropped: 0 };
+  const ended = () => {
+    if (v.failed) return t("shell.reading.failed");
+    if (v.unsent > 0) return t("shell.reading.handing");
+    const h = v.handed;
     const head = h.noted > 0 ? t("shell.reading.handed", { count: h.noted }) : t("shell.reading.handedNone");
     return h.dropped > 0 ? `${head} ${t("shell.reading.dropped", { count: h.dropped })}` : head;
   };
@@ -63,11 +77,16 @@ export function phaseText(v: PanelView, site: string): string {
     "signing-in": () => t("shell.reading.signingIn", { site }),
     reading: () => (v.paused ? t("shell.reading.paused") : v.auto ? t("shell.reading.auto") : t("shell.reading.manual")),
     stopped: () => t("shell.reading.stopped", { reason: reasonText(v.reason) }),
-    handing: () => t("shell.reading.handing"),
-    handed,
-    failed: () => t("shell.reading.failed"),
+    ended,
   };
   return text[v.phase]();
+}
+
+/** 跳过了的列表：哪一个、为什么。 */
+function skippedList(action: string, reason: string): string {
+  const list = isList(action) ? t(`shell.reading.list.${action}`) : action;
+  const why = isListReason(reason) ? t(`shell.reading.listReason.${reason}`) : t("shell.reading.reason.other", { word: reason });
+  return t("shell.reading.listSkipped", { list, reason: why });
 }
 
 /** 面板第三行：略过了哪些、超过上限没记的。 */
@@ -82,6 +101,10 @@ export function detailText(v: PanelView): string {
     parts.push(t("shell.reading.skipped", { count: total, kinds: named }));
   }
   if (v.over > 0) parts.push(t("shell.reading.over", { count: v.over }));
+  // 还在读、停着时已经交了的；读完以后第一行就说了
+  if (v.phase !== "ended" && v.handed.noted > 0) parts.push(t("shell.reading.handedSoFar", { count: v.handed.noted }));
+  if (v.phase !== "ended" && v.failed) parts.push(t("shell.reading.failed"));
+  for (const l of v.lists) if (l.reason) parts.push(skippedList(l.action, l.reason));
   return parts.join(" ");
 }
 
@@ -107,6 +130,8 @@ if (setup && say && done) {
   window.usuyoSay = (text) => {
     say.textContent = text;
   };
+  // 访客身份随这个窗口的 UA 交给 usuyo（这一条和下面的网页是同一个引擎），插件请求时用同一个
+  if (setup.mode === "visitor") void invoke("login_agent", { userAgent: navigator.userAgent });
   if (setup.mode === "reading") reading(setup.name, say);
 }
 
@@ -162,7 +187,7 @@ function reading(site: string, line: HTMLElement) {
     detail.textContent = detailText(v);
     auto.checked = v.auto;
     pause.textContent = paused ? t("shell.reading.resume") : t("shell.reading.pause");
-    const over = v.phase === "handing" || v.phase === "handed";
+    const over = v.phase === "ended";
     pause.disabled = over || v.phase === "signing-in";
     finish.disabled = over;
     auto.disabled = over;

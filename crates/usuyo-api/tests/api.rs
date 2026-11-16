@@ -763,12 +763,32 @@ async fn visitors_are_listed_stored_and_cleared_apart_from_logins() {
     let text = json_of(res).await.to_string();
     assert!(!text.contains("visitor-secret-1"), "{text}");
 
+    // 窗口没取到就关了：交来页面里有的 cookie 名字和窗口的 UA，列表上写着
+    let ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Safari/605.1.15";
+    let missed = with_body(
+        "POST",
+        "/visitors/www.example.com/missed",
+        json!({"cookieNames": ["vid", "acw"], "userAgent": ua}),
+    );
+    assert_eq!(send(&f.app, missed).await.status(), StatusCode::NO_CONTENT);
+    let v = json_of(send(&f.app, authed("/visitors")).await).await;
+    assert_eq!(v[0]["lastMissed"]["seen"], json!(["acw", "vid"]), "{v}");
+    let bad_ua = json!({"cookies": [{"name": "vid", "value": "v-value-12", "domain": ".example.com"}], "userAgent": "x\r\nHost: evil"});
+    assert_eq!(
+        send(&f.app, put(bad_ua.to_string())).await.status(),
+        StatusCode::BAD_REQUEST
+    );
+
+    // 请求体里 cookie 旁边带着窗口的 UA：记下来，列表上看得到
     let good = json!({"cookies": [
-        {"name": "vid", "value": "visitor-secret-1", "domain": ".example.com", "expires": 4102444800i64}]});
+        {"name": "vid", "value": "visitor-secret-1", "domain": ".example.com", "expires": 4102444800i64}],
+        "userAgent": ua});
     let res = send(&f.app, put(good.to_string())).await;
     assert_eq!(res.status(), StatusCode::OK);
     let saved = json_of(res).await;
     assert_eq!(saved["state"], "present");
+    assert_eq!(saved["userAgent"], ua);
+    assert_eq!(saved["storedCookies"], json!(["vid"]));
     assert_eq!(saved["expiresAt"], "2100-01-01T00:00:00.000Z");
     assert!(!saved.to_string().contains("visitor-secret-1"));
     let listed = json_of(send(&f.app, authed("/visitors")).await).await;

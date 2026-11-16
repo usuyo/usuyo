@@ -729,12 +729,44 @@ impl Jobs {
         Ok(())
     }
 
+    /// 认完了：只在清单里没有等着认的条目时算数（同时有并进来的条目，就留着下一轮再认）。
     pub fn mark_listed(&self, id: &str) -> Result<()> {
         self.conn().execute(
-            "UPDATE imports SET listed = 1, wait_until = NULL WHERE id = ?1",
+            "UPDATE imports SET listed = 1, wait_until = NULL WHERE id = ?1
+               AND NOT EXISTS (SELECT 1 FROM import_entries WHERE import_id = ?1 AND standing = 'unresolved')",
             params![id],
         )?;
         Ok(())
+    }
+
+    /// 往一次还没确认的导入里并进条目，并让它重新认身份；已经确认了（或不在了）就什么都不做，回 `false`。
+    /// 查和写在同一个事务里：确认和并进不会交错。
+    pub fn append_entries(&self, import_id: &str, entries: &[EntryRow]) -> Result<bool> {
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        let open = tx.execute(
+            "UPDATE imports SET listed = 0 WHERE id = ?1 AND confirmed_at IS NULL",
+            params![import_id],
+        )?;
+        if open == 0 {
+            return Ok(false);
+        }
+        {
+            let mut stmt = tx.prepare(
+                "INSERT INTO import_entries
+                    (import_id, seq, url, title, action, acted_at, identity, item_id, standing, added)
+                 VALUES (?1, (SELECT COALESCE(MAX(seq), 0) + 1 FROM import_entries WHERE import_id = ?1),
+                    ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0)",
+            )?;
+            for e in entries {
+                stmt.execute(params![
+                    import_id, e.url, e.title, e.action, e.acted_at, e.identity, e.item_id,
+                    e.standing
+                ])?;
+            }
+        }
+        tx.commit()?;
+        Ok(true)
     }
 
     /// 过会儿再列，记下为什么等；`failed` 时次数加一。

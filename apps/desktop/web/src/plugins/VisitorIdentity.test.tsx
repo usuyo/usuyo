@@ -27,6 +27,7 @@ const visitor: Visitor = {
   domains: [],
   state: "missing",
   plugins: ["someone/example"],
+  storedCookies: [],
 };
 
 function show(state: Visitor["state"]) {
@@ -77,4 +78,24 @@ it("clears the window's data before the daemon forgets, and keeps the identity w
   fireEvent.click(screen.getByRole("button", { name: "移除" }));
   expect(await screen.findByText("没能清掉")).toBeTruthy();
   expect(order).toEqual([]);
+});
+
+it("shows the saved cookie names, the window's user agent and what a missed window lacked, without values", () => {
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <VisitorIdentity
+        visitor={{
+          ...visitor,
+          state: "present",
+          storedCookies: ["a1", "webId"],
+          userAgent: "Mozilla/5.0 (Macintosh) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Safari/605.1.15",
+          lastMissed: { at: "2026-11-15T10:00:00Z", seen: ["a1"], missing: ["web_session"] },
+        }}
+      />
+    </QueryClientProvider>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "诊断信息" }));
+  expect(screen.getByText("a1, webId")).toBeTruthy();
+  expect(screen.getByText(/Version\/26\.5 Safari/)).toBeTruthy();
+  expect(screen.getByText("页面中有：a1。缺少：web_session。")).toBeTruthy();
 });

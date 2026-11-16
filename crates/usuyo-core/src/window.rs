@@ -39,6 +39,8 @@ pub struct WindowSource {
     /// 已经在边界上核对过（`favorite`、`like`……）。
     pub action: String,
     pub links: Vec<DeliveredLink>,
+    /// 这个来源前面交过时落成的那次导入：这一回并进去。
+    pub import: Option<String>,
 }
 
 /// 交完以后：落成了哪几次导入，几条不合插件的 `match` 被丢掉。
@@ -135,7 +137,9 @@ impl Engine {
     }
 
     /// `POST /plugins/{id}/methods/{method}/window/links`：窗口里记下的链接。只留合插件 `match` 的、去掉重复的，
-    /// 每个来源落成一次（或几次，一次最多 [`BATCH_MAX`] 条）导入，等你确认；记下这一回用了站点窗口。
+    /// 每个来源落成一次导入，等你确认。同一个来源分几次交时带上头一回的导入（`import`），并进那一份；
+    /// 那份已经确认了、不在了、不是这种方法这个来源的，另起一份。一回超过 [`BATCH_MAX`] 条也并成一份。
+    /// 记下这一回用了站点窗口，条数是交来的这几份导入里一共有几条。
     pub fn window_links(
         &self,
         plugin_id: &str,
@@ -158,26 +162,54 @@ impl Engine {
                 }
             }
             noted += kept.len();
+            let n = kept.len();
+            // 交来的那份要是这种方法这个来源的、还在
+            let mut target = match &source.import {
+                Some(id) => self
+                    .inner
+                    .jobs
+                    .import(id)?
+                    .filter(|r| {
+                        r.kind == "delivered"
+                            && r.client.as_deref() == Some(m.name.as_str())
+                            && r.action.as_deref() == Some(source.action.as_str())
+                    })
+                    .map(|r| r.id),
+                None => None,
+            };
             while !kept.is_empty() {
                 let rest = kept.split_off(kept.len().min(BATCH_MAX));
-                let n = kept.len();
-                let view = self.deliver_batch(
-                    &plugin.header.name,
-                    Some(&source.action),
-                    kept,
-                    Some(&m.name),
-                )?;
+                let merged = match &target {
+                    Some(id) => self.append_links(id, Some(&source.action), kept.clone())?,
+                    None => false,
+                };
+                if !merged {
+                    let view = self.deliver_batch(
+                        &plugin.header.name,
+                        Some(&source.action),
+                        kept,
+                        Some(&m.name),
+                    )?;
+                    target = Some(view.id);
+                }
+                kept = rest;
+            }
+            if let Some(id) = target {
                 imports.push(HandedImport {
-                    id: view.id,
+                    id,
                     action: source.action.clone(),
                     links: count(n),
                 });
-                kept = rest;
             }
+        }
+        let mut total = 0u32;
+        for i in &imports {
+            let c = self.inner.jobs.entry_counts(&i.id)?;
+            total = total.saturating_add(c.new + c.stored + c.trashed + c.unresolved);
         }
         self.loaded()
             .host
-            .profile_used(&site.site, plugin.id().as_str(), &m.id, count(noted))?;
+            .profile_used(&site.site, plugin.id().as_str(), &m.id, total)?;
         self.emit(Event::PluginsUpdated);
         for i in &imports {
             self.emit(Event::ImportUpdated { id: i.id.clone() });

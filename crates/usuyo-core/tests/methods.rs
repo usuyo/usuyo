@@ -203,7 +203,9 @@ impl Fixture {
         let state = serde_json::from_value(serde_json::json!({"cookies": [
             {"name": "vid", "value": "visitor-vid", "domain": ".example.test"}]}))
         .unwrap();
-        engine.save_visitor("www.example.test", &state).unwrap();
+        engine
+            .save_visitor("www.example.test", &state, None)
+            .unwrap();
     }
 
     fn failure_log(&self) -> Vec<serde_json::Value> {
@@ -253,6 +255,9 @@ async fn methods_go_lowest_tier_first_and_account_free_first_and_fall_through() 
         (Some("guest"), Some("not-found"), Some("example.test"))
     );
     assert_eq!(log[1]["method"], "visitor");
+    // 这次交给插件的 cookie 的名字：访客页带了访客身份，公开接口什么都没带；没有值
+    assert_eq!(log[1]["cookies"], serde_json::json!(["vid"]));
+    assert_eq!(log[0]["cookies"], serde_json::json!([]));
     assert_eq!(log[0]["detail"], "<html>\n404");
     let text = std::fs::read_to_string(f.machine().join("logs/fetch-failures.jsonl")).unwrap();
     assert!(

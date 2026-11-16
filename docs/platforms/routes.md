@@ -37,7 +37,7 @@
 
 | 平台（仓库） | 单条内容 | 视频文件 | 收藏等列表 | 官方导出 |
 |---|---|---|---|---|
-| 小红书（[rednote](https://github.com/usuyo-fetch/rednote)） | `note-page` 已实现 | 随 `note-page` 一起取，不登录是低清 | `in-usuyo`、`userscript` 已实现；`iphone`、`android` 未实现 | — |
+| 小红书（[rednote](https://github.com/usuyo-fetch/rednote)） | `note-page` 已实现（访客身份被拒时同一次调用里再用手机版页面、不带 cookie 取一次） | 随 `note-page` 一起取，不登录是低清 | `in-usuyo`、`userscript` 已实现；`iphone`、`android` 未实现 | — |
 | 视频号（[wechat-channels](https://github.com/usuyo-fetch/wechat-channels)） | `feed-info` 已实现：作者、描述、封面 | `yuanbao` 已实现 | `userscript`、`iphone`、`mac`、`android` 未实现 | — |
 | B站（[bilibili](https://github.com/usuyo-fetch/bilibili)） | `view` 已实现 | 随 `view` 一起取，低画质 | `favorites-public`、`favorites`、`userscript` 已实现 | — |
 | X（[x](https://github.com/usuyo-fetch/x)） | `guest`、`embed` 已实现；`deliver-content` 未实现 | 随 `guest`、`embed` 一起取 | `userscript` 已实现；`session`、`iphone` 未实现 | `archive` 已实现 |

@@ -6,6 +6,7 @@ import { dayText } from "../item/format";
 import { clearVisitorData, openVisitor } from "../shell";
 import { Button } from "../ui/Button";
 import { CardRow } from "../ui/Card";
+import { Fold } from "../ui/Fold";
 import { t } from "../i18n";
 import { formatList } from "../i18n/format";
 import { VISITOR_STATE } from "./words";
@@ -44,6 +45,31 @@ export function VisitorTake({ visitor }: { visitor: Visitor }) {
       </Button>
       <Say text={say} />
     </div>
+  );
+}
+
+/** 技术信息：存着的 cookie 名字（不含值）、取它时窗口的 UA、上一回没取到时缺了哪几个。真跑一回以后照它看缺什么。 */
+function Technical({ visitor }: { visitor: Visitor }) {
+  const none = t("plugins.accounts.visitorNone");
+  const names = (list: string[]) => (list.length > 0 ? list.join(", ") : none);
+  const miss = visitor.lastMissed;
+  return (
+    <Fold title={t("plugins.accounts.visitorDiagnostics")} className="mt-1.5">
+      <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-small text-sub">
+        <dt>{t("plugins.accounts.visitorCookies")}</dt>
+        <dd className="m-0 min-w-0 break-words font-mono">{names(visitor.storedCookies)}</dd>
+        <dt>{t("plugins.accounts.visitorAgent")}</dt>
+        <dd className="m-0 min-w-0 break-words font-mono">{visitor.userAgent ?? none}</dd>
+        {miss ? (
+          <>
+            <dt>{t("plugins.accounts.visitorMissed", { day: dayText(miss.at) })}</dt>
+            <dd className="m-0 min-w-0 break-words">
+              {t("plugins.accounts.visitorMissedNames", { seen: names(miss.seen), missing: names(miss.missing) })}
+            </dd>
+          </>
+        ) : null}
+      </dl>
+    </Fold>
   );
 }
 
@@ -97,6 +123,7 @@ export function VisitorIdentity({ visitor, users }: { visitor: Visitor; users?: 
           {forget.error ? <ErrorLine error={forget.error} className="mt-1.5" /> : null}
         </>
       ) : null}
+      <Technical visitor={visitor} />
     </CardRow>
   );
 }

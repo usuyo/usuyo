@@ -97,6 +97,33 @@ pub(crate) struct Wait {
     pub hint: Option<Said>,
 }
 
+fn bare_entry(url: String, action: Option<&str>, standing: &str) -> EntryRow {
+    EntryRow {
+        seq: 0,
+        url,
+        title: None,
+        action: action.map(str::to_owned),
+        acted_at: None,
+        identity: None,
+        item_id: None,
+        standing: standing.into(),
+        added: false,
+        reference: None,
+    }
+}
+
+/// 交进来的链接，等着认身份。
+fn delivered_entries(
+    action: Option<&str>,
+    links: Vec<DeliveredLink>,
+) -> impl Iterator<Item = EntryRow> + '_ {
+    links.into_iter().map(move |l| EntryRow {
+        title: l.title,
+        acted_at: l.acted_at,
+        ..bare_entry(l.url.to_string(), action, "unresolved")
+    })
+}
+
 fn ts(ms: i64) -> String {
     jiff::Timestamp::from_millisecond(ms)
         .map(usuyo_library::time::format)
@@ -229,30 +256,32 @@ impl Engine {
             file_name: None,
         };
         self.inner.jobs.insert_import(&row)?;
-        let entry = |url: String, standing: &str| EntryRow {
-            seq: 0,
-            url,
-            title: None,
-            action: action.map(str::to_owned),
-            acted_at: None,
-            identity: None,
-            item_id: None,
-            standing: standing.into(),
-            added: false,
-            reference: None,
-        };
-        let entries: Vec<EntryRow> = links
-            .into_iter()
-            .map(|l| EntryRow {
-                title: l.title,
-                acted_at: l.acted_at,
-                ..entry(l.url.to_string(), "unresolved")
-            })
-            .chain(unrecognized.into_iter().map(|u| entry(u, "unrecognized")))
+        let entries: Vec<EntryRow> = delivered_entries(action, links)
+            .chain(
+                unrecognized
+                    .into_iter()
+                    .map(|u| bare_entry(u, action, "unrecognized")),
+            )
             .collect();
         self.inner.jobs.add_entries(&row.id, &entries)?;
         self.inner.imports_wake.notify_one();
         self.import(&row.id)
+    }
+
+    /// 把又交来的一批并进一次还没确认的导入（站点窗口分几次交同一个列表），它重新认身份。
+    /// 那次导入已经确认了、或不在了，回 `false`，什么都没写。
+    pub(crate) fn append_links(
+        &self,
+        import_id: &str,
+        action: Option<&str>,
+        links: Vec<DeliveredLink>,
+    ) -> Result<bool> {
+        let entries: Vec<EntryRow> = delivered_entries(action, links).collect();
+        let appended = self.inner.jobs.append_entries(import_id, &entries)?;
+        if appended {
+            self.inner.imports_wake.notify_one();
+        }
+        Ok(appended)
     }
 
     pub fn imports(&self) -> Result<Vec<ImportView>> {
@@ -527,8 +556,10 @@ impl Engine {
     ) -> Result<T> {
         match &r {
             Ok(_) => self.record_method_call(plugin, method, link_host, Ok(()))?,
-            Err(PluginError::Call { failure, .. }) => {
-                self.record_method_call(plugin, method, link_host, Err(failure))?;
+            Err(PluginError::Call {
+                failure, cookies, ..
+            }) => {
+                self.record_method_call(plugin, method, link_host, Err((failure, cookies)))?;
                 self.pause_for(plugin, method, scope, failure)?;
             }
             Err(_) => {}
@@ -974,8 +1005,10 @@ impl Engine {
                 self.record_method_call(&plugin, &method, None, Ok(()))?;
                 page
             }
-            Err(PluginError::Call { failure, .. }) => {
-                self.record_method_call(&plugin, &method, None, Err(&failure))?;
+            Err(PluginError::Call {
+                failure, cookies, ..
+            }) => {
+                self.record_method_call(&plugin, &method, None, Err((&failure, &cookies)))?;
                 // 被限流、被拦：只记在这种方法的暂停上（导入照它显示原因），「现在再试」一去掉就接着列
                 match self.pause_for(&plugin, &method, &scope, &failure)? {
                     Halt::Pause(until) => return Ok(Some(until)),

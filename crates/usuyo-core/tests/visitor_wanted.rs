@@ -130,7 +130,9 @@ fn visitor(engine: &Engine, value: &str) {
     let state = serde_json::from_value(serde_json::json!({"cookies": [
         {"name": "vid", "value": value, "domain": ".example.test"}]}))
     .unwrap();
-    engine.save_visitor("www.example.test", &state).unwrap();
+    engine
+        .save_visitor("www.example.test", &state, None)
+        .unwrap();
 }
 
 fn wanted(engine: &Engine) -> Vec<(String, bool)> {
@@ -350,10 +352,12 @@ async fn links_from_a_site_window_become_imports_and_the_window_use_is_recorded(
                         link("https://www.example.test/n/1?xsec_token=a"),
                         link("https://other.test/n/3"),
                     ],
+                    import: None,
                 },
                 WindowSource {
                     action: "like".into(),
                     links: vec![link("https://www.example.test/n/4?xsec_token=c")],
+                    import: None,
                 },
             ],
         )
@@ -375,6 +379,149 @@ async fn links_from_a_site_window_become_imports_and_the_window_use_is_recorded(
         .unwrap();
     assert_eq!(site().login, LoginState::Missing);
     assert!(site().last_use.is_none());
+}
+
+/// 同一个列表分几次交（读到底交一回、停下交一回、你自己翻的又交一回）：带上头一回的导入 id，
+/// 后面的并进同一次导入，不另起一份；那次导入已经确认了才另起一份。一次超过一批的上限也只是一份。
+#[tokio::test]
+async fn a_list_handed_in_parts_stays_one_import() {
+    let f = Fixture::new();
+    let engine = f.engine(Duration::from_secs(90));
+    let hand = |import: Option<String>, links: Vec<DeliveredLink>| {
+        engine
+            .window_links(
+                "fake/visit",
+                "in-usuyo",
+                vec![WindowSource {
+                    action: "favorite".into(),
+                    links,
+                    import,
+                }],
+            )
+            .unwrap()
+    };
+    let first = hand(
+        None,
+        vec![
+            link("https://www.example.test/n/1?xsec_token=a"),
+            link("https://www.example.test/n/2?xsec_token=b"),
+        ],
+    );
+    assert_eq!(first.imports.len(), 1);
+    let id = first.imports[0].id.clone();
+    // 等它认完身份（列完）再并进去：并进去以后要重新认
+    while !matches!(
+        engine.import(&id).unwrap().state,
+        usuyo_core::view::ImportState::Ready
+    ) {
+        engine.advance_imports().await.unwrap();
+    }
+    let second = hand(
+        Some(id.clone()),
+        vec![link("https://www.example.test/n/3?xsec_token=c")],
+    );
+    assert_eq!(second.imports.len(), 1);
+    assert_eq!(second.imports[0].id, id, "merged into the first import");
+    assert_eq!(engine.imports().unwrap().len(), 1);
+    engine.advance_imports().await.unwrap();
+    engine.advance_imports().await.unwrap();
+    let v = serde_json::to_value(engine.import(&id).unwrap()).unwrap();
+    assert_eq!(v["preview"]["new"], 3, "{v}");
+    assert_eq!(v["state"], "ready", "{v}");
+    // 上一回用站点窗口：记的是这一份里一共几条，不是最后交的那一回
+    let site = engine
+        .sites()
+        .unwrap()
+        .into_iter()
+        .find(|s| s.site == "www.example.test")
+        .unwrap();
+    assert_eq!(site.last_use.unwrap().noted, 3);
+
+    // 确认过的导入不再往里加：另起一份
+    engine
+        .confirm_import(
+            &id,
+            &usuyo_core::ImportChoice {
+                new: false,
+                trashed: false,
+                except: Default::default(),
+            },
+        )
+        .unwrap();
+    let third = hand(
+        Some(id.clone()),
+        vec![link("https://www.example.test/n/4?xsec_token=d")],
+    );
+    assert_ne!(third.imports[0].id, id);
+    assert_eq!(engine.imports().unwrap().len(), 2);
+
+    // 一回交的超过一批的上限：还是一份导入
+    let many: Vec<DeliveredLink> = (0..usuyo_core::BATCH_MAX + 3)
+        .map(|i| {
+            link(&format!(
+                "https://www.example.test/n/{}?xsec_token=x",
+                100 + i
+            ))
+        })
+        .collect();
+    let big = hand(None, many);
+    assert_eq!(big.imports.len(), 1);
+    assert_eq!(big.imports[0].links as usize, usuyo_core::BATCH_MAX + 3);
+}
+
+/// 诊断：访客身份的列表上有存着的 cookie 名字（不含值）和取它时的 UA；访客窗口没取到就关了时，
+/// 写着页面里有哪几个名字、声明的缺了哪几个。存下一份以后那一条就去掉。
+#[test]
+fn the_visitor_list_names_its_cookies_and_what_a_missed_window_lacked() {
+    let f = Fixture::new();
+    let yaml = f
+        .tmp
+        .path()
+        .join("machine/plugins/fake/visit/1.0.0/usuyo-plugin.yaml");
+    std::fs::write(
+        &yaml,
+        MANIFEST.replace(
+            r#"url: "https://www.example.test/"}"#,
+            r#"url: "https://www.example.test/", cookies: [vid, sess]}"#,
+        ),
+    )
+    .unwrap();
+    let engine = f.engine(Duration::from_secs(90));
+    let ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Safari/605.1.15";
+    engine
+        .visitor_missed(
+            "www.example.test",
+            vec!["vid".into(), "acw".into()],
+            Some(ua.into()),
+        )
+        .unwrap();
+    assert!(
+        engine
+            .visitor_missed("www.nowhere.test", vec![], None)
+            .is_err()
+    );
+    let v = serde_json::to_value(&engine.visitors().unwrap()[0]).unwrap();
+    assert_eq!(
+        v["lastMissed"]["seen"],
+        serde_json::json!(["acw", "vid"]),
+        "{v}"
+    );
+    assert_eq!(v["lastMissed"]["missing"], serde_json::json!(["sess"]));
+    assert_eq!(v["lastMissed"]["userAgent"], ua);
+    assert_eq!(v["storedCookies"], serde_json::json!([]));
+
+    let state = serde_json::from_value(serde_json::json!({"cookies": [
+        {"name": "vid", "value": "visitor-secret-1", "domain": ".example.test"},
+        {"name": "sess", "value": "visitor-secret-2", "domain": ".example.test"}]}))
+    .unwrap();
+    engine
+        .save_visitor("www.example.test", &state, Some(ua))
+        .unwrap();
+    let v = serde_json::to_value(&engine.visitors().unwrap()[0]).unwrap();
+    assert_eq!(v["storedCookies"], serde_json::json!(["sess", "vid"]));
+    assert_eq!(v["userAgent"], ua);
+    assert!(v.get("lastMissed").is_none(), "{v}");
+    assert!(!v.to_string().contains("visitor-secret"));
 }
 
 /// 窗口能去的域名只来自拥有这个窗口的插件自己的清单；同一站点别的插件写的 `domains` 在这里不算。

@@ -6,12 +6,14 @@
 //! 脚本认出登录了、记下列表里的链接，经只进不出的那一条（`channel.rs`）交给壳。
 //!
 //! 默认自己往下翻：隔几秒（带一点随机）叫脚本翻一屏；面板上能换成你自己翻、暂停、继续。
-//! 脚本说到底了，壳把记下的链接交给内核，落成普通的导入（在导入页确认）；说停下了（验证页、登录墙、
-//! 认不出的回答……），壳不再叫它翻，面板上写原因。你点「完成」或关掉窗口时，记下的也照样交过去。
+//! 脚本每读完一个列表（读到底，或者找不到、认不出而跳过）就说一声，壳把这个列表记下的交给内核，
+//! 落成普通的导入（在导入页确认）；同一个列表后来又记下的并进那一份。脚本说到底了，壳交出剩下的，不用你点什么。
+//! 说停下了（验证页、登录墙、站点的错误码：要你动手的），壳不再叫它翻，交出已经记下的，面板上写原因和你要做什么。
+//! 「完成」和关掉窗口照样交出还没交的；交没成的过一会儿自己再交。
 //!
 //! 能去哪些地址只照清单的站点和 `domains`；新窗口、下载、别的协议都挡掉。
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::hash::BuildHasher;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
@@ -39,6 +41,8 @@ const TICK: Duration = Duration::from_millis(250);
 const PANEL_EVERY: Duration = Duration::from_millis(300);
 /// 一个窗口一回最多记这么多条；再多的不记，面板上写着。
 const LINKS_MAX: usize = 20_000;
+/// 交给内核没成：隔这么久自己再交。
+const SEND_RETRY: Duration = Duration::from_secs(10);
 
 /// 内核 `GET /plugins/{id}/methods/{method}/window` 给的。
 #[derive(Debug, Clone, Deserialize)]
@@ -111,25 +115,25 @@ enum Phase {
     /// 还没认出登录。
     SigningIn,
     Reading,
-    /// 停下了，`reason` 是脚本给的词（或壳自己的 `left`）。
+    /// 停下了，`reason` 是脚本给的词：要你动手（验证页、登录墙、站点的错误码……）。
     Stopped(String),
-    Handing,
-    Handed {
-        imports: u32,
-        noted: u32,
-        dropped: u32,
-    },
-    /// 交给内核没成；可以再点「完成」。
-    Failed,
+    /// 读完了（脚本说到底了，或你点了「完成」）。之后你自己翻出来的照样交。
+    Ended,
 }
 
 /// 要线程去做的事。
 #[derive(Debug, PartialEq, Eq)]
 enum Effect {
     SignedIn,
-    HandOver,
     /// 叫页面里的脚本接着读（停下以后点了「继续」）。
     Resume,
+}
+
+/// 交给内核的一回：请求体，和这回交了哪几条（交成了才算交过）。
+#[derive(Debug)]
+struct Batch {
+    body: Value,
+    urls: Vec<String>,
 }
 
 /// 一个站点窗口的状态：只有数和记下的链接，没有 cookie。
@@ -139,6 +143,17 @@ struct Session {
     paused: bool,
     signed_in: bool,
     links: BTreeMap<String, Noted>,
+    /// 已经交给内核的。
+    sent: BTreeSet<String>,
+    /// 来源（`favorite`……）→ 它落成的那次导入；后面再交就并进去。
+    imports: BTreeMap<String, String>,
+    /// 脚本说读过了的列表 → 跳过的原因（读到底的是 `None`）。
+    finished: BTreeMap<String, Option<String>>,
+    /// 内核收下了几条、几条不合插件的 `match`。
+    handed_noted: u32,
+    dropped: u32,
+    /// 上一回交给内核没成；线程过一会儿自己再交。
+    failed: bool,
     /// 超过 [`LINKS_MAX`] 没记的。
     over: u32,
     counts: Counts,
@@ -155,15 +170,17 @@ impl Session {
             paused: false,
             signed_in: false,
             links: BTreeMap::new(),
+            sent: BTreeSet::new(),
+            imports: BTreeMap::new(),
+            finished: BTreeMap::new(),
+            handed_noted: 0,
+            dropped: 0,
+            failed: false,
             over: 0,
             counts: Counts::default(),
             diagnosis: String::new(),
             resuming: false,
         }
-    }
-
-    fn handed(&self) -> bool {
-        matches!(self.phase, Phase::Handing | Phase::Handed { .. })
     }
 
     fn apply(&mut self, r: Report) -> Vec<Effect> {
@@ -175,17 +192,15 @@ impl Session {
                 self.phase = Phase::Reading;
             }
         }
-        if !self.handed() {
-            for l in r.links {
-                if self.links.contains_key(&l.url) {
-                    continue;
-                }
-                if self.links.len() >= LINKS_MAX {
-                    self.over = self.over.saturating_add(1);
-                    continue;
-                }
-                self.links.insert(l.url.clone(), l);
+        for l in r.links {
+            if self.links.contains_key(&l.url) {
+                continue;
             }
+            if self.links.len() >= LINKS_MAX {
+                self.over = self.over.saturating_add(1);
+                continue;
+            }
+            self.links.insert(l.url.clone(), l);
         }
         if let Some(c) = r.counts {
             self.counts = c;
@@ -193,12 +208,13 @@ impl Session {
         if let Some(d) = r.diagnosis {
             self.diagnosis = d;
         }
+        if let Some(f) = r.finished {
+            self.finished = f.into_iter().map(|f| (f.action, f.reason)).collect();
+        }
         match r.said {
             Some(Said::Reading) => self.resuming = false,
             Some(Said::Stopped) if self.resuming => {}
-            Some(Said::End) if !self.handed() => {
-                out.push(Effect::HandOver);
-            }
+            Some(Said::End) if self.phase != Phase::Ended => self.phase = Phase::Ended,
             Some(Said::Stopped) if matches!(self.phase, Phase::Reading | Phase::SigningIn) => {
                 self.phase = Phase::Stopped(r.reason.unwrap_or_else(|| "unknown".into()));
             }
@@ -224,8 +240,11 @@ impl Session {
                     return vec![Effect::Resume];
                 }
             }
-            Control::Finish if !self.handed() => return vec![Effect::HandOver],
-            Control::Finish => {}
+            // 「完成」：不再翻，记下的都交出去（交没成的也马上再交一回）
+            Control::Finish => {
+                self.phase = Phase::Ended;
+                self.failed = false;
+            }
         }
         Vec::new()
     }
@@ -239,45 +258,108 @@ impl Session {
         self.links.values().filter(|l| l.action == action).count()
     }
 
-    /// 按来源分好，交给内核的样子。
-    fn sources(&self) -> Value {
+    fn unsent(&self) -> usize {
+        self.links.len() - self.sent.len()
+    }
+
+    /// 现在该交的：读过了的列表里还没交的；停下了、读完了就是全部还没交的。没有就是 `None`。
+    /// 前面交过的来源都带上它的导入（没有新链接的也带，内核照它算这一回一共几条），新链接并进那一份。
+    fn batch(&self) -> Option<Batch> {
+        let all = matches!(self.phase, Phase::Stopped(_) | Phase::Ended);
         let mut by: BTreeMap<&str, Vec<Value>> = BTreeMap::new();
+        let mut urls = Vec::new();
         for l in self.links.values() {
+            if self.sent.contains(&l.url) || !(all || self.finished.contains_key(&l.action)) {
+                continue;
+            }
             let mut link = json!({ "url": l.url });
             if let Some(t) = &l.title {
                 link["title"] = json!(t);
             }
             by.entry(l.action.as_str()).or_default().push(link);
+            urls.push(l.url.clone());
+        }
+        if urls.is_empty() {
+            return None;
+        }
+        for action in self.imports.keys() {
+            by.entry(action.as_str()).or_default();
         }
         let sources: Vec<Value> = by
             .into_iter()
-            .map(|(action, links)| json!({ "action": action, "links": links }))
+            .map(|(action, links)| {
+                let mut src = json!({ "action": action, "links": links });
+                if let Some(id) = self.imports.get(action) {
+                    src["import"] = json!(id);
+                }
+                src
+            })
             .collect();
-        json!({ "sources": sources })
+        Some(Batch {
+            body: json!({ "sources": sources }),
+            urls,
+        })
+    }
+
+    /// 内核收下了这一回：记下交过的、每个来源落成的导入和条数。
+    fn delivered(&mut self, urls: Vec<String>, answer: &Value) {
+        self.sent.extend(urls);
+        let n = |k: &str| {
+            answer
+                .get(k)
+                .and_then(Value::as_u64)
+                .and_then(|x| u32::try_from(x).ok())
+                .unwrap_or(0)
+        };
+        self.handed_noted = self.handed_noted.saturating_add(n("noted"));
+        self.dropped = self.dropped.saturating_add(n("dropped"));
+        for i in answer
+            .get("imports")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            if let (Some(action), Some(id)) = (
+                i.get("action").and_then(Value::as_str),
+                i.get("id").and_then(Value::as_str),
+            ) {
+                self.imports.insert(action.to_owned(), id.to_owned());
+            }
+        }
+        self.failed = false;
+    }
+
+    /// 窗口标题，跟着读到哪了变。
+    fn title(&self, lang: Lang, site: &str) -> String {
+        let w = match self.phase {
+            Phase::SigningIn => words::LOGIN_TITLE,
+            Phase::Reading => words::READING_TITLE,
+            Phase::Stopped(_) => words::READING_STOPPED_TITLE,
+            Phase::Ended => words::READING_ENDED_TITLE,
+        };
+        w.fill(lang, &[("site", &site)])
     }
 
     /// 给面板的：都是数和固定的词，加上脚本给的形状诊断（不含内容）。
     fn view(&self) -> Value {
-        let (phase, reason, handed) = match &self.phase {
-            Phase::SigningIn => ("signing-in", None, None),
-            Phase::Reading => ("reading", None, None),
-            Phase::Stopped(r) => ("stopped", Some(r.as_str()), None),
-            Phase::Handing => ("handing", None, None),
-            Phase::Handed {
-                imports,
-                noted,
-                dropped,
-            } => (
-                "handed",
-                None,
-                Some(json!({ "imports": imports, "noted": noted, "dropped": dropped })),
-            ),
-            Phase::Failed => ("failed", None, None),
+        let (phase, reason) = match &self.phase {
+            Phase::SigningIn => ("signing-in", None),
+            Phase::Reading => ("reading", None),
+            Phase::Stopped(r) => ("stopped", Some(r.as_str())),
+            Phase::Ended => ("ended", None),
         };
+        let lists: Vec<Value> = self
+            .finished
+            .iter()
+            .map(|(action, reason)| json!({ "action": action, "reason": reason }))
+            .collect();
         json!({
             "phase": phase,
             "reason": reason,
-            "handed": handed,
+            "handed": { "imports": self.imports.len(), "noted": self.handed_noted, "dropped": self.dropped },
+            "unsent": self.unsent(),
+            "failed": self.failed,
+            "lists": lists,
             "auto": self.auto,
             "paused": self.paused,
             "requests": self.counts.requests,
@@ -358,33 +440,36 @@ impl Logins {
             guide: spec.guide.as_deref(),
         };
         let bar_view = window.add_child(
-            WebviewBuilder::new(
-                format!("{label}-bar"),
-                WebviewUrl::App("login-bar.html".into()),
-            )
-            .initialization_script(format!(
-                "window.usuyoLogin = {};",
-                serde_json::to_string(&bar)?
-            )),
+            login::with_agent(
+                WebviewBuilder::new(
+                    format!("{label}-bar"),
+                    WebviewUrl::App("login-bar.html".into()),
+                )
+                .initialization_script(format!(
+                    "window.usuyoLogin = {};",
+                    serde_json::to_string(&bar)?
+                )),
+            ),
             LogicalPosition::new(0.0, 0.0),
             LogicalSize::new(width, BAR_HEIGHT),
         )?;
         let nav = allowed.clone();
-        let site_builder = WebviewBuilder::new(&site_label, WebviewUrl::External(url))
-            .initialization_script(channel::page_script(&allowed, &spec.script, lang.tag()))
-            .on_navigation(move |u: &Url| {
-                let ok = nav.page(u);
-                if !ok {
-                    eprintln!(
-                        "usuyo: the site window stayed put instead of opening {}://{}",
-                        u.scheme(),
-                        u.host_str().unwrap_or("")
-                    );
-                }
-                ok
-            })
-            .on_new_window(|_, _| NewWindowResponse::Deny)
-            .on_download(|_, _| false);
+        let site_builder =
+            login::with_agent(WebviewBuilder::new(&site_label, WebviewUrl::External(url)))
+                .initialization_script(channel::page_script(&allowed, &spec.script, lang.tag()))
+                .on_navigation(move |u: &Url| {
+                    let ok = nav.page(u);
+                    if !ok {
+                        eprintln!(
+                            "usuyo: the site window stayed put instead of opening {}://{}",
+                            u.scheme(),
+                            u.host_str().unwrap_or("")
+                        );
+                    }
+                    ok
+                })
+                .on_new_window(|_, _| NewWindowResponse::Deny)
+                .on_download(|_, _| false);
         let site_view = window.add_child(
             self.with_store(site_builder, &store),
             LogicalPosition::new(0.0, BAR_HEIGHT),
@@ -411,13 +496,15 @@ impl Logins {
         Ok(())
     }
 
-    /// 窗口开着时的那个线程：收报告和按钮，到点叫脚本翻一屏，刷新面板。
+    /// 窗口开着时的那个线程：收报告和按钮，到点叫脚本翻一屏，读完一个列表就交给内核，刷新面板和标题。
     fn read(&self, seat: &Seat<'_>, spec: &WindowSpec, rx: &Receiver<Msg>) {
         let mut s = Session::new();
         let mut next = Instant::now() + STEP_MIN;
         let mut steps = 0u64;
         let mut dirty = true;
         let mut painted = Instant::now() - PANEL_EVERY;
+        let mut send_at = Instant::now();
+        let mut titled = String::new();
         loop {
             let effects = match rx.recv_timeout(TICK) {
                 Ok(Msg::Report(v)) => match Report::parse(&v, seat.allowed) {
@@ -432,6 +519,9 @@ impl Logins {
                 },
                 Ok(Msg::Control(c)) => {
                     dirty = true;
+                    if c == Control::Finish {
+                        send_at = Instant::now();
+                    }
                     s.control(c)
                 }
                 Err(RecvTimeoutError::Timeout) => Vec::new(),
@@ -439,8 +529,9 @@ impl Logins {
             };
             if seat.closed.load(Ordering::SeqCst) {
                 // 关窗口时还没交的照样交过去，在导入页确认
-                if !s.handed() && !s.links.is_empty() {
-                    self.hand_over(&mut s, spec);
+                s.phase = Phase::Ended;
+                if let Some(b) = s.batch() {
+                    self.hand_over(&mut s, spec, b);
                 }
                 return;
             }
@@ -454,15 +545,18 @@ impl Logins {
                     Effect::Resume => {
                         let _ = seat.site.eval(channel::RESUME);
                     }
-                    Effect::HandOver => {
-                        s.phase = Phase::Handing;
-                        self.paint(seat.bar, &s);
-                        self.hand_over(&mut s, spec);
-                        dirty = true;
-                    }
                 }
             }
             let now = Instant::now();
+            if now >= send_at
+                && let Some(b) = s.batch()
+            {
+                self.hand_over(&mut s, spec, b);
+                if s.failed {
+                    send_at = now + SEND_RETRY;
+                }
+                dirty = true;
+            }
             if s.steps() && now >= next {
                 let _ = seat.site.eval(channel::STEP);
                 steps += 1;
@@ -473,6 +567,11 @@ impl Logins {
             }
             if dirty && painted.elapsed() >= PANEL_EVERY {
                 self.paint(seat.bar, &s);
+                let title = s.title(Lang::of(self.daemon.machine_dir()), &spec.site_name);
+                if title != titled {
+                    let _ = seat.site.window().set_title(&title);
+                    titled = title;
+                }
                 painted = Instant::now();
                 dirty = false;
             }
@@ -497,7 +596,8 @@ impl Logins {
         Ok(())
     }
 
-    fn hand_over(&self, s: &mut Session, spec: &WindowSpec) {
+    /// 交一回；没成的留着，下一回连同新记下的一起交。
+    fn hand_over(&self, s: &mut Session, spec: &WindowSpec, b: Batch) {
         let result = plugin_path(&spec.plugin).and_then(|(owner, repo)| {
             self.api(
                 "POST",
@@ -510,32 +610,16 @@ impl Logins {
                     "window",
                     "links",
                 ],
-                Some(s.sources()),
+                Some(b.body),
             )
         });
-        s.phase = match result {
-            Ok(v) => {
-                let n = |k: &str| {
-                    v.get(k)
-                        .and_then(Value::as_u64)
-                        .and_then(|x| u32::try_from(x).ok())
-                        .unwrap_or(0)
-                };
-                let imports = v
-                    .get("imports")
-                    .and_then(Value::as_array)
-                    .map_or(0, |a| u32::try_from(a.len()).unwrap_or(u32::MAX));
-                Phase::Handed {
-                    imports,
-                    noted: n("noted"),
-                    dropped: n("dropped"),
-                }
-            }
+        match result {
+            Ok(v) => s.delivered(b.urls, &v),
             Err(e) => {
                 eprintln!("usuyo: cannot hand the noted links to the daemon: {e:#}");
-                Phase::Failed
+                s.failed = true;
             }
-        };
+        }
     }
 
     fn paint(&self, bar: &Webview, s: &Session) {
@@ -565,8 +649,32 @@ mod tests {
         json!({"action": action, "url": format!("https://www.example.test/explore/{n:024x}?xsec_token=t{n}"), "title": format!("笔记 {n}")})
     }
 
+    /// 交给内核的那一回里每个来源有几条、带没带导入 id。
+    fn sources(b: &Batch) -> Vec<(String, usize, Option<String>)> {
+        b.body["sources"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| {
+                (
+                    s["action"].as_str().unwrap().to_owned(),
+                    s["links"].as_array().unwrap().len(),
+                    s["import"].as_str().map(str::to_owned),
+                )
+            })
+            .collect()
+    }
+
+    fn answer(imports: &[(&str, &str)], noted: u32) -> Value {
+        let imports: Vec<Value> = imports
+            .iter()
+            .map(|(a, id)| json!({"id": id, "action": a, "links": 0}))
+            .collect();
+        json!({"imports": imports, "noted": noted, "dropped": 0})
+    }
+
     #[test]
-    fn reading_starts_once_signed_in_and_hands_over_at_the_end() {
+    fn reading_starts_once_signed_in_and_counts_what_it_noted() {
         let mut s = Session::new();
         assert!(!s.steps(), "不在登录前翻");
         assert_eq!(
@@ -585,33 +693,110 @@ mod tests {
         let v = s.view();
         assert_eq!(v["noted"], json!({"favorite": 2, "like": 1, "all": 3}));
         assert_eq!(v["skipped"]["noToken"], 1);
-        assert_eq!(s.apply(report(json!({"state": "end"}))), [Effect::HandOver]);
-        let sources = s.sources();
-        assert_eq!(sources["sources"].as_array().unwrap().len(), 2);
-        assert_eq!(sources["sources"][0]["action"], "favorite");
-        assert_eq!(sources["sources"][0]["links"].as_array().unwrap().len(), 2);
+        assert!(s.batch().is_none(), "一个列表都还没读完：不交");
+    }
+
+    /// 2026-11-15：读完「收藏」以后找不到下一栏，读到的一直不交、要你点「完成」。现在读完一栏就交这一栏；
+    /// 后面的栏跳过了，脚本说到底，剩下的自己交，不用点什么。
+    #[test]
+    fn each_list_is_handed_over_once_it_is_read_and_the_end_needs_no_click() {
+        let mut s = Session::new();
+        s.apply(report(json!({"signedIn": true})));
+        let favs: Vec<Value> = (0..150).map(|i| link("favorite", i)).collect();
+        s.apply(report(json!({ "links": favs })));
+        s.apply(report(
+            json!({"links": [link("like", 900)], "finished": [{"action": "favorite"}]}),
+        ));
+        let b = s.batch().expect("favorites are due");
+        assert_eq!(sources(&b), [("favorite".into(), 150, None)]);
+        s.delivered(b.urls, &answer(&[("favorite", "imp-fav")], 150));
+        assert!(s.batch().is_none(), "交过的不再交，没读完的「赞过」不交");
+        assert!(s.steps(), "交了「收藏」照样往下读");
+        // 「收藏」后来又冒出来一条：并进同一份导入
+        s.apply(report(json!({"links": [link("favorite", 500)]})));
+        let b = s.batch().unwrap();
+        assert_eq!(
+            sources(&b),
+            [("favorite".into(), 1, Some("imp-fav".into()))]
+        );
+        s.delivered(b.urls, &answer(&[("favorite", "imp-fav")], 1));
+        // 「赞过」找不到，跳过；脚本说到底了：剩下的自己交，带上前面那份导入好算总数
+        s.apply(report(json!({"state": "end", "finished": [{"action": "favorite"}, {"action": "like", "reason": "notab"}]})));
+        assert_eq!(s.phase, Phase::Ended);
+        assert!(!s.steps());
+        let b = s.batch().unwrap();
+        assert_eq!(
+            sources(&b),
+            [
+                ("favorite".into(), 0, Some("imp-fav".into())),
+                ("like".into(), 1, None)
+            ]
+        );
+        s.delivered(
+            b.urls,
+            &answer(&[("favorite", "imp-fav"), ("like", "imp-like")], 1),
+        );
+        assert!(s.batch().is_none());
+        let v = s.view();
+        assert_eq!(v["phase"], "ended");
+        assert_eq!(v["unsent"], 0);
+        assert_eq!(v["handed"]["noted"], 152);
+        assert_eq!(v["lists"][1], json!({"action": "like", "reason": "notab"}));
+        assert_eq!(s.title(Lang::ZhHans, "例子"), "已读取例子 · usuyo");
     }
 
     #[test]
-    fn a_stop_holds_scrolling_until_you_resume() {
+    fn a_stop_holds_scrolling_hands_over_what_was_read_and_waits_for_you() {
         let mut s = Session::new();
         s.apply(report(json!({"signedIn": true})));
+        assert_eq!(s.title(Lang::ZhHans, "例子"), "正在读取例子 · usuyo");
+        s.apply(report(json!({"links": [link("favorite", 1)]})));
         s.apply(report(json!({"state": "stopped", "reason": "verify"})));
         assert_eq!(s.phase, Phase::Stopped("verify".into()));
         assert!(!s.steps());
         assert_eq!(s.view()["reason"], "verify");
+        assert_eq!(
+            s.title(Lang::En, "Example"),
+            "Reading Stopped · Example · usuyo"
+        );
+        // 停下了：记下的先交出去
+        let b = s.batch().unwrap();
+        s.delivered(b.urls, &answer(&[("favorite", "imp-fav")], 1));
         assert_eq!(s.control(Control::Resume), [Effect::Resume]);
         assert!(s.steps());
         // 路上那份还写着停下：不算；脚本报它接着读了以后，再停下才算
         s.apply(report(json!({"state": "stopped", "reason": "verify"})));
         assert!(s.steps());
         s.apply(report(json!({"state": "reading"})));
+        s.apply(report(json!({"links": [link("favorite", 2)]})));
+        assert!(s.batch().is_none(), "接着读的这一栏没读完：先不交");
         s.apply(report(json!({"state": "stopped", "reason": "verify"})));
         assert!(!s.steps());
+        let b = s.batch().unwrap();
+        assert_eq!(
+            sources(&b),
+            [("favorite".into(), 1, Some("imp-fav".into()))]
+        );
     }
 
     #[test]
-    fn manual_and_pause_stop_the_steps_and_finish_hands_over_once() {
+    fn a_failed_hand_over_keeps_the_links_for_the_next_one() {
+        let mut s = Session::new();
+        s.apply(report(
+            json!({"signedIn": true, "links": [link("favorite", 1)], "state": "end"}),
+        ));
+        assert!(s.batch().is_some());
+        s.failed = true;
+        assert_eq!(s.view()["failed"], true);
+        s.apply(report(json!({"links": [link("favorite", 2)]})));
+        let b = s.batch().unwrap();
+        assert_eq!(sources(&b), [("favorite".into(), 2, None)]);
+        s.delivered(b.urls, &answer(&[("favorite", "imp")], 2));
+        assert_eq!(s.view()["failed"], false);
+    }
+
+    #[test]
+    fn manual_and_pause_stop_the_steps_and_finish_hands_over_everything() {
         let mut s = Session::new();
         s.apply(report(json!({"signedIn": true})));
         s.control(Control::Manual);
@@ -621,12 +806,13 @@ mod tests {
         assert!(!s.steps());
         s.control(Control::Resume);
         assert!(s.steps());
-        assert_eq!(s.control(Control::Finish), [Effect::HandOver]);
-        s.phase = Phase::Handing;
-        assert!(s.control(Control::Finish).is_empty());
-        // 交出去以后不再记
-        s.apply(report(json!({"links": [link("favorite", 9)]})));
-        assert!(s.links.is_empty());
+        s.apply(report(
+            json!({"links": [link("favorite", 9), link("like", 8)]}),
+        ));
+        assert!(s.batch().is_none());
+        s.control(Control::Finish);
+        assert!(!s.steps());
+        assert_eq!(s.batch().unwrap().urls.len(), 2);
     }
 
     #[test]

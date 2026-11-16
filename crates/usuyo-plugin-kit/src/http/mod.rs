@@ -22,7 +22,7 @@ use url::Url;
 use address::Refusal;
 pub use address::{Lookup, Policy};
 pub use proxy::Proxy;
-pub use visitor::VisitorError;
+pub use visitor::{Visitor, VisitorError};
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const LOOKUP_TIMEOUT: Duration = Duration::from_secs(15);

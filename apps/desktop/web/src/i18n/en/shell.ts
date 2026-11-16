@@ -16,8 +16,19 @@ export default mirror<typeof zh>()({
     handing: "Sending to usuyo…",
     handed: { one: "Sent to usuyo: {count} link. usuyo starts fetching after you confirm on the Import page. You can close this window.", other: "Sent to usuyo: {count} links. usuyo starts fetching after you confirm on the Import page. You can close this window." },
     handedNone: "No links were found. You can close this window.",
+    handedSoFar: { one: "Sent to usuyo: {count} link.", other: "Sent to usuyo: {count} links." },
     dropped: { one: "{count} link didn't match the plugin's link format and was skipped.", other: "{count} links didn't match the plugin's link format and were skipped." },
-    failed: "Couldn't send to the usuyo service. Click Done to try again.",
+    failed: "Couldn't send to the usuyo service. It will try again shortly.",
+    listSkipped: "Didn't read {list}: {reason}",
+    list: {
+      favorite: "Favorites",
+      like: "Likes",
+    },
+    listReason: {
+      notab: "The list isn't on the page.",
+      quiet: "No list appeared even at the bottom of the page.",
+      unknown: "The list the page returned isn't recognized. You can copy the diagnostics and send them to the plugin's author.",
+    },
     counts: "Requests {requests} · List replies recognized {recognised} · Links found {noted} (Favorites {favorite}, Likes {like})",
     skipped: "Skipped {count}: {kinds}",
     skipKind: {

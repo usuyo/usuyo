@@ -55,6 +55,9 @@ struct SiteRecord {
     /// 登录状态从哪来；没写的是登录窗口（这一项以前存下的）。
     #[serde(default)]
     source: LoginSource,
+    /// 访客身份：取它的那个窗口的 User-Agent（不是机密，记在索引里）；以前存下的没有。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    user_agent: Option<String>,
 }
 
 /// 一个 `cookies` 站点的登录状态从哪来（协议 §6）。
@@ -188,6 +191,8 @@ pub struct DeclaredSite {
     pub last_use: Option<ProfileUse>,
     /// `cookies` 站点存着的登录状态从哪来；没存着时没有。
     pub source: Option<LoginSource>,
+    /// 存着的 cookie 的名字（不含值），给诊断看；`browser-profile` 站点的 cookie 不读出来，总是空的。
+    pub cookie_names: Vec<String>,
 }
 
 /// 装着的插件声明过的一个访客身份，合起来看。
@@ -201,6 +206,10 @@ pub struct DeclaredVisitor {
     pub captured_at: Option<String>,
     /// 最早过期的那个 cookie 什么时候过期（Unix 秒）；都是会话 cookie 时没有。
     pub expires: Option<f64>,
+    /// 存着的 cookie 的名字（不含值），给诊断看。
+    pub cookie_names: Vec<String>,
+    /// 取它的那个窗口的 User-Agent。
+    pub user_agent: Option<String>,
 }
 
 /// 一个站点在装着的插件里只能有一种凭据形式（`cookies` 或 `browser-profile`）：按给定的顺序，
@@ -455,6 +464,8 @@ pub(crate) struct Handover {
     pub values: Vec<String>,
     /// 这次交了哪些站点：`credentialsUpdate` 只往它们写回。
     pub sites: Vec<Site>,
+    /// 这次交出去的 cookie 的名字（账号的和访客身份的），不含值。
+    pub cookie_names: Vec<String>,
 }
 
 impl Handover {
@@ -464,6 +475,7 @@ impl Handover {
             env: Vec::new(),
             values: Vec::new(),
             sites: Vec::new(),
+            cookie_names: Vec::new(),
         }
     }
 }
@@ -599,6 +611,7 @@ impl Logins {
                         captured_at: None,
                         last_use: None,
                         source: None,
+                        cookie_names: Vec::new(),
                     }),
                 }
             }
@@ -621,6 +634,7 @@ impl Logins {
             d.login = login_of(&d.site, record, now);
             d.captured_at = record.map(|r| r.captured_at.clone());
             d.source = record.map(|r| r.source);
+            d.cookie_names = record.map(names_of).unwrap_or_default();
         }
         Ok(out)
     }
@@ -799,6 +813,8 @@ impl Logins {
                         state: LoginState::Missing,
                         captured_at: None,
                         expires: None,
+                        cookie_names: Vec::new(),
+                        user_agent: None,
                     }),
                 }
             }
@@ -807,6 +823,8 @@ impl Logins {
             let record = index.visitors.get(&d.visitor.site);
             d.state = login_of(&d.visitor, record, now);
             d.captured_at = record.map(|r| r.captured_at.clone());
+            d.cookie_names = record.map(names_of).unwrap_or_default();
+            d.user_agent = record.and_then(|r| r.user_agent.clone());
             d.expires = record
                 .and_then(|r| counted(&d.visitor, r))
                 .and_then(|found| {
@@ -821,11 +839,13 @@ impl Logins {
     }
 
     /// 存下访客窗口交来的 cookie：只留属于这个访客身份（合起所有插件的声明）的。不碰同一主机的账号。
+    /// `user_agent` 是取它的那个窗口的 UA，调用时随访客身份交给插件。
     pub fn save_visitor(
         &self,
         plugins: &[FetchPlugin],
         site: &str,
         state: &StorageState,
+        user_agent: Option<&str>,
     ) -> Result<DeclaredVisitor, PluginError> {
         let find = |list: Vec<DeclaredVisitor>| list.into_iter().find(|d| d.visitor.site == site);
         let declared = find(self.visitors(plugins)?).ok_or_else(|| PluginError::Credentials {
@@ -851,7 +871,13 @@ impl Logins {
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             self.vault()?.write(&visitor_key(site), &json)?;
             let mut index = self.read_index()?;
-            index.visitors.insert(site.into(), record(&kept));
+            index.visitors.insert(
+                site.into(),
+                SiteRecord {
+                    user_agent: user_agent.map(str::to_owned),
+                    ..record(&kept)
+                },
+            );
             self.write_index(&index)?;
         }
         find(self.visitors(plugins)?)
@@ -987,13 +1013,13 @@ impl Logins {
             }
         }
         // 访客身份和 `login` 无关：方法列了、存着，就交。只读 `visitor:` 那份，不碰账号。
-        let mut visitors: Vec<(Visitor, StorageState)> = Vec::new();
+        let mut visitors: Vec<(Visitor, StorageState, Option<String>)> = Vec::new();
         for name in method.map(|m| m.visitors.as_slice()).unwrap_or_default() {
             let Some(v) = plugin.spec.visitors.iter().find(|v| &v.site == name) else {
                 continue;
             };
             if !index.visitors.contains_key(&v.site)
-                || visitors.iter().any(|(x, _)| x.site == v.site)
+                || visitors.iter().any(|(x, _, _)| x.site == v.site)
             {
                 continue;
             }
@@ -1009,7 +1035,8 @@ impl Logins {
             })?;
             let kept = restrict(v, &state, now);
             if !kept.cookies.is_empty() {
-                visitors.push((v.clone(), kept));
+                let ua = index.visitors[&v.site].user_agent.clone();
+                visitors.push((v.clone(), kept, ua));
             }
         }
         let secret_keys = index.secrets.get(plugin.id().as_str());
@@ -1040,6 +1067,15 @@ impl Logins {
         }
         let mut env = Vec::new();
         let mut values = Vec::new();
+        // 交出去的 cookie 的名字（不含值）：调用失败时记进失败日志
+        let mut cookie_names: Vec<String> = sites
+            .iter()
+            .flat_map(|(_, s, _)| s.cookies.iter())
+            .chain(visitors.iter().flat_map(|(_, s, _)| s.cookies.iter()))
+            .map(|c| c.name.clone())
+            .collect();
+        cookie_names.sort();
+        cookie_names.dedup();
         if !sites.is_empty() {
             let mut all = StorageState::default();
             for (_, s, _) in &sites {
@@ -1058,6 +1094,7 @@ impl Logins {
                     .map(|(s, _, from)| CredentialSite {
                         site: s.site.clone(),
                         source: from.as_str().into(),
+                        user_agent: None,
                     })
                     .collect(),
                 storage_state: all.clone(),
@@ -1072,16 +1109,17 @@ impl Logins {
         }
         if !visitors.is_empty() {
             let mut cookies = Vec::new();
-            for (_, s) in &visitors {
+            for (_, s, _) in &visitors {
                 cookies.extend(s.cookies.iter().cloned());
             }
             values.extend(cookies.iter().map(|c| c.value.clone()));
             let file = Credentials {
                 sites: visitors
                     .iter()
-                    .map(|(v, _)| CredentialSite {
+                    .map(|(v, _, ua)| CredentialSite {
                         site: v.site.clone(),
                         source: "visitor-window".into(),
+                        user_agent: ua.clone(),
                     })
                     .collect(),
                 storage_state: StorageState {
@@ -1113,6 +1151,7 @@ impl Logins {
             env,
             values,
             sites: sites.into_iter().map(|(s, _, _)| s).collect(),
+            cookie_names,
         })
     }
 
@@ -1158,6 +1197,7 @@ const RUN_PREFIX: &str = "usuyo-cred-";
 fn record(state: &StorageState) -> SiteRecord {
     SiteRecord {
         source: LoginSource::default(),
+        user_agent: None,
         captured_at: jiff::Timestamp::now().to_string(),
         cookies: state
             .cookies
@@ -1169,6 +1209,14 @@ fn record(state: &StorageState) -> SiteRecord {
             })
             .collect(),
     }
+}
+
+/// 索引里记着的 cookie 名字，排好、去掉重复。
+fn names_of(r: &SiteRecord) -> Vec<String> {
+    let mut names: Vec<String> = r.cookies.iter().map(|c| c.name.clone()).collect();
+    names.sort();
+    names.dedup();
+    names
 }
 
 fn io(path: &Path, source: std::io::Error) -> PluginError {
@@ -1248,6 +1296,7 @@ mod tests {
         let s = site(&[]);
         let rec = |name: &str, expires: f64| SiteRecord {
             source: LoginSource::default(),
+            user_agent: None,
             captured_at: String::new(),
             cookies: vec![CookieName {
                 name: name.into(),
@@ -1287,6 +1336,7 @@ mod tests {
         };
         let rec = |cookies: Vec<CookieName>| SiteRecord {
             source: LoginSource::default(),
+            user_agent: None,
             captured_at: String::new(),
             cookies,
         };

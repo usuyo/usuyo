@@ -134,6 +134,13 @@ pub enum Said {
     Stopped,
 }
 
+/// 脚本读过了的一个列表：`reason` 为空是读到底了，不空是跳过了（固定的几个词）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Finished {
+    pub action: String,
+    pub reason: Option<String>,
+}
+
 /// 一份合格的报告。
 #[derive(Debug, Clone, PartialEq)]
 pub struct Report {
@@ -143,6 +150,8 @@ pub struct Report {
     pub reason: Option<String>,
     pub signed_in: bool,
     pub diagnosis: Option<String>,
+    /// 读过了的列表；脚本每次都交全，没交就是 `None`（照旧）。
+    pub finished: Option<Vec<Finished>>,
 }
 
 #[derive(Deserialize)]
@@ -160,6 +169,16 @@ struct WireReport {
     signed_in: bool,
     #[serde(default)]
     diagnosis: Option<String>,
+    #[serde(default)]
+    finished: Option<Vec<WireFinished>>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WireFinished {
+    action: String,
+    #[serde(default)]
+    reason: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -259,6 +278,28 @@ impl Report {
         {
             return Err("diagnosis too large");
         }
+        let finished = match w.finished {
+            None => None,
+            Some(list) => {
+                if list.len() > ACTIONS.len() {
+                    return Err("too many finished lists");
+                }
+                let mut out = Vec::with_capacity(list.len());
+                for f in list {
+                    if !ACTIONS.contains(&f.action.as_str()) {
+                        return Err("unknown action");
+                    }
+                    if f.reason.as_deref().is_some_and(|r| !word(r)) {
+                        return Err("bad reason");
+                    }
+                    out.push(Finished {
+                        action: f.action,
+                        reason: f.reason,
+                    });
+                }
+                Some(out)
+            }
+        };
         Ok(Report {
             links,
             counts,
@@ -266,6 +307,7 @@ impl Report {
             reason: w.reason,
             signed_in: w.signed_in,
             diagnosis: w.diagnosis,
+            finished,
         })
     }
 }
@@ -381,10 +423,18 @@ mod tests {
         let ok = json!({"report": {
             "links": [link("favorite", "https://www.example.test/explore/1?xsec_token=a")],
             "counts": {"requests": 3, "recognised": 1, "skipped": {"noToken": 2}},
-            "state": "end", "signedIn": true, "diagnosis": "{}"
+            "state": "end", "signedIn": true, "diagnosis": "{}",
+            "finished": [{"action": "favorite"}, {"action": "like", "reason": "notab"}]
         }});
         let r = Report::parse(&ok, &a).unwrap();
         assert_eq!(r.links.len(), 1);
+        assert_eq!(
+            r.finished.as_deref().unwrap()[1],
+            Finished {
+                action: "like".into(),
+                reason: Some("notab".into())
+            }
+        );
         assert_eq!(r.said, Some(Said::End));
         assert!(r.signed_in);
         assert_eq!(r.counts.unwrap().skipped["noToken"], 2);
@@ -408,6 +458,10 @@ mod tests {
         assert!(bad(json!({ "links": many })));
         assert!(bad(json!({"state": "exfiltrate"})));
         assert!(bad(json!({"reason": "两个字"})));
+        assert!(bad(json!({"finished": [{"action": "steal"}]})));
+        assert!(bad(
+            json!({"finished": [{"action": "like", "reason": "not a word"}]})
+        ));
         assert!(bad(json!({"token": "x"})), "unknown fields are refused");
         assert!(bad(json!({"diagnosis": "x".repeat(300 << 10)})));
         assert!(Report::parse(&json!({"other": 1}), &a).is_err());

@@ -826,6 +826,7 @@ impl Inner {
             call_id,
             failure: Box::new(failure),
             stderr,
+            cookies: Vec::new(),
         }
     }
 }

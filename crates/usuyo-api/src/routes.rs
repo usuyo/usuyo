@@ -173,6 +173,7 @@ pub(crate) fn build(engine: Engine, gate: Arc<Gate>, origins: &[String]) -> Rout
         .route("/visitors", get(visitors))
         .route("/visitors/wanted", get(visitors_wanted))
         .route("/visitors/{site}", put(visitor_save).delete(visitor_forget))
+        .route("/visitors/{site}/missed", post(visitor_missed))
         .route(
             "/sites/{site}/login",
             put(site_login)
@@ -887,6 +888,9 @@ struct WindowLinksRequest {
 struct WindowSourceRequest {
     action: String,
     links: Vec<BatchLink>,
+    /// 这个来源前面交过时落成的导入：并进去。
+    #[serde(default)]
+    import: Option<String>,
 }
 
 /// 站点窗口里记下的链接：照插件的 `match` 筛过，每个来源落成普通的导入，等你确认。
@@ -925,9 +929,16 @@ async fn window_links(
                 acted_at: None,
             });
         }
+        if src.import.as_ref().is_some_and(|id| id.len() > 64) {
+            return Err(Problem::new(
+                "invalid-args",
+                format!("sources[{j}].import is too long"),
+            ));
+        }
         sources.push(usuyo_core::WindowSource {
             action: src.action,
             links,
+            import: src.import,
         });
     }
     Ok(Json(
@@ -1006,7 +1017,7 @@ async fn sites(State(s): State<AppState>) -> ApiResult<Vec<SiteView>> {
 }
 
 /// 交来的 cookie。解析不了时只说形状不对：解析器的原话会引用值。
-fn cookies_body(r: Result<Json<StorageState>, JsonRejection>) -> Result<StorageState, Problem> {
+fn cookies_body<T>(r: Result<Json<T>, JsonRejection>) -> Result<T, Problem> {
     match r {
         Ok(Json(v)) => Ok(v),
         Err(e) if e.status() == StatusCode::PAYLOAD_TOO_LARGE => {
@@ -1077,16 +1088,80 @@ async fn visitors(State(s): State<AppState>) -> ApiResult<Vec<VisitorView>> {
     Ok(Json(blocking(move || s.engine.visitors()).await?))
 }
 
-/// 壳的访客窗口读出 cookie 以后交到这里：只留属于这个访客身份的，和同一主机的账号分开存。回的里面没有值。
+/// 访客窗口交来的：cookie，和那个窗口的 User-Agent（插件请求时用同一个）。
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct VisitorBody {
+    #[serde(flatten)]
+    state: StorageState,
+    #[serde(default)]
+    user_agent: Option<String>,
+}
+
+/// UA 最长多少字节。
+const USER_AGENT_MAX: usize = 512;
+
+/// UA 只收能放进请求头的：可见的 ASCII 和空格，不超过 [`USER_AGENT_MAX`]。
+fn user_agent(ua: Option<String>) -> Result<Option<String>, Problem> {
+    match ua {
+        Some(u)
+            if u.is_empty()
+                || u.len() > USER_AGENT_MAX
+                || !u.bytes().all(|b| (0x20..0x7f).contains(&b)) =>
+        {
+            Err(Problem::new(
+                "invalid-args",
+                "`userAgent` must be 1 to 512 printable ASCII characters",
+            ))
+        }
+        other => Ok(other),
+    }
+}
+
+/// 壳的访客窗口读出 cookie 以后交到这里：只留属于这个访客身份的，和同一主机的账号分开存；
+/// 窗口的 UA 记下，调用时随访客身份交给插件。回的里面没有值。
 async fn visitor_save(
     State(s): State<AppState>,
     Path(site): Path<String>,
-    req: Result<Json<StorageState>, JsonRejection>,
+    req: Result<Json<VisitorBody>, JsonRejection>,
 ) -> ApiResult<VisitorView> {
-    let state = cookies_body(req)?;
+    let body = cookies_body(req)?;
+    let ua = user_agent(body.user_agent)?;
+    let state = body.state;
     Ok(Json(
-        blocking(move || s.engine.save_visitor(&site, &state)).await?,
+        blocking(move || s.engine.save_visitor(&site, &state, ua.as_deref())).await?,
     ))
+}
+
+/// 访客窗口没取到就关了：页面里有的 cookie 名字（不含值）和窗口的 UA。
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct VisitorMissedBody {
+    cookie_names: Vec<String>,
+    #[serde(default)]
+    user_agent: Option<String>,
+}
+
+async fn visitor_missed(
+    State(s): State<AppState>,
+    Path(site): Path<String>,
+    req: Result<Json<VisitorMissedBody>, JsonRejection>,
+) -> Result<StatusCode, Problem> {
+    let body = body(req)?;
+    if body.cookie_names.len() > 200
+        || body
+            .cookie_names
+            .iter()
+            .any(|n| n.is_empty() || n.len() > 256 || n.chars().any(char::is_control))
+    {
+        return Err(Problem::new(
+            "invalid-args",
+            "`cookieNames` holds at most 200 names of 1 to 256 bytes",
+        ));
+    }
+    let ua = user_agent(body.user_agent)?;
+    blocking(move || s.engine.visitor_missed(&site, body.cookie_names, ua)).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn visitor_forget(

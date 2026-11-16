@@ -120,6 +120,13 @@ pub const CANT_OPEN_READING: Words = w(
 
 // login.rs：登录窗口的标题和上面那条里的话
 pub const LOGIN_TITLE: Words = w("登录{site} · usuyo", "Sign In to {site} · usuyo");
+// reading.rs：站点窗口登录以后的标题，跟着读到哪了变
+pub const READING_TITLE: Words = w("正在读取{site} · usuyo", "Reading {site} · usuyo");
+pub const READING_STOPPED_TITLE: Words = w(
+    "已停止读取{site} · usuyo",
+    "Reading Stopped · {site} · usuyo",
+);
+pub const READING_ENDED_TITLE: Words = w("已读取{site} · usuyo", "Finished Reading {site} · usuyo");
 pub const VISITOR_TITLE: Words = w(
     "获取{site}访客身份 · usuyo",
     "Get {site} Visitor Identity · usuyo",

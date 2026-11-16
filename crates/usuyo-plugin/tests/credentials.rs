@@ -263,11 +263,20 @@ impl Fixture {
             "origins": [{"origin": "https://www.example.com", "localStorage": [{"name": "k", "value": "visitor-local-1"}]}]
         }))
         .unwrap();
-        let v = self.host.save_visitor("www.example.com", &state).unwrap();
+        let v = self
+            .host
+            .save_visitor("www.example.com", &state, Some(WEBKIT_UA))
+            .unwrap();
         assert_eq!(v.state, LoginState::Present);
         assert_eq!(v.expires, Some(4102444800.0));
+        // 诊断：存着的 cookie 的名字（不含值）和取它时的 UA
+        assert_eq!(v.cookie_names, ["late", "vid"]);
+        assert_eq!(v.user_agent.as_deref(), Some(WEBKIT_UA));
     }
 }
+
+/// 访客窗口的 UA（macOS 上壳照 Safari 写的完整 UA）。
+const WEBKIT_UA: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Safari/605.1.15";
 
 fn fetch_request() -> FetchRequest {
     FetchRequest {
@@ -544,9 +553,10 @@ async fn the_visitor_reaches_only_calls_that_list_it() {
         .unwrap();
     let seen = f.seen("fake/visitor", "fetch");
     assert_eq!(seen["credentials"], Value::Null, "访客身份的调用不带账号");
+    // 取访客身份时的 UA 跟着交给插件：插件用同一个 UA 请求
     assert_eq!(
         seen["visitor"]["sites"],
-        json!([{"site": "www.example.com", "source": "visitor-window"}])
+        json!([{"site": "www.example.com", "source": "visitor-window", "userAgent": WEBKIT_UA}])
     );
     let names: Vec<&str> = seen["visitor"]["storageState"]["cookies"]
         .as_array()
@@ -649,10 +659,14 @@ async fn visitor_values_are_scrubbed_and_foreign_cookies_refused() {
     let foreign: StorageState = serde_json::from_value(json!({"cookies": [
         {"name": "x", "value": "v-v-v-v", "domain": ".nowhere.test"}]}))
     .unwrap();
-    assert!(f.host.save_visitor("www.example.com", &foreign).is_err());
     assert!(
         f.host
-            .save_visitor("www.undeclared.test", &foreign)
+            .save_visitor("www.example.com", &foreign, None)
+            .is_err()
+    );
+    assert!(
+        f.host
+            .save_visitor("www.undeclared.test", &foreign, None)
             .is_err()
     );
     f.visit();
@@ -671,11 +685,16 @@ async fn visitor_values_are_scrubbed_and_foreign_cookies_refused() {
         .await
         .unwrap_err();
     let PluginError::Call {
-        failure, stderr, ..
+        failure,
+        stderr,
+        cookies,
+        ..
     } = &e
     else {
         panic!("{e:?}")
     };
+    // 失败时带着这次交出去的 cookie 的名字（给失败日志），没有值
+    assert_eq!(cookies, &["late", "vid"]);
     let all = format!(
         "{e} {e:?} {} {:?} {}",
         failure.message,

@@ -1098,6 +1098,8 @@ export interface SiteLogin {
   lastUse?: { at: string; plugin: string; method: string; methodName: string; noted: number };
   /** `cookies` 站点存着的登录状态从哪来：登录窗口，或你选的 cookie 文件（`capturedAt` 是导入的时间）。 */
   source?: "login-window" | "cookie-file";
+  /** 存着的 cookie 的名字（不含值），给诊断看；`browser-profile` 站点总是空的。 */
+  storedCookies: string[];
 }
 
 /**
@@ -1118,6 +1120,12 @@ export interface VisitorIdentity {
   expiresAt?: string;
   /** 用到它的插件 id。 */
   plugins: string[];
+  /** 存着的 cookie 的名字（不含值），给诊断看。 */
+  storedCookies: string[];
+  /** 取它的那个窗口的 User-Agent；调用时随它交给插件。 */
+  userAgent?: string;
+  /** 访客窗口上一回没取到：页面里有哪些 cookie 名字、`cookies` 里声明的缺了哪几个。 */
+  lastMissed?: { at: string; seen: string[]; missing: string[]; userAgent?: string };
 }
 
 /** 壳交给 `paths.siteLogin`、`paths.visitor` 的：Playwright storageState 的形状（协议 §6）。 */
