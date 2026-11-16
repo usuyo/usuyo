@@ -517,6 +517,15 @@ impl Response {
         self.inner.headers().get(name).and_then(|v| v.to_str().ok())
     }
 
+    /// 同名的头有几条时（`Set-Cookie`）按回答里的先后都给；[`Response::header`] 只给第一条。
+    pub fn headers<'a>(&'a self, name: &str) -> impl Iterator<Item = &'a str> + use<'a> {
+        self.inner
+            .headers()
+            .get_all(name)
+            .iter()
+            .filter_map(|v| v.to_str().ok())
+    }
+
     /// 读完整个响应体，解压后超过 `limit` 字节回 [`Error::TooLarge`]，读到上限就停。
     pub fn read_to_vec(&mut self, limit: u64) -> Result<Vec<u8>, Error> {
         let mut reader = Capped::new(self.inner.body_mut().with_config().reader(), limit);
@@ -593,7 +602,7 @@ mod tests {
     type Seen = Arc<Mutex<Vec<(String, String, Option<String>, Vec<String>)>>>;
 
     /// 本机 HTTP 服务。`/to/<地址>` 回 302 到那个地址，`/see-other` 回 303 到 `/end`，
-    /// `/big` 回 1 KiB，其余回 200。
+    /// `/big` 回 1 KiB，`/two-cookies` 带两条 `Set-Cookie`，其余回 200。
     fn serve() -> (u16, Seen) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
@@ -644,8 +653,13 @@ mod tests {
                 } else {
                     format!("Location: {location}\r\n")
                 };
+                let cookies = if path == "/two-cookies" {
+                    "Set-Cookie: a=1; Path=/\r\nSet-Cookie: b=2\r\n"
+                } else {
+                    ""
+                };
                 let head = format!(
-                    "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n{location}\r\n",
+                    "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n{location}{cookies}\r\n",
                     body.len()
                 );
                 stream.write_all(head.as_bytes()).ok();
@@ -880,6 +894,22 @@ mod tests {
         let log = seen.lock().unwrap().clone();
         assert_eq!(log.len(), 1);
         assert_eq!(log[0].2, None);
+    }
+
+    #[test]
+    fn repeated_response_headers_are_all_readable() {
+        let (port, _) = serve();
+        let client = Client::new(UA, Hosts::only(["site.test"])).with_policy(local_policy());
+        let response = client
+            .get(&url(&format!("http://site.test:{port}/two-cookies")))
+            .send()
+            .unwrap();
+        assert_eq!(response.header("set-cookie"), Some("a=1; Path=/"));
+        assert_eq!(
+            response.headers("set-cookie").collect::<Vec<_>>(),
+            ["a=1; Path=/", "b=2"]
+        );
+        assert_eq!(response.headers("x-absent").count(), 0);
     }
 
     #[test]
