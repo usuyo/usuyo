@@ -32,5 +32,7 @@
 - **40.** 只有登录才看得到：`not-found` 的 `reason` 里没有这一种。X 上成人内容和受保护账号的帖子不登录看不到，插件现在回 `reason: private`，界面分不出「作者设了私密」和「登录了就看得到」（[platforms/x.md](../platforms/x.md#3-取单条)）。
 - **41.** 哪条路取到的：一个插件在一个能力里有几条路（X 的帖子接口和嵌入用的 syndication 接口），`evidence` 没有字段写这次是哪一条答的，出了错、改了版对不上是哪条路。
 - **42.** 只有某几样要账号：定了、做了（11-12），不加字段，写成另一种方法（[§2.3.1](manifest.md#231-方法-methods)）；凭据只交给列了站点的方法。视频号是 `feed-info` 和 `yuanbao`。
+- **43.** 可有可无的访客身份：方法列了 `visitors`，这台机器上没有那一份时宿主不调它（[§2.3.1](manifest.md#231-方法-methods) 的「用得上」，`crates/usuyo-core/src/methods.rs` 的 `blockers`）。有的方法不带 cookie 就取得到、只在被拒时才需要一份（B站的 `view`：接口那一段带 `buvid3`、`buvid4`），照现在的写法一声明就在没有桌面壳的环境里用不了。要加一种声明：没有时照常调、不交 `USUYO_VISITOR`，插件回 `visitor-required` 时宿主再去取一份重试（B站的那一条等它：[anonymous-content §10](../platforms/anonymous-content.md#10-改动清单)）。
+- **44.** 访客身份要打开内容页才生成：访客窗口现在只开 `visitors[].url` 那一个固定地址。知乎的 `__zse_ck` 是内容页上的脚本算出来的，首页和 `/explore` 不生成（2026-11-16 实测，[anonymous-content §11](../platforms/anonymous-content.md#11-要真跑一次才知道的)），声明了它就自动取不到。要能声明「打开正在取的那条链接」，窗口等到要的 cookie 出现就收。
 
 调研 11 建议的其余几处还没编号：`owner` 的含义、同时带 `url` 和 `ref` 时先用哪个、`sites[].site` 引用设置项、`feed:` 来源按主机算节奏（`origin.subscription` 写在 [§3.8](fetch.md#38-list-与跟着收)），见[调研 11 §6.2](../research/11-subscriptions-compat-and-wx-cli.md#62-要补的地方)。

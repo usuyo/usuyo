@@ -63,7 +63,7 @@ TikTok、贴吧、Reddit、QQ 四个仓库现在只有 README 和许可证，获
 
 | 插件 · 获取方式 | 结果 |
 |---|---|
-| `bilibili` · `view` | 完整存下一条（约 11 MB）；之后合成能播的文件、取关键帧、识别画面中文字也走通了 |
+| `bilibili` · `view` | 完整存下一条（约 11 MB）；之后合成能播的文件、取关键帧、识别画面中文字也走通了。2026-11-15 改成先取视频页以后又取一条：视频信息来自页面，流地址来自 `playurl`，画面、音轨、封面都存下（[anonymous-content §11](anonymous-content.md#11-要真跑一次才知道的)） |
 | `bilibili` · `favorites-public` | 列出一个公开收藏夹的第一页，20 条，有下一页；那一页按收藏时间从旧到新排，清单写 `order: unordered`。私密的收藏夹和稍后再看列不到 |
 | `x` · `guest` | 经系统代理取回文字的和带图的帖子各一条 |
 | `x` · `embed` | 没单独跑 |
@@ -72,9 +72,10 @@ TikTok、贴吧、Reddit、QQ 四个仓库现在只有 README 和许可证，获
 | `wechat` · `article` | `/s/<短码>` 的一篇完整取到（正文转成 Markdown、52 张图、原样的页面）；长链接（`__biz`、`mid`、`idx`、`sn`）两次都落到「环境异常，完成验证后即可继续访问」 |
 | `douyin` · `share-page` | 取不到：`iesdouyin.com/share/video/<id>` 的页面数据里没有作品内容，只有「请尝试在抖音内观看」；插件回 `upstream-changed`，留下页面原文 |
 | `douyin` · `h5-token` | 没跑：这个环境的权限检查不放行带加密参数的请求 |
-| `zhihu` · `page` | 不带 cookie 时文章页和回答页都回 403 的校验页（`zh-zse-ck`），所以改成用访客身份；带访客身份没跑 |
+| `zhihu` · `page` | 不带 cookie 时文章页和回答页都回 403 的校验页（`zh-zse-ck`），所以改成用访客身份。2026-11-16 带访客身份试了三次，还取不到：访客窗口开首页拿不到 `__zse_ck`，开回答页拿到以后请求落到安全验证页（[anonymous-content §11](anonymous-content.md#11-要真跑一次才知道的)） |
 | `zhihu` · `collection` | 收藏夹页面只带收藏夹自己的信息；条目接口 `/api/v4/collections/<id>/items` 对不带 cookie 的请求回 401「身份未经过验证」 |
-| `rednote` · `note-page`、`weibo` · `status` | 没跑：要先在应用里取一次访客身份 |
+| `rednote` · `note-page` | 2026-11-15：网页版那一段带访客身份仍被送去登录页，同一次调用里的手机版页面那一段取到，83 条（[anonymous-content §11](anonymous-content.md#11-要真跑一次才知道的)） |
+| `weibo` · `status` | 2026-11-16：访客窗口自己取到访客身份，取到一条带视频的公开微博，文字和视频都存下 |
 
 要账号、要你的文件、要手机的获取方式，只有你能试，见[一轮测试](test-round.md)。
 

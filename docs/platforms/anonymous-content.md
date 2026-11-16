@@ -21,12 +21,12 @@
 |---|---|---|---|---|---|
 | 小红书 | 能：笔记页 HTML，带 `xsec_token`、`xsec_source`，要访客身份；今天同一出口上空 cookie 只通了一次，原因是推断（[§2.2](#22-访客身份是什么)） | 能：CDN 直接下，带 Referer，不带 cookie | 能：同上；`originVideoKey` 原片 2026-01 起页面不给了 | 只能带账号；最低风险是你自己的浏览器里自己往下翻、脚本只截获页面自己的请求 | `note-page` 第一个请求就带访客身份和取它时的 UA，被拒再用手机版页面、不带 cookie 取一次；11-15 真跑两次都被送去 `/login`（[§11](#11-要真跑一次才知道的)）；改之前的差别见 [§2.5](#25-我们的-note-page-差在哪) |
 | 微信视频号 | 部分：匿名 `get_feed_info` 只给作者、描述、封面、时间 | 封面能 | 不能：要元宝账号换 `generalToken`，或改客户端 | 只能带账号，网页版普通浏览器里拿不到 | `feed-info`、`yuanbao` 和参考项目一致（[§3](#3-微信视频号)） |
-| B站 | 能：视频页 HTML 或接口；接口有的要 WBI 签名，不带 cookie 时有 412、-352 | 能 | 能，不登录约 480p，最多 720p | 公开收藏夹不带账号能列；自己的私密收藏夹、稍后再看要账号 | `view` 调不带签名的 `x/web-interface/view`，有人报告 2026-09 起它一律 412（[§4](#4-b站)） |
+| B站 | 能：视频页 HTML 或接口；接口有的要 WBI 签名，不带 cookie 时有 412、-352 | 能 | 能，不登录约 480p，最多 720p | 公开收藏夹不带账号能列；自己的私密收藏夹、稍后再看要账号 | `view` 先取视频页、不带 cookie，读不到的那一半再调不签名的接口；11-15 真跑：视频信息来自页面，流来自 `playurl`（[§4](#4-b站)） |
 | X | 能：访客令牌调 GraphQL，或 syndication 嵌入接口；敏感内容、受保护账号要登录 | 能，`name=orig` | 能，最高码率的 mp4 | 只能带账号；官方归档有喜欢 | `guest`、`embed` 和 gallery-dl、yt-dlp 一致（[§5](#5-x)） |
 | 抖音 | 网页接口没有不带 cookie 的路：要访客 cookie（含只有真浏览器才拿得到的 `UIFID_TEMP`）加两种签名；分享页 2026-08 起不带作品数据 | 随单条 | 随单条，地址约 3 小时过期 | 只能带账号，接口要签名 | `share-page` 取不到；`h5-token` 默认关、没跑过（[§6](#6-抖音)） |
 | 快手 | 能：手机页 `fw/photo/<id>` 的 `INIT_STATE`，最好走 App 分享短链 | 随单条 | 随单条 | 只能带账号 | `share-page` 对真平台跑通过（[§7.1](#71-快手)） |
-| 微博 | 能：`ajax/statuses/show` 加访客 cookie `SUB`、`SUBP` | 能，带 Referer | 能 | 只能带账号 | `status` 用访客身份，没跑过（[§7.2](#72-微博)） |
-| 知乎 | 能：页面里的 `js-initialData`，要页面自己算出的 `__zse_ck` 和 `d_c0` | 能 | 视频要 `__zse_ck` | 公开收藏夹接口不带 cookie 回 401 | `page` 用访客身份，没跑过（[§7.3](#73-知乎)） |
+| 微博 | 能：`ajax/statuses/show` 加访客 cookie `SUB`、`SUBP` | 能，带 Referer | 能 | 只能带账号 | `status` 用访客身份，11-16 对真平台跑通一条（[§7.2](#72-微博)） |
+| 知乎 | 能：页面里的 `js-initialData`，要页面自己算出的 `__zse_ck` 和 `d_c0` | 能 | 视频要 `__zse_ck` | 公开收藏夹接口不带 cookie 回 401 | `page` 用访客身份，11-16 试了三次还取不到：访客窗口开首页拿不到 `__zse_ck`（[§7.3](#73-知乎)） |
 
 <a id="2-小红书"></a>
 ## 2. 小红书
@@ -118,7 +118,7 @@
 - **风控报告。** 不签名的 `x/web-interface/view` 登录与否、带不带 `buvid` 都回 412，签名的 `wbi/view` 不登录回 200（issue：[yutto #866](https://github.com/yutto-dev/yutto/issues/866)，2026-09-28，未关）；把 `wbi/playurl` 换成 `playurl` 修好了 412（issue：[yt-dlp #16962](https://github.com/yt-dlp/yt-dlp/issues/16962)，2026-06）；`-412 request was banned`，建议换出口或加 cookie（哪怕没登录的）（issue：[yt-dlp #17605](https://github.com/yt-dlp/yt-dlp/issues/17605)）；空间接口间歇 -352、请求快了升成 412，按出口和会话、不按用户（issue：[yutto #876](https://github.com/yutto-dev/yutto/issues/876)）；批量下载频道出口被封，维护者让加 sleep（issue：[yt-dlp #14857](https://github.com/yt-dlp/yt-dlp/issues/14857)）。
 - **媒体。** DASH 的 `dash.video[]`、`dash.audio[]`，`baseUrl` 加 `backup_url`；下载带 Referer `https://www.bilibili.com/` 和 UA，MediaCrawler 特意不带 cookie，地址带 `deadline`、`upsig`（`core.py:702-714`）。时效没有项目写明，看地址里的 `deadline`（推断）。不登录约 480p（`core.py:118-122`），ParseHub 不登录用 `qn=64`（720p）或 16（`provider_api/bilibili.py:96-115`）；playurl 报得出高画质但 CDN 回 403，MediaCrawler 一档档往下试（`core.py:640-659`）。
 - **节奏。** gallery-dl 3–6 秒（`gallery_dl/extractor/bilibili.py:17`）；MediaCrawler 并发 1、睡 2 秒；yutto 重试 4 次，指数退避封顶 4 秒（`fetcher.py:37-40,82-87`）。
-- **我们。** `view` 调不签名的 `x/web-interface/view`（`bilibili/src/video.rs:131`）和不签名的 `x/player/playurl`（`qn=127`、`fnval=16`，挑最低那一路，`video.rs:320-330`），不带任何 cookie；412、403、-412、-352、带 `v_voucher` 的回 `blocked`（`bilibili/src/api.rs:86,128,140,422`）。节奏 `interval: 5s`、`daily: 500`（`bilibili/usuyo-plugin.yaml:71`），比 gallery-dl 的 3–6 秒随机稍密、是固定的。11-12 跑通过一条；照 yutto #866，`view` 可能随时一律 412。差的：没有页面 HTML 那一路（yt-dlp 的第一步，不签名）；没有 `buvid3`、`buvid4` 访客身份。清单见 [bilibili.md §4.1](bilibili.md#41-列出你存过的)：公开收藏夹 `x/v3/fav/resource/list` 不带账号能列（yt-dlp `bilibili.py:1640-1651`），私密的回 -403。
+- **我们。** `view` 照 yt-dlp 的先后，先不带 cookie 取视频页 `www.bilibili.com/video/<BV 号>/`（分 P 带 `?p=N`），读 `window.__INITIAL_STATE__` 的 `videoData` 和 `window.__playinfo__`（`bilibili/src/video.rs` 的 `video_page`）；页面带 `window._riskdata_` 的 `v_voucher` 或回 412 就回 `blocked`，不再调接口；页面里读不到的那一半才调不签名的 `x/web-interface/view`、`x/player/playurl`（`qn=127`、`fnval=16`，挑最低那一路），都不带 cookie、不签名。`meta.json` 的 `stage` 记两半各从哪来（`video-page` 或 `api`）。412、403、-412、-352、带 `v_voucher` 的回 `blocked`（`bilibili/src/api.rs:86,128,140,422`）。节奏 `interval: 5s`、`daily: 500`（`bilibili/usuyo-plugin.yaml:71`），比 gallery-dl 的 3–6 秒随机稍密、是固定的。只走接口的旧版 11-12 跑通过一条；先取页面的这一版 11-15 跑通一条（[§11](#11-要真跑一次才知道的)）。差的：没有 `buvid3`、`buvid4` 访客身份，等协议能声明可有可无的访客身份（[协议待定](../protocol/open.md#13-待定)第 43 项）。清单见 [bilibili.md §4.1](bilibili.md#41-列出你存过的)：公开收藏夹 `x/v3/fav/resource/list` 不带账号能列（yt-dlp `bilibili.py:1640-1651`），私密的回 -403。
 
 <a id="5-x"></a>
 ## 5. X
@@ -146,17 +146,17 @@
 <a id="71-快手"></a>
 ### 7.1 快手
 
-parse-video 跟着分享短链跳到 `/fw/photo/<id>`，用 iPhone UA 取，读 `window.INIT_STATE` 里同时有 `result`、`photo` 的那一项，`result==1`；视频 `photo.mainMvUrls[0].url`，图集 `https://{atlas.cdn[0]}/{atlas.list[i]}`（`parser/kuaishou.go:18-99`）。维护者说只有 App 分享链接行，因为解析「需要 app 分享链接跳转时携带的 cookie」（issue：[parse-video #76](https://github.com/wujunwei928/parse-video/issues/76)，2025-10）。验证码：`result 2001 antispam need captcha`，归因频率或出口（issue：[parse-video #36](https://github.com/wujunwei928/parse-video/issues/36)）。MediaCrawler 快手走 GraphQL `visionVideoDetail`，一律要登录，列表接口还要页面里生成的 `__NS_hxfalcon` 签名（`media_platform/kuaishou/client.py:59,117-159,191-211`）。ParseHub 自带一份写死的登录 cookie（`src/parsehub/parsers/parser/kuaishou.py:14-29`），不是不带账号的路。我们的 `share-page` 照 parse-video，请求都不带 cookie（`kuaishou/src/api.rs:1-15`），11-12 跑通四次。`captchaConfig`、`result` 2/2001/400002、验证字样回 `blocked`（`kuaishou/src/page.rs:186-194`），403、412、跳去验证页也是（`kuaishou/src/api.rs:114-120`）；节奏 `interval: 8s`、`daily: 300`。差的：跳转时站点发的 cookie（`did` 一类）我们不带到落地页（推断这就是 #76 说的那份）。
+parse-video 跟着分享短链跳到 `/fw/photo/<id>`，用 iPhone UA 取，读 `window.INIT_STATE` 里同时有 `result`、`photo` 的那一项，`result==1`；视频 `photo.mainMvUrls[0].url`，图集 `https://{atlas.cdn[0]}/{atlas.list[i]}`（`parser/kuaishou.go:18-99`）。维护者说只有 App 分享链接行，因为解析「需要 app 分享链接跳转时携带的 cookie」（issue：[parse-video #76](https://github.com/wujunwei928/parse-video/issues/76)，2025-10）。验证码：`result 2001 antispam need captcha`，归因频率或出口（issue：[parse-video #36](https://github.com/wujunwei928/parse-video/issues/36)）。MediaCrawler 快手走 GraphQL `visionVideoDetail`，一律要登录，列表接口还要页面里生成的 `__NS_hxfalcon` 签名（`media_platform/kuaishou/client.py:59,117-159,191-211`）。ParseHub 自带一份写死的登录 cookie（`src/parsehub/parsers/parser/kuaishou.py:14-29`），不是不带账号的路。我们的 `share-page` 照 parse-video；不带 cookie 的那一版 11-12 跑通四次。`captchaConfig`、`result` 2/2001/400002、验证字样回 `blocked`（`kuaishou/src/page.rs:186-194`），403、412、跳去验证页也是（`kuaishou/src/api.rs:114-120`）；节奏 `interval: 8s`、`daily: 300`。11-15 起跟短链时把各跳回答里 `Set-Cookie` 发的 cookie（`did` 一类）记在这一次调用的内存里，按 `Domain`、主机和路径对得上的带给后面的跳转和手机页，下载媒体不带，直接给作品链接时没有可带的（`kuaishou/src/api.rs` 的 `CookieJar`）；推断这就是 #76 说的那份，带上以后有没有用还没对真平台跑过。落地页的主机和短链主机不在同一个注册域下时，短链主机发的 cookie 照规则带不过去。
 
 <a id="72-微博"></a>
 ### 7.2 微博
 
-yt-dlp 调 `weibo.com/ajax/statuses/show?id=`，Referer `https://weibo.com/`，被送去 `passport.weibo.com` 时走 `visitor/genvisitor` 和 `incarnate` 拿访客 cookie（`yt_dlp/extractor/weibo.py:24-65,197`）；gallery-dl 用新的 `genvisitor2` 和 `crossdomain`，`SUB`、`SUBP` 存 365 天，长文用 `isGetLongText=true`（`gallery_dl/extractor/weibo.py:25-43,103-105,279-312`）。MediaCrawler 一律要登录（`media_platform/weibo/core.py:105-124`）。媒体：视频挑 `playback_list` 里 `quality_index` 最高的（gallery-dl `weibo.py:173-190`），图片 `pic_infos[id].largest`；下载带 Referer，不带 cookie。我们的 `status` 用访客窗口取的访客身份调 `ajax/statuses/show` 和 `longtext`（`weibo/src/api.rs:1,300-305`），没有就不发请求，和参考项目同一类做法；403、418、跳去验证页、`geetest` 字样回 `blocked`，被送回 `passport.weibo.com` 回访客身份不被收（`weibo/src/api.rs:110-121`）；节奏 `interval: 10s`、`daily: 200`。没跑过。
+yt-dlp 调 `weibo.com/ajax/statuses/show?id=`，Referer `https://weibo.com/`，被送去 `passport.weibo.com` 时走 `visitor/genvisitor` 和 `incarnate` 拿访客 cookie（`yt_dlp/extractor/weibo.py:24-65,197`）；gallery-dl 用新的 `genvisitor2` 和 `crossdomain`，`SUB`、`SUBP` 存 365 天，长文用 `isGetLongText=true`（`gallery_dl/extractor/weibo.py:25-43,103-105,279-312`）。MediaCrawler 一律要登录（`media_platform/weibo/core.py:105-124`）。媒体：视频挑 `playback_list` 里 `quality_index` 最高的（gallery-dl `weibo.py:173-190`），图片 `pic_infos[id].largest`；下载带 Referer，不带 cookie。我们的 `status` 用访客窗口取的访客身份调 `ajax/statuses/show` 和 `longtext`（`weibo/src/api.rs:1,300-305`），没有就不发请求，和参考项目同一类做法；403、418、跳去验证页、`geetest` 字样回 `blocked`，被送回 `passport.weibo.com` 回访客身份不被收（`weibo/src/api.rs:110-121`）；节奏 `interval: 10s`、`daily: 200`。2026-11-16 跑通一条（[§11](#11-要真跑一次才知道的)）。
 
 <a id="73-知乎"></a>
 ### 7.3 知乎
 
-页面数据在 `<script id="js-initialData">` 的 `initialState.entities`（MediaCrawler `media_platform/zhihu/help.py:380-423`）。接口要 `d_c0` 和 `x-zse-96` 签名（MediaCrawler `libs/zhihu.js:155-166`、ParseHub `src/parsehub/provider_api/zhihu.py:183-208`）；页面要 `__zse_ck`：WXD 特意在干净的匿名会话里用一个小浏览器让页面自己算出它，存着用，页面回得不全就扔掉，旧的登录 cookie 反而让公开页被送去 `/signin`（`pkg/scraper/zhihu/pcweb.go:203-306`）。视频：yt-dlp 调 `api/v4/zvideos/<id>`（`yt_dlp/extractor/zhihu.py:26-47`），WXD 还要 `__zse_ck`（`pkg/scraper/zhihu/video.go:150-163`）。我们的 `page` 用访客窗口取的访客身份读 `js-initialData`，挑战页回 `blocked`（`zhihu/src/page.rs:13,352-355`），和 WXD 是同一个思路；带着访客身份还碰到挑战页回访客身份不被收（`zhihu/src/fetch.rs:210-217`），但被送去 `signin`、`/login` 时回的是 `login-required`（`zhihu/src/api.rs:120-129`），对一个不登录的方法，照 [协议 §2.5.1](../protocol/manifest.md#251-访客身份-visitors) 应回 `visitor-required`。节奏 `interval: 30s`、`daily: 100`。没跑过。公开收藏夹接口不带 cookie 回 401（[routes.md §4](routes.md#4-对真平台跑过的记录)），哪个参考项目都没做收藏夹。
+页面数据在 `<script id="js-initialData">` 的 `initialState.entities`（MediaCrawler `media_platform/zhihu/help.py:380-423`）。接口要 `d_c0` 和 `x-zse-96` 签名（MediaCrawler `libs/zhihu.js:155-166`、ParseHub `src/parsehub/provider_api/zhihu.py:183-208`）；页面要 `__zse_ck`：WXD 特意在干净的匿名会话里用一个小浏览器让页面自己算出它，存着用，页面回得不全就扔掉，旧的登录 cookie 反而让公开页被送去 `/signin`（`pkg/scraper/zhihu/pcweb.go:203-306`）。视频：yt-dlp 调 `api/v4/zvideos/<id>`（`yt_dlp/extractor/zhihu.py:26-47`），WXD 还要 `__zse_ck`（`pkg/scraper/zhihu/video.go:150-163`）。我们的 `page` 用访客窗口取的访客身份读 `js-initialData`，挑战页回 `blocked`（`zhihu/src/page.rs:13,352-355`），和 WXD 是同一个思路；带着访客身份还碰到挑战页、401，或被送去 `signin`、`/login`（没跟的 3xx，和跟着同主机的跳转落在登录页上），都回访客身份不被收（`visitor-required`，`zhihu/src/fetch.rs` 的 `rejected`、`zhihu/src/api.rs` 的 `SentToLogin`）。节奏 `interval: 30s`、`daily: 100`。2026-11-16 试了三次，还取不到（[§11](#11-要真跑一次才知道的)）：访客身份要的 `__zse_ck` 首页不生成；页面请求当时用的是写死的 Chrome UA，不是取身份时的 UA，已改成用同一个；带着内嵌数据的安全验证页当时被当成「没有这条回答」，已改成认作验证页。公开收藏夹接口不带 cookie 回 401（[routes.md §4](routes.md#4-对真平台跑过的记录)），哪个参考项目都没做收藏夹。
 
 <a id="8-清单和内容的分工"></a>
 ## 8. 清单和内容的分工
@@ -226,8 +226,8 @@ yt-dlp 调 `weibo.com/ajax/statuses/show?id=`，Referer `https://weibo.com/`，�
 
 **B站（`bilibili`）**
 
-11. `view` 先取视频页 HTML，读 `window.__INITIAL_STATE__` 和 `window.__playinfo__`，带 `v_voucher` 的回 `blocked`；页面里没有再调接口（`src/video.rs:131`）。照 yt-dlp `yt_dlp/extractor/bilibili.py:723-753,829-834`。不签名。
-12. 加 `buvid3`、`buvid4` 的访客身份：清单 `visitors` 声明 `www.bilibili.com`，由访客窗口取，只发给 API 主机。照 ParseHub `provider_api/bilibili.py:149-155`、dtk `src/dtk/identity/minting/native.py:112-145`（它们是调 `finger/spi`；我们走窗口，不调）。
+11. 已做（11-15）：`view` 先取视频页 HTML，读 `window.__INITIAL_STATE__` 和 `window.__playinfo__`，带 `v_voucher` 的回 `blocked`；页面里没有的那一半再调接口。照 yt-dlp `yt_dlp/extractor/bilibili.py:723-753,829-834`。不签名。
+12. 没做，等[协议待定](../protocol/open.md#13-待定)第 43 项：现在一种方法列了访客身份，没有那一份时宿主就不调它，`view` 会在没有桌面壳的环境里用不了。要做成的样子：加 `buvid3`、`buvid4` 的访客身份，清单 `visitors` 声明 `www.bilibili.com`，由访客窗口取，只发给 API 主机；接口被拒而这次没带时回 `visitor-required`，带了还被拒回 `blocked`。照 ParseHub `provider_api/bilibili.py:149-155`、dtk `src/dtk/identity/minting/native.py:112-145`（它们是调 `finger/spi`；我们走窗口，不调）。
 13. 接口那一路改用 `wbi/view`、`wbi/playurl` 要 WBI 签名，算不算 `private-api` 要先定；定了再做，单写一种方法。照 MediaCrawler `media_platform/bilibili/help.py:36-76`、yutto #866。
 
 **X（`x`）**
@@ -241,11 +241,11 @@ yt-dlp 调 `weibo.com/ajax/statuses/show?id=`，Referer `https://weibo.com/`，�
 
 **快手（`kuaishou`）**
 
-17. 跟分享短链时把站点在跳转里发的 cookie 带到落地页，只发给快手的页面主机（`src/api.rs`）。照 parse-video #76 维护者的说法；推断，要真跑核实。（`result 2001`、`captchaConfig` 已经回 `blocked`，不用改。）
+17. 已做（11-15）：跟分享短链时把站点在跳转里发的 cookie 带到后面的跳转和落地页，只发给主机和路径对得上的快手页面主机（`src/api.rs`）；为读全一次回答里的几条 `Set-Cookie`，plugin-kit 加了 `Response::headers`。照 parse-video #76 维护者的说法；推断，要真跑核实。（`result 2001`、`captchaConfig` 已经回 `blocked`，不用改。）
 
 **知乎（`zhihu`）**
 
-18. 被送去 `signin`、`/login` 时回 `visitor-required`（带着访客身份时说这份不被收），不回 `login-required`（`src/api.rs:120-129`）。照 [协议 §2.5.1](../protocol/manifest.md#251-访客身份-visitors) 和 WXD `pkg/scraper/zhihu/pcweb.go:203-245`（旧的登录 cookie 让公开页被送去 `/signin`）。
+18. 已做（11-15）：被送去 `signin`、`/login`（含 401、跟着跳转落在登录页上）时回 `visitor-required`（带着访客身份时说这份不被收），不回 `login-required`。照 [协议 §2.5.1](../protocol/manifest.md#251-访客身份-visitors) 和 WXD `pkg/scraper/zhihu/pcweb.go:203-245`（旧的登录 cookie 让公开页被送去 `/signin`）。
 
 **微信视频号、微博**：和参考项目同一类做法，不改；先各真跑一次（[§11](#11-要真跑一次才知道的)）。
 
@@ -261,8 +261,15 @@ yt-dlp 调 `weibo.com/ajax/statuses/show?id=`，Referer `https://weibo.com/`，�
     - **已改（11-15）。** 访客身份要 `a1`、`webId`、`web_session` 都出现才收（[§10](#10-改动清单)）；窗口在 macOS 上用和系统 Safari 一样的完整 UA，取身份时记下 UA，插件用同一个 UA 和配它的 Accept（[协议 §6](../protocol/credentials.md#6-凭据)）；访客身份被拒时插件再用手机版页面、不带 cookie 取一次（[rednote §2.4](rednote.md#24-插件做成的样子)）；`GET /visitors` 和插件页「诊断信息」写存着的 cookie 名字和 UA，失败日志记这次带了哪些 cookie 名（[协议 §2.3.1](../protocol/manifest.md#231-方法-methods) 的「试跑和失败」）。
   - **下次真跑看这几样。** 先在插件页小红书下面「更换」访客身份：以前存下的那份没有 UA，名字也是没等 `web_session` 就收的。请求数照这个算：一条笔记一次调用，访客那一段被拒时同一次调用里接着发手机版那一个，宿主换一份访客身份再试一回，最多四个请求；手机版取到了，宿主当访客身份被收了，之后每条都是两个。插件页小红书的访客身份「诊断信息」：存着的名字里有没有 `web_session`，UA 是不是带 `Version/… Safari/…` 的那个；60 秒没取到时「未能获取」那一行缺了哪个名字。`fetch-failures.jsonl` 那一行的 `cookies` 和 `message`：开头的 `visitor-page:`、`mobile-page:` 各被送去了哪。手机版那一段取到了而访客那一段被拒，问题在访客身份或 UA；两段都被送去 `/login`，更像是出口被标记，先停下，隔一阵再试一条。
   - 2026-11-15 夜里改完以后又在独立实例里跑了一回（策略「仅不使用账号」，链接是当天从站点窗口读的收藏）：访客窗口交回 `a1`、`webId`、`web_session` 等 10 个 cookie，UA 是完整的 Safari 写法；网页版笔记页那一段仍被转去 `/login`，同一次调用里接着取手机版页面（不带 cookie），取到正文、图片和视频。之后按 15–25 秒一条导入 81 条，全部取到，没有出现验证页；另有 2 条用新链接「重新获取」后取到。所以这个出口上现在能用的是手机版页面那一段，网页版那一段被拒的原因仍不清楚。
-- B站：不签名的 `x/web-interface/view` 现在是不是一律 412；视频页 HTML 里还有没有 `__playinfo__`；访客窗口取不取得到 `buvid3`、`buvid4`。
+- B站：不签名的 `x/web-interface/view` 现在是不是一律 412；访客窗口取不取得到 `buvid3`、`buvid4`。
+  - 2026-11-15 夜里在独立实例里取了一条公开视频（策略「仅不使用账号」，经系统代理）：视频页不带 cookie 回了 `__INITIAL_STATE__`，视频信息从页面读到（`stage.view: video-page`），没有调 `x/web-interface/view`；页面里没有读到带 DASH 的 `__playinfo__`，流地址由不签名的 `x/player/playurl` 给（`stage.streams: api`），360p 的画面和音轨各一个文件、封面都存下。没有出现 412 和验证。
 - 抖音：访客窗口里打开作品页时，页面自己的详情请求在不在、回答能不能读到。
 - 快手：带上跳转 cookie 后网页版 `/f/` 链接能不能取到。
 - 微博、知乎：带访客窗口的访客身份各取一条。
+  - 微博，2026-11-16（独立实例，策略「仅不使用账号」）：内核要访客身份，看不见的访客窗口开首页交回 `SUB`、`SUBP`、`WBPSESS`、`XSRF-TOKEN`，`status` 带着它取到一条带视频的公开微博，文字、作者、视频都存下，从收下到存好约 17 秒，没有出现验证。
+  - 知乎，2026-11-16 同一个实例，三次，之后停下：
+    1. 访客窗口开首页，交回 13 个 cookie（有 `d_c0`、`captcha_session_v2`，没有 `__zse_ck`）；带着它请求回答页，回的是 `zh-zse-ck` 挑战页，插件回 `visitor-required`。
+    2. 试着让访客身份必须有 `__zse_ck`、窗口改开 `/explore`：60 秒里还是那 13 个，没有 `__zse_ck`，没取到身份，没有请求回答页。
+    3. 窗口改开要取的那条回答的页面：交回的 cookie 里有 `__zse_ck`；带着它请求回答页，回的是标题「安全验证 - 知乎」的页面。当时页面请求用的是插件写死的 Chrome UA，访客窗口是 Safari 的 UA；插件还把这一页当成了「没有这条回答」。
+    - 之后改的：页面请求用取身份时的 UA；跟着跳转落到验证页、和带着内嵌数据的安全验证页都认作验证页；清单声明访客身份要 `__zse_ck`。改完没有再对真平台跑。还缺的是协议：访客窗口要能打开正在取的那条链接（[协议待定](../protocol/open.md#13-待定)第 44 项）；UA 对上以后还回不回安全验证页，要隔一阵再试一条才知道。
 - 账号这一边的事（隔一天看提示、导入一批几十条）只有用户能试，见 [README §4](README.md#4-怎么相对安全地试)。

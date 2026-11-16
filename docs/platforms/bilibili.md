@@ -8,7 +8,7 @@
 
 | 平台 | 首个实现 | 兜底 | 做不到的 |
 |---|---|---|---|
-| B站 | `list` 带你的 cookie 调不签名的收藏夹、稍后再看接口（`session-api`）；`fetch` 不用账号，调不签名的 `view`、`playurl` | 日常浏览器里的扩展导出收藏夹 JSON，交给导入插件 | 字幕要登录，`fetch` 不用账号所以不取；不碰要 WBI 签名的接口，高清也不取；文字交给转写插件 |
+| B站 | `list` 带你的 cookie 调不签名的收藏夹、稍后再看接口（`session-api`）；`fetch` 不用账号，先取视频页，读不到的再调不签名的 `view`、`playurl` | 日常浏览器里的扩展导出收藏夹 JSON，交给导入插件 | 字幕要登录，`fetch` 不用账号所以不取；不碰要 WBI 签名的接口，高清也不取；文字交给转写插件 |
 
 <a id="4-b站"></a>
 ## 4. B站
@@ -45,12 +45,12 @@
 <a id="44-插件做成的样子"></a>
 ### 4.4 插件做成的样子
 
-插件在 `usuyo-fetch/bilibili`：`list` 调不签名的收藏夹、稍后再看接口，`fetch` 不用账号调 `view` 和 `playurl`。平时只取文字、元数据和封面（`--want text,meta,images`），视频按需要再取。兜底仍是扩展导出 JSON 加导入插件，再不行用官方的个人信息下载。
+插件在 `usuyo-fetch/bilibili`：`list` 调不签名的收藏夹、稍后再看接口，`fetch` 不用账号，先取视频页、读不到的那一半再调 `view` 和 `playurl`。平时只取文字、元数据和封面（`--want text,meta,images`），视频按需要再取。兜底仍是扩展导出 JSON 加导入插件，再不行用官方的个人信息下载。
 
 - **`canonicalize`**：BV 号、av 号、`b23.tv` 短链和分 P；av 号离线换成 BV 号，只有短链发请求，只跟重定向，不带 cookie。
 - **`sources`**：列你建的收藏夹和「稍后再看」；`mid` 取自 cookie `DedeUserID`，不调签名接口。
 - **`list`**：一页一调，收藏夹按页码翻页，`actedAt` 用收藏时间 `fav_time`；稍后再看一次给完，按加入时间从新到旧。
-- **`fetch`**：`view` 的原样回答、封面、按 `--want` 的最低画质视频流和音频流（两个文件，`media[]` 里带同一个 `group`：`cid:<这一 P 的 cid>`，合起来交给宿主的转换）。即使你登录过，也不读凭据、不带 cookie，所以不取字幕。拿不到的写进 `missing`、`missingReason`。
+- **`fetch`**：视频信息的原样 JSON（`view.json`：页面那一路是 `videoData`，接口那一路是 `view` 的整个回答；`meta.json` 的 `stage` 写是哪一路）、封面、按 `--want` 的最低画质视频流和音频流（两个文件，`media[]` 里带同一个 `group`：`cid:<这一 P 的 cid>`，合起来交给宿主的转换）。即使你登录过，也不读凭据、不带 cookie，所以不取字幕。拿不到的写进 `missing`、`missingReason`。
 - **cookie 只用在 `sources`、`list`**，只发往 `api.bilibili.com`；封面和视频流只连 `*.hdslb.com`、`*.bilivideo.com`、`*.bilivideo.cn`，也不带 cookie。不带 `bili_jct`。
 - **错误码**（推断，照抓到的响应核对）：`-412`、`-352`（以及 HTTP 412、回答里带 `v_voucher`）回 `blocked`，`-101` 回 `login-required`，`-799`、`-509`、HTTP 429 回 `rate-limited`。
 - **`health`**：不发请求；`--probe` 才用登录信息请求一次 `nav`。
