@@ -374,9 +374,17 @@ fn login_of(site: &impl CookieScope, record: Option<&SiteRecord>, now: f64) -> L
     let Some(found) = counted(site, r) else {
         return LoginState::Missing;
     };
+    let lapsed = |c: &&CookieName| c.expires > 0.0 && c.expires <= now;
+    // 写了名字的：那几个里有一个过期就算过期。没写名字的：交给插件的是没过期的那些（`restrict`），
+    // 所以还有一个没过期就算登录着，全过期才算过期。
+    let expired = if site.names().is_empty() {
+        found.iter().all(lapsed)
+    } else {
+        found.iter().any(lapsed)
+    };
     if found.is_empty() {
         LoginState::Missing
-    } else if found.iter().any(|c| c.expires > 0.0 && c.expires <= now) {
+    } else if expired {
         LoginState::Expired
     } else {
         LoginState::Present
@@ -1265,6 +1273,34 @@ mod tests {
         assert_eq!(
             login_of(&unnamed, Some(&rec("x", 50.0)), 10.0),
             LoginState::Present
+        );
+    }
+
+    #[test]
+    fn without_names_one_live_cookie_is_a_login_and_only_all_lapsed_is_expired() {
+        let mut unnamed = site(&[]);
+        unnamed.cookies.clear();
+        let cookie = |name: &str, expires: f64| CookieName {
+            name: name.into(),
+            domain: ".bilibili.com".into(),
+            expires,
+        };
+        let rec = |cookies: Vec<CookieName>| SiteRecord {
+            source: LoginSource::default(),
+            captured_at: String::new(),
+            cookies,
+        };
+        // 导出的文件里常有几个很快过期的统计 cookie：它们过期了，交给插件的还有没过期的那些
+        let mixed = rec(vec![cookie("session", -1.0), cookie("tracker", 5.0)]);
+        assert_eq!(login_of(&unnamed, Some(&mixed), 10.0), LoginState::Present);
+        let lapsed = rec(vec![cookie("a", 5.0), cookie("b", 8.0)]);
+        assert_eq!(login_of(&unnamed, Some(&lapsed), 10.0), LoginState::Expired);
+        // 写了名字的照旧：那几个里有一个过期就算过期
+        let named = site(&[]);
+        let rec_named = rec(vec![cookie("SESSDATA", 5.0), cookie("other", -1.0)]);
+        assert_eq!(
+            login_of(&named, Some(&rec_named), 10.0),
+            LoginState::Expired
         );
     }
 
