@@ -156,7 +156,7 @@ yt-dlp 调 `weibo.com/ajax/statuses/show?id=`，Referer `https://weibo.com/`，�
 <a id="73-知乎"></a>
 ### 7.3 知乎
 
-页面数据在 `<script id="js-initialData">` 的 `initialState.entities`（MediaCrawler `media_platform/zhihu/help.py:380-423`）。接口要 `d_c0` 和 `x-zse-96` 签名（MediaCrawler `libs/zhihu.js:155-166`、ParseHub `src/parsehub/provider_api/zhihu.py:183-208`）；页面要 `__zse_ck`：WXD 特意在干净的匿名会话里用一个小浏览器让页面自己算出它，存着用，页面回得不全就扔掉，旧的登录 cookie 反而让公开页被送去 `/signin`（`pkg/scraper/zhihu/pcweb.go:203-306`）。视频：yt-dlp 调 `api/v4/zvideos/<id>`（`yt_dlp/extractor/zhihu.py:26-47`），WXD 还要 `__zse_ck`（`pkg/scraper/zhihu/video.go:150-163`）。我们的 `page` 用访客窗口取的访客身份读 `js-initialData`，挑战页回 `blocked`（`zhihu/src/page.rs:13,352-355`），和 WXD 是同一个思路；带着访客身份还碰到挑战页、401，或被送去 `signin`、`/login`（没跟的 3xx，和跟着同主机的跳转落在登录页上），都回访客身份不被收（`visitor-required`，`zhihu/src/fetch.rs` 的 `rejected`、`zhihu/src/api.rs` 的 `SentToLogin`）。节奏 `interval: 30s`、`daily: 100`。2026-11-16 试了三次，还取不到（[§11](#11-要真跑一次才知道的)）：访客身份要的 `__zse_ck` 首页不生成；页面请求当时用的是写死的 Chrome UA，不是取身份时的 UA，已改成用同一个；带着内嵌数据的安全验证页当时被当成「没有这条回答」，已改成认作验证页。公开收藏夹接口不带 cookie 回 401（[routes.md §4](routes.md#4-对真平台跑过的记录)），哪个参考项目都没做收藏夹。
+页面数据在 `<script id="js-initialData">` 的 `initialState.entities`（MediaCrawler `media_platform/zhihu/help.py:380-423`）。接口要 `d_c0` 和 `x-zse-96` 签名（MediaCrawler `libs/zhihu.js:155-166`、ParseHub `src/parsehub/provider_api/zhihu.py:183-208`）；页面要 `__zse_ck`：WXD 特意在干净的匿名会话里用一个小浏览器让页面自己算出它，存着用，页面回得不全就扔掉，旧的登录 cookie 反而让公开页被送去 `/signin`（`pkg/scraper/zhihu/pcweb.go:203-306`）。视频：yt-dlp 调 `api/v4/zvideos/<id>`（`yt_dlp/extractor/zhihu.py:26-47`），WXD 还要 `__zse_ck`（`pkg/scraper/zhihu/video.go:150-163`）。我们的 `page` 用访客窗口取的访客身份读 `js-initialData`，挑战页回 `blocked`（`zhihu/src/page.rs:13,352-355`），和 WXD 是同一个思路；带着访客身份还碰到挑战页、401，或被送去 `signin`、`/login`（没跟的 3xx，和跟着同主机的跳转落在登录页上），都回访客身份不被收（`visitor-required`，`zhihu/src/fetch.rs` 的 `rejected`、`zhihu/src/api.rs` 的 `SentToLogin`）。节奏 `interval: 30s`、`daily: 100`。2026-11-16 试了三次，还取不到（[§11](#11-要真跑一次才知道的)）：访客身份要的 `__zse_ck` 首页不生成；页面请求当时用的是写死的 Chrome UA，不是取身份时的 UA，已改成用同一个；带着内嵌数据的安全验证页当时被当成「没有这条回答」，已改成回 `blocked`：安全验证页（含 `/account/unhuman`）不换访客身份再试，清单的节奏写了 `blocked: stop`，整个平台停到你点「继续获取」。公开收藏夹接口不带 cookie 回 401（[routes.md §4](routes.md#4-对真平台跑过的记录)），哪个参考项目都没做收藏夹。
 
 <a id="8-清单和内容的分工"></a>
 ## 8. 清单和内容的分工
@@ -271,5 +271,5 @@ yt-dlp 调 `weibo.com/ajax/statuses/show?id=`，Referer `https://weibo.com/`，�
     1. 访客窗口开首页，交回 13 个 cookie（有 `d_c0`、`captcha_session_v2`，没有 `__zse_ck`）；带着它请求回答页，回的是 `zh-zse-ck` 挑战页，插件回 `visitor-required`。
     2. 试着让访客身份必须有 `__zse_ck`、窗口改开 `/explore`：60 秒里还是那 13 个，没有 `__zse_ck`，没取到身份，没有请求回答页。
     3. 窗口改开要取的那条回答的页面：交回的 cookie 里有 `__zse_ck`；带着它请求回答页，回的是标题「安全验证 - 知乎」的页面。当时页面请求用的是插件写死的 Chrome UA，访客窗口是 Safari 的 UA；插件还把这一页当成了「没有这条回答」。
-    - 之后改的：页面请求用取身份时的 UA；跟着跳转落到验证页、和带着内嵌数据的安全验证页都认作验证页；清单声明访客身份要 `__zse_ck`。改完没有再对真平台跑。还缺的是协议：访客窗口要能打开正在取的那条链接（[协议待定](../protocol/open.md#13-待定)第 44 项）；UA 对上以后还回不回安全验证页，要隔一阵再试一条才知道。
+    - 之后改的：页面请求用取身份时的 UA；跟着跳转落到验证页、和带着内嵌数据的安全验证页都回 `blocked`、停下整个平台；清单声明访客身份要 `__zse_ck`。改完没有再对真平台跑。还缺的是协议：访客窗口要能打开正在取的那条链接（[协议待定](../protocol/open.md#13-待定)第 44 项）；UA 对上以后还回不回安全验证页，要隔一阵再试一条才知道。
 - 账号这一边的事（隔一天看提示、导入一批几十条）只有用户能试，见 [README §4](README.md#4-怎么相对安全地试)。
