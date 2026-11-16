@@ -12,6 +12,7 @@ import {
   type PluginSource,
   type PluginsView,
   type SiteLogin,
+  type PasteLinksRequest,
   type StartImportRequest,
   type Strategy,
   type StrategyView,
@@ -110,6 +111,7 @@ export interface Platforms {
   forgetVisitor(site: string): Promise<void>;
   imports(): Promise<ImportView[]>;
   startImport(body: StartImportRequest): Promise<ImportView>;
+  pasteLinks(body: PasteLinksRequest): Promise<ImportView>;
   import(id: string): Promise<ImportView>;
   importEntries(id: string, standing: ImportEntry["standing"], offset: number, limit: number): Promise<ImportEntry[]>;
   confirmImport(id: string, body: ConfirmImportRequest): Promise<ImportView>;
@@ -266,6 +268,7 @@ const daemon: Source = {
   forgetVisitor: (site) => request<void>(paths.visitor(site), { method: "DELETE" }),
   imports: () => request<ImportView[]>(paths.imports),
   startImport: (body) => request<ImportView>(paths.imports, { method: "POST", body }),
+  pasteLinks: (body) => request<ImportView>(paths.pasteLinks, { method: "POST", body }),
   import: (id) => request<ImportView>(paths.import(id)),
   importEntries: (id, standing, offset, limit) =>
     request<ImportEntry[]>(paths.importEntries(id), {

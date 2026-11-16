@@ -56,9 +56,94 @@ pub fn link_count(text: &str) -> usize {
     link_runs(text).count()
 }
 
+/// 一段文字里的全部链接（[`links_in`]）。
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct FoundLinks {
+    /// 认得出的 http(s) 链接，照出现的顺序，一模一样的只留第一条。
+    pub links: Vec<url::Url>,
+    /// 以 `http://`、`https://` 开头却不是能用的链接的那几段（没有主机、带用户名或密码），照原样。
+    pub unrecognized: Vec<String>,
+}
+
+/// 一段里紧挨着的几条链接（`…/sph/Ahttps://…/sph/B`）从后一条的开头切开。
+/// 只在 `http(s)://` 前面是字母、数字、`_` 或 `-` 时切（链接末尾的一段常以它们结尾）：`?u=https://…`、`/to/https://…`
+/// 这种是一条链接里带着的地址，不切。
+fn split_glued(run: &str) -> Vec<&str> {
+    let lower = run.to_ascii_lowercase();
+    let bytes = run.as_bytes();
+    let mut cuts = vec![0];
+    for scheme in ["http://", "https://"] {
+        cuts.extend(lower.match_indices(scheme).map(|(i, _)| i).filter(|&i| {
+            i > 0 && (bytes[i - 1].is_ascii_alphanumeric() || b"_-".contains(&bytes[i - 1]))
+        }));
+    }
+    cuts.sort_unstable();
+    cuts.dedup();
+    cuts.push(run.len());
+    cuts.windows(2)
+        .map(|w| trim_tail(&run[w[0]..w[1]]))
+        .collect()
+}
+
+/// 你粘贴的一段文字里的每一条链接：一行一条、夹在分享文字里、几条挤在一起都认。
+pub fn links_in(text: &str) -> FoundLinks {
+    let mut found = FoundLinks::default();
+    for piece in link_runs(text).flat_map(split_glued) {
+        match http_with_host(piece) {
+            Some(u) if u.username().is_empty() && u.password().is_none() => {
+                if !found.links.contains(&u) {
+                    found.links.push(u);
+                }
+            }
+            _ => found.unrecognized.push(piece.chars().take(500).collect()),
+        }
+    }
+    found
+}
+
 #[cfg(test)]
 mod tests {
-    use super::link_in;
+    use super::{link_in, links_in};
+
+    fn all(text: &str) -> (Vec<String>, Vec<String>) {
+        let f = links_in(text);
+        (
+            f.links.iter().map(ToString::to_string).collect(),
+            f.unrecognized,
+        )
+    }
+
+    #[test]
+    fn every_link_in_lines_share_texts_and_glued_runs() {
+        let (links, bad) = all("https://weixin.qq.com/sph/A1\n\
+             看看这个视频https://weixin.qq.com/sph/B2复制链接打开\r\n\
+             https://weixin.qq.com/sph/C3https://weixin.qq.com/sph/D4，\
+             https://weixin.qq.com/sph/E_https://a.test/f-https://a.test/g\n\
+             https://weixin.qq.com/sph/A1 https://a.test/go?u=https://b.test/x");
+        assert_eq!(
+            links,
+            [
+                "https://weixin.qq.com/sph/A1",
+                "https://weixin.qq.com/sph/B2",
+                "https://weixin.qq.com/sph/C3",
+                "https://weixin.qq.com/sph/D4",
+                "https://weixin.qq.com/sph/E_",
+                "https://a.test/f-",
+                "https://a.test/g",
+                "https://a.test/go?u=https://b.test/x",
+            ],
+            "一模一样的只留一条，带在查询里的地址不切"
+        );
+        assert!(bad.is_empty(), "{bad:?}");
+    }
+
+    #[test]
+    fn pieces_that_are_not_usable_links_are_kept_aside() {
+        let (links, bad) = all("https:// 坏的 https://u:p@a.test/x https://ok.test/1");
+        assert_eq!(links, ["https://ok.test/1"]);
+        assert_eq!(bad, ["https://", "https://u:p@a.test/x"]);
+        assert_eq!(links_in("没有链接"), Default::default());
+    }
 
     fn got(text: &str) -> Option<String> {
         link_in(text).map(|u| u.to_string())

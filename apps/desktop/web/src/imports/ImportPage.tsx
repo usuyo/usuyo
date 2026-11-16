@@ -13,6 +13,7 @@ import { Fold } from "../ui/Fold";
 import { DeliverTokens } from "./DeliverTokens";
 import { FileImport } from "./FileImport";
 import { ImportDetail } from "./ImportDetail";
+import { PasteLinks } from "./PasteLinks";
 import { SourcePicker } from "./SourcePicker";
 import { stateLine } from "./words";
 
@@ -28,7 +29,7 @@ export function ImportPage() {
     return pluginId && method && found ? names.method(pluginId, method, found) : found;
   };
   const show = (id: string | undefined) => void navigate({ to: "/import", search: id ? { open: id } : {} });
-  const half = (next: "platform" | "file") => void navigate({ to: "/import", search: next === "file" ? { from: "file" } : {}, replace: true });
+  const half = (next: "platform" | "file" | "links") => void navigate({ to: "/import", search: next === "platform" ? {} : { from: next }, replace: true });
 
   return (
     <div className="relative h-full overflow-hidden bg-bg">
@@ -58,14 +59,17 @@ export function ImportPage() {
                     label={t("imports.fromLabel")}
                     options={[
                       { id: "platform", text: t("imports.fromPlatform") },
+                      { id: "links", text: t("imports.fromLinks") },
                       { id: "file", text: t("imports.fromFile") },
                     ]}
-                    value={from === "file" ? "file" : "platform"}
+                    value={from ?? "platform"}
                     onChange={half}
                   />
                 </div>
                 {from === "file" ? (
                   <FileImport onStarted={show} {...(reader ? { initial: reader } : {})} />
+                ) : from === "links" ? (
+                  <PasteLinks onStarted={show} />
                 ) : (
                   <>
                     <SourcePicker onStarted={show} {...(pick ? { initial: pick } : {})} />
@@ -108,5 +112,6 @@ export function ImportPage() {
 function historyMeta(v: ImportView, day: string, method: string | undefined): string {
   if (v.kind === "delivered") return v.client ? t("imports.history.delivered", { day, client: v.client }) : t("imports.history.deliveredAnon", { day });
   if (v.kind === "file") return t("imports.history.file", { day });
+  if (v.kind === "pasted") return t("imports.history.pasted", { day });
   return method ? t("imports.history.method", { day, method }) : day;
 }

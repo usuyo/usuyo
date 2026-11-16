@@ -272,7 +272,7 @@ pub struct ImportRow {
     pub file_name: Option<String>,
 }
 
-/// 导入里的一条。`standing`：`unresolved`（还没认出身份）、`new`、`stored`、`trashed`。
+/// 导入里的一条。`standing`：`unresolved`（还没认出身份）、`new`、`stored`、`trashed`、`unrecognized`（认不出，不收）。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EntryRow {
     pub seq: i64,
@@ -990,6 +990,7 @@ impl Jobs {
                 "new" => c.new = n,
                 "stored" => c.stored = n,
                 "trashed" => c.trashed = n,
+                "unrecognized" => {}
                 _ => c.unresolved = n,
             }
         }

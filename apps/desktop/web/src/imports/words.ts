@@ -8,9 +8,11 @@ export function stateLine(v: ImportView): string {
   switch (v.state) {
     case "listing": {
       const count = v.preview.new + v.preview.stored + v.preview.trashed;
+      if (v.kind === "pasted") return t("imports.state.listingPasted", { count });
       return v.kind === "file" ? t("imports.state.listingFile", { count }) : t("imports.state.listingSource", { count });
     }
     case "ready":
+      if (v.kind === "pasted") return t("imports.state.readyPasted", { count: v.preview.new });
       return v.kind === "file" ? t("imports.state.readyFile", { count: v.preview.new }) : t("imports.state.readySource", { count: v.preview.new });
     case "taking":
       return t("imports.state.taking", { count: v.taken });

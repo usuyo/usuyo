@@ -5,7 +5,7 @@ import { ApiError } from "../api/client";
 import type { FetchMethod, FetchPlugin, FileReader, NewDeliverToken, SiteLogin, VisitorIdentity } from "../api/endpoints";
 import { useCreateDeliverToken, useFileReaders, useMethodScript, usePlugins, useSites, useSources, useStartImport, useVisitors } from "../api/hooks";
 import { ErrorLine } from "../components/ErrorLine";
-import { t } from "../i18n";
+import { rich, t } from "../i18n";
 import { formatList } from "../i18n/format";
 import { localized, useNames } from "../plugins/names";
 import { needsOf, Needs, TryAgain } from "../plugins/Needs";
@@ -359,7 +359,14 @@ export function SourcePicker({ onStarted, initial }: { onStarted: (id: string) =
           </ul>
         </section>
       ))}
-      {linkOnly.length > 0 ? <p className="m-0 text-small text-sub">{t("imports.picker.linkOnly", { platforms: formatList(linkOnly.map((p) => p.name)) })}</p> : null}
+      {linkOnly.length > 0 ? (
+        <p className="m-0 text-small text-sub">
+          {rich("imports.picker.linkOnly", {
+            platforms: formatList(linkOnly.map((p) => p.name)),
+            link: <Link to="/import" search={{ from: "links" }} className="mx-0.5 text-label underline decoration-border2 underline-offset-4 hover:text-text" />,
+          })}
+        </p>
+      ) : null}
     </section>
   );
 }

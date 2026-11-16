@@ -38,7 +38,9 @@ export function ImportDetail({ id, onGone }: { id: string; onGone: () => void })
   const visitor = visitors.data?.find((x) => plugin?.visitors.includes(x.site))?.state;
   const pluginName = plugin ? names.plugin(plugin.id, plugin.name) : (v.pluginId ?? "");
   const from =
-    v.kind === "delivered"
+    v.kind === "pasted"
+      ? t("imports.detail.pasted")
+      : v.kind === "delivered"
       ? v.client
         ? t("imports.detail.deliveredFrom", { client: v.client })
         : t("imports.detail.delivered")
@@ -111,6 +113,11 @@ function Listing({ v, visitor, plugin }: { v: ImportView; visitor: VisitorIdenti
           <p className="m-0 mt-5 text-title font-semibold text-text">{t("imports.detail.listingFile", { count: n })}</p>
           <p className="m-0 mt-1 text-note text-sub">{t("imports.detail.listingFileNote")}</p>
         </>
+      ) : v.kind === "pasted" ? (
+        <>
+          <p className="m-0 mt-5 text-title font-semibold text-text">{t("imports.detail.listingPasted", { count: n })}</p>
+          <p className="m-0 mt-1 text-note text-sub">{t("imports.detail.listingPastedNote")}</p>
+        </>
       ) : (
         <>
           <p className="m-0 mt-5 text-title font-semibold text-text">{t("imports.detail.listingSource", { pages: t("imports.detail.pages", { count: v.pages }), count: n })}</p>
@@ -159,7 +166,9 @@ function Ready({ v, platform }: { v: ImportView; platform: string | undefined })
       <div className="mt-5 flex flex-wrap items-start gap-x-4 gap-y-3">
         <div className="min-w-[240px] flex-1">
           <p className="m-0 text-title font-semibold text-text">
-            {t(v.kind === "file" ? "imports.detail.readyFile" : "imports.detail.readySource", { count: v.preview.new + v.preview.stored + v.preview.trashed })}
+            {t(v.kind === "file" ? "imports.detail.readyFile" : v.kind === "pasted" ? "imports.detail.readyPasted" : "imports.detail.readySource", {
+              count: v.preview.new + v.preview.stored + v.preview.trashed,
+            })}
           </p>
           <p className="m-0 mt-1 text-note text-sub">{willText(takeNew, bringBack, v.preview.stored)}</p>
           <p className="m-0 mt-1 text-small text-sub">
@@ -184,7 +193,7 @@ function Ready({ v, platform }: { v: ImportView; platform: string | undefined })
         choice={{ pick: picks.trashed, set: set("trashed") }}
       />
       <Group v={v} standing="stored" title={t("imports.group.storedTitle")} note={t("imports.group.storedReadyNote")} />
-      <Group v={v} standing="unresolved" title={t("imports.group.unresolvedTitle")} note={t("imports.group.unresolvedNote")} />
+      <Group v={v} standing="unrecognized" title={t("imports.group.unrecognizedTitle")} note={t("imports.group.unrecognizedNote")} />
     </>
   );
 }
@@ -256,8 +265,9 @@ function Taken({ v }: { v: ImportView }) {
 
 function EntryRow({ e, tick }: { e: ImportEntry; tick?: { on: boolean; set: (on: boolean) => void } }) {
   // 从文件导入时，只在文件里的那几条没有链接：只写标题，不写主机。
-  const host = e.url === undefined ? "" : URL.canParse(e.url) ? new URL(e.url).host : e.url;
+  // 用不了的链接没有主机，名字就是它本身，不再写一遍。
   const name = e.title || e.url || t("imports.detail.untitled");
+  const host = e.url === undefined ? "" : URL.canParse(e.url) ? new URL(e.url).host : e.url === name ? "" : e.url;
   if (tick) {
     return (
       <li className="border-b border-border">
@@ -325,7 +335,7 @@ function Group({
 }) {
   const [limit, setLimit] = useState(FIRST);
   const [open, setOpen] = useState(false);
-  const count = standing === "unresolved" ? undefined : v.preview[standing];
+  const count = standing === "unresolved" || standing === "unrecognized" ? undefined : v.preview[standing];
   const entries = useImportEntries(v.id, standing, limit, count === undefined || count > 0, v.state === "listing");
   const list = entries.data ?? [];
   if (count === 0 || (count === undefined && list.length === 0)) return null;

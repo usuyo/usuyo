@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
-import type { PhoneView, SettingsPane, ChangesView, FollowPatch, FollowTrialRequest, NewFollowRequest, Draft, DraftPatch, NewDraftRequest, CiteRequest, PagePatch, TopicMatch, TopicPage, SettingsPatch, Strategy, TransformRequest, ConfirmImportRequest, CreateDeliverTokenRequest, ImportEntry, ImportView, Item, StartImportRequest, TakeRequest } from "./endpoints";
+import type { PhoneView, SettingsPane, ChangesView, FollowPatch, FollowTrialRequest, NewFollowRequest, Draft, DraftPatch, NewDraftRequest, CiteRequest, PagePatch, TopicMatch, TopicPage, SettingsPatch, Strategy, TransformRequest, ConfirmImportRequest, CreateDeliverTokenRequest, ImportEntry, ImportView, Item, PasteLinksRequest, StartImportRequest, TakeRequest } from "./endpoints";
 import { ApiError, DaemonUnreachableError, isNotServed } from "./client";
 import { call } from "./source";
 
@@ -574,6 +574,18 @@ export function useStartImport() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: StartImportRequest) => call((s) => s.startImport(body)),
+    onSuccess: (view) => {
+      queryClient.setQueryData(queryKeys.import(view.id), view);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.imports });
+    },
+  });
+}
+
+/** 粘贴的一段文字落成一次导入。 */
+export function usePasteLinks() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: PasteLinksRequest) => call((s) => s.pasteLinks(body)),
     onSuccess: (view) => {
       queryClient.setQueryData(queryKeys.import(view.id), view);
       void queryClient.invalidateQueries({ queryKey: queryKeys.imports });

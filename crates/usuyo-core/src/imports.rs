@@ -2,8 +2,8 @@
 //!
 //! 一次导入走这几步，都记在 `jobs.db`，重启后接着：
 //!
-//! 1. **列**（`listing`）：`source` 类按插件的节奏一页页调 `list`；`delivered` 类一条条认身份。
-//!    每条按身份分成新的、库里已经有的、在回收站里的；这一步什么都不建。
+//! 1. **列**（`listing`）：`source` 类按插件的节奏一页页调 `list`；`delivered`、`pasted` 类一条条认身份。
+//!    每条按身份分成新的、库里已经有的、在回收站里的，认不出的另列；这一步什么都不建。
 //! 2. **看一眼**（`ready`）：列完了，等你确认。
 //! 3. **收**（`taking`）：你确认以后，你挑的（新的、回收站里的各一个整组的选择，加上逐条改过的）各排一个任务，按节奏一条条来：
 //!    轮到时先收下（`origins[].entry: import`，同一批共用 `importBatch`），再取内容。
@@ -164,9 +164,49 @@ impl Engine {
                 "a batch has 1 to {BATCH_MAX} links"
             )));
         }
+        self.links_import("delivered", name, action, links, Vec::new(), client)
+    }
+
+    /// 你在窗口里粘贴的一段文字：里面的每一条链接（一行一条、夹在分享文字里、挤在一起的都算）落成一次导入，
+    /// 和交进来的一批一样先认身份、给你看一眼；一模一样的链接只留一条，同一条内容的几条链接在认身份时合并；
+    /// 像链接又用不了的那几段也列进预览（`unrecognized`），不收。
+    pub fn paste_links(&self, text: &str) -> Result<ImportView> {
+        let found = crate::share_text::links_in(text);
+        if found.links.is_empty() && found.unrecognized.is_empty() {
+            return Err(Error::InvalidArgs("the text has no links".into())
+                .hinted(words::NO_LINKS_PASTED.said()));
+        }
+        if found.links.len() + found.unrecognized.len() > BATCH_MAX {
+            return Err(
+                Error::InvalidArgs(format!("a batch has 1 to {BATCH_MAX} links"))
+                    .hinted(words::TOO_MANY_PASTED.with(&[("max", &BATCH_MAX)])),
+            );
+        }
+        let links = found
+            .links
+            .into_iter()
+            .map(|url| DeliveredLink {
+                url,
+                title: None,
+                acted_at: None,
+            })
+            .collect();
+        self.links_import("pasted", "", None, links, found.unrecognized, None)
+    }
+
+    /// 一批链接落成一次导入：`links` 等着认身份，`unrecognized` 直接记成认不出的。
+    fn links_import(
+        &self,
+        kind: &str,
+        name: &str,
+        action: Option<&str>,
+        links: Vec<DeliveredLink>,
+        unrecognized: Vec<String>,
+        client: Option<&str>,
+    ) -> Result<ImportView> {
         let row = ImportRow {
             id: usuyo_library::uuid7(),
-            kind: "delivered".into(),
+            kind: kind.into(),
             plugin: None,
             method: None,
             source: None,
@@ -189,20 +229,26 @@ impl Engine {
             file_name: None,
         };
         self.inner.jobs.insert_import(&row)?;
+        let entry = |url: String, standing: &str| EntryRow {
+            seq: 0,
+            url,
+            title: None,
+            action: action.map(str::to_owned),
+            acted_at: None,
+            identity: None,
+            item_id: None,
+            standing: standing.into(),
+            added: false,
+            reference: None,
+        };
         let entries: Vec<EntryRow> = links
             .into_iter()
             .map(|l| EntryRow {
-                seq: 0,
-                url: l.url.to_string(),
                 title: l.title,
-                action: action.map(str::to_owned),
                 acted_at: l.acted_at,
-                identity: None,
-                item_id: None,
-                standing: "unresolved".into(),
-                added: false,
-                reference: None,
+                ..entry(l.url.to_string(), "unresolved")
             })
+            .chain(unrecognized.into_iter().map(|u| entry(u, "unrecognized")))
             .collect();
         self.inner.jobs.add_entries(&row.id, &entries)?;
         self.inner.imports_wake.notify_one();
@@ -223,7 +269,7 @@ impl Engine {
         self.import_view(row)
     }
 
-    /// 预览里的条目；`standing` 是 `new`、`stored`、`trashed`、`unresolved` 之一，不给就是全部。
+    /// 预览里的条目；`standing` 是 `new`、`stored`、`trashed`、`unresolved`、`unrecognized` 之一，不给就是全部。
     pub fn import_entries(
         &self,
         id: &str,
@@ -233,7 +279,10 @@ impl Engine {
     ) -> Result<Vec<ImportEntryView>> {
         self.import_row(id)?;
         if let Some(s) = standing
-            && !matches!(s, "new" | "stored" | "trashed" | "unresolved")
+            && !matches!(
+                s,
+                "new" | "stored" | "trashed" | "unresolved" | "unrecognized"
+            )
         {
             return Err(Error::InvalidArgs(format!("no standing `{s}`"))
                 .hinted(words::NO_SUCH_GROUP.said()));
@@ -677,6 +726,7 @@ impl Engine {
             kind: match r.kind.as_str() {
                 "source" => ImportKind::Source,
                 "file" => ImportKind::File,
+                "pasted" => ImportKind::Pasted,
                 _ => ImportKind::Delivered,
             },
             file: r.file_name.map(|name| ImportFileView {
@@ -690,6 +740,8 @@ impl Engine {
             }),
             title: if r.title.is_empty() && r.kind == "delivered" {
                 words::DELIVERED_BATCH.pick(self.lang()).to_owned()
+            } else if r.title.is_empty() && r.kind == "pasted" {
+                words::PASTED_LINKS.pick(self.lang()).to_owned()
             } else {
                 r.title
             },
@@ -790,7 +842,8 @@ impl Engine {
             }
             // 来源型导入每走一步之前都再看一次它的方法：关了、登录没了、自检没过，就停在这里；
             // 在等的也一样，不等到点再去调插件
-            if r.kind != "delivered" && self.stop_if_unlistable(&r)? {
+            let links = r.kind == "delivered" || r.kind == "pasted";
+            if !links && self.stop_if_unlistable(&r)? {
                 self.emit(Event::ImportUpdated { id: r.id.clone() });
                 continue;
             }
@@ -799,7 +852,7 @@ impl Engine {
                 note(at);
                 continue;
             }
-            let step = if r.kind != "delivered" {
+            let step = if !links {
                 self.list_page(&r).await
             } else {
                 self.resolve_some(&r).await
@@ -1065,7 +1118,7 @@ impl Engine {
         self.classify_and_store(import, ready).await
     }
 
-    /// 交进来的一批：认一段身份。回下一步最早什么时候（还有没认的就是马上）。
+    /// 交进来的、粘贴的一批：认一段身份。回下一步最早什么时候（还有没认的就是马上）。
     async fn resolve_some(&self, r: &ImportRow) -> Result<Option<i64>> {
         let pending = self
             .inner
@@ -1090,9 +1143,16 @@ impl Engine {
                         ..e
                     },
                 )),
+                // 认不出的留在预览里（`unrecognized`），不收
                 Err(err) => {
-                    tracing::warn!(import = %r.id, seq = e.seq, error = %err, "batch link dropped");
-                    self.inner.jobs.drop_entry(&r.id, e.seq)?;
+                    tracing::warn!(import = %r.id, seq = e.seq, error = %err, "batch link not recognized");
+                    self.inner.jobs.resolve_entry(
+                        &r.id,
+                        &EntryRow {
+                            standing: "unrecognized".into(),
+                            ..e
+                        },
+                    )?;
                 }
             }
         }

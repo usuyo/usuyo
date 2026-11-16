@@ -177,9 +177,11 @@ export const paths = {
   // —— 导入（「导入」页）——
   /** GET 全部（新的在前）；POST `StartImportRequest` 从一个插件的来源开始列。 */
   imports: "/imports",
+  /** POST `PasteLinksRequest`：你粘贴的一段文字里的每条链接落成一次 `pasted` 导入，和交进来的一批一样先认身份、等你确认。 */
+  pasteLinks: "/imports/links",
   /** GET 一次导入；DELETE 不要了（清单和还没收的去掉，已经收下的留着）。 */
   import: (id: string) => `/imports/${encodeURIComponent(id)}`,
-  /** GET 预览里的条目，`?standing=new|stored|trashed|unresolved&offset=&limit=`。 */
+  /** GET 预览里的条目，`?standing=new|stored|trashed|unresolved|unrecognized&offset=&limit=`。 */
   importEntries: (id: string) => `/imports/${encodeURIComponent(id)}/entries`,
   /** POST `ConfirmImportRequest`：看过了，按节奏去收你挑的。 */
   importConfirm: (id: string) => `/imports/${encodeURIComponent(id)}/confirm`,
@@ -1156,8 +1158,8 @@ export interface ImportWaiting {
 /** 一次导入。只说事实：列了几页、预览里各几条、收下了几条、为什么在等；不给还剩多少。 */
 export interface ImportView {
   id: string;
-  /** `source`：插件列出来的；`delivered`：交进来的一批链接；`file`：别的工具导出的文件读出来的。 */
-  kind: "source" | "delivered" | "file";
+  /** `source`：插件列出来的；`delivered`：交进来的一批链接；`pasted`：你在窗口里粘贴的链接；`file`：别的工具导出的文件读出来的。 */
+  kind: "source" | "delivered" | "pasted" | "file";
   title: string;
   /** `file` 的：交来的文件名（洗过的，只当显示的字）和读它的插件的名字。 */
   file?: { name: string; reader: string };
@@ -1191,7 +1193,8 @@ export interface ImportEntry {
   action?: string;
   actedAt?: string;
   itemId?: string;
-  standing: "new" | "stored" | "trashed" | "unresolved";
+  /** `unresolved`：还在认身份；`unrecognized`：认不出（像链接却用不了的一段，或没有插件认得的），不收。 */
+  standing: "new" | "stored" | "trashed" | "unresolved" | "unrecognized";
   /** 已经收下了。 */
   taken: boolean;
 }
@@ -1211,6 +1214,11 @@ export interface StartImportRequest {
  * `except` 是和自己那组选得不一样的条目 `seq`。只交例外：预览按页看，没翻到的条目跟着整组走。
  * 已经存着的、认不出的不收，也不能出现在 `except` 里。
  */
+/** 一段文字：一行一条链接，或包含链接的分享文字；几条挤在一起的也会分开，一模一样的只留一条。 */
+export interface PasteLinksRequest {
+  text: string;
+}
+
 export interface ConfirmImportRequest {
   new: boolean;
   trashed: boolean;

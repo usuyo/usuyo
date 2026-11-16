@@ -272,6 +272,15 @@ pub(crate) const UNFETCHABLE_ENTRIES: Words = w(
     "{plugin} listed items that it can't fetch itself. The plugin needs an update.",
 );
 pub(crate) const DELIVERED_BATCH: Words = w("发送到 usuyo 的列表", "List sent to usuyo");
+pub(crate) const PASTED_LINKS: Words = w("粘贴的链接", "Pasted links");
+pub(crate) const NO_LINKS_PASTED: Words = w(
+    "没有找到链接。粘贴以 http:// 或 https:// 开头的链接，或包含链接的分享文字。",
+    "No links found. Paste links that start with http:// or https://, or share text that contains them.",
+);
+pub(crate) const TOO_MANY_PASTED: Words = w(
+    "一次最多粘贴 {max} 条链接。",
+    "You can paste up to {max} links at a time.",
+);
 pub(crate) const NO_READER: Words = w(
     "未指定读取此文件的方式。",
     "No method was chosen to read this file.",

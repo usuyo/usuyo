@@ -583,3 +583,78 @@ async fn big_batches_and_login_bodies_fit_their_own_limits() {
     .await;
     assert_eq!(res.status(), StatusCode::PAYLOAD_TOO_LARGE);
 }
+
+#[tokio::test]
+async fn pasted_text_becomes_a_pasted_import_for_the_window_only() {
+    let f = fixture();
+    let text = "https://a.test/1\n看这个https://a.test/2复制打开 https://";
+    let res = send(
+        &f.app,
+        req(
+            "POST",
+            "/imports/links",
+            Some(TOKEN),
+            Some(json!({ "text": text })),
+        ),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let v = json_of(res).await;
+    assert_eq!(v["kind"], "pasted");
+    assert_eq!(v["state"], "listing");
+    let id = v["id"].as_str().unwrap().to_owned();
+    let res = send(
+        &f.app,
+        req(
+            "GET",
+            &format!("/imports/{id}/entries?standing=unrecognized"),
+            Some(TOKEN),
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let entries = json_of(res).await;
+    assert_eq!(entries[0]["url"], "https://");
+
+    let res = send(
+        &f.app,
+        req(
+            "POST",
+            "/imports/links",
+            Some(TOKEN),
+            Some(json!({ "text": "没有链接" })),
+        ),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    assert!(json_of(res).await["hint"].is_string());
+    let res = send(
+        &f.app,
+        req(
+            "POST",
+            "/imports/links",
+            Some(TOKEN),
+            Some(json!({ "text": text, "name": "x" })),
+        ),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST, "不认识的字段");
+
+    let (_, token) = new_token(&f.app, "extension").await;
+    let res = send(
+        &f.app,
+        req(
+            "POST",
+            "/imports/links",
+            Some(&token),
+            Some(json!({ "text": text })),
+        ),
+    )
+    .await;
+    assert_eq!(
+        res.status(),
+        StatusCode::UNAUTHORIZED,
+        "投递令牌只能交 /v1/"
+    );
+}

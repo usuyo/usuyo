@@ -132,8 +132,8 @@ const pluginDetailRoute = createRoute({
 export interface ImportSearch {
   /** 开着的那一次导入。 */
   open?: string;
-  /** `file`：从「别的工具导出的文件」那一半开始。 */
-  from?: "file";
+  /** `file`：从「别的工具导出的文件」开始；`links`：从「粘贴链接」开始。 */
+  from?: "file" | "links";
   /** 平台页链过来：先展开这一种能列的方法（`<插件 id>#<方法 id>`）。 */
   pick?: string;
   /** 平台页链过来：先选好这一种读文件的方法（`FileReader.id`）。 */
@@ -145,7 +145,7 @@ const importRoute = createRoute({
   path: "/import",
   validateSearch: (search: Record<string, unknown>): ImportSearch => ({
     ...(typeof search.open === "string" && search.open !== "" ? { open: search.open } : {}),
-    ...(search.from === "file" ? { from: "file" as const } : {}),
+    ...(search.from === "file" || search.from === "links" ? { from: search.from } : {}),
     ...(typeof search.pick === "string" && search.pick !== "" ? { pick: search.pick } : {}),
     ...(typeof search.reader === "string" && search.reader !== "" ? { reader: search.reader } : {}),
   }),

@@ -396,6 +396,8 @@ pub enum ImportKind {
     Source,
     /// 交进来的一批链接（`/v1/batches`）。
     Delivered,
+    /// 你在窗口里粘贴的一段文字里的链接（`POST /imports/links`）。
+    Pasted,
     /// 导入插件读交进来的一个文件（`POST /file-imports`，或浏览器脚本经 `/v1/file-imports` 交的）。
     File,
 }
@@ -501,7 +503,7 @@ pub struct ImportEntryView {
     pub acted_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub item_id: Option<String>,
-    /// `new`、`stored`、`trashed`、`unresolved`（还没认出身份）。
+    /// `new`、`stored`、`trashed`、`unresolved`（还没认出身份）、`unrecognized`（认不出，不收）。
     pub standing: String,
     /// 已经收下了。
     pub taken: bool,

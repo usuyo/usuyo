@@ -661,6 +661,78 @@ async fn a_delivered_batch_goes_through_the_same_preview() {
 }
 
 #[tokio::test]
+async fn pasted_links_merge_list_the_unrecognized_and_are_taken_at_the_pace() {
+    let f = Fixture::new("pacing:\n  example: {batch: true, interval: 2s, daily: 2}");
+    let engine = f.engine();
+    let b = engine
+        .take("https://example.test/b", "link", Via::Cli)
+        .await
+        .unwrap();
+    assert_eq!(engine.run_due().await.unwrap(), 1);
+    // 一行一条、夹在分享文字里、两条挤在一起、同一条贴两次、同一条内容的两种写法、一段用不了的
+    let text = "https://example.test/b\n\
+        看看这个https://example.test/c复制打开\n\
+        https://example.test/dhttps://example.test/e，https://example.test/c\n\
+        http://example.test/d https:// 结束";
+    let imp = engine.paste_links(text).unwrap();
+    assert_eq!(imp.kind, usuyo_core::view::ImportKind::Pasted);
+    assert_eq!(imp.title, "粘贴的链接");
+    list_all(&engine, &imp.id).await;
+    let v = engine.import(&imp.id).unwrap();
+    assert_eq!(v.state, ImportState::Ready);
+    assert_eq!((v.preview.new, v.preview.stored), (3, 1), "{v:?}");
+    let bad = engine
+        .import_entries(&imp.id, Some("unrecognized"), 0, 10)
+        .unwrap();
+    assert_eq!(
+        bad.iter().map(|e| e.url.as_deref()).collect::<Vec<_>>(),
+        [Some("https://")]
+    );
+    let new: Vec<_> = engine
+        .import_entries(&imp.id, Some("new"), 0, 10)
+        .unwrap()
+        .into_iter()
+        .filter_map(|e| e.url)
+        .collect();
+    assert_eq!(
+        new,
+        [
+            "https://example.test/c",
+            "https://example.test/d",
+            "https://example.test/e"
+        ]
+    );
+
+    // 确认以后照平台的节奏：隔 2 秒一条，每天批量 2 次
+    engine.confirm_import(&imp.id, &only_new()).unwrap();
+    tokio::time::sleep(Duration::from_millis(2050)).await;
+    assert_eq!(engine.run_due().await.unwrap(), 1);
+    assert_eq!(engine.run_due().await.unwrap(), 0, "上一次调用刚结束");
+    let v = engine.import(&imp.id).unwrap();
+    assert_eq!(v.waiting.as_ref().map(|w| w.code.as_str()), Some("pacing"));
+    assert!(v.next_at.is_some());
+    tokio::time::sleep(Duration::from_millis(2050)).await;
+    assert_eq!(engine.run_due().await.unwrap(), 1);
+    tokio::time::sleep(Duration::from_millis(2050)).await;
+    assert_eq!(engine.run_due().await.unwrap(), 0);
+    let v = engine.import(&imp.id).unwrap();
+    assert_eq!(
+        v.waiting.as_ref().map(|w| w.code.as_str()),
+        Some("daily-limit"),
+        "{v:?}"
+    );
+    assert_eq!(v.taken, 2);
+    assert_eq!(
+        engine.item(&b.id, &Links::default()).unwrap().summary.title,
+        "标题 b"
+    );
+
+    let none = engine.paste_links("没有链接").unwrap_err();
+    assert_eq!(none.code(), "invalid-args", "{none:?}");
+    assert!(none.hint().is_some());
+}
+
+#[tokio::test]
 async fn the_inbox_takes_links_from_txt_files_and_ignores_the_rest() {
     let f = Fixture::new("");
     let engine = f.engine();

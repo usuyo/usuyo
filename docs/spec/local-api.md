@@ -36,7 +36,7 @@
 | `catalog-updated` | 订阅源开始读、读到了新索引或没读成，加了或去掉一个订阅源；插件开始装、下载每过 2%、在校验、解开、载入、装好、没装上、删掉了。装好、删掉以后插件换上了，另发 `plugins-updated`、`transforms-updated` | 无 |
 
 - **错误**：照 [§0.3](conventions.md#03-错误模型)：`application/problem+json`，字段 `type`（`urn:usuyo:problem:<code>`）、`title`、`status`、`detail`、`instance`（`urn:uuid:<随机>`）、`code`、`retryable`、`hint?`；插件报的另带 `plugin`，一律 502。`hint` 是给人看的一句话，照设置的语言（下「设置」的 `language`）写：插件给了就是它的（插件照 `USUYO_LOCALE` 写）；内核自己报的，列来源、开始导入、翻预览、确认、从文件导入、交内容这几条的 400、422（还有找不到读文件的插件的 404、文件太大的 413）都带，这时 `detail` 是英文，留给日志。内核自己的句子两种语言都在各 crate 的 `words.rs` 里，写出 problem+json 时照这次请求进来时的语言挑；错误码不翻译。视图里内核写的话（`blockers[].hint`、`pauses[].hint`、`pending[].hint`、`remark`、`missing`、模型和驱动的 `hint`、`driver.step.text`）同样照这个语言；`jobs.db` 里宿主自己记下的原因两种语言都存，换了语言，读出来就是新的。可重试的带 `Retry-After: 5`。没有的路径 404 `not-found`，方法不对 405 `invalid-args`。
-- **上限**：请求体 64 KiB，超了 413 `too-large`；握手 256 字节；登录和访客身份的 cookie 256 KiB；`/v1/batches` 4 MiB；交文件 `POST /file-imports` 16 GiB、`POST /v1/file-imports` 256 MiB（内核边收边数，超了 413 带 `hint`，写了一半的副本去掉）；每个请求 30 秒，超了 504 `timeout`，列来源（`GET /plugins/{owner}/{repo}/sources`）120 秒，交文件 30 分钟；搜索 `limit` 默认 50，限在 1 到 200。
+- **上限**：请求体 64 KiB，超了 413 `too-large`；握手 256 字节；登录和访客身份的 cookie 256 KiB；`/v1/batches` 和 `POST /imports/links` 4 MiB；交文件 `POST /file-imports` 16 GiB、`POST /v1/file-imports` 256 MiB（内核边收边数，超了 413 带 `hint`，写了一半的副本去掉）；每个请求 30 秒，超了 504 `timeout`，列来源（`GET /plugins/{owner}/{repo}/sources`）120 秒，交文件 30 分钟；搜索 `limit` 默认 50，限在 1 到 200。
 - **日志**：守护进程和命令行的日志里，链接 `?`、`#` 以后的部分和 `Bearer ` 后面的字换成 `…`。
 
 `endpoints.ts` 的 `paths` 和 `deliverPaths`（11-11）：
@@ -77,9 +77,10 @@
 | `GET /visitors` | 装着的插件在清单里声明的访客身份，和有没有存着、最早什么时候过期；不出现在 `/sites` 里 |
 | `GET /visitors/wanted` | 内核在要的访客身份 `[{site, replace}]`（[协议 §2.5.1](../protocol/manifest.md#251-访客身份-visitors)）：桌面壳照它开看不见的访客窗口；`replace` 为真时先清掉那份网页数据 |
 | `PUT /visitors/{site}`；`DELETE …` | 同上，存成 `visitor:<站点>`，和同一主机的账号分开；`DELETE` 去掉，账号不动 |
-| `GET /imports`；`POST /imports` | 全部导入（新的在前）；按 `{pluginId, method, source, title?}` 从一个插件一种方法的来源开始列。导入的视图多一项 `method`；`kind` 是 `source`、`delivered`、`file`，`file` 类多一项 `file: {name, reader}`（交来的文件名、读它的插件的名字） |
+| `GET /imports`；`POST /imports` | 全部导入（新的在前）；按 `{pluginId, method, source, title?}` 从一个插件一种方法的来源开始列。导入的视图多一项 `method`；`kind` 是 `source`、`delivered`、`pasted`、`file`，`file` 类多一项 `file: {name, reader}`（交来的文件名、读它的插件的名字） |
+| `POST /imports/links` | 粘贴链接：请求体 `{text}`（不认识的字段回 400），至多 4 MiB。文字里每一段以 `http://`、`https://` 开头的都算：一行一条、夹在分享文字里、几条紧挨着（后一条的 `http` 前面是字母、数字、`_` 或 `-` 时切开）的都认，一模一样的只留一条；没有主机、带用户名或密码的那几段照原样记成 `unrecognized`。一段都没有回 400 `invalid-args` 带 `hint`，超过 5000 段回 400。回 200 `ImportView`（`kind: pasted`，`state: listing`，标题照设置的语言写「粘贴的链接」），之后和 `delivered` 类一样认身份、看预览、确认。只认主令牌 |
 | `GET /imports/{id}`；`DELETE …` | 一次导入；不要了：清单和还没收的去掉，已经收下的留着，204 |
-| `GET /imports/{id}/entries?standing=&offset=&limit=` | 预览里的条目；`standing` 取 `new`、`stored`、`trashed`、`unresolved`，不给就是全部；`limit` 默认 100，限在 1 到 500；从文件导入时只有插件的 `ref`、没有链接的条目没有 `url` |
+| `GET /imports/{id}/entries?standing=&offset=&limit=` | 预览里的条目；`standing` 取 `new`、`stored`、`trashed`、`unresolved`、`unrecognized`，不给就是全部；`limit` 默认 100，限在 1 到 500；从文件导入时只有插件的 `ref`、没有链接的条目没有 `url` |
 | `POST /imports/{id}/confirm` | 确认，见下 |
 | `POST /imports/{id}/hold`；`POST /imports/{id}/resume` | 先停下；接着导入 |
 | `GET /deliver-tokens`；`POST /deliver-tokens`；`DELETE /deliver-tokens/{id}` | 见上「投递令牌」 |
@@ -133,12 +134,12 @@
 - `POST /phone/android/devices`：你点「找一下连着的手机」时跑一次 `adb devices -l`（10 秒），adb 的服务没在跑时它会起来、留在后台；回 `PhoneView`，`android` 是这次读到的设备，`running` 为真，`step` 说怎么停掉它。不发 `phone-updated`。没找到 adb 回 424 `dependency-missing`（「这台电脑上没找到 adb。」）。守护进程别处都不起 adb。
 - `POST /phone/ios/dry-run`：回 `PhoneDryRun`。「mirroir serve」不在（没有令牌文件、连不上）回 424 `dependency-missing`；它的工具报错（镜像没连上、没授权）也是 424；回话看不懂（令牌不对、不是 JSON）回 503 `unavailable`；超时 504。
 
-**链接从哪来**：你给的链接都可以是 App 的整段分享文字。整段就是一条 http(s) 链接就用它；不然取文字里第一段 `http://`、`https://` 开头的（不分大小写），到第一个空白、控制字符、非 ASCII 字符、引号或尖括号为止，末尾的 `.,;:!?)]}` 去掉；之后照常核 http(s)、主机、用户名密码、长度。没有链接的回错，带一句 `hint`；有几条时只看第一条，第一条没收下时 `hint` 里说「只检查了第一个链接」。`POST /items` 的 `input`、`POST /v1/deliver` 的 `url` 和 `text`、`POST /v1/batches` 每条的 `url`、列来源的 `link`、收件文件夹的 `.txt` 都照它（`usuyo-core` 的 `link_in`），插件拿到的总是一条干净的链接。
+**链接从哪来**：你给的链接都可以是 App 的整段分享文字。整段就是一条 http(s) 链接就用它；不然取文字里第一段 `http://`、`https://` 开头的（不分大小写），到第一个空白、控制字符、非 ASCII 字符、引号或尖括号为止，末尾的 `.,;:!?)]}` 去掉；之后照常核 http(s)、主机、用户名密码、长度。没有链接的回错，带一句 `hint`；有几条时只看第一条，第一条没收下时 `hint` 里说「只检查了第一个链接」。`POST /items` 的 `input`、`POST /v1/deliver` 的 `url` 和 `text`、`POST /v1/batches` 每条的 `url`、列来源的 `link`、收件文件夹的 `.txt` 都照它（`usuyo-core` 的 `link_in`），插件拿到的总是一条干净的链接。`POST /imports/links` 取全部链接，不只第一条（`links_in`，见上）。
 
 **投递**（[协议 §5.1](../protocol/delivery.md#51-本机-http-接口)）：
 - `POST /v1/deliver`，`{url?, text?}`，给一个（两个都给取 `url`）。`text` 是手机分享出来的整段文字，从里面找第一个链接。只收链接，已经取到的内容（multipart）还不收。回 202 `{id, state: "accepted", duplicate}`，`duplicate` 为真是以前收下过。条目的入口取令牌的 `kind`，取内容照常排任务。遇到私密条目不收、不加来源，现在的回答和「收下过」一样（`duplicate: true`），没有单独的 `skipped`。
 - `POST /v1/file-imports?reader=&name=`：浏览器脚本交它在页面里读到的内容，装在一个文件里，请求体就是文件。只认 `extension` 类投递令牌和主令牌，`mobile`、`api` 类回 403 `forbidden`。照 `POST /file-imports` 落成一次 `file` 类导入（`client` 是令牌名），回 202 `{id}`，只有 id：投递令牌读不了导入，你在导入页上看、确认。读不了的文件回 400 `invalid-args` 带 `hint`。
-- `POST /v1/batches`，`{name?, action?, links: [{url, title?, actedAt?}]}`，进导入的预览，你确认了才按节奏去收。`links` 1 到 5000 条；`action` 取 `favorite`、`like`、`share`、`view`、`unknown`；每条 `url` 要是带主机的 http(s)、不带用户名密码，`actedAt` 要是 RFC 3339，`title` 超过 500 字截掉；`name` 不给写「交进来的一批」，最多 200 字。不合的回 400 `invalid-args`，说是第几条。回 202 `{id}`，是新建的导入的 id（`kind: delivered`，`client` 是令牌名）。每条的身份由宿主重新算，不信交来的；认不出的这一条去掉，记日志；清单里身份相同的合成一条。
+- `POST /v1/batches`，`{name?, action?, links: [{url, title?, actedAt?}]}`，进导入的预览，你确认了才按节奏去收。`links` 1 到 5000 条；`action` 取 `favorite`、`like`、`share`、`view`、`unknown`；每条 `url` 要是带主机的 http(s)、不带用户名密码，`actedAt` 要是 RFC 3339，`title` 超过 500 字截掉；`name` 不给写「交进来的一批」，最多 200 字。不合的回 400 `invalid-args`，说是第几条。回 202 `{id}`，是新建的导入的 id（`kind: delivered`，`client` 是令牌名）。每条的身份由宿主重新算，不信交来的；认不出的记成 `unrecognized`、留在预览里，记日志；清单里身份相同的合成一条。
 
 **获取插件**（`GET /plugins` 的 `plugins[]`，[协议 §2.3.1](../protocol/manifest.md#231-方法-methods)）：`{id, name, description?, version, platforms, access, login, canList, sources, sites, visitors, settings, pacing, upstream?, pauses, methods}`。`upstream` 是清单 `upstream` 的 `{name, license}`，没写时不给；`GET /plugins` 另带 `failureLog`，失败日志 `logs/fetch-failures.jsonl` 在这台电脑上的路径。`access`、`login` 是做了的方法里最高的；`canList` 是有做了的方法能列；`sources` 是清单里写死的来源，每项带 `method`；`sites` 是做了的方法用到的登录站点；`pauses` 是所有方法的暂停，每项 `{method, scope, byYou, until?, code?, hint?, stopped?, since?, said?}`，你点的「先别试」`method`、`scope` 都是 `*`；平台停下（[协议 §3.1](../protocol/fetch.md#31a-平台停下)）是 `method: *`、`scope` 是平台、`stopped: true`，`since` 是停下的时间，`said` 是插件说平台回了什么，没有 `until`。`pacing` 每项 `{platform, batch, intervalSec, intervalMaxSec, daily?, stopsWhenBlocked?}`：间隔在 `intervalSec` 到 `intervalMaxSec` 之间随机，`stopsWhenBlocked` 是被拦以后停下整个平台。`methods` 是清单里每一种方法，照清单的顺序，没做的也在：
 - `{id, name, access, login, account: {kind, sites?, where?}, interaction, drives?, perPlatform?, gets: {fetch?, list?, link?, delivers?}, built, enabled, usable, blockers, lastCall?, pauses, riskNote?, script?}`。
@@ -150,8 +151,8 @@
 - `lastCall` 是上一次调用 `{at, ok, code?, hint?}`，没调过就没有；`pauses` 是这种方法的暂停加上「先别试」；`riskNote` 是清单的 `risk`；`script` 只在清单写了 `script` 的方法上有，`{path, present}`：文件在这台电脑上的路径，`present` 是它在插件文件夹里、是个普通文件。
 
 **导入**：一次导入的状态不单独存，由几项现算：`listing`（还在列）、`ready`（列完了，等你看一眼）、`taking`（确认了，还有排着的任务）、`done`（确认了，没有排着的了），`held` 盖过其余，是你点了「先停下」。走向：
-1. 开始（`POST /imports`、`POST /v1/batches`、`POST /file-imports` 或 `POST /v1/file-imports`）：`file` 类和 `source` 类一样一页页调插件的 `list`，只是读本机的副本，不守节奏，第一页在交的时候就列（见上）。`source` 类要这个插件的这种方法能列、获取策略选中它（[协议 §2.3.2](../protocol/manifest.md#232-获取策略)）、开着、这台机器上用得上（不然回 422 `unsupported-input`，原因写明缺什么），来源非空、最多 512 字节，平台没声明 `batch: false`（声明了回 422）。`source` 类按平台的节奏一页页调插件的 `list`，`delivered` 类每轮认 50 条的身份。每条按身份分成 `new`、`stored`（库里已经有）、`trashed`（在回收站里）；认不出来的是 `unresolved`。这一步不建任何条目。
-2. 列完是 `ready`。`POST /imports/{id}/confirm`，请求体 `{new, trashed, except?}`（不认识的字段回 400）：`new` 是「新的」整组收不收；`trashed` 是「回收站里的」整组收不收，收下就是拿回来；`except` 是 `seq` 的数组，这些条目和自己那组选得反着来（整组收的，它不收；整组不收的，它收）。只交例外：预览按页看，没翻到的条目跟着整组走。`stored` 和 `unresolved` 的不收，也不能出现在 `except` 里，出现了回 400。还在列的、或已经确认过的再确认，回 400。
+1. 开始（`POST /imports`、`POST /v1/batches`、`POST /imports/links`、`POST /file-imports` 或 `POST /v1/file-imports`）：`file` 类和 `source` 类一样一页页调插件的 `list`，只是读本机的副本，不守节奏，第一页在交的时候就列（见上）。`source` 类要这个插件的这种方法能列、获取策略选中它（[协议 §2.3.2](../protocol/manifest.md#232-获取策略)）、开着、这台机器上用得上（不然回 422 `unsupported-input`，原因写明缺什么），来源非空、最多 512 字节，平台没声明 `batch: false`（声明了回 422）。`source` 类按平台的节奏一页页调插件的 `list`，`delivered`、`pasted` 类每轮认 50 条的身份（`unresolved` 是还没认的）；同一条内容的几条链接只留第一条。每条按身份分成 `new`、`stored`（库里已经有）、`trashed`（在回收站里）；认不出来的是 `unrecognized`，留在预览里，不收。这一步不建任何条目。
+2. 列完是 `ready`。`POST /imports/{id}/confirm`，请求体 `{new, trashed, except?}`（不认识的字段回 400）：`new` 是「新的」整组收不收；`trashed` 是「回收站里的」整组收不收，收下就是拿回来；`except` 是 `seq` 的数组，这些条目和自己那组选得反着来（整组收的，它不收；整组不收的，它收）。只交例外：预览按页看，没翻到的条目跟着整组走。`stored`、`unresolved`、`unrecognized` 的不收，也不能出现在 `except` 里，出现了回 400。还在列的、或已经确认过的再确认，回 400。
 3. 确认后，挑中的每条排一个取内容的任务，优先级低于你手动收下的；按平台的节奏一条条来。轮到时先收下（入口 `import`，`takenBy: user`，同一批共用 `importBatch`，带 `action`、`actedAt`），再取内容。这一条已经有任务（你刚手动收过）的不动。轮到时发现已经进了回收站、而你没挑回收站那一组的，不收，`skipped` 加一；私密条目批量导入照收（[§1.7](library.md#17-删掉) 的表）。`taken` 是收下的条数，`notStored` 是收下了但内容取不到的。
 4. `POST /imports/{id}/hold` 随时可以，不再列、不再收，已经收下的不动；`resume` 从停的地方接着，停在要你处理的原因上（例如重新登录以后）也从这里再试。导入页只说事实（列了几页、各几条、收下几条、为什么在等和什么时候），不给还剩多少。
 

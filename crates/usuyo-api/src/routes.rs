@@ -48,7 +48,7 @@ const SEARCH_MAX: usize = 200;
 const HANDSHAKE_BODY_LIMIT: usize = 256;
 /// 登录窗口交来的 cookie 和 localStorage。
 const LOGIN_BODY_LIMIT: usize = 256 << 10;
-/// 一批链接（`/v1/batches`），最多 5000 条。
+/// 一批链接（`/v1/batches`，最多 5000 条）和粘贴的一段文字（`/imports/links`）。
 const BATCH_BODY_LIMIT: usize = 4 << 20;
 /// 站点窗口一回记下的链接：壳那边最多收 [`WINDOW_LINKS_MAX`] 条，每条不过 2 KiB。
 const WINDOW_BODY_LIMIT: usize = 48 << 20;
@@ -184,6 +184,10 @@ pub(crate) fn build(engine: Engine, gate: Arc<Gate>, origins: &[String]) -> Rout
             put(site_login_file).layer(DefaultBodyLimit::max(LOGIN_BODY_LIMIT)),
         )
         .route("/imports", get(imports).post(start_import))
+        .route(
+            "/imports/links",
+            post(paste_links).layer(DefaultBodyLimit::max(BATCH_BODY_LIMIT)),
+        )
         .route("/imports/{id}", get(import).delete(delete_import))
         .route("/imports/{id}/entries", get(import_entries))
         .route("/imports/{id}/confirm", post(confirm_import))
@@ -1120,6 +1124,23 @@ async fn start_import(
                 .start_import(&req.plugin_id, &req.method, &req.source, &req.title)
         })
         .await?,
+    ))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PasteLinksRequest {
+    text: String,
+}
+
+/// 粘贴的一段文字：里面的每条链接落成一次导入（`pasted`），和交进来的一批一样先认身份、等你确认。
+async fn paste_links(
+    State(s): State<AppState>,
+    req: Result<Json<PasteLinksRequest>, JsonRejection>,
+) -> ApiResult<ImportView> {
+    let req = body(req)?;
+    Ok(Json(
+        blocking(move || s.engine.paste_links(&req.text)).await?,
     ))
 }
 

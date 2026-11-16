@@ -674,6 +674,33 @@ export function createMockPlatforms(empty = false): Platforms {
       });
       return { ...getImport(id).view };
     },
+    async pasteLinks(body) {
+      await wait(80);
+      const links = [...new Set(body.text.match(/https?:\/\/[!-~]+/gi) ?? [])];
+      if (links.length === 0) throw new Error("没有找到链接");
+      const id = `0193f2b0-${(imports.size + 1).toString().padStart(4, "0")}-7f3a-8b4c-5d6e7f8a9b0c`;
+      const entries = links.map((url, i): ImportEntry => ({ seq: i + 1, url, standing: "new", taken: false }));
+      imports.set(id, {
+        entries: [],
+        later: entries,
+        everyMs: 5000,
+        at: Date.now(),
+        chosen: new Set(),
+        view: {
+          id,
+          kind: "pasted",
+          title: "粘贴的链接",
+          createdAt: new Date().toISOString(),
+          state: "listing",
+          pages: 0,
+          preview: { new: 0, stored: 0, trashed: 0 },
+          taken: 0,
+          notStored: 0,
+          skipped: 0,
+        },
+      });
+      return { ...getImport(id).view };
+    },
     async import(id) {
       await wait(40);
       return { ...getImport(id).view };
